@@ -238,6 +238,8 @@
     <Compile Include="Helpers\ExcelReportExporter.cs" />
     <Compile Include="Helpers\ExcelCaseImporter.cs" />
     <Compile Include="Helpers\FileCleanupHelper.cs" />
+    <Compile Include="Helpers\LicenseInfo.cs" />
+    <Compile Include="Helpers\LicenseManager.cs" />
     <Compile Include="Helpers\OpenXmlCaseExporter.cs" />
     <Compile Include="Helpers\PasswordHelper.cs" />
     <Compile Include="Helpers\PersianDateHelper.cs" />
