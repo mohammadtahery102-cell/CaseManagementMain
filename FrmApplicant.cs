@@ -273,10 +273,14 @@ VALUES (@Full, @Father, @Phone, @Prov, @Dist, @Req, @Note, @Status, @CID, @By)",
 UPDATE TblApplicant SET
     FullName = @Full, FatherName = @Father, Phone = @Phone, Province = @Prov,
     District = @Dist, RequestType = @Req, Note = @Note, Status = @Status
-WHERE ApplicantID = @ID", con))
+WHERE ApplicantID = @ID AND (@CID = 0 OR CenterID = @CID)", con))
                         {
                             AddParams(cmd);
                             cmd.Parameters.AddWithValue("@ID", _currentId);
+                            // آموزش — رفع نشت/بازنویسی بین‌مرکزی: Admin غیر-SuperAdmin
+                            // فقط می‌تواند متقاضی مرکز خودش را ویرایش کند (هم‌راستا با
+                            // همان الگوی امنیتی که در FrmUsers/FrmCase اعمال شده است).
+                            cmd.Parameters.AddWithValue("@CID", SecurityContext.CenterFilterId);
                             cmd.ExecuteNonQuery();
                         }
                     }
@@ -318,12 +322,22 @@ WHERE ApplicantID = @ID", con))
             if (!UiTheme.ShowConfirm(this, "این متقاضی حذف شود؟", "حذف متقاضی"))
                 return;
 
+            int affected;
             using (var con = db.GetConnection())
-            using (var cmd = new SQLiteCommand("DELETE FROM TblApplicant WHERE ApplicantID = @ID", con))
+            using (var cmd = new SQLiteCommand(
+                "DELETE FROM TblApplicant WHERE ApplicantID = @ID AND (@CID = 0 OR CenterID = @CID)", con))
             {
                 cmd.Parameters.AddWithValue("@ID", _currentId);
+                // آموزش — رفع حذف بین‌مرکزی: Admin غیر-SuperAdmin نمی‌تواند متقاضی
+                // مرکز دیگری را حذف کند؛ فقط رکورد متعلق به مرکز فعال حذف می‌شود.
+                cmd.Parameters.AddWithValue("@CID", SecurityContext.CenterFilterId);
                 con.Open();
-                cmd.ExecuteNonQuery();
+                affected = cmd.ExecuteNonQuery();
+            }
+            if (affected == 0)
+            {
+                UiTheme.ShowWarning(this, "این متقاضی متعلق به مرکز دیگری است و حذف نشد.");
+                return;
             }
             LoadApplicants();
             ClearForm();
