@@ -946,19 +946,33 @@ namespace CaseManagement
         // آموزش — بارگذاری عکس کوچک هر ردیف از PhotoPath ذخیره‌شده؛ تصویر در
         // اندازه کوچک (۴۰×۴۰) ساخته می‌شود تا حافظه/کارایی گرید برای تعداد
         // زیاد ردیف مشکل ایجاد نکند، نه تصویر اصلی با رزولوشن کامل.
+        // آموزش — سقف ایمن برای جلوگیری از فریز UI: تولید thumbnail برای هر ردیف
+        // یک FileStream + Bitmap روی UI thread است. با ده‌ها هزار پرونده این کار
+        // برنامه را برای چند ثانیه/دقیقه قفل می‌کرد. با این سقف، همه‌ی ردیف‌های
+        // داده همچنان نمایش داده می‌شوند (هیچ رکوردی پنهان نمی‌شود) و فقط برای
+        // تعداد زیاد، عکسِ کوچکِ درون‌گرید تولید نمی‌شود؛ عکس اصلی با باز کردن
+        // پرونده کاملاً در دسترس است.
+        private const int MaxInlineThumbnails = 500;
+
         private void LoadCaseThumbnails()
         {
             if (!dgvCases.Columns.Contains("PhotoPath") || !dgvCases.Columns.Contains(PhotoThumbColumnName))
                 return;
+
+            bool skipImages = dgvCases.Rows.Count > MaxInlineThumbnails;
 
             foreach (DataGridViewRow row in dgvCases.Rows)
             {
                 if (row.IsNewRow)
                     continue;
 
+                row.Height = 46;
+
+                if (skipImages)
+                    continue;
+
                 object pathValue = row.Cells["PhotoPath"].Value;
                 string path = pathValue == null || pathValue == DBNull.Value ? "" : pathValue.ToString();
-                row.Height = 46;
                 row.Cells[PhotoThumbColumnName].Value = LoadThumbnail(path, 40);
             }
         }
@@ -1130,8 +1144,11 @@ namespace CaseManagement
                         con.Open();
                         cmd.ExecuteNonQuery();
 
-                        var idObj = new SQLiteCommand("SELECT last_insert_rowid()", con).ExecuteScalar();
-                        currentCaseId = Convert.ToInt32((long)idObj);
+                        // آموزش — رفع نشت resource: قبلاً این SQLiteCommand بدون
+                        // Dispose ساخته می‌شد و هر ذخیره یک command رهاشده باقی
+                        // می‌گذاشت. حالا داخل using بسته می‌شود.
+                        using (var idCmd = new SQLiteCommand("SELECT last_insert_rowid()", con))
+                            currentCaseId = Convert.ToInt32((long)idCmd.ExecuteScalar());
                     }
                 }
 
