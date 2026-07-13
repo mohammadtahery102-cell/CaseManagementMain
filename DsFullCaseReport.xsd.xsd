@@ -1,0 +1,94 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<xs:schema id="DsFullCaseReport" targetNamespace="http://tempuri.org/DsFullCaseReport.xsd" xmlns:mstns="http://tempuri.org/DsFullCaseReport.xsd" xmlns="http://tempuri.org/DsFullCaseReport.xsd" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata" attributeFormDefault="qualified" elementFormDefault="qualified">
+	<xs:element name="DsFullCaseReport" msdata:IsDataSet="true" msdata:UseCurrentLocale="true">
+		<xs:complexType>
+			<xs:choice minOccurs="0" maxOccurs="unbounded">
+
+				<xs:element name="CaseData">
+					<xs:complexType>
+						<xs:sequence>
+							<xs:element name="CasID" type="xs:string" minOccurs="0" />
+							<xs:element name="FormNo" type="xs:string" minOccurs="0" />
+							<xs:element name="Code" type="xs:string" minOccurs="0" />
+							<xs:element name="CaseNo" type="xs:string" minOccurs="0" />
+							<xs:element name="CaseDate" type="xs:string" minOccurs="0" />
+							<xs:element name="Zone" type="xs:string" minOccurs="0" />
+							<xs:element name="Province" type="xs:string" minOccurs="0" />
+							<xs:element name="District" type="xs:string" minOccurs="0" />
+							<xs:element name="RequestType" type="xs:string" minOccurs="0" />
+							<xs:element name="PriorityLevel" type="xs:string" minOccurs="0" />
+							<xs:element name="HeadFullName" type="xs:string" minOccurs="0" />
+							<xs:element name="HeadFatherName" type="xs:string" minOccurs="0" />
+							<xs:element name="HeadSadat" type="xs:string" minOccurs="0" />
+							<xs:element name="Religion" type="xs:string" minOccurs="0" />
+							<xs:element name="HeadTazkiraNo" type="xs:string" minOccurs="0" />
+							<xs:element name="HeadOriginalResidence" type="xs:string" minOccurs="0" />
+							<xs:element name="HeadCurrentResidence" type="xs:string" minOccurs="0" />
+							<xs:element name="RelationshipToFamily" type="xs:string" minOccurs="0" />
+							<xs:element name="Phone" type="xs:string" minOccurs="0" />
+							<xs:element name="RelativePhone" type="xs:string" minOccurs="0" />
+							<xs:element name="CoveredByOrg" type="xs:string" minOccurs="0" />
+							<xs:element name="Job" type="xs:string" minOccurs="0" />
+							<xs:element name="Skill" type="xs:string" minOccurs="0" />
+							<xs:element name="DisabilityDegree" type="xs:string" minOccurs="0" />
+							<xs:element name="DisabilityType" type="xs:string" minOccurs="0" />
+							<xs:element name="MigrationCardType" type="xs:string" minOccurs="0" />
+							<xs:element name="MaritalStatus" type="xs:string" minOccurs="0" />
+							<xs:element name="Surveyors" type="xs:string" minOccurs="0" />
+							<xs:element name="SurveyDate" type="xs:string" minOccurs="0" />
+							<xs:element name="LocationAddress" type="xs:string" minOccurs="0" />
+							<xs:element name="EducationLevel" type="xs:string" minOccurs="0" />
+							<xs:element name="ServiceStatus" type="xs:string" minOccurs="0" />
+							<xs:element name="UrgentSituation" type="xs:string" minOccurs="0" />
+							<xs:element name="PhotoPath" type="xs:string" minOccurs="0" />
+							<xs:element name="FamilyPhotoPath" type="xs:string" minOccurs="0" />
+						</xs:sequence>
+					</xs:complexType>
+				</xs:element>
+
+				<xs:element name="FamilyData">
+					<xs:complexType>
+						<xs:sequence>
+							<xs:element name="FamID" type="xs:string" minOccurs="0" />
+							<xs:element name="CasID" type="xs:string" minOccurs="0" />
+							<xs:element name="MemberName" type="xs:string" minOccurs="0" />
+							<xs:element name="MemberFatherName" type="xs:string" minOccurs="0" />
+							<xs:element name="MemberTazkiraNo" type="xs:string" minOccurs="0" />
+							<xs:element name="BirthDate" type="xs:string" minOccurs="0" />
+							<xs:element name="MemberSadat" type="xs:string" minOccurs="0" />
+							<xs:element name="Gender" type="xs:string" minOccurs="0" />
+							<xs:element name="PhysicalStatus" type="xs:string" minOccurs="0" />
+							<xs:element name="HasDisability" type="xs:string" minOccurs="0" />
+							<xs:element name="MemberDisabilityDegree" type="xs:string" minOccurs="0" />
+							<xs:element name="MemberEducation" type="xs:string" minOccurs="0" />
+							<xs:element name="SchoolName" type="xs:string" minOccurs="0" />
+							<xs:element name="GradeLevel" type="xs:string" minOccurs="0" />
+							<xs:element name="UniversityName" type="xs:string" minOccurs="0" />
+							<xs:element name="StudyYear" type="xs:string" minOccurs="0" />
+							<xs:element name="Major" type="xs:string" minOccurs="0" />
+							<xs:element name="StudyField" type="xs:string" minOccurs="0" />
+							<xs:element name="OfficialStatus" type="xs:string" minOccurs="0" />
+							<xs:element name="Details" type="xs:string" minOccurs="0" />
+							<xs:element name="MemberPhotoPath" type="xs:string" minOccurs="0" />
+						</xs:sequence>
+					</xs:complexType>
+				</xs:element>
+
+				<xs:element name="DocsData">
+					<xs:complexType>
+						<xs:sequence>
+							<xs:element name="DocID" type="xs:string" minOccurs="0" />
+							<xs:element name="CasID" type="xs:string" minOccurs="0" />
+							<xs:element name="DocType" type="xs:string" minOccurs="0" />
+							<xs:element name="OriginalFileName" type="xs:string" minOccurs="0" />
+							<xs:element name="DocFilePath" type="xs:string" minOccurs="0" />
+							<xs:element name="RelatedCaseRef" type="xs:string" minOccurs="0" />
+							<xs:element name="DocDescription" type="xs:string" minOccurs="0" />
+						</xs:sequence>
+					</xs:complexType>
+				</xs:element>
+
+			</xs:choice>
+		</xs:complexType>
+	</xs:element>
+</xs:schema>

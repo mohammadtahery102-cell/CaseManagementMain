@@ -1,0 +1,558 @@
+using CaseManagement.DAL;
+using CaseManagement.Helpers;
+using ClosedXML.Excel;
+using System;
+using System.Data;
+using System.Data.SQLite;
+using System.Drawing;
+using System.IO;
+using System.Text;
+using System.Windows.Forms;
+
+namespace CaseManagement
+{
+    // آموزش — بازطراحی کامل (به درخواست کاربر): قبلاً این فرم فقط سرپرست
+    // خانواده را جستجو می‌کرد. حالا دو بخش کاملاً مجزا در دو تب دارد:
+    //   ۱) جستجوی سرپرست — تمام اطلاعات اصلی TblCase
+    //   ۲) جستجوی اعضاء خانواده — تمام اطلاعات اصلی TblFamily (+ اطلاعات پرونده والد)
+    // هر دو بخش فیلتر «ولایت» و «تحصیلات» (دانشگاهی/مکتبی/سایر مقاطع) و دکمه
+    // «خروجی Excel» برای نتیجه فیلترشده دارند.
+    public class FrmAdvancedSearch : Form
+    {
+        private readonly DatabaseHelper db = new DatabaseHelper();
+
+        private static readonly string[] Provinces =
+        {
+            "کابل", "هرات", "بلخ", "قندهار", "ننگرهار", "بدخشان", "بغلان", "تخار",
+            "غزنی", "هلمند", "لغمان", "کندز", "فاریاب", "جوزجان", "سمنگان", "بامیان",
+            "پکتیا", "لوگر", "وردک", "غور", "فراه", "خوست", "کاپیسا", "پروان",
+            "زابل", "ارزگان", "نیمروز", "نورستان", "کنر", "سرپل", "دایکندی",
+            "پکتیکا", "بادغیس", "پنجشیر"
+        };
+
+        // ─── تب ۱: جستجوی سرپرست ─────────────────────────────────────────────
+        private TextBox txtHCode, txtHFormNo, txtHName, txtHFatherName, txtHTazkira, txtHPhone, txtHDistrict, txtHJob;
+        private ComboBox cmbHProvince, cmbHRequestType, cmbHPriority, cmbHSadat, cmbHReligion, cmbHMarital, cmbHEducationTier, cmbHDisabilityType, cmbHStatus;
+        private Helpers.PersianDatePicker dtpHFrom, dtpHTo;
+        private DataGridView dgvHeadResults;
+
+        // ─── تب ۲: جستجوی اعضاء خانواده ──────────────────────────────────────
+        private TextBox txtMName, txtMFatherName, txtMTazkira, txtMSkill, txtMDistrict;
+        private ComboBox cmbMProvince, cmbMGender, cmbMEducationTier, cmbMMarital, cmbMReligion, cmbMPhysical, cmbMDisabilityType, cmbMStatus;
+        private DataGridView dgvMemberResults;
+
+        public FrmAdvancedSearch()
+        {
+            BuildUi();
+        }
+
+        private void BuildUi()
+        {
+            Text = "جستجوی پیشرفته  —  " + SecurityContext.CenterDisplay;
+            RightToLeft = RightToLeft.Yes;
+            RightToLeftLayout = true;
+            BackColor = UiTheme.Background;
+            Font = UiTheme.Font(UiTheme.SizeBody);
+            UiTheme.MakeFixedSize(this, 1280, 720);
+
+            TabControl tabs = new TabControl();
+            tabs.Dock = DockStyle.Fill;
+            tabs.Font = UiTheme.FontBold(10F);
+            tabs.RightToLeft = RightToLeft.Yes;
+            tabs.RightToLeftLayout = true;
+
+            TabPage tabHead = new TabPage("👤  جستجوی سرپرست");
+            TabPage tabMember = new TabPage("👪  جستجوی اعضاء خانواده");
+            tabHead.BackColor = UiTheme.Background;
+            tabMember.BackColor = UiTheme.Background;
+
+            BuildHeadSearchTab(tabHead);
+            BuildMemberSearchTab(tabMember);
+
+            tabs.TabPages.Add(tabHead);
+            tabs.TabPages.Add(tabMember);
+
+            Controls.Add(tabs);
+
+            LoadHeadResults();
+            LoadMemberResults();
+        }
+
+        // ══════════════════════════════════════════════════════════════════
+        // تب ۱: جستجوی سرپرست (TblCase)
+        // ══════════════════════════════════════════════════════════════════
+        private void BuildHeadSearchTab(TabPage page)
+        {
+            FlowLayoutPanel filters = new FlowLayoutPanel();
+            filters.Dock = DockStyle.Top;
+            filters.Height = 190;
+            filters.Padding = new Padding(12, 8, 12, 8);
+            filters.BackColor = UiTheme.CardBack;
+            filters.FlowDirection = FlowDirection.RightToLeft;
+            filters.WrapContents = true;
+            filters.AutoScroll = true;
+
+            txtHCode = new TextBox();
+            txtHFormNo = new TextBox();
+            txtHName = new TextBox();
+            txtHFatherName = new TextBox();
+            txtHTazkira = new TextBox();
+            txtHPhone = new TextBox();
+            txtHDistrict = new TextBox();
+            txtHJob = new TextBox();
+
+            cmbHProvince = MakeCombo("همه", Provinces);
+            cmbHRequestType = MakeCombo("همه", new[] { "یتیم", "معلول", "مهاجر", "بدسرپرست", "کهولت سن", "بی‌سرپرست" });
+            cmbHPriority = MakeCombo("همه", new[] { "اول", "دوم", "سوم" });
+            cmbHSadat = MakeCombo("همه", new[] { "عام", "سادات" });
+            cmbHReligion = MakeCombo("همه", new[] { "اهل تشیع", "اهل تسنن" });
+            cmbHMarital = MakeCombo("همه", new[] { "مجرد", "متأهل", "مطلقه" });
+            // آموزش — فیلتر «تحصیلات» به درخواست کاربر: چون مقادیر EducationLevel
+            // سرپرست (ابتدایی/متوسط/عالی/لیسانس/دکترا/طلبه/بی‌سواد) با دسته‌های
+            // دانشگاه/مکتب اعضای خانواده یکی نیست، این سه گزینه یک «رده‌بندی»
+            // منطقی روی همان مقادیر هستند (نگاه کنید به GetHeadEducationTierSql).
+            cmbHEducationTier = MakeCombo("همه", new[] { "دانشگاهی", "مکتبی", "سایر مقاطع" });
+            cmbHDisabilityType = MakeCombo("همه", new[] { "جسمی", "ذهنی", "بینایی", "شنوایی", "گفتاری", "حسی" });
+            cmbHStatus = MakeCombo("همه", new[] { "فعال", "در انتظار تأیید", "قطع موقت", "قطع" });
+
+            dtpHFrom = new Helpers.PersianDatePicker { ShowCheckBox = true, Checked = false };
+            dtpHTo = new Helpers.PersianDatePicker { ShowCheckBox = true, Checked = false };
+
+            filters.Controls.Add(MakeFieldPanel("کد اختصاصی", txtHCode));
+            filters.Controls.Add(MakeFieldPanel("شماره فرم", txtHFormNo));
+            filters.Controls.Add(MakeFieldPanel("نام سرپرست", txtHName));
+            filters.Controls.Add(MakeFieldPanel("نام پدر سرپرست", txtHFatherName));
+            filters.Controls.Add(MakeFieldPanel("شماره تذکره", txtHTazkira));
+            filters.Controls.Add(MakeFieldPanel("شماره تماس", txtHPhone));
+            filters.Controls.Add(MakeFieldPanel("ولایت", cmbHProvince));
+            filters.Controls.Add(MakeFieldPanel("ولسوالی", txtHDistrict));
+            filters.Controls.Add(MakeFieldPanel("نوع درخواست", cmbHRequestType));
+            filters.Controls.Add(MakeFieldPanel("اولویت‌بندی", cmbHPriority));
+            filters.Controls.Add(MakeFieldPanel("سیادت", cmbHSadat));
+            filters.Controls.Add(MakeFieldPanel("مذهب", cmbHReligion));
+            filters.Controls.Add(MakeFieldPanel("وضعیت تأهل", cmbHMarital));
+            filters.Controls.Add(MakeFieldPanel("تحصیلات", cmbHEducationTier));
+            filters.Controls.Add(MakeFieldPanel("شغل", txtHJob));
+            filters.Controls.Add(MakeFieldPanel("نوع معلولیت", cmbHDisabilityType));
+            filters.Controls.Add(MakeFieldPanel("وضعیت خدمات", cmbHStatus));
+            filters.Controls.Add(MakeFieldPanel("از تاریخ", dtpHFrom));
+            filters.Controls.Add(MakeFieldPanel("تا تاریخ", dtpHTo));
+
+            Button btnSearch = UiTheme.CreateButton("جستجو", "⌕", UiTheme.Primary);
+            btnSearch.Size = new Size(110, 34);
+            btnSearch.Margin = new Padding(6, 30, 6, 6);
+            btnSearch.Click += delegate { LoadHeadResults(); };
+            filters.Controls.Add(btnSearch);
+
+            Button btnExport = UiTheme.CreateSecondaryButton("خروجی Excel", "⇑");
+            btnExport.Size = new Size(120, 34);
+            btnExport.Margin = new Padding(6, 30, 6, 6);
+            btnExport.Click += delegate { ExportGridToExcel(dgvHeadResults, "جستجوی_سرپرست"); };
+            filters.Controls.Add(btnExport);
+
+            dgvHeadResults = new DataGridView();
+            dgvHeadResults.Dock = DockStyle.Fill;
+            dgvHeadResults.ReadOnly = true;
+            dgvHeadResults.AllowUserToAddRows = false;
+            dgvHeadResults.AllowUserToDeleteRows = false;
+            dgvHeadResults.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+            dgvHeadResults.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+            UiTheme.StyleGrid(dgvHeadResults);
+            UiTheme.ApplyPersianDateColumns(dgvHeadResults, "CaseDate");
+
+            Panel gridWrap = new Panel { Dock = DockStyle.Fill, Padding = new Padding(8) };
+            gridWrap.Controls.Add(dgvHeadResults);
+
+            page.Controls.Add(gridWrap);
+            page.Controls.Add(filters);
+        }
+
+        // آموزش — رده‌بندی تحصیلات سرپرست به سه گروه، چون مقادیر خام
+        // EducationLevel با دسته‌های دانشگاه/مکتب اعضای خانواده یکی نیست.
+        private static string GetHeadEducationTierSql(string tier, SQLiteCommand cmd)
+        {
+            if (tier == "دانشگاهی")
+            {
+                return " AND EducationLevel IN ('لیسانس', 'دکترا', 'عالی')";
+            }
+            if (tier == "مکتبی")
+            {
+                return " AND EducationLevel IN ('ابتدایی', 'متوسط')";
+            }
+            if (tier == "سایر مقاطع")
+            {
+                return " AND (EducationLevel IS NULL OR EducationLevel NOT IN ('لیسانس', 'دکترا', 'عالی', 'ابتدایی', 'متوسط'))";
+            }
+            return "";
+        }
+
+        private void LoadHeadResults()
+        {
+            StringBuilder sql = new StringBuilder(@"
+SELECT CasID, FormNo, Code, CaseNo, HeadFullName, HeadFatherName, HeadTazkiraNo, Phone,
+       Province, District, RequestType, PriorityLevel, HeadSadat, Religion, MaritalStatus,
+       EducationLevel, Job, DisabilityType, ServiceStatus, CaseDate
+FROM TblCase
+WHERE 1 = 1");
+
+            using (var con = db.GetConnection())
+            using (var cmd = new SQLiteCommand())
+            {
+                cmd.Connection = con;
+
+                AddLikeFilter(sql, cmd, "Code", "@Code", txtHCode.Text);
+                AddLikeFilter(sql, cmd, "FormNo", "@FormNo", txtHFormNo.Text);
+                AddLikeFilter(sql, cmd, "HeadFullName", "@Name", txtHName.Text);
+                AddLikeFilter(sql, cmd, "HeadFatherName", "@FatherName", txtHFatherName.Text);
+                AddLikeFilter(sql, cmd, "HeadTazkiraNo", "@Tazkira", txtHTazkira.Text);
+                AddLikeFilter(sql, cmd, "Phone", "@Phone", txtHPhone.Text);
+                AddLikeFilter(sql, cmd, "District", "@District", txtHDistrict.Text);
+                AddLikeFilter(sql, cmd, "Job", "@Job", txtHJob.Text);
+
+                AddExactFilter(sql, cmd, "Province", "@Province", cmbHProvince.Text);
+                AddExactFilter(sql, cmd, "RequestType", "@ReqType", cmbHRequestType.Text);
+                AddExactFilter(sql, cmd, "PriorityLevel", "@Priority", cmbHPriority.Text);
+                AddExactFilter(sql, cmd, "HeadSadat", "@Sadat", cmbHSadat.Text);
+                AddExactFilter(sql, cmd, "Religion", "@Religion", cmbHReligion.Text);
+                AddExactFilter(sql, cmd, "MaritalStatus", "@Marital", cmbHMarital.Text);
+                AddExactFilter(sql, cmd, "DisabilityType", "@DisabType", cmbHDisabilityType.Text);
+                AddExactFilter(sql, cmd, "ServiceStatus", "@Status", cmbHStatus.Text);
+
+                if (cmbHEducationTier.Text != "همه")
+                    sql.Append(GetHeadEducationTierSql(cmbHEducationTier.Text, cmd));
+
+                if (dtpHFrom.Checked)
+                {
+                    sql.Append(" AND CaseDate >= @FromDate");
+                    cmd.Parameters.AddWithValue("@FromDate", dtpHFrom.Value.Date.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture));
+                }
+                if (dtpHTo.Checked)
+                {
+                    sql.Append(" AND CaseDate <= @ToDate");
+                    cmd.Parameters.AddWithValue("@ToDate", dtpHTo.Value.Date.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture));
+                }
+
+                int cid = SecurityContext.CenterFilterId;
+                if (cid != 0)
+                {
+                    sql.Append(" AND CenterID = @CenterID");
+                    cmd.Parameters.AddWithValue("@CenterID", cid);
+                }
+
+                sql.Append(" ORDER BY CasID DESC");
+                cmd.CommandText = sql.ToString();
+
+                con.Open();
+                using (var reader = cmd.ExecuteReader())
+                {
+                    DataTable table = new DataTable();
+                    table.Load(reader);
+                    dgvHeadResults.DataSource = table;
+                }
+            }
+
+            ApplyHeadGridHeaders();
+        }
+
+        private void ApplyHeadGridHeaders()
+        {
+            SetHeader(dgvHeadResults, "FormNo", "شماره فرم");
+            SetHeader(dgvHeadResults, "Code", "کد اختصاصی");
+            SetHeader(dgvHeadResults, "CaseNo", "شماره پرونده");
+            SetHeader(dgvHeadResults, "HeadFullName", "نام سرپرست");
+            SetHeader(dgvHeadResults, "HeadFatherName", "نام پدر سرپرست");
+            SetHeader(dgvHeadResults, "HeadTazkiraNo", "شماره تذکره");
+            SetHeader(dgvHeadResults, "Phone", "شماره تماس");
+            SetHeader(dgvHeadResults, "Province", "ولایت");
+            SetHeader(dgvHeadResults, "District", "ولسوالی");
+            SetHeader(dgvHeadResults, "RequestType", "نوع درخواست");
+            SetHeader(dgvHeadResults, "PriorityLevel", "اولویت‌بندی");
+            SetHeader(dgvHeadResults, "HeadSadat", "سیادت");
+            SetHeader(dgvHeadResults, "Religion", "مذهب");
+            SetHeader(dgvHeadResults, "MaritalStatus", "وضعیت تأهل");
+            SetHeader(dgvHeadResults, "EducationLevel", "تحصیلات");
+            SetHeader(dgvHeadResults, "Job", "شغل");
+            SetHeader(dgvHeadResults, "DisabilityType", "نوع معلولیت");
+            SetHeader(dgvHeadResults, "ServiceStatus", "وضعیت خدمات");
+            SetHeader(dgvHeadResults, "CaseDate", "تاریخ تشکیل");
+            if (dgvHeadResults.Columns.Contains("CasID"))
+                dgvHeadResults.Columns["CasID"].Visible = false;
+        }
+
+        // ══════════════════════════════════════════════════════════════════
+        // تب ۲: جستجوی اعضاء خانواده (TblFamily + TblCase والد)
+        // ══════════════════════════════════════════════════════════════════
+        private void BuildMemberSearchTab(TabPage page)
+        {
+            FlowLayoutPanel filters = new FlowLayoutPanel();
+            filters.Dock = DockStyle.Top;
+            filters.Height = 190;
+            filters.Padding = new Padding(12, 8, 12, 8);
+            filters.BackColor = UiTheme.CardBack;
+            filters.FlowDirection = FlowDirection.RightToLeft;
+            filters.WrapContents = true;
+            filters.AutoScroll = true;
+
+            txtMName = new TextBox();
+            txtMFatherName = new TextBox();
+            txtMTazkira = new TextBox();
+            txtMSkill = new TextBox();
+            txtMDistrict = new TextBox();
+
+            cmbMProvince = MakeCombo("همه", Provinces);
+            cmbMGender = MakeCombo("همه", new[] { "دختر", "پسر" });
+            cmbMEducationTier = MakeCombo("همه", new[] { "دانشگاهی", "مکتبی", "سایر مقاطع" });
+            cmbMMarital = MakeCombo("همه", new[] { "مجرد", "متأهل", "مطلقه" });
+            cmbMReligion = MakeCombo("همه", new[] { "اهل تشیع", "اهل تسنن" });
+            cmbMPhysical = MakeCombo("همه", new[] { "سالم", "معلول", "مریض" });
+            cmbMDisabilityType = MakeCombo("همه", new[] { "جسمی", "ذهنی", "بینایی", "شنوایی", "گفتاری", "حسی" });
+            cmbMStatus = MakeCombo("همه", new[] { "فعال", "در انتظار تأیید", "قطع موقت", "قطع" });
+
+            filters.Controls.Add(MakeFieldPanel("نام عضو", txtMName));
+            filters.Controls.Add(MakeFieldPanel("نام پدر عضو", txtMFatherName));
+            filters.Controls.Add(MakeFieldPanel("شماره تذکره", txtMTazkira));
+            filters.Controls.Add(MakeFieldPanel("جنسیت", cmbMGender));
+            filters.Controls.Add(MakeFieldPanel("ولایت", cmbMProvince));
+            filters.Controls.Add(MakeFieldPanel("ولسوالی", txtMDistrict));
+            filters.Controls.Add(MakeFieldPanel("تحصیلات", cmbMEducationTier));
+            filters.Controls.Add(MakeFieldPanel("وضعیت تأهل", cmbMMarital));
+            filters.Controls.Add(MakeFieldPanel("مذهب", cmbMReligion));
+            filters.Controls.Add(MakeFieldPanel("وضعیت جسمی", cmbMPhysical));
+            filters.Controls.Add(MakeFieldPanel("نوع معلولیت", cmbMDisabilityType));
+            filters.Controls.Add(MakeFieldPanel("مهارت", txtMSkill));
+            filters.Controls.Add(MakeFieldPanel("وضعیت خدمات", cmbMStatus));
+
+            Button btnSearch = UiTheme.CreateButton("جستجو", "⌕", UiTheme.Primary);
+            btnSearch.Size = new Size(110, 34);
+            btnSearch.Margin = new Padding(6, 30, 6, 6);
+            btnSearch.Click += delegate { LoadMemberResults(); };
+            filters.Controls.Add(btnSearch);
+
+            Button btnExport = UiTheme.CreateSecondaryButton("خروجی Excel", "⇑");
+            btnExport.Size = new Size(120, 34);
+            btnExport.Margin = new Padding(6, 30, 6, 6);
+            btnExport.Click += delegate { ExportGridToExcel(dgvMemberResults, "جستجوی_اعضاء_خانواده"); };
+            filters.Controls.Add(btnExport);
+
+            dgvMemberResults = new DataGridView();
+            dgvMemberResults.Dock = DockStyle.Fill;
+            dgvMemberResults.ReadOnly = true;
+            dgvMemberResults.AllowUserToAddRows = false;
+            dgvMemberResults.AllowUserToDeleteRows = false;
+            dgvMemberResults.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+            dgvMemberResults.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+            UiTheme.StyleGrid(dgvMemberResults);
+
+            Panel gridWrap = new Panel { Dock = DockStyle.Fill, Padding = new Padding(8) };
+            gridWrap.Controls.Add(dgvMemberResults);
+
+            page.Controls.Add(gridWrap);
+            page.Controls.Add(filters);
+        }
+
+        private void LoadMemberResults()
+        {
+            StringBuilder sql = new StringBuilder(@"
+SELECT f.FamID, c.Code AS [کد پرونده], c.HeadFullName AS [نام سرپرست],
+       f.MemberName, f.MemberFatherName, f.MemberTazkiraNo, f.Gender,
+       c.Province, c.District, f.MemberEducation, f.MaritalStatus, f.Religion,
+       f.PhysicalStatus, f.HasDisability, f.Skill, f.ServiceStatus
+FROM TblFamily f
+JOIN TblCase c ON c.CasID = f.CasID
+WHERE 1 = 1");
+
+            using (var con = db.GetConnection())
+            using (var cmd = new SQLiteCommand())
+            {
+                cmd.Connection = con;
+
+                AddLikeFilter(sql, cmd, "f.MemberName", "@Name", txtMName.Text);
+                AddLikeFilter(sql, cmd, "f.MemberFatherName", "@FatherName", txtMFatherName.Text);
+                AddLikeFilter(sql, cmd, "f.MemberTazkiraNo", "@Tazkira", txtMTazkira.Text);
+                AddLikeFilter(sql, cmd, "c.District", "@District", txtMDistrict.Text);
+                AddLikeFilter(sql, cmd, "f.Skill", "@Skill", txtMSkill.Text);
+
+                AddExactFilter(sql, cmd, "f.Gender", "@Gender", cmbMGender.Text);
+                AddExactFilter(sql, cmd, "c.Province", "@Province", cmbMProvince.Text);
+                AddExactFilter(sql, cmd, "f.MaritalStatus", "@Marital", cmbMMarital.Text);
+                AddExactFilter(sql, cmd, "f.Religion", "@Religion", cmbMReligion.Text);
+                AddExactFilter(sql, cmd, "f.PhysicalStatus", "@Physical", cmbMPhysical.Text);
+                AddExactFilter(sql, cmd, "f.HasDisability", "@DisabType", cmbMDisabilityType.Text);
+                AddExactFilter(sql, cmd, "f.ServiceStatus", "@Status", cmbMStatus.Text);
+
+                // آموزش — فیلتر تحصیلات اعضا مستقیماً روی مقادیر واقعی MemberEducation
+                // است (بر خلاف سرپرست) چون این‌جا دسته «دانشگاه»/«مکتب» عیناً وجود دارد.
+                if (cmbMEducationTier.Text == "دانشگاهی")
+                {
+                    sql.Append(" AND f.MemberEducation = @Edu");
+                    cmd.Parameters.AddWithValue("@Edu", "دانشگاه");
+                }
+                else if (cmbMEducationTier.Text == "مکتبی")
+                {
+                    sql.Append(" AND f.MemberEducation = @Edu");
+                    cmd.Parameters.AddWithValue("@Edu", "مکتب");
+                }
+                else if (cmbMEducationTier.Text == "سایر مقاطع")
+                {
+                    sql.Append(" AND (f.MemberEducation IS NULL OR f.MemberEducation NOT IN ('دانشگاه', 'مکتب'))");
+                }
+
+                int cid = SecurityContext.CenterFilterId;
+                if (cid != 0)
+                {
+                    sql.Append(" AND c.CenterID = @CenterID");
+                    cmd.Parameters.AddWithValue("@CenterID", cid);
+                }
+
+                sql.Append(" ORDER BY f.FamID DESC");
+                cmd.CommandText = sql.ToString();
+
+                con.Open();
+                using (var reader = cmd.ExecuteReader())
+                {
+                    DataTable table = new DataTable();
+                    table.Load(reader);
+                    dgvMemberResults.DataSource = table;
+                }
+            }
+
+            ApplyMemberGridHeaders();
+        }
+
+        private void ApplyMemberGridHeaders()
+        {
+            SetHeader(dgvMemberResults, "MemberName", "نام عضو");
+            SetHeader(dgvMemberResults, "MemberFatherName", "نام پدر عضو");
+            SetHeader(dgvMemberResults, "MemberTazkiraNo", "شماره تذکره");
+            SetHeader(dgvMemberResults, "Gender", "جنسیت");
+            SetHeader(dgvMemberResults, "Province", "ولایت");
+            SetHeader(dgvMemberResults, "District", "ولسوالی");
+            SetHeader(dgvMemberResults, "MemberEducation", "تحصیلات");
+            SetHeader(dgvMemberResults, "MaritalStatus", "وضعیت تأهل");
+            SetHeader(dgvMemberResults, "Religion", "مذهب");
+            SetHeader(dgvMemberResults, "PhysicalStatus", "وضعیت جسمی");
+            SetHeader(dgvMemberResults, "HasDisability", "نوع معلولیت");
+            SetHeader(dgvMemberResults, "Skill", "مهارت");
+            SetHeader(dgvMemberResults, "ServiceStatus", "وضعیت خدمات");
+            if (dgvMemberResults.Columns.Contains("FamID"))
+                dgvMemberResults.Columns["FamID"].Visible = false;
+        }
+
+        // ══════════════════════════════════════════════════════════════════
+        // کمکی‌های مشترک
+        // ══════════════════════════════════════════════════════════════════
+        private ComboBox MakeCombo(string firstItem, string[] items)
+        {
+            ComboBox cmb = new ComboBox();
+            cmb.DropDownStyle = ComboBoxStyle.DropDownList;
+            cmb.Items.Add(firstItem);
+            cmb.Items.AddRange(items);
+            cmb.SelectedIndex = 0;
+            return cmb;
+        }
+
+        private static void SetHeader(DataGridView grid, string column, string header)
+        {
+            if (grid.Columns.Contains(column))
+                grid.Columns[column].HeaderText = header;
+        }
+
+        // یک فیلد فیلتر: برچسب بالا + کنترل پایین، با اندازه یکسان.
+        private Panel MakeFieldPanel(string labelText, Control input)
+        {
+            Panel p = new Panel();
+            p.Width = 150;
+            p.Height = 78;
+            p.Margin = new Padding(4, 2, 4, 2);
+
+            Label lbl = new Label();
+            lbl.Text = labelText;
+            lbl.AutoSize = false;
+            lbl.Dock = DockStyle.Top;
+            lbl.Height = 24;
+            lbl.TextAlign = ContentAlignment.MiddleRight;
+            lbl.Font = UiTheme.FontBold(UiTheme.SizeSmall);
+            lbl.ForeColor = UiTheme.TextDark;
+
+            input.Dock = DockStyle.Top;
+            input.Width = 144;
+            input.Font = UiTheme.Font(UiTheme.SizeBody);
+            TextBox tb = input as TextBox;
+            if (tb != null)
+            {
+                tb.Height = 26;
+                UiTheme.StyleTextBox(tb);
+            }
+            else if (input is ComboBox cb)
+            {
+                cb.Height = 26;
+            }
+
+            p.Controls.Add(input);
+            p.Controls.Add(lbl);
+            return p;
+        }
+
+        private void AddLikeFilter(StringBuilder sql, SQLiteCommand cmd, string column, string parameter, string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return;
+
+            sql.Append(" AND " + column + " LIKE " + parameter);
+            cmd.Parameters.AddWithValue(parameter, "%" + value.Trim() + "%");
+        }
+
+        private void AddExactFilter(StringBuilder sql, SQLiteCommand cmd, string column, string parameter, string value)
+        {
+            if (string.IsNullOrWhiteSpace(value) || value == "همه")
+                return;
+
+            sql.Append(" AND " + column + " = " + parameter);
+            cmd.Parameters.AddWithValue(parameter, value.Trim());
+        }
+
+        // خروجی اکسل نتیجه فیلترشده فعلی (همان چیزی که در گرید نمایش داده می‌شود).
+        private void ExportGridToExcel(DataGridView grid, string suggestedName)
+        {
+            DataTable table = grid.DataSource as DataTable;
+            if (table == null || table.Rows.Count == 0)
+            {
+                UiTheme.ShowWarning(this, "داده‌ای برای خروجی اکسل وجود ندارد.");
+                return;
+            }
+
+            try
+            {
+                string rootFolder = FileHelper.GetOrChooseBaseRootFolder();
+                if (string.IsNullOrWhiteSpace(rootFolder))
+                {
+                    UiTheme.ShowWarning(this, "محل ذخیره فایل‌ها مشخص نیست");
+                    return;
+                }
+
+                string reportsFolder = Path.Combine(rootFolder, "ExcelReports");
+                Directory.CreateDirectory(reportsFolder);
+
+                string safeName = FileHelper.CleanName(suggestedName);
+                string outputPath = Path.Combine(reportsFolder,
+                    safeName + "_" + DateTime.Now.ToString("yyyyMMdd_HHmmss", System.Globalization.CultureInfo.InvariantCulture) + ".xlsx");
+
+                using (XLWorkbook workbook = new XLWorkbook())
+                {
+                    IXLWorksheet ws = workbook.Worksheets.Add("نتیجه جستجو");
+                    ws.RightToLeft = true;
+                    IXLTable excelTable = ws.Cell(1, 1).InsertTable(table, "Data", true);
+                    excelTable.Theme = XLTableTheme.TableStyleMedium2;
+                    ws.Columns().AdjustToContents();
+                    workbook.SaveAs(outputPath);
+                }
+
+                UiTheme.ShowSuccess(this, "خروجی اکسل ذخیره شد:" + Environment.NewLine + outputPath);
+            }
+            catch (Exception ex)
+            {
+                UiTheme.ShowError(this, "خطا در ساخت خروجی اکسل: " + ex.Message);
+            }
+        }
+    }
+}

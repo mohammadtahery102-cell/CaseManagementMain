@@ -1,0 +1,2077 @@
+using CaseManagement.DAL;
+using CaseManagement.Helpers;
+using System;
+using System.Data;
+using System.Data.SQLite;
+using System.Drawing;
+using System.Windows.Forms;
+
+namespace CaseManagement
+{
+    /// <summary>
+    /// فرم تنظیمات نرم‌افزار (Control Center) — مرکز مدیریت کل نرم‌افزار.
+    /// تب‌های فعلی: اطلاعات مؤسسه، مدیریت مراکز، اطلاعات پایه (Lookup).
+    /// تب‌های باقی‌مانده (شماره‌گذاری/مسیرها/ظاهر/چاپ/امنیت/Backup/اعلان‌ها/
+    /// نگهداری/درباره) در دسته‌های بعدی اضافه می‌شوند.
+    /// </summary>
+    public class FrmSettings : Form
+    {
+        private readonly DatabaseHelper _db = new DatabaseHelper();
+
+        // ─── مراکز ─────────────────────────────────────────────────────────
+        private DataGridView _gridCenters;
+        private TextBox  _txtCenterCode;
+        private TextBox  _txtCenterName;
+        private ComboBox _cmbCenterProvince;
+        private TextBox  _txtCenterAddress;
+        private TextBox  _txtCenterPhone;
+        private TextBox  _txtCenterManager;
+        private TextBox  _txtCenterEmail;
+        private TextBox  _txtCenterLogoPath;
+        private PictureBox _picCenterLogo;
+        private Panel    _pnlCenterColorSwatch;
+        private Color    _selectedCenterColor = UiTheme.Primary;
+        private TextBox  _txtCenterSearch;
+        private int      _editingCenterId = 0;
+
+        // ─── مقادیر پایه ───────────────────────────────────────────────────
+        private ComboBox _cmbCategory;
+        private DataGridView _gridLookup;
+        private TextBox _txtLookupValue;
+        private TextBox _txtLookupSearch;
+        private int     _editingLookupId = 0;
+
+        // ─── شماره‌گذاری ───────────────────────────────────────────────────
+        private NumericUpDown _numStartFamilyNo;
+        private NumericUpDown _numStartDocNo;
+        private NumericUpDown _numStartReportNo;
+
+        // ─── مسیرها و فایل‌ها ──────────────────────────────────────────────
+        private TextBox _txtReportsPath;
+        private TextBox _txtLogsPath;
+        private TextBox _txtTempPath;
+
+        // ─── نگهداری سیستم ─────────────────────────────────────────────────
+        private Label _lblMaintenanceStats;
+        private TextBox _txtMaintenanceOutput;
+
+        // ─── امنیت ─────────────────────────────────────────────────────────
+        private NumericUpDown _numMinPasswordLength;
+        private NumericUpDown _numMaxFailedAttempts;
+        private NumericUpDown _numLockoutMinutes;
+        private NumericUpDown _numSessionTimeoutMinutes;
+        private NumericUpDown _numForcePasswordChangeDays;
+        private CheckBox      _chkAuditEnabled;
+
+        // ─── Backup ────────────────────────────────────────────────────────
+        private RadioButton _radBackupDaily;
+        private RadioButton _radBackupWeekly;
+        private RadioButton _radBackupMonthly;
+        private NumericUpDown _numBackupRetention;
+        private Label _lblBackupStatus;
+        private TextBox _txtBackupOutput;
+
+        // ─── اعلان‌ها ───────────────────────────────────────────────────────
+        private CheckBox _chkNotifyBackupMissing;
+        private CheckBox _chkNotifyLowDisk;
+        private CheckBox _chkNotifyIncompleteCase;
+        private CheckBox _chkNotifyNoPhoto;
+        private CheckBox _chkNotifyNoDocs;
+        private CheckBox _chkNotifyIncompleteFamily;
+        private CheckBox _chkNotifyIncompleteFinance;
+
+        // ─── ظاهر نرم‌افزار ────────────────────────────────────────────────
+        private Panel _pnlSuccessSwatch, _pnlDangerSwatch, _pnlWarningSwatch;
+        private Color _selectedSuccessColor = UiTheme.Success;
+        private Color _selectedDangerColor = UiTheme.Danger;
+        private Color _selectedWarningColor = UiTheme.Warning;
+        private RadioButton _radThemeLight, _radThemeDark;
+        private ComboBox _cmbFontFamily;
+        private NumericUpDown _numFontSize;
+        private Panel _pnlAppearancePreview;
+
+        // ─── چاپ و گزارش ────────────────────────────────────────────────────
+        private ComboBox _cmbDefaultPrinter;
+        private ComboBox _cmbPaperSize;
+        private NumericUpDown _numMarginTop, _numMarginBottom, _numMarginLeft, _numMarginRight;
+        private CheckBox _chkShowLogoOnPrint, _chkShowStamp, _chkShowSignature;
+        private TextBox _txtStampPath, _txtSignaturePath;
+
+        // ─── درباره نرم‌افزار ──────────────────────────────────────────────
+        private TextBox _txtDeveloperName;
+        private TextBox _txtLicenseInfo;
+        private TextBox _txtMachineId;
+
+        // ─── تنظیمات عمومی / اطلاعات مؤسسه ───────────────────────────────
+        private TextBox _txtOrgName;
+        private TextBox _txtOrgNameEn;
+        private TextBox _txtSlogan;
+        private TextBox _txtOrgCode;
+        private TextBox _txtRegNumber;
+        private TextBox _txtManagerName;
+        private TextBox _txtLogoPath;
+        private TextBox _txtAddress;
+        private TextBox _txtGeneralPhone;
+        private TextBox _txtMobile;
+        private TextBox _txtWhatsApp;
+        private TextBox _txtEmail;
+        private TextBox _txtWebsite;
+        private TextBox _txtDescription;
+        private TextBox _txtBackupPath;
+        private TextBox _txtPhotoStoragePath;
+        private NumericUpDown _numStartCaseNo;
+        private NumericUpDown _numStartReceiptNo;
+        private Panel _pnlColorSwatch;
+        private Color _selectedThemeColor = UiTheme.Primary;
+        private Panel _pnlFontColorSwatch;
+        private Color _selectedFontColor = UiTheme.TextDark;
+        private PictureBox _picLogoPreview;
+
+        public FrmSettings()
+        {
+            BuildUi();
+        }
+
+        private void BuildUi()
+        {
+            Text              = "تنظیمات نرم‌افزار — مرکز مدیریت";
+            RightToLeft       = RightToLeft.Yes;
+            RightToLeftLayout = true;
+            BackColor         = UiTheme.Background;
+            Font              = UiTheme.Font(UiTheme.SizeBody);
+            UiTheme.MakeFixedSize(this, 980, 680);
+
+            TabControl tabs = new TabControl();
+            tabs.Dock = DockStyle.Fill;
+            tabs.Font = UiTheme.FontBold(UiTheme.SizeSmall);
+            tabs.RightToLeft = RightToLeft.Yes;
+            tabs.RightToLeftLayout = true;
+
+            // آموزش — به درخواست کاربر (بازطراحی مدرن): یک نماد کوچک قبل از
+            // عنوان هر تب اضافه شد تا نوار تب‌ها در نگاه اول خواناتر و شبیه
+            // نرم‌افزارهای تجاری به‌نظر برسد؛ متن/عملکرد هر تب دست‌نخورده ماند.
+            TabPage tabGeneral      = new TabPage("🏢  اطلاعات مؤسسه");
+            TabPage tabCenters      = new TabPage("🏬  مدیریت مراکز");
+            TabPage tabNumbering    = new TabPage("🔢  شماره‌گذاری");
+            TabPage tabPaths        = new TabPage("📁  مسیرها و فایل‌ها");
+            TabPage tabSecurity     = new TabPage("🔒  امنیت");
+            TabPage tabBackup       = new TabPage("💾  Backup و Restore");
+            TabPage tabNotify       = new TabPage("🔔  اعلان‌ها");
+            TabPage tabLookup       = new TabPage("📋  اطلاعات پایه");
+            TabPage tabMaintenance  = new TabPage("🛠️  نگهداری سیستم");
+            tabGeneral.BackColor     = UiTheme.Background;
+            tabCenters.BackColor     = UiTheme.Background;
+            tabNumbering.BackColor   = UiTheme.Background;
+            tabPaths.BackColor       = UiTheme.Background;
+            tabSecurity.BackColor    = UiTheme.Background;
+            tabBackup.BackColor      = UiTheme.Background;
+            tabNotify.BackColor      = UiTheme.Background;
+            tabLookup.BackColor      = UiTheme.Background;
+            tabMaintenance.BackColor = UiTheme.Background;
+
+            BuildGeneralTab(tabGeneral);
+            BuildCentersTab(tabCenters);
+            BuildNumberingTab(tabNumbering);
+            BuildPathsTab(tabPaths);
+            BuildSecurityTab(tabSecurity);
+            BuildBackupTab(tabBackup);
+            BuildNotificationsTab(tabNotify);
+            BuildLookupTab(tabLookup);
+            BuildMaintenanceTab(tabMaintenance);
+
+            tabs.TabPages.Add(tabGeneral);
+
+            // آموزش — رفع باگ امنیتی چندمرکزی: «مدیریت مراکز» و «Backup/Restore»
+            // کل سیستم را تحت تأثیر قرار می‌دهند (همه مراکز)، پس فقط SuperAdmin
+            // این دو تب را می‌بیند؛ Admin مرکز (نه SuperAdmin) اصلاً این
+            // امکانات را نمی‌بیند، نه فقط دکمه‌هایش غیرفعال باشد.
+            if (SecurityContext.IsSuperAdmin())
+                tabs.TabPages.Add(tabCenters);
+
+            tabs.TabPages.Add(tabNumbering);
+            tabs.TabPages.Add(tabPaths);
+            tabs.TabPages.Add(tabSecurity);
+
+            if (SecurityContext.IsSuperAdmin())
+                tabs.TabPages.Add(tabBackup);
+
+            tabs.TabPages.Add(tabNotify);
+            tabs.TabPages.Add(tabLookup);
+            tabs.TabPages.Add(tabMaintenance);
+            Controls.Add(tabs);
+        }
+
+        // ══════════════════════════════════════════════════════════════════
+        // تب ۱: اطلاعات مؤسسه
+        // ══════════════════════════════════════════════════════════════════
+        private void BuildGeneralTab(TabPage tab)
+        {
+            Panel bottomBar = new Panel { Dock = DockStyle.Bottom, Height = 54, BackColor = UiTheme.CardBack };
+            FlowLayoutPanel saveFlow = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                FlowDirection = FlowDirection.LeftToRight, // + RightToLeft ارثی فرم = یک‌بار آینه (راست‌چین درست)
+                Padding = new Padding(14, 8, 14, 8)
+            };
+            Button btnSaveGeneral = UiTheme.CreateButton("ذخیره تنظیمات", "✔", UiTheme.Success);
+            btnSaveGeneral.Size = new Size(180, 38);
+            btnSaveGeneral.Click += BtnSaveGeneral_Click;
+            saveFlow.Controls.Add(btnSaveGeneral);
+            bottomBar.Controls.Add(saveFlow);
+
+            FlowLayoutPanel fieldsFlow = new FlowLayoutPanel();
+            fieldsFlow.Dock = DockStyle.Fill;
+            fieldsFlow.FlowDirection = FlowDirection.LeftToRight;
+            fieldsFlow.WrapContents = true;
+            fieldsFlow.AutoScroll = true;
+            fieldsFlow.Padding = new Padding(14, 12, 14, 12);
+
+            _txtOrgName = NewStyledTextBox();
+            fieldsFlow.Controls.Add(MakeFieldPanel("نام مؤسسه", _txtOrgName));
+
+            _txtOrgNameEn = NewStyledTextBox();
+            fieldsFlow.Controls.Add(MakeFieldPanel("نام انگلیسی مؤسسه", _txtOrgNameEn));
+
+            _txtSlogan = NewStyledTextBox();
+            fieldsFlow.Controls.Add(MakeFieldPanel("شعار", _txtSlogan));
+
+            _txtOrgCode = NewStyledTextBox();
+            fieldsFlow.Controls.Add(MakeFieldPanel("کد مؤسسه", _txtOrgCode));
+
+            _txtRegNumber = NewStyledTextBox();
+            fieldsFlow.Controls.Add(MakeFieldPanel("شماره ثبت", _txtRegNumber));
+
+            _txtManagerName = NewStyledTextBox();
+            fieldsFlow.Controls.Add(MakeFieldPanel("نام مسئول", _txtManagerName));
+
+            _txtAddress = NewStyledTextBox();
+            fieldsFlow.Controls.Add(MakeFieldPanel("آدرس کامل", _txtAddress));
+
+            _txtGeneralPhone = NewStyledTextBox();
+            fieldsFlow.Controls.Add(MakeFieldPanel("تلفن", _txtGeneralPhone));
+
+            _txtMobile = NewStyledTextBox();
+            fieldsFlow.Controls.Add(MakeFieldPanel("موبایل", _txtMobile));
+
+            _txtWhatsApp = NewStyledTextBox();
+            fieldsFlow.Controls.Add(MakeFieldPanel("واتساپ", _txtWhatsApp));
+
+            _txtEmail = NewStyledTextBox();
+            fieldsFlow.Controls.Add(MakeFieldPanel("ایمیل", _txtEmail));
+
+            _txtWebsite = NewStyledTextBox();
+            fieldsFlow.Controls.Add(MakeFieldPanel("وب‌سایت", _txtWebsite));
+
+            // آموزش — شماره شروع پرونده/رسید و مسیر Backup/تصاویر به تب‌های
+            // اختصاصی «شماره‌گذاری» و «مسیرها و فایل‌ها» منتقل شدند (کنترل‌ها
+            // اینجا حذف شدند، ولی کلید تنظیمات همان قبلی مانده — بدون افت داده).
+
+            // ─── توضیحات (چندخطی، عریض‌تر) ───────────────────────────────────
+            _txtDescription = new TextBox { Multiline = true, ScrollBars = ScrollBars.Vertical, TextAlign = HorizontalAlignment.Right };
+            Panel descField = new Panel { Width = 430, Height = 90, Margin = new Padding(6, 4, 6, 4) };
+            _txtDescription.Dock = DockStyle.Fill;
+            UiTheme.StyleTextBox(_txtDescription);
+            descField.Controls.Add(_txtDescription);
+            descField.Controls.Add(new Label
+            {
+                Text = "توضیحات", AutoSize = false, Dock = DockStyle.Top, Height = 22,
+                TextAlign = ContentAlignment.MiddleRight, Font = UiTheme.FontBold(UiTheme.SizeSmall), ForeColor = UiTheme.TextDark
+            });
+            fieldsFlow.Controls.Add(descField);
+
+            // ─── لوگو: تکست‌باکس + دکمه انتخاب + پیش‌نمایش بزرگ‌شده ────────────
+            Panel logoField = new Panel { Width = 300, Height = 130, Margin = new Padding(6, 4, 6, 4) };
+            Panel logoRow = new Panel { Dock = DockStyle.Top, Height = 100 };
+            _picLogoPreview = new PictureBox
+            {
+                Dock = DockStyle.Right, Width = 100, BorderStyle = BorderStyle.FixedSingle, SizeMode = PictureBoxSizeMode.Zoom
+            };
+            Panel logoBrowseRow = new Panel { Dock = DockStyle.Fill };
+            Button btnBrowseLogo = UiTheme.CreateSecondaryButton("انتخاب لوگو", "▤");
+            btnBrowseLogo.Dock = DockStyle.Top;
+            btnBrowseLogo.Height = 30;
+            btnBrowseLogo.Click += BtnBrowseLogo_Click;
+            _txtLogoPath = new TextBox { Dock = DockStyle.Top, ReadOnly = true };
+            UiTheme.StyleTextBox(_txtLogoPath);
+            logoBrowseRow.Controls.Add(btnBrowseLogo);
+            logoBrowseRow.Controls.Add(_txtLogoPath);
+            logoRow.Controls.Add(logoBrowseRow);
+            logoRow.Controls.Add(_picLogoPreview);
+            logoField.Controls.Add(logoRow);
+            logoField.Controls.Add(new Label
+            {
+                Text = "لوگوی مؤسسه (پیش‌نمایش بزرگ)", AutoSize = false, Dock = DockStyle.Top, Height = 22,
+                TextAlign = ContentAlignment.MiddleRight, Font = UiTheme.FontBold(UiTheme.SizeSmall), ForeColor = UiTheme.TextDark
+            });
+            fieldsFlow.Controls.Add(logoField);
+
+            // ─── رنگ نرم‌افزار (فیلد ترکیبی) ────────────────────────────────
+            Panel colorField = new Panel { Width = 260, Height = 78, Margin = new Padding(6, 4, 6, 4) };
+            Panel colorRow = new Panel { Dock = DockStyle.Top, Height = 32 };
+            _pnlColorSwatch = new Panel { Dock = DockStyle.Right, Width = 60, BorderStyle = BorderStyle.FixedSingle, BackColor = _selectedThemeColor };
+            Button btnPickColor = UiTheme.CreateSecondaryButton("انتخاب رنگ", "◐");
+            btnPickColor.Dock = DockStyle.Fill;
+            btnPickColor.Click += BtnPickColor_Click;
+            colorRow.Controls.Add(btnPickColor);
+            colorRow.Controls.Add(_pnlColorSwatch);
+            colorField.Controls.Add(colorRow);
+            colorField.Controls.Add(new Label
+            {
+                Text = "رنگ نرم‌افزار", AutoSize = false, Dock = DockStyle.Top, Height = 22,
+                TextAlign = ContentAlignment.MiddleRight, Font = UiTheme.FontBold(UiTheme.SizeSmall), ForeColor = UiTheme.TextDark
+            });
+            fieldsFlow.Controls.Add(colorField);
+
+            // ─── رنگ فونت (متن) نرم‌افزار — به درخواست کاربر ─────────────────
+            Panel fontColorField = new Panel { Width = 260, Height = 78, Margin = new Padding(6, 4, 6, 4) };
+            Panel fontColorRow = new Panel { Dock = DockStyle.Top, Height = 32 };
+            _pnlFontColorSwatch = new Panel { Dock = DockStyle.Right, Width = 60, BorderStyle = BorderStyle.FixedSingle, BackColor = _selectedFontColor };
+            Button btnPickFontColor = UiTheme.CreateSecondaryButton("انتخاب رنگ", "◐");
+            btnPickFontColor.Dock = DockStyle.Fill;
+            btnPickFontColor.Click += BtnPickFontColor_Click;
+            fontColorRow.Controls.Add(btnPickFontColor);
+            fontColorRow.Controls.Add(_pnlFontColorSwatch);
+            fontColorField.Controls.Add(fontColorRow);
+            fontColorField.Controls.Add(new Label
+            {
+                Text = "رنگ فونت نرم‌افزار", AutoSize = false, Dock = DockStyle.Top, Height = 22,
+                TextAlign = ContentAlignment.MiddleRight, Font = UiTheme.FontBold(UiTheme.SizeSmall), ForeColor = UiTheme.TextDark
+            });
+            fieldsFlow.Controls.Add(fontColorField);
+
+            tab.Controls.Add(fieldsFlow);
+            tab.Controls.Add(bottomBar);
+
+            LoadGeneralSettings();
+        }
+
+        private TextBox NewStyledTextBox()
+        {
+            TextBox tb = new TextBox();
+            UiTheme.StyleTextBox(tb);
+            return tb;
+        }
+
+        // فیلد ترکیبی: برچسب + تکست‌باکس فقط‌خواندنی + دکمه «انتخاب» مسیر پوشه.
+        private Panel MakeBrowseFieldPanel(string labelText, TextBox textBox, EventHandler onBrowse)
+        {
+            Panel field = new Panel { Width = 260, Height = 58, Margin = new Padding(6, 4, 6, 4) };
+            Panel row = new Panel { Dock = DockStyle.Top, Height = 28 };
+            Button btnBrowse = UiTheme.CreateSecondaryButton("انتخاب", "▤");
+            btnBrowse.Dock = DockStyle.Left;
+            btnBrowse.Width = 78;
+            btnBrowse.Click += onBrowse;
+            textBox.Dock = DockStyle.Fill;
+            row.Controls.Add(textBox);
+            row.Controls.Add(btnBrowse);
+            field.Controls.Add(row);
+            field.Controls.Add(new Label
+            {
+                Text = labelText, AutoSize = false, Dock = DockStyle.Top, Height = 22,
+                TextAlign = ContentAlignment.MiddleRight, Font = UiTheme.FontBold(UiTheme.SizeSmall), ForeColor = UiTheme.TextDark
+            });
+            return field;
+        }
+
+        private void BrowseFolderInto(TextBox target)
+        {
+            using (FolderBrowserDialog fbd = new FolderBrowserDialog())
+            {
+                if (!string.IsNullOrWhiteSpace(target.Text) && System.IO.Directory.Exists(target.Text))
+                    fbd.SelectedPath = target.Text;
+
+                if (fbd.ShowDialog(this) == DialogResult.OK)
+                    target.Text = fbd.SelectedPath;
+            }
+        }
+
+        private void BtnBrowseLogo_Click(object sender, EventArgs e)
+        {
+            using (OpenFileDialog ofd = new OpenFileDialog())
+            {
+                ofd.Filter = "فایل‌های تصویری|*.jpg;*.jpeg;*.png;*.bmp";
+                ofd.CheckFileExists = true;
+
+                if (ofd.ShowDialog(this) != DialogResult.OK)
+                    return;
+
+                _txtLogoPath.Text = ofd.FileName;
+                ShowImagePreview(_picLogoPreview, ofd.FileName);
+            }
+        }
+
+        private void ShowImagePreview(PictureBox target, string path)
+        {
+            try
+            {
+                if (target.Image != null)
+                {
+                    var old = target.Image;
+                    target.Image = null;
+                    old.Dispose();
+                }
+
+                if (!string.IsNullOrWhiteSpace(path) && System.IO.File.Exists(path))
+                {
+                    using (var fs = new System.IO.FileStream(path, System.IO.FileMode.Open, System.IO.FileAccess.Read, System.IO.FileShare.ReadWrite))
+                    using (var img = System.Drawing.Image.FromStream(fs))
+                        target.Image = new System.Drawing.Bitmap(img);
+                }
+            }
+            catch { /* پیش‌نمایش غیرحیاتی است */ }
+        }
+
+        private void BtnPickColor_Click(object sender, EventArgs e)
+        {
+            using (ColorDialog cd = new ColorDialog())
+            {
+                cd.Color = _selectedThemeColor;
+                if (cd.ShowDialog(this) == DialogResult.OK)
+                {
+                    _selectedThemeColor = cd.Color;
+                    _pnlColorSwatch.BackColor = _selectedThemeColor;
+                }
+            }
+        }
+
+        // آموزش — به درخواست کاربر: قابلیت «تغییر رنگ فونت» که قبلاً اضافه
+        // نشده بود. زیرساخت آن (UiTheme.TextDark + ApplyFullPalette) از قبل
+        // آماده بود، فقط UI/ذخیره‌سازی آن جا افتاده بود. مثل رنگ نرم‌افزار،
+        // فقط بعد از بستن و بازکردن دوباره برنامه روی همه فرم‌ها اعمال می‌شود.
+        private void BtnPickFontColor_Click(object sender, EventArgs e)
+        {
+            using (ColorDialog cd = new ColorDialog())
+            {
+                cd.Color = _selectedFontColor;
+                if (cd.ShowDialog(this) == DialogResult.OK)
+                {
+                    _selectedFontColor = cd.Color;
+                    _pnlFontColorSwatch.BackColor = _selectedFontColor;
+                }
+            }
+        }
+
+        private void LoadGeneralSettings()
+        {
+            _txtOrgName.Text          = SettingsHelper.Get(SettingsHelper.OrgName);
+            _txtOrgNameEn.Text        = SettingsHelper.Get(SettingsHelper.OrgNameEn);
+            _txtSlogan.Text           = SettingsHelper.Get(SettingsHelper.Slogan);
+            _txtOrgCode.Text          = SettingsHelper.Get(SettingsHelper.OrgCode);
+            _txtRegNumber.Text        = SettingsHelper.Get(SettingsHelper.RegNumber);
+            _txtManagerName.Text      = SettingsHelper.Get(SettingsHelper.ManagerName);
+            _txtLogoPath.Text         = SettingsHelper.Get(SettingsHelper.LogoPath);
+            _txtAddress.Text          = SettingsHelper.Get(SettingsHelper.Address);
+            _txtGeneralPhone.Text     = SettingsHelper.Get(SettingsHelper.Phone);
+            _txtMobile.Text           = SettingsHelper.Get(SettingsHelper.Mobile);
+            _txtWhatsApp.Text         = SettingsHelper.Get(SettingsHelper.WhatsApp);
+            _txtEmail.Text            = SettingsHelper.Get(SettingsHelper.Email);
+            _txtWebsite.Text          = SettingsHelper.Get(SettingsHelper.Website);
+            _txtDescription.Text      = SettingsHelper.Get(SettingsHelper.Description);
+
+            string colorHex = SettingsHelper.Get(SettingsHelper.ThemeColor);
+            if (!string.IsNullOrWhiteSpace(colorHex))
+            {
+                try { _selectedThemeColor = ColorTranslator.FromHtml(colorHex); }
+                catch { _selectedThemeColor = UiTheme.Primary; }
+            }
+            _pnlColorSwatch.BackColor = _selectedThemeColor;
+
+            string fontColorHex = SettingsHelper.Get(SettingsHelper.FontColor);
+            if (!string.IsNullOrWhiteSpace(fontColorHex))
+            {
+                try { _selectedFontColor = ColorTranslator.FromHtml(fontColorHex); }
+                catch { _selectedFontColor = UiTheme.TextDark; }
+            }
+            _pnlFontColorSwatch.BackColor = _selectedFontColor;
+
+            ShowImagePreview(_picLogoPreview, _txtLogoPath.Text);
+        }
+
+        private void BtnSaveGeneral_Click(object sender, EventArgs e)
+        {
+            SettingsHelper.Set(SettingsHelper.OrgName, _txtOrgName.Text.Trim());
+            SettingsHelper.Set(SettingsHelper.OrgNameEn, _txtOrgNameEn.Text.Trim());
+            SettingsHelper.Set(SettingsHelper.Slogan, _txtSlogan.Text.Trim());
+            SettingsHelper.Set(SettingsHelper.OrgCode, _txtOrgCode.Text.Trim());
+            SettingsHelper.Set(SettingsHelper.RegNumber, _txtRegNumber.Text.Trim());
+            SettingsHelper.Set(SettingsHelper.ManagerName, _txtManagerName.Text.Trim());
+            SettingsHelper.Set(SettingsHelper.LogoPath, _txtLogoPath.Text.Trim());
+            SettingsHelper.Set(SettingsHelper.Address, _txtAddress.Text.Trim());
+            SettingsHelper.Set(SettingsHelper.Phone, _txtGeneralPhone.Text.Trim());
+            SettingsHelper.Set(SettingsHelper.Mobile, _txtMobile.Text.Trim());
+            SettingsHelper.Set(SettingsHelper.WhatsApp, _txtWhatsApp.Text.Trim());
+            SettingsHelper.Set(SettingsHelper.Email, _txtEmail.Text.Trim());
+            SettingsHelper.Set(SettingsHelper.Website, _txtWebsite.Text.Trim());
+            SettingsHelper.Set(SettingsHelper.Description, _txtDescription.Text.Trim());
+            SettingsHelper.Set(SettingsHelper.ThemeColor, ColorTranslator.ToHtml(_selectedThemeColor));
+            SettingsHelper.Set(SettingsHelper.FontColor, ColorTranslator.ToHtml(_selectedFontColor));
+
+            UiTheme.ShowSuccess(this, "تنظیمات مؤسسه ذخیره شد. برای اعمال کامل رنگ‌ها/فونت روی همه پنجره‌ها، برنامه را دوباره باز کنید.");
+        }
+
+        // ══════════════════════════════════════════════════════════════════
+        // تب ۲: مدیریت مراکز
+        // ══════════════════════════════════════════════════════════════════
+        private void BuildCentersTab(TabPage tab)
+        {
+            Panel panel = new Panel
+            {
+                Dock      = DockStyle.Top,
+                Height    = 210,
+                BackColor = UiTheme.CardBack
+            };
+
+            FlowLayoutPanel flow = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = true,
+                Padding = new Padding(14, 8, 14, 4)
+            };
+
+            _txtCenterCode = NewStyledTextBox();
+            flow.Controls.Add(MakeFieldPanel("کد مرکز", _txtCenterCode));
+
+            _txtCenterName = NewStyledTextBox();
+            flow.Controls.Add(MakeFieldPanel("نام مرکز", _txtCenterName));
+
+            _cmbCenterProvince = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
+            _cmbCenterProvince.Items.AddRange(CaseManagement.Helpers.AfghanGeoData.Zones); // موقتاً؛ پایین با ولایات جایگزین می‌شود
+            _cmbCenterProvince.Items.Clear();
+            foreach (string p in LookupHelper.GetValues("Province"))
+                _cmbCenterProvince.Items.Add(p);
+            flow.Controls.Add(MakeFieldPanel("ولایت", _cmbCenterProvince));
+
+            _txtCenterAddress = NewStyledTextBox();
+            flow.Controls.Add(MakeFieldPanel("آدرس", _txtCenterAddress));
+
+            _txtCenterPhone = NewStyledTextBox();
+            flow.Controls.Add(MakeFieldPanel("تلفن", _txtCenterPhone));
+
+            _txtCenterManager = NewStyledTextBox();
+            flow.Controls.Add(MakeFieldPanel("مسئول مرکز", _txtCenterManager));
+
+            _txtCenterEmail = NewStyledTextBox();
+            flow.Controls.Add(MakeFieldPanel("ایمیل", _txtCenterEmail));
+
+            // ─── لوگوی مرکز ─────────────────────────────────────────────────
+            Panel centerLogoField = new Panel { Width = 220, Height = 58, Margin = new Padding(6, 4, 6, 4) };
+            Panel centerLogoRow = new Panel { Dock = DockStyle.Top, Height = 28 };
+            _picCenterLogo = new PictureBox { Dock = DockStyle.Right, Width = 28, BorderStyle = BorderStyle.FixedSingle, SizeMode = PictureBoxSizeMode.Zoom };
+            Button btnBrowseCenterLogo = UiTheme.CreateSecondaryButton("انتخاب", "▤");
+            btnBrowseCenterLogo.Dock = DockStyle.Left;
+            btnBrowseCenterLogo.Width = 78;
+            btnBrowseCenterLogo.Click += delegate
+            {
+                using (OpenFileDialog ofd = new OpenFileDialog { Filter = "فایل‌های تصویری|*.jpg;*.jpeg;*.png;*.bmp", CheckFileExists = true })
+                {
+                    if (ofd.ShowDialog(this) == DialogResult.OK)
+                    {
+                        _txtCenterLogoPath.Text = ofd.FileName;
+                        ShowImagePreview(_picCenterLogo, ofd.FileName);
+                    }
+                }
+            };
+            _txtCenterLogoPath = new TextBox { Dock = DockStyle.Fill, ReadOnly = true };
+            UiTheme.StyleTextBox(_txtCenterLogoPath);
+            centerLogoRow.Controls.Add(_txtCenterLogoPath);
+            centerLogoRow.Controls.Add(btnBrowseCenterLogo);
+            centerLogoRow.Controls.Add(_picCenterLogo);
+            centerLogoField.Controls.Add(centerLogoRow);
+            centerLogoField.Controls.Add(new Label
+            {
+                Text = "لوگوی مرکز", AutoSize = false, Dock = DockStyle.Top, Height = 22,
+                TextAlign = ContentAlignment.MiddleRight, Font = UiTheme.FontBold(UiTheme.SizeSmall), ForeColor = UiTheme.TextDark
+            });
+            flow.Controls.Add(centerLogoField);
+
+            // ─── رنگ اختصاصی مرکز ───────────────────────────────────────────
+            Panel centerColorField = new Panel { Width = 210, Height = 58, Margin = new Padding(6, 4, 6, 4) };
+            Panel centerColorRow = new Panel { Dock = DockStyle.Top, Height = 28 };
+            _pnlCenterColorSwatch = new Panel { Dock = DockStyle.Right, Width = 40, BorderStyle = BorderStyle.FixedSingle, BackColor = _selectedCenterColor };
+            Button btnPickCenterColor = UiTheme.CreateSecondaryButton("انتخاب رنگ", "◐");
+            btnPickCenterColor.Dock = DockStyle.Fill;
+            btnPickCenterColor.Click += delegate
+            {
+                using (ColorDialog cd = new ColorDialog { Color = _selectedCenterColor })
+                {
+                    if (cd.ShowDialog(this) == DialogResult.OK)
+                    {
+                        _selectedCenterColor = cd.Color;
+                        _pnlCenterColorSwatch.BackColor = _selectedCenterColor;
+                    }
+                }
+            };
+            centerColorRow.Controls.Add(btnPickCenterColor);
+            centerColorRow.Controls.Add(_pnlCenterColorSwatch);
+            centerColorField.Controls.Add(centerColorRow);
+            centerColorField.Controls.Add(new Label
+            {
+                Text = "رنگ اختصاصی مرکز", AutoSize = false, Dock = DockStyle.Top, Height = 22,
+                TextAlign = ContentAlignment.MiddleRight, Font = UiTheme.FontBold(UiTheme.SizeSmall), ForeColor = UiTheme.TextDark
+            });
+            flow.Controls.Add(centerColorField);
+
+            // ─── دکمه‌های عملیات مرکز ────────────────────────────────────────
+            Panel buttonsField = new Panel { Width = 560, Height = 42, Margin = new Padding(6, 4, 6, 4) };
+            FlowLayoutPanel buttonsRow = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight };
+
+            Button btnAdd = UiTheme.CreateButton("افزودن مرکز جدید", "+", UiTheme.Primary);
+            btnAdd.Size = new Size(150, 34); btnAdd.Margin = new Padding(2);
+            btnAdd.Click += BtnCenterAdd_Click;
+            buttonsRow.Controls.Add(btnAdd);
+
+            Button btnUpdate = UiTheme.CreateSecondaryButton("ذخیره ویرایش", "✎");
+            btnUpdate.Size = new Size(130, 34); btnUpdate.Margin = new Padding(2);
+            btnUpdate.Click += BtnCenterUpdate_Click;
+            buttonsRow.Controls.Add(btnUpdate);
+
+            Button btnClearCenterForm = UiTheme.CreateSecondaryButton("فرم جدید", "↺");
+            btnClearCenterForm.Size = new Size(110, 34); btnClearCenterForm.Margin = new Padding(2);
+            btnClearCenterForm.Click += delegate { ClearCenterForm(); };
+            buttonsRow.Controls.Add(btnClearCenterForm);
+
+            Button btnToggle = UiTheme.CreateSecondaryButton("فعال/غیرفعال", "⊙");
+            btnToggle.Size = new Size(120, 34); btnToggle.Margin = new Padding(2);
+            btnToggle.Click += BtnCenterToggle_Click;
+            buttonsRow.Controls.Add(btnToggle);
+
+            Button btnDeleteCenter = UiTheme.CreateButton("حذف مرکز", "✕", UiTheme.Danger);
+            btnDeleteCenter.Size = new Size(110, 34); btnDeleteCenter.Margin = new Padding(2);
+            btnDeleteCenter.Click += BtnCenterDelete_Click;
+            buttonsRow.Controls.Add(btnDeleteCenter);
+
+            buttonsField.Controls.Add(buttonsRow);
+            flow.Controls.Add(buttonsField);
+
+            // ─── جستجو ──────────────────────────────────────────────────────
+            _txtCenterSearch = NewStyledTextBox();
+            _txtCenterSearch.TextChanged += delegate { LoadCenters(); };
+            flow.Controls.Add(MakeFieldPanel("جستجو (کد یا نام)", _txtCenterSearch));
+
+            panel.Controls.Add(flow);
+
+            _gridCenters = CreateGrid();
+            _gridCenters.CellClick += GridCenters_CellClick;
+            tab.Controls.Add(_gridCenters);
+            tab.Controls.Add(panel);
+
+            LoadCenters();
+        }
+
+        private void GridCenters_CellClick(object sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex < 0 || !_gridCenters.Columns.Contains("CenterID")) return;
+            DataGridViewRow row = _gridCenters.Rows[e.RowIndex];
+
+            _editingCenterId = Convert.ToInt32(row.Cells["CenterID"].Value);
+            _txtCenterCode.Text = row.Cells["کد"].Value?.ToString() ?? "";
+            _txtCenterName.Text = row.Cells["نام مرکز"].Value?.ToString() ?? "";
+            _cmbCenterProvince.Text = row.Cells["ولایت"].Value?.ToString() ?? "";
+            _txtCenterAddress.Text = row.Cells["آدرس"].Value?.ToString() ?? "";
+            _txtCenterPhone.Text = row.Cells["تلفن"].Value?.ToString() ?? "";
+            _txtCenterManager.Text = row.Cells["مسئول"].Value?.ToString() ?? "";
+            _txtCenterEmail.Text = row.Cells["ایمیل"].Value?.ToString() ?? "";
+            _txtCenterLogoPath.Text = row.Cells["لوگو"].Value?.ToString() ?? "";
+            ShowImagePreview(_picCenterLogo, _txtCenterLogoPath.Text);
+
+            string colorHex = row.Cells["رنگ"].Value?.ToString();
+            if (!string.IsNullOrWhiteSpace(colorHex))
+            {
+                try { _selectedCenterColor = ColorTranslator.FromHtml(colorHex); }
+                catch { _selectedCenterColor = UiTheme.Primary; }
+            }
+            else _selectedCenterColor = UiTheme.Primary;
+            _pnlCenterColorSwatch.BackColor = _selectedCenterColor;
+        }
+
+        private void ClearCenterForm()
+        {
+            _editingCenterId = 0;
+            _txtCenterCode.Text = "";
+            _txtCenterName.Text = "";
+            _cmbCenterProvince.SelectedIndex = -1;
+            _txtCenterAddress.Text = "";
+            _txtCenterPhone.Text = "";
+            _txtCenterManager.Text = "";
+            _txtCenterEmail.Text = "";
+            _txtCenterLogoPath.Text = "";
+            ShowImagePreview(_picCenterLogo, "");
+            _selectedCenterColor = UiTheme.Primary;
+            _pnlCenterColorSwatch.BackColor = _selectedCenterColor;
+        }
+
+        private void LoadCenters()
+        {
+            string search = _txtCenterSearch?.Text.Trim() ?? "";
+            using (SQLiteConnection con = _db.GetConnection())
+            using (SQLiteCommand cmd = new SQLiteCommand(@"
+SELECT CenterID, CenterCode AS [کد], CenterName AS [نام مرکز], Province AS [ولایت],
+       Address AS [آدرس], Phone AS [تلفن], ManagerName AS [مسئول], Email AS [ایمیل],
+       LogoPath AS [لوگو], Color AS [رنگ],
+       CASE IsActive WHEN 1 THEN 'فعال' ELSE 'غیرفعال' END AS [وضعیت]
+FROM TblCenter
+WHERE (@Search = '' OR CenterCode LIKE @SearchLike OR CenterName LIKE @SearchLike)
+ORDER BY CenterCode", con))
+            using (SQLiteDataAdapter da = new SQLiteDataAdapter(cmd))
+            {
+                cmd.Parameters.AddWithValue("@Search", search);
+                cmd.Parameters.AddWithValue("@SearchLike", "%" + search + "%");
+                DataTable t = new DataTable();
+                da.Fill(t);
+                _gridCenters.DataSource = t;
+
+                // ستون‌های داخلی (لوگو/رنگ) در جدول اصلی مخفی می‌مانند؛ فقط برای
+                // بارگذاری فرم هنگام کلیک استفاده می‌شوند.
+                if (_gridCenters.Columns.Contains("لوگو")) _gridCenters.Columns["لوگو"].Visible = false;
+                if (_gridCenters.Columns.Contains("رنگ")) _gridCenters.Columns["رنگ"].Visible = false;
+            }
+        }
+
+        private void BtnCenterAdd_Click(object sender, EventArgs e)
+        {
+            if (!SecurityContext.IsSuperAdmin())
+            {
+                UiTheme.ShowWarning(this, "مدیریت مراکز فقط برای مدیر کل (SuperAdmin) مجاز است.");
+                return;
+            }
+
+            string code = _txtCenterCode.Text.Trim();
+            string name = _txtCenterName.Text.Trim();
+            if (string.IsNullOrWhiteSpace(code) || string.IsNullOrWhiteSpace(name))
+            { UiTheme.ShowWarning(this, "کد و نام مرکز را وارد کنید."); return; }
+
+            try
+            {
+                using (SQLiteConnection con = _db.GetConnection())
+                using (SQLiteCommand cmd = new SQLiteCommand(@"
+INSERT INTO TblCenter (CenterCode, CenterName, Province, Address, Phone, ManagerName, Email, LogoPath, Color)
+VALUES (@Code, @Name, @Province, @Address, @Phone, @Manager, @Email, @Logo, @Color)", con))
+                {
+                    AddCenterParameters(cmd, code, name);
+                    con.Open();
+                    cmd.ExecuteNonQuery();
+                }
+                AuditLogger.Log("ثبت مرکز", "TblCenter", 0, "", code + "/" + name);
+                ClearCenterForm();
+                LoadCenters();
+                UiTheme.ShowSuccess(this, "مرکز جدید اضافه شد.");
+            }
+            catch (SQLiteException ex)
+            {
+                if (ex.Message.IndexOf("UNIQUE", StringComparison.OrdinalIgnoreCase) >= 0)
+                    UiTheme.ShowError(this, "کد مرکز تکراری است.");
+                else
+                    UiTheme.ShowError(this, "خطا: " + ex.Message);
+            }
+        }
+
+        private void BtnCenterUpdate_Click(object sender, EventArgs e)
+        {
+            if (!SecurityContext.IsSuperAdmin())
+            {
+                UiTheme.ShowWarning(this, "مدیریت مراکز فقط برای مدیر کل (SuperAdmin) مجاز است.");
+                return;
+            }
+
+            if (_editingCenterId <= 0)
+            { UiTheme.ShowWarning(this, "ابتدا یک مرکز را از جدول انتخاب کنید."); return; }
+
+            string code = _txtCenterCode.Text.Trim();
+            string name = _txtCenterName.Text.Trim();
+            if (string.IsNullOrWhiteSpace(code) || string.IsNullOrWhiteSpace(name))
+            { UiTheme.ShowWarning(this, "کد و نام مرکز را وارد کنید."); return; }
+
+            try
+            {
+                using (SQLiteConnection con = _db.GetConnection())
+                using (SQLiteCommand cmd = new SQLiteCommand(@"
+UPDATE TblCenter SET
+    CenterCode = @Code, CenterName = @Name, Province = @Province, Address = @Address,
+    Phone = @Phone, ManagerName = @Manager, Email = @Email, LogoPath = @Logo, Color = @Color
+WHERE CenterID = @ID", con))
+                {
+                    AddCenterParameters(cmd, code, name);
+                    cmd.Parameters.AddWithValue("@ID", _editingCenterId);
+                    con.Open();
+                    cmd.ExecuteNonQuery();
+                }
+                AuditLogger.Log("ویرایش مرکز", "TblCenter", _editingCenterId, "", code + "/" + name);
+                LoadCenters();
+                UiTheme.ShowSuccess(this, "تغییرات مرکز ذخیره شد.");
+            }
+            catch (SQLiteException ex)
+            {
+                if (ex.Message.IndexOf("UNIQUE", StringComparison.OrdinalIgnoreCase) >= 0)
+                    UiTheme.ShowError(this, "کد مرکز تکراری است.");
+                else
+                    UiTheme.ShowError(this, "خطا: " + ex.Message);
+            }
+        }
+
+        private void AddCenterParameters(SQLiteCommand cmd, string code, string name)
+        {
+            cmd.Parameters.AddWithValue("@Code", code);
+            cmd.Parameters.AddWithValue("@Name", name);
+            cmd.Parameters.AddWithValue("@Province", _cmbCenterProvince.Text.Trim());
+            cmd.Parameters.AddWithValue("@Address", _txtCenterAddress.Text.Trim());
+            cmd.Parameters.AddWithValue("@Phone", _txtCenterPhone.Text.Trim());
+            cmd.Parameters.AddWithValue("@Manager", _txtCenterManager.Text.Trim());
+            cmd.Parameters.AddWithValue("@Email", _txtCenterEmail.Text.Trim());
+            cmd.Parameters.AddWithValue("@Logo", _txtCenterLogoPath.Text.Trim());
+            cmd.Parameters.AddWithValue("@Color", ColorTranslator.ToHtml(_selectedCenterColor));
+        }
+
+        private void BtnCenterToggle_Click(object sender, EventArgs e)
+        {
+            if (!SecurityContext.IsSuperAdmin())
+            {
+                UiTheme.ShowWarning(this, "مدیریت مراکز فقط برای مدیر کل (SuperAdmin) مجاز است.");
+                return;
+            }
+
+            if (_gridCenters.CurrentRow == null || !_gridCenters.Columns.Contains("CenterID")) return;
+            int id = Convert.ToInt32(_gridCenters.CurrentRow.Cells["CenterID"].Value);
+            using (SQLiteConnection con = _db.GetConnection())
+            using (SQLiteCommand cmd = new SQLiteCommand(
+                "UPDATE TblCenter SET IsActive = CASE WHEN IsActive=1 THEN 0 ELSE 1 END WHERE CenterID=@ID", con))
+            {
+                cmd.Parameters.AddWithValue("@ID", id);
+                con.Open();
+                cmd.ExecuteNonQuery();
+            }
+            LoadCenters();
+        }
+
+        // حذف مرکز فقط اگر هیچ پرونده‌ای به آن اشاره نمی‌کند (CenterID در TblCase
+        // به CenterID مرکز پیش‌فرض 1 اشاره دارد اگر مرکز حذف شود؛ برای جلوگیری
+        // از یتیم‌شدن داده، اینجا صراحتاً مسدود می‌شود تا مدیر خودش تصمیم بگیرد).
+        private void BtnCenterDelete_Click(object sender, EventArgs e)
+        {
+            if (!SecurityContext.IsSuperAdmin())
+            {
+                UiTheme.ShowWarning(this, "مدیریت مراکز فقط برای مدیر کل (SuperAdmin) مجاز است.");
+                return;
+            }
+
+            if (_gridCenters.CurrentRow == null || !_gridCenters.Columns.Contains("CenterID")) return;
+            int id = Convert.ToInt32(_gridCenters.CurrentRow.Cells["CenterID"].Value);
+            string name = _gridCenters.CurrentRow.Cells["نام مرکز"].Value?.ToString() ?? "";
+
+            int caseCount;
+            using (SQLiteConnection con = _db.GetConnection())
+            using (SQLiteCommand cmd = new SQLiteCommand("SELECT COUNT(1) FROM TblCase WHERE CenterID = @ID", con))
+            {
+                cmd.Parameters.AddWithValue("@ID", id);
+                con.Open();
+                caseCount = Convert.ToInt32(cmd.ExecuteScalar());
+            }
+
+            if (caseCount > 0)
+            {
+                UiTheme.ShowWarning(this,
+                    "این مرکز " + caseCount + " پرونده دارد و قابل حذف نیست.\n" +
+                    "به‌جای حذف می‌توانید آن را «غیرفعال» کنید.");
+                return;
+            }
+
+            if (!UiTheme.ShowConfirm(this, "مرکز «" + name + "» حذف شود؟", "حذف مرکز"))
+                return;
+
+            using (SQLiteConnection con = _db.GetConnection())
+            using (SQLiteCommand cmd = new SQLiteCommand("DELETE FROM TblCenter WHERE CenterID = @ID", con))
+            {
+                cmd.Parameters.AddWithValue("@ID", id);
+                con.Open();
+                cmd.ExecuteNonQuery();
+            }
+            AuditLogger.Log("حذف مرکز", "TblCenter", id, name, "");
+            ClearCenterForm();
+            LoadCenters();
+            UiTheme.ShowSuccess(this, "مرکز حذف شد.");
+        }
+
+        // ══════════════════════════════════════════════════════════════════
+        // تب ۱۰: اطلاعات پایه (مدیریت لیست‌های کشویی)
+        // ══════════════════════════════════════════════════════════════════
+        private void BuildLookupTab(TabPage tab)
+        {
+            Panel topPanel = new Panel
+            {
+                Dock      = DockStyle.Top,
+                Height    = 66,
+                BackColor = UiTheme.CardBack
+            };
+            FlowLayoutPanel topFlow = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                FlowDirection = FlowDirection.LeftToRight,
+                Padding = new Padding(14, 6, 14, 4)
+            };
+
+            _cmbCategory = new ComboBox();
+            _cmbCategory.DropDownStyle = ComboBoxStyle.DropDownList;
+            _cmbCategory.Items.AddRange(new object[]
+            {
+                // دسته‌های اصلی موجود از قبل
+                "ServiceStatus", "RequestType", "PriorityLevel", "MaritalStatus",
+                "Religion", "DisabilityType", "MigrationCardType", "Gender", "Province",
+                // دسته‌های جدید (بخش کنترل سنتر)
+                "CoveredByOrg", "Madhab", "HeadSadat", "MemberSadat", "DisabilityDegree",
+                "HeadEducationLevel", "MemberEducation", "MemberGender", "PhysicalStatus",
+                "StudyYear", "GradeLevel", "AssistanceType", "DocType"
+            });
+            _cmbCategory.SelectedIndex = 0;
+            _cmbCategory.SelectedIndexChanged += delegate { _editingLookupId = 0; _txtLookupValue.Text = ""; LoadLookup(); };
+            topFlow.Controls.Add(MakeFieldPanel("دسته‌بندی", _cmbCategory));
+
+            _txtLookupSearch = NewStyledTextBox();
+            _txtLookupSearch.TextChanged += delegate { LoadLookup(); };
+            topFlow.Controls.Add(MakeFieldPanel("جستجو در مقادیر", _txtLookupSearch));
+            topPanel.Controls.Add(topFlow);
+
+            Panel addPanel = new Panel
+            {
+                Dock      = DockStyle.Bottom,
+                Height    = 66,
+                BackColor = UiTheme.CardBack
+            };
+            FlowLayoutPanel addFlow = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                FlowDirection = FlowDirection.LeftToRight,
+                Padding = new Padding(14, 6, 14, 4)
+            };
+
+            _txtLookupValue = NewStyledTextBox();
+            addFlow.Controls.Add(MakeFieldPanel("مقدار", _txtLookupValue));
+
+            Panel lookupButtonsField = new Panel { Width = 480, Height = 58, Margin = new Padding(6, 26, 6, 4) };
+            FlowLayoutPanel lookupButtonsRow = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                FlowDirection = FlowDirection.LeftToRight
+            };
+
+            Button btnAdd = UiTheme.CreateButton("افزودن مقدار", "+", UiTheme.Primary);
+            btnAdd.Size = new Size(140, 34);
+            btnAdd.Margin = new Padding(2);
+            btnAdd.Click += BtnLookupAdd_Click;
+            lookupButtonsRow.Controls.Add(btnAdd);
+
+            Button btnEditVal = UiTheme.CreateSecondaryButton("ذخیره ویرایش", "✎");
+            btnEditVal.Size = new Size(130, 34);
+            btnEditVal.Margin = new Padding(2);
+            btnEditVal.Click += BtnLookupUpdate_Click;
+            lookupButtonsRow.Controls.Add(btnEditVal);
+
+            Button btnDel = UiTheme.CreateButton("حذف", "✕", UiTheme.Danger);
+            btnDel.Size = new Size(90, 34);
+            btnDel.Margin = new Padding(2);
+            btnDel.Click += BtnLookupDelete_Click;
+            lookupButtonsRow.Controls.Add(btnDel);
+
+            Button btnToggle = UiTheme.CreateSecondaryButton("فعال/غیرفعال", "⊙");
+            btnToggle.Size = new Size(130, 34);
+            btnToggle.Margin = new Padding(2);
+            btnToggle.Click += BtnLookupToggle_Click;
+            lookupButtonsRow.Controls.Add(btnToggle);
+
+            lookupButtonsField.Controls.Add(lookupButtonsRow);
+            addFlow.Controls.Add(lookupButtonsField);
+            addPanel.Controls.Add(addFlow);
+
+            _gridLookup = CreateGrid();
+            _gridLookup.CellClick += GridLookup_CellClick;
+
+            tab.Controls.Add(_gridLookup);
+            tab.Controls.Add(addPanel);
+            tab.Controls.Add(topPanel);
+
+            LoadLookup();
+        }
+
+        private void GridLookup_CellClick(object sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex < 0 || !_gridLookup.Columns.Contains("LookupID")) return;
+            DataGridViewRow row = _gridLookup.Rows[e.RowIndex];
+            _editingLookupId = Convert.ToInt32(row.Cells["LookupID"].Value);
+            _txtLookupValue.Text = row.Cells["مقدار"].Value?.ToString() ?? "";
+        }
+
+        private void LoadLookup()
+        {
+            string cat = _cmbCategory?.Text ?? "";
+            if (string.IsNullOrWhiteSpace(cat)) return;
+            string search = _txtLookupSearch?.Text.Trim() ?? "";
+
+            using (SQLiteConnection con = _db.GetConnection())
+            using (SQLiteCommand cmd = new SQLiteCommand(@"
+SELECT LookupID, Value AS [مقدار], SortOrder AS [ترتیب],
+       CASE IsActive WHEN 1 THEN 'فعال' ELSE 'غیرفعال' END AS [وضعیت]
+FROM TblLookup
+WHERE Category = @Cat AND (@Search = '' OR Value LIKE @SearchLike)
+ORDER BY SortOrder, Value", con))
+            using (SQLiteDataAdapter da = new SQLiteDataAdapter(cmd))
+            {
+                cmd.Parameters.AddWithValue("@Cat", cat);
+                cmd.Parameters.AddWithValue("@Search", search);
+                cmd.Parameters.AddWithValue("@SearchLike", "%" + search + "%");
+                DataTable t = new DataTable();
+                da.Fill(t);
+                _gridLookup.DataSource = t;
+            }
+        }
+
+        private void BtnLookupAdd_Click(object sender, EventArgs e)
+        {
+            string cat = _cmbCategory?.Text;
+            string val = _txtLookupValue.Text.Trim();
+            if (string.IsNullOrWhiteSpace(cat) || string.IsNullOrWhiteSpace(val))
+            { UiTheme.ShowWarning(this, "دسته‌بندی و مقدار را وارد کنید."); return; }
+
+            try
+            {
+                using (SQLiteConnection con = _db.GetConnection())
+                using (SQLiteCommand cmd = new SQLiteCommand(
+                    "INSERT OR IGNORE INTO TblLookup (Category, Value) VALUES (@Cat, @Val)", con))
+                {
+                    cmd.Parameters.AddWithValue("@Cat", cat);
+                    cmd.Parameters.AddWithValue("@Val", val);
+                    con.Open();
+                    cmd.ExecuteNonQuery();
+                }
+                _txtLookupValue.Text = "";
+                _editingLookupId = 0;
+                LookupHelper.ClearCache();
+                LoadLookup();
+            }
+            catch (Exception ex) { UiTheme.ShowError(this, ex.Message); }
+        }
+
+        // ویرایش مقدار انتخاب‌شده (تغییر نام) — قبلاً وجود نداشت.
+        private void BtnLookupUpdate_Click(object sender, EventArgs e)
+        {
+            if (_editingLookupId <= 0)
+            { UiTheme.ShowWarning(this, "ابتدا یک مقدار را از جدول انتخاب کنید."); return; }
+
+            string val = _txtLookupValue.Text.Trim();
+            if (string.IsNullOrWhiteSpace(val))
+            { UiTheme.ShowWarning(this, "مقدار را وارد کنید."); return; }
+
+            try
+            {
+                using (SQLiteConnection con = _db.GetConnection())
+                using (SQLiteCommand cmd = new SQLiteCommand(
+                    "UPDATE TblLookup SET Value = @Val WHERE LookupID = @ID", con))
+                {
+                    cmd.Parameters.AddWithValue("@Val", val);
+                    cmd.Parameters.AddWithValue("@ID", _editingLookupId);
+                    con.Open();
+                    cmd.ExecuteNonQuery();
+                }
+                LookupHelper.ClearCache();
+                LoadLookup();
+                UiTheme.ShowSuccess(this, "مقدار ویرایش شد.");
+            }
+            catch (SQLiteException ex)
+            {
+                if (ex.Message.IndexOf("UNIQUE", StringComparison.OrdinalIgnoreCase) >= 0)
+                    UiTheme.ShowError(this, "این مقدار در همین دسته از قبل وجود دارد.");
+                else
+                    UiTheme.ShowError(this, "خطا: " + ex.Message);
+            }
+        }
+
+        // آموزش — حذف کامل عمداً حفظ شد (برای مقادیر اشتباهی که هرگز استفاده
+        // نشده‌اند)، ولی «فعال/غیرفعال» روش پیشنهادی و امن‌تر برای مقادیری است
+        // که احتمالاً قبلاً در رکوردهای موجود استفاده شده‌اند — طبق تأیید کاربر.
+        private void BtnLookupDelete_Click(object sender, EventArgs e)
+        {
+            if (_gridLookup.CurrentRow == null || !_gridLookup.Columns.Contains("LookupID")) return;
+            if (!UiTheme.ShowConfirm(this,
+                "این مقدار کاملاً حذف شود؟\nاگر ممکن است قبلاً در رکوردی استفاده شده باشد، به‌جای حذف از «فعال/غیرفعال» استفاده کنید.",
+                "حذف")) return;
+
+            int id = Convert.ToInt32(_gridLookup.CurrentRow.Cells["LookupID"].Value);
+            using (SQLiteConnection con = _db.GetConnection())
+            using (SQLiteCommand cmd = new SQLiteCommand("DELETE FROM TblLookup WHERE LookupID=@ID", con))
+            {
+                cmd.Parameters.AddWithValue("@ID", id);
+                con.Open();
+                cmd.ExecuteNonQuery();
+            }
+            _editingLookupId = 0;
+            _txtLookupValue.Text = "";
+            LookupHelper.ClearCache();
+            LoadLookup();
+        }
+
+        private void BtnLookupToggle_Click(object sender, EventArgs e)
+        {
+            if (_gridLookup.CurrentRow == null || !_gridLookup.Columns.Contains("LookupID")) return;
+            int id = Convert.ToInt32(_gridLookup.CurrentRow.Cells["LookupID"].Value);
+            using (SQLiteConnection con = _db.GetConnection())
+            using (SQLiteCommand cmd = new SQLiteCommand(
+                "UPDATE TblLookup SET IsActive=CASE WHEN IsActive=1 THEN 0 ELSE 1 END WHERE LookupID=@ID", con))
+            {
+                cmd.Parameters.AddWithValue("@ID", id);
+                con.Open();
+                cmd.ExecuteNonQuery();
+            }
+            LookupHelper.ClearCache();
+            LoadLookup();
+        }
+
+        // ══════════════════════════════════════════════════════════════════
+        // تب ۳: شماره‌گذاری
+        // ══════════════════════════════════════════════════════════════════
+        private void BuildNumberingTab(TabPage tab)
+        {
+            Panel bottomBar = new Panel { Dock = DockStyle.Bottom, Height = 54, BackColor = UiTheme.CardBack };
+            FlowLayoutPanel saveFlow = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, Padding = new Padding(14, 8, 14, 8)
+            };
+            Button btnSave = UiTheme.CreateButton("ذخیره شماره‌گذاری", "✔", UiTheme.Success);
+            btnSave.Size = new Size(180, 38);
+            btnSave.Click += BtnSaveNumbering_Click;
+            saveFlow.Controls.Add(btnSave);
+            bottomBar.Controls.Add(saveFlow);
+
+            FlowLayoutPanel flow = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = true, AutoScroll = true, Padding = new Padding(14, 12, 14, 12)
+            };
+
+            _numStartCaseNo = new NumericUpDown { Maximum = 1000000 };
+            flow.Controls.Add(MakeNumberingFieldPanel("شماره شروع پرونده", _numStartCaseNo,
+                delegate { ResetCounter(SettingsHelper.StartCaseNo, _numStartCaseNo, "شماره شروع پرونده"); }));
+
+            _numStartFamilyNo = new NumericUpDown { Maximum = 1000000 };
+            flow.Controls.Add(MakeNumberingFieldPanel("شماره شروع اعضای خانواده", _numStartFamilyNo,
+                delegate { ResetCounter(SettingsHelper.StartFamilyNo, _numStartFamilyNo, "شماره شروع اعضای خانواده"); }));
+
+            _numStartDocNo = new NumericUpDown { Maximum = 1000000 };
+            flow.Controls.Add(MakeNumberingFieldPanel("شماره شروع اسناد", _numStartDocNo,
+                delegate { ResetCounter(SettingsHelper.StartDocNo, _numStartDocNo, "شماره شروع اسناد"); }));
+
+            _numStartReceiptNo = new NumericUpDown { Maximum = 1000000 };
+            flow.Controls.Add(MakeNumberingFieldPanel("شماره شروع رسید مالی", _numStartReceiptNo,
+                delegate { ResetCounter(SettingsHelper.StartReceiptNo, _numStartReceiptNo, "شماره شروع رسید مالی"); }));
+
+            _numStartReportNo = new NumericUpDown { Maximum = 1000000 };
+            flow.Controls.Add(MakeNumberingFieldPanel("شماره شروع گزارش‌ها", _numStartReportNo,
+                delegate { ResetCounter(SettingsHelper.StartReportNo, _numStartReportNo, "شماره شروع گزارش‌ها"); }));
+
+            Label note = new Label
+            {
+                Text =
+                    "توجه: «شماره شروع پرونده» همین حالا هم در ثبت پرونده جدید رعایت می‌شود.\n" +
+                    "«شماره شروع اعضای خانواده/اسناد/گزارش‌ها» ذخیره می‌شوند، ولی چون این موارد در حال حاضر شماره ترتیبی نمایشی جداگانه‌ای در فرم‌هایشان ندارند (بر خلاف شماره فرم پرونده)، هنوز اثر قابل‌مشاهده‌ای ندارند.",
+                AutoSize = false,
+                Size = new Size(880, 60),
+                ForeColor = UiTheme.TextMuted,
+                Font = UiTheme.Font(UiTheme.SizeSmall),
+                TextAlign = ContentAlignment.TopRight
+            };
+            flow.Controls.Add(note);
+
+            tab.Controls.Add(flow);
+            tab.Controls.Add(bottomBar);
+
+            LoadNumberingSettings();
+        }
+
+        // فیلد شماره‌گذاری: برچسب + NumericUpDown + دکمه Reset کوچک کنار آن.
+        private Panel MakeNumberingFieldPanel(string labelText, NumericUpDown input, EventHandler onReset)
+        {
+            Panel p = new Panel { Width = 280, Height = 58, Margin = new Padding(6, 4, 6, 4) };
+            Label lbl = new Label
+            {
+                Text = labelText, AutoSize = false, Dock = DockStyle.Top, Height = 22,
+                TextAlign = ContentAlignment.MiddleRight, Font = UiTheme.FontBold(UiTheme.SizeSmall), ForeColor = UiTheme.TextDark
+            };
+            Panel row = new Panel { Dock = DockStyle.Top, Height = 28 };
+            Button btnReset = UiTheme.CreateSecondaryButton("Reset", "↺");
+            btnReset.Dock = DockStyle.Left;
+            btnReset.Width = 70;
+            btnReset.Click += onReset;
+            input.Dock = DockStyle.Fill;
+            input.Font = UiTheme.Font(UiTheme.SizeBody);
+            row.Controls.Add(input);
+            row.Controls.Add(btnReset);
+            p.Controls.Add(row);
+            p.Controls.Add(lbl);
+            return p;
+        }
+
+        private void ResetCounter(string settingKey, NumericUpDown control, string displayName)
+        {
+            if (!UiTheme.ShowConfirm(this, "«" + displayName + "» به صفر بازنشانی شود؟", "بازنشانی شماره"))
+                return;
+            control.Value = 0;
+            SettingsHelper.Set(settingKey, "0");
+            UiTheme.ShowSuccess(this, displayName + " بازنشانی شد.");
+        }
+
+        private void LoadNumberingSettings()
+        {
+            _numStartCaseNo.Value    = SettingsHelper.GetInt(SettingsHelper.StartCaseNo, 0);
+            _numStartFamilyNo.Value  = SettingsHelper.GetInt(SettingsHelper.StartFamilyNo, 0);
+            _numStartDocNo.Value     = SettingsHelper.GetInt(SettingsHelper.StartDocNo, 0);
+            _numStartReceiptNo.Value = SettingsHelper.GetInt(SettingsHelper.StartReceiptNo, 0);
+            _numStartReportNo.Value  = SettingsHelper.GetInt(SettingsHelper.StartReportNo, 0);
+        }
+
+        private void BtnSaveNumbering_Click(object sender, EventArgs e)
+        {
+            SettingsHelper.Set(SettingsHelper.StartCaseNo, ((int)_numStartCaseNo.Value).ToString());
+            SettingsHelper.Set(SettingsHelper.StartFamilyNo, ((int)_numStartFamilyNo.Value).ToString());
+            SettingsHelper.Set(SettingsHelper.StartDocNo, ((int)_numStartDocNo.Value).ToString());
+            SettingsHelper.Set(SettingsHelper.StartReceiptNo, ((int)_numStartReceiptNo.Value).ToString());
+            SettingsHelper.Set(SettingsHelper.StartReportNo, ((int)_numStartReportNo.Value).ToString());
+            UiTheme.ShowSuccess(this, "شماره‌گذاری ذخیره شد.");
+        }
+
+        // ══════════════════════════════════════════════════════════════════
+        // تب ۴: مسیرها و فایل‌ها
+        // ══════════════════════════════════════════════════════════════════
+        private void BuildPathsTab(TabPage tab)
+        {
+            Panel bottomBar = new Panel { Dock = DockStyle.Bottom, Height = 54, BackColor = UiTheme.CardBack };
+            FlowLayoutPanel saveFlow = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, Padding = new Padding(14, 8, 14, 8)
+            };
+            Button btnSave = UiTheme.CreateButton("ذخیره مسیرها", "✔", UiTheme.Success);
+            btnSave.Size = new Size(160, 38);
+            btnSave.Click += BtnSavePaths_Click;
+            saveFlow.Controls.Add(btnSave);
+            bottomBar.Controls.Add(saveFlow);
+
+            FlowLayoutPanel flow = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = true, AutoScroll = true, Padding = new Padding(14, 12, 14, 12)
+            };
+
+            Label note = new Label
+            {
+                Text = "محل اصلی ذخیره پرونده‌ها/عکس‌ها/اسناد از دکمه «⚙» در فرم پرونده تنظیم می‌شود. مسیرهای زیر جداگانه و مکمل آن هستند:",
+                AutoSize = false, Size = new Size(880, 26), ForeColor = UiTheme.TextMuted, Font = UiTheme.Font(UiTheme.SizeSmall),
+                TextAlign = ContentAlignment.MiddleRight
+            };
+            flow.Controls.Add(note);
+
+            _txtBackupPath = new TextBox { ReadOnly = true };
+            UiTheme.StyleTextBox(_txtBackupPath);
+            flow.Controls.Add(MakeBrowseFieldPanel("مسیر Backup (خودکار/دستی)", _txtBackupPath,
+                delegate { BrowseFolderInto(_txtBackupPath); }));
+
+            _txtPhotoStoragePath = new TextBox { ReadOnly = true };
+            UiTheme.StyleTextBox(_txtPhotoStoragePath);
+            flow.Controls.Add(MakeBrowseFieldPanel("مسیر ذخیره تصاویر", _txtPhotoStoragePath,
+                delegate { BrowseFolderInto(_txtPhotoStoragePath); }));
+
+            _txtReportsPath = new TextBox { ReadOnly = true };
+            UiTheme.StyleTextBox(_txtReportsPath);
+            flow.Controls.Add(MakeBrowseFieldPanel("مسیر گزارش‌ها", _txtReportsPath,
+                delegate { BrowseFolderInto(_txtReportsPath); }));
+
+            _txtLogsPath = new TextBox { ReadOnly = true };
+            UiTheme.StyleTextBox(_txtLogsPath);
+            flow.Controls.Add(MakeBrowseFieldPanel("مسیر لاگ‌ها", _txtLogsPath,
+                delegate { BrowseFolderInto(_txtLogsPath); }));
+
+            _txtTempPath = new TextBox { ReadOnly = true };
+            UiTheme.StyleTextBox(_txtTempPath);
+            flow.Controls.Add(MakeBrowseFieldPanel("مسیر موقت (Temp)", _txtTempPath,
+                delegate { BrowseFolderInto(_txtTempPath); }));
+
+            tab.Controls.Add(flow);
+            tab.Controls.Add(bottomBar);
+
+            LoadPathsSettings();
+        }
+
+        private void LoadPathsSettings()
+        {
+            _txtBackupPath.Text       = SettingsHelper.Get(SettingsHelper.BackupPath);
+            _txtPhotoStoragePath.Text = SettingsHelper.Get(SettingsHelper.PhotoStoragePath);
+            _txtReportsPath.Text      = SettingsHelper.Get(SettingsHelper.ReportsPath);
+            _txtLogsPath.Text         = SettingsHelper.Get(SettingsHelper.LogsPath);
+            _txtTempPath.Text         = SettingsHelper.Get(SettingsHelper.TempPath);
+        }
+
+        private void BtnSavePaths_Click(object sender, EventArgs e)
+        {
+            SettingsHelper.Set(SettingsHelper.BackupPath, _txtBackupPath.Text.Trim());
+            SettingsHelper.Set(SettingsHelper.PhotoStoragePath, _txtPhotoStoragePath.Text.Trim());
+            SettingsHelper.Set(SettingsHelper.ReportsPath, _txtReportsPath.Text.Trim());
+            SettingsHelper.Set(SettingsHelper.LogsPath, _txtLogsPath.Text.Trim());
+            SettingsHelper.Set(SettingsHelper.TempPath, _txtTempPath.Text.Trim());
+            UiTheme.ShowSuccess(this, "مسیرها ذخیره شد.");
+        }
+
+        // ══════════════════════════════════════════════════════════════════
+        // تب نگهداری سیستم
+        // ══════════════════════════════════════════════════════════════════
+        private void BuildMaintenanceTab(TabPage tab)
+        {
+            Panel statsPanel = new Panel { Dock = DockStyle.Top, Height = 130, BackColor = UiTheme.CardBack, Padding = new Padding(14) };
+            _lblMaintenanceStats = new Label
+            {
+                Dock = DockStyle.Fill, Font = UiTheme.Font(UiTheme.SizeBody), ForeColor = UiTheme.TextDark,
+                TextAlign = ContentAlignment.TopRight
+            };
+            statsPanel.Controls.Add(_lblMaintenanceStats);
+
+            FlowLayoutPanel buttonFlow = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Top, Height = 56, FlowDirection = FlowDirection.LeftToRight, Padding = new Padding(14, 8, 14, 8)
+            };
+
+            Button btnRefreshStats = UiTheme.CreateSecondaryButton("تازه‌سازی آمار", "↻");
+            btnRefreshStats.Size = new Size(140, 38);
+            btnRefreshStats.Click += delegate { LoadMaintenanceStats(); };
+            buttonFlow.Controls.Add(btnRefreshStats);
+
+            Button btnCleanup = UiTheme.CreateSecondaryButton("پاکسازی فایل‌های بدون استفاده", "⌫");
+            btnCleanup.Size = new Size(230, 38);
+            btnCleanup.Click += BtnMaintenanceCleanup_Click;
+            buttonFlow.Controls.Add(btnCleanup);
+
+            Button btnReindex = UiTheme.CreateSecondaryButton("بازسازی Index", "▤");
+            btnReindex.Size = new Size(140, 38);
+            btnReindex.Click += delegate { RunMaintenanceSql("REINDEX;", "بازسازی Index با موفقیت انجام شد."); };
+            buttonFlow.Controls.Add(btnReindex);
+
+            Button btnVacuum = UiTheme.CreateSecondaryButton("VACUUM دیتابیس", "◐");
+            btnVacuum.Size = new Size(150, 38);
+            btnVacuum.Click += delegate { RunMaintenanceSql("VACUUM;", "فشرده‌سازی (VACUUM) دیتابیس انجام شد."); };
+            buttonFlow.Controls.Add(btnVacuum);
+
+            Button btnIntegrity = UiTheme.CreateSecondaryButton("بررسی سلامت دیتابیس", "✔");
+            btnIntegrity.Size = new Size(180, 38);
+            btnIntegrity.Click += BtnCheckIntegrity_Click;
+            buttonFlow.Controls.Add(btnIntegrity);
+
+            Button btnMissingFiles = UiTheme.CreateSecondaryButton("بررسی فایل‌های گمشده", "⌕");
+            btnMissingFiles.Size = new Size(180, 38);
+            btnMissingFiles.Click += BtnCheckMissingFiles_Click;
+            buttonFlow.Controls.Add(btnMissingFiles);
+
+            _txtMaintenanceOutput = new TextBox
+            {
+                Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical,
+                TextAlign = HorizontalAlignment.Right, Font = UiTheme.Font(UiTheme.SizeSmall)
+            };
+            Panel outputWrap = new Panel { Dock = DockStyle.Fill, Padding = new Padding(14, 4, 14, 14) };
+            outputWrap.Controls.Add(_txtMaintenanceOutput);
+
+            tab.Controls.Add(outputWrap);
+            tab.Controls.Add(buttonFlow);
+            tab.Controls.Add(statsPanel);
+
+            LoadMaintenanceStats();
+        }
+
+        private void LoadMaintenanceStats()
+        {
+            try
+            {
+                using (SQLiteConnection con = _db.GetConnection())
+                {
+                    con.Open();
+                    long dbSizeBytes = 0;
+                    try
+                    {
+                        string dbPathQuery = "PRAGMA database_list;";
+                        using (var cmd = new SQLiteCommand(dbPathQuery, con))
+                        using (var dr = cmd.ExecuteReader())
+                        {
+                            if (dr.Read())
+                            {
+                                string dbPath = dr["file"].ToString();
+                                if (!string.IsNullOrWhiteSpace(dbPath) && System.IO.File.Exists(dbPath))
+                                    dbSizeBytes = new System.IO.FileInfo(dbPath).Length;
+                            }
+                        }
+                    }
+                    catch { }
+
+                    int cases = Scalar(con, "SELECT COUNT(*) FROM TblCase");
+                    int families = Scalar(con, "SELECT COUNT(*) FROM TblFamily");
+                    int docs = Scalar(con, "SELECT COUNT(*) FROM TblDocs");
+                    int users = Scalar(con, "SELECT COUNT(*) FROM TblUsers");
+                    int centers = Scalar(con, "SELECT COUNT(*) FROM TblCenter");
+
+                    string lastBackup = SettingsHelper.Get(SettingsHelper.LastBackupDate, "");
+                    string lastRestore = SettingsHelper.Get(SettingsHelper.LastRestoreDate, "");
+
+                    _lblMaintenanceStats.Text =
+                        "حجم دیتابیس: " + (dbSizeBytes / 1024.0 / 1024.0).ToString("N2") + " مگابایت" +
+                        "     |     تعداد پرونده‌ها: " + cases +
+                        "     |     تعداد اعضای خانواده: " + families +
+                        "     |     تعداد اسناد: " + docs + "\n" +
+                        "تعداد کاربران: " + users +
+                        "     |     تعداد مراکز: " + centers +
+                        "     |     آخرین Backup: " + (string.IsNullOrEmpty(lastBackup) ? "—" : lastBackup) +
+                        "     |     آخرین Restore: " + (string.IsNullOrEmpty(lastRestore) ? "—" : lastRestore);
+                }
+            }
+            catch (Exception ex)
+            {
+                _lblMaintenanceStats.Text = "خطا در خواندن آمار: " + ex.Message;
+            }
+        }
+
+        private int Scalar(SQLiteConnection con, string sql)
+        {
+            using (var cmd = new SQLiteCommand(sql, con))
+                return Convert.ToInt32(cmd.ExecuteScalar());
+        }
+
+        private void RunMaintenanceSql(string sql, string successMessage)
+        {
+            try
+            {
+                using (SQLiteConnection con = _db.GetConnection())
+                using (SQLiteCommand cmd = new SQLiteCommand(sql, con))
+                {
+                    con.Open();
+                    cmd.ExecuteNonQuery();
+                }
+                AppendMaintenanceOutput(successMessage);
+                LoadMaintenanceStats();
+            }
+            catch (Exception ex)
+            {
+                AppendMaintenanceOutput("خطا: " + ex.Message);
+            }
+        }
+
+        private void AppendMaintenanceOutput(string text)
+        {
+            _txtMaintenanceOutput.AppendText(
+                "[" + DateTime.Now.ToString("HH:mm:ss") + "] " + text + Environment.NewLine);
+        }
+
+        private void BtnMaintenanceCleanup_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                FileCleanupHelper helper = new FileCleanupHelper();
+                System.Collections.Generic.List<string> unused = helper.FindUnusedFiles();
+
+                if (unused.Count == 0)
+                {
+                    AppendMaintenanceOutput("فایل بدون استفاده‌ای پیدا نشد.");
+                    return;
+                }
+
+                if (!UiTheme.ShowConfirm(this, unused.Count + " فایل بدون استفاده پیدا شد. حذف شوند؟", "پاکسازی فایل‌ها"))
+                    return;
+
+                int deleted = helper.DeleteFiles(unused);
+                AppendMaintenanceOutput("تعداد فایل حذف‌شده: " + deleted);
+            }
+            catch (Exception ex)
+            {
+                AppendMaintenanceOutput("خطا در پاکسازی: " + ex.Message);
+            }
+        }
+
+        private void BtnCheckIntegrity_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                using (SQLiteConnection con = _db.GetConnection())
+                using (SQLiteCommand cmd = new SQLiteCommand("PRAGMA integrity_check;", con))
+                {
+                    con.Open();
+                    string result = Convert.ToString(cmd.ExecuteScalar());
+                    AppendMaintenanceOutput("نتیجه بررسی سلامت دیتابیس: " + result);
+                }
+            }
+            catch (Exception ex)
+            {
+                AppendMaintenanceOutput("خطا در بررسی سلامت: " + ex.Message);
+            }
+        }
+
+        // بررسی فایل‌های ثبت‌شده در دیتابیس که دیگر روی دیسک وجود ندارند
+        // (فقط گزارش می‌دهد؛ چیزی حذف نمی‌کند).
+        private void BtnCheckMissingFiles_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                int missing = 0;
+                using (SQLiteConnection con = _db.GetConnection())
+                {
+                    con.Open();
+                    missing += ReportMissingFiles(con, "SELECT CasID, PhotoPath AS P FROM TblCase WHERE NULLIF(PhotoPath,'') IS NOT NULL", "CasID");
+                    missing += ReportMissingFiles(con, "SELECT CasID, FamilyPhotoPath AS P FROM TblCase WHERE NULLIF(FamilyPhotoPath,'') IS NOT NULL", "CasID");
+                    missing += ReportMissingFiles(con, "SELECT FamID, MemberPhotoPath AS P FROM TblFamily WHERE NULLIF(MemberPhotoPath,'') IS NOT NULL", "FamID");
+                    missing += ReportMissingFiles(con, "SELECT DocID, DocFilePath AS P FROM TblDocs WHERE NULLIF(DocFilePath,'') IS NOT NULL", "DocID");
+                }
+                AppendMaintenanceOutput("بررسی فایل‌های گمشده تمام شد — مجموع: " + missing + " فایل ثبت‌شده در دیتابیس روی دیسک پیدا نشد.");
+            }
+            catch (Exception ex)
+            {
+                AppendMaintenanceOutput("خطا در بررسی فایل‌های گمشده: " + ex.Message);
+            }
+        }
+
+        private int ReportMissingFiles(SQLiteConnection con, string sql, string idColumn)
+        {
+            int count = 0;
+            using (var cmd = new SQLiteCommand(sql, con))
+            using (var dr = cmd.ExecuteReader())
+            {
+                while (dr.Read())
+                {
+                    string path = dr["P"].ToString();
+                    if (!string.IsNullOrWhiteSpace(path) && !System.IO.File.Exists(path))
+                    {
+                        count++;
+                        AppendMaintenanceOutput("گمشده — " + idColumn + "=" + dr[idColumn] + " → " + path);
+                    }
+                }
+            }
+            return count;
+        }
+
+        // ─── بخش «مدیریت حساب مدیر کل (سوپر ادمین)» در تب امنیت ───────────────
+        private TextBox _txtSaUsername;
+        private TextBox _txtSaNewPassword;
+        private int _superAdminUserId;
+
+        private void BuildSuperAdminSection(FlowLayoutPanel flow)
+        {
+            Panel sep = new Panel { Width = 880, Height = 2, BackColor = UiTheme.Border, Margin = new Padding(6, 10, 6, 10) };
+            flow.Controls.Add(sep);
+
+            Label header = new Label
+            {
+                Text = "مدیریت حساب مدیر کل (سوپر ادمین)",
+                AutoSize = false, Size = new Size(880, 26), Font = UiTheme.FontBold(11F),
+                ForeColor = UiTheme.PrimaryDark, TextAlign = ContentAlignment.MiddleRight
+            };
+            flow.Controls.Add(header);
+
+            if (!SecurityContext.IsSuperAdmin())
+            {
+                Label onlySa = new Label
+                {
+                    Text = "این بخش فقط برای حساب «مدیر کل (SuperAdmin)» در دسترس است.",
+                    AutoSize = false, Size = new Size(880, 24), ForeColor = UiTheme.TextMuted,
+                    Font = UiTheme.Font(UiTheme.SizeSmall), TextAlign = ContentAlignment.MiddleRight
+                };
+                flow.Controls.Add(onlySa);
+                return;
+            }
+
+            _txtSaUsername = new TextBox();
+            flow.Controls.Add(MakeFieldPanel("نام کاربری مدیر کل", _txtSaUsername));
+
+            _txtSaNewPassword = new TextBox { UseSystemPasswordChar = true };
+            flow.Controls.Add(MakeFieldPanel("رمز جدید (خالی = بدون تغییر)", _txtSaNewPassword));
+
+            Panel btnField = new Panel { Width = 240, Height = 58, Margin = new Padding(6, 26, 6, 4) };
+            Button btnApply = UiTheme.CreateButton("به‌روزرسانی حساب مدیر کل", "✔", UiTheme.PrimaryDark);
+            btnApply.Dock = DockStyle.Fill;
+            btnApply.Click += BtnUpdateSuperAdmin_Click;
+            btnField.Controls.Add(btnApply);
+            flow.Controls.Add(btnField);
+
+            LoadSuperAdminInfo();
+        }
+
+        private void LoadSuperAdminInfo()
+        {
+            _superAdminUserId = 0;
+            using (var con = _db.GetConnection())
+            using (var cmd = new SQLiteCommand(
+                "SELECT UserID, Username FROM TblUsers WHERE Role = 'SuperAdmin' ORDER BY UserID LIMIT 1", con))
+            {
+                con.Open();
+                using (var dr = cmd.ExecuteReader())
+                {
+                    if (dr.Read())
+                    {
+                        _superAdminUserId = Convert.ToInt32(dr["UserID"]);
+                        if (_txtSaUsername != null)
+                            _txtSaUsername.Text = dr["Username"].ToString();
+                    }
+                }
+            }
+        }
+
+        private void BtnUpdateSuperAdmin_Click(object sender, EventArgs e)
+        {
+            if (!SecurityContext.IsSuperAdmin())
+            {
+                UiTheme.ShowWarning(this, "فقط مدیر کل مجاز به این کار است.");
+                return;
+            }
+            if (_superAdminUserId <= 0)
+            {
+                UiTheme.ShowWarning(this, "حساب مدیر کل پیدا نشد.");
+                return;
+            }
+            string newUsername = _txtSaUsername.Text.Trim();
+            if (string.IsNullOrWhiteSpace(newUsername))
+            {
+                UiTheme.ShowWarning(this, "نام کاربری نمی‌تواند خالی باشد.");
+                return;
+            }
+
+            string newPassword = _txtSaNewPassword.Text;
+            int minLen = SettingsHelper.GetInt(SettingsHelper.MinPasswordLength, 6);
+            if (!string.IsNullOrEmpty(newPassword) && newPassword.Length < minLen)
+            {
+                UiTheme.ShowWarning(this, "رمز جدید باید حداقل " + minLen + " کاراکتر باشد.");
+                return;
+            }
+
+            try
+            {
+                using (var con = _db.GetConnection())
+                {
+                    con.Open();
+
+                    // تغییر نام کاربری
+                    using (var cmd = new SQLiteCommand("UPDATE TblUsers SET Username = @U WHERE UserID = @ID", con))
+                    {
+                        cmd.Parameters.AddWithValue("@U", newUsername);
+                        cmd.Parameters.AddWithValue("@ID", _superAdminUserId);
+                        cmd.ExecuteNonQuery();
+                    }
+
+                    // تغییر رمز (فقط اگر وارد شده باشد)
+                    if (!string.IsNullOrEmpty(newPassword))
+                    {
+                        byte[] hash, salt; int iterations;
+                        PasswordHelper.CreateHash(newPassword, out hash, out salt, out iterations);
+                        using (var cmd = new SQLiteCommand(@"
+UPDATE TblUsers
+SET PasswordHash = @H, PasswordSalt = @S, PasswordIterations = @It,
+    MustChangePassword = 0, LastPasswordChangeAt = datetime('now')
+WHERE UserID = @ID", con))
+                        {
+                            cmd.Parameters.AddWithValue("@H", hash);
+                            cmd.Parameters.AddWithValue("@S", salt);
+                            cmd.Parameters.AddWithValue("@It", iterations);
+                            cmd.Parameters.AddWithValue("@ID", _superAdminUserId);
+                            cmd.ExecuteNonQuery();
+                        }
+                    }
+                }
+
+                AuditLogger.Log("به‌روزرسانی حساب مدیر کل", "TblUsers", _superAdminUserId, "", newUsername);
+                _txtSaNewPassword.Text = "";
+                UiTheme.ShowSuccess(this, "حساب مدیر کل به‌روزرسانی شد.");
+            }
+            catch (SQLiteException ex)
+            {
+                if (ex.Message.IndexOf("UNIQUE", StringComparison.OrdinalIgnoreCase) >= 0)
+                    UiTheme.ShowError(this, "این نام کاربری قبلاً استفاده شده است.");
+                else
+                    UiTheme.ShowError(this, "خطا: " + ex.Message);
+            }
+        }
+
+        // ══════════════════════════════════════════════════════════════════
+        // تب امنیت
+        // ══════════════════════════════════════════════════════════════════
+        private void BuildSecurityTab(TabPage tab)
+        {
+            Panel bottomBar = new Panel { Dock = DockStyle.Bottom, Height = 54, BackColor = UiTheme.CardBack };
+            FlowLayoutPanel saveFlow = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, Padding = new Padding(14, 8, 14, 8)
+            };
+            Button btnSave = UiTheme.CreateButton("ذخیره تنظیمات امنیت", "✔", UiTheme.Success);
+            btnSave.Size = new Size(180, 38);
+            btnSave.Click += BtnSaveSecurity_Click;
+            saveFlow.Controls.Add(btnSave);
+            bottomBar.Controls.Add(saveFlow);
+
+            FlowLayoutPanel flow = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = true, AutoScroll = true, Padding = new Padding(14, 12, 14, 12)
+            };
+
+            _numMinPasswordLength = new NumericUpDown { Minimum = 4, Maximum = 32 };
+            flow.Controls.Add(MakeFieldPanel("حداقل طول رمز عبور", _numMinPasswordLength));
+
+            _numMaxFailedAttempts = new NumericUpDown { Minimum = 1, Maximum = 20 };
+            flow.Controls.Add(MakeFieldPanel("حداکثر تلاش ورود ناموفق", _numMaxFailedAttempts));
+
+            _numLockoutMinutes = new NumericUpDown { Minimum = 1, Maximum = 1440 };
+            flow.Controls.Add(MakeFieldPanel("مدت قفل شدن حساب (دقیقه)", _numLockoutMinutes));
+
+            _numSessionTimeoutMinutes = new NumericUpDown { Minimum = 0, Maximum = 1440 };
+            flow.Controls.Add(MakeFieldPanel("Timeout عدم فعالیت (دقیقه — ۰=غیرفعال)", _numSessionTimeoutMinutes));
+
+            _numForcePasswordChangeDays = new NumericUpDown { Minimum = 0, Maximum = 365 };
+            flow.Controls.Add(MakeFieldPanel("اجبار تغییر رمز هر (روز — ۰=غیرفعال)", _numForcePasswordChangeDays));
+
+            _chkAuditEnabled = new CheckBox { Text = "ثبت گزارش رویدادها (Audit) فعال باشد", AutoSize = true, Font = UiTheme.Font(UiTheme.SizeBody) };
+            Panel auditField = new Panel { Width = 320, Height = 58, Margin = new Padding(6, 26, 6, 4) };
+            _chkAuditEnabled.Dock = DockStyle.Fill;
+            auditField.Controls.Add(_chkAuditEnabled);
+            flow.Controls.Add(auditField);
+
+            Label note = new Label
+            {
+                Text = "توجه: تغییر «Timeout عدم فعالیت» بعد از ذخیره، از همان بازبینی بعدی (۳۰ ثانیه‌ای) اعمال می‌شود؛ بقیه تنظیمات امنیت بلافاصله برای ورودهای بعدی اعمال می‌شوند.",
+                AutoSize = false, Size = new Size(880, 40), ForeColor = UiTheme.TextMuted, Font = UiTheme.Font(UiTheme.SizeSmall),
+                TextAlign = ContentAlignment.TopRight
+            };
+            flow.Controls.Add(note);
+
+            // ─── مدیریت حساب مدیر کل (سوپر ادمین) — به درخواست کاربر ──────────
+            // فقط SuperAdmin می‌تواند نام کاربری/رمز حساب مدیر کل را تغییر دهد.
+            BuildSuperAdminSection(flow);
+
+            tab.Controls.Add(flow);
+            tab.Controls.Add(bottomBar);
+
+            LoadSecuritySettings();
+        }
+
+        private void LoadSecuritySettings()
+        {
+            _numMinPasswordLength.Value      = SettingsHelper.GetInt(SettingsHelper.MinPasswordLength, 6);
+            _numMaxFailedAttempts.Value      = SettingsHelper.GetInt(SettingsHelper.MaxFailedAttempts, 5);
+            _numLockoutMinutes.Value         = SettingsHelper.GetInt(SettingsHelper.LockoutMinutes, 15);
+            _numSessionTimeoutMinutes.Value  = SettingsHelper.GetInt(SettingsHelper.SessionTimeoutMinutes, 0);
+            _numForcePasswordChangeDays.Value = SettingsHelper.GetInt(SettingsHelper.ForcePasswordChangeDays, 0);
+            _chkAuditEnabled.Checked         = SettingsHelper.GetInt(SettingsHelper.AuditEnabled, 1) == 1;
+        }
+
+        private void BtnSaveSecurity_Click(object sender, EventArgs e)
+        {
+            SettingsHelper.Set(SettingsHelper.MinPasswordLength, ((int)_numMinPasswordLength.Value).ToString());
+            SettingsHelper.Set(SettingsHelper.MaxFailedAttempts, ((int)_numMaxFailedAttempts.Value).ToString());
+            SettingsHelper.Set(SettingsHelper.LockoutMinutes, ((int)_numLockoutMinutes.Value).ToString());
+            SettingsHelper.Set(SettingsHelper.SessionTimeoutMinutes, ((int)_numSessionTimeoutMinutes.Value).ToString());
+            SettingsHelper.Set(SettingsHelper.ForcePasswordChangeDays, ((int)_numForcePasswordChangeDays.Value).ToString());
+            SettingsHelper.Set(SettingsHelper.AuditEnabled, _chkAuditEnabled.Checked ? "1" : "0");
+            UiTheme.ShowSuccess(this, "تنظیمات امنیت ذخیره شد.");
+        }
+
+        // ══════════════════════════════════════════════════════════════════
+        // تب Backup و Restore
+        // ══════════════════════════════════════════════════════════════════
+        private void BuildBackupTab(TabPage tab)
+        {
+            Panel topPanel = new Panel { Dock = DockStyle.Top, Height = 170, BackColor = UiTheme.CardBack, Padding = new Padding(14) };
+            FlowLayoutPanel topFlow = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = true };
+
+            Panel scheduleField = new Panel { Width = 260, Height = 90, Margin = new Padding(6, 4, 6, 4) };
+            scheduleField.Controls.Add(new Label
+            {
+                Text = "زمان‌بندی Backup خودکار", AutoSize = false, Dock = DockStyle.Top, Height = 22,
+                TextAlign = ContentAlignment.MiddleRight, Font = UiTheme.FontBold(UiTheme.SizeSmall), ForeColor = UiTheme.TextDark
+            });
+            _radBackupDaily = new RadioButton { Text = "روزانه", Dock = DockStyle.Top, Height = 22, Checked = true };
+            _radBackupWeekly = new RadioButton { Text = "هفتگی", Dock = DockStyle.Top, Height = 22 };
+            _radBackupMonthly = new RadioButton { Text = "ماهانه", Dock = DockStyle.Top, Height = 22 };
+            scheduleField.Controls.Add(_radBackupMonthly);
+            scheduleField.Controls.Add(_radBackupWeekly);
+            scheduleField.Controls.Add(_radBackupDaily);
+            topFlow.Controls.Add(scheduleField);
+
+            _numBackupRetention = new NumericUpDown { Minimum = 1, Maximum = 365 };
+            topFlow.Controls.Add(MakeFieldPanel("تعداد نسخه‌های نگه‌داری", _numBackupRetention));
+
+            Button btnSaveSchedule = UiTheme.CreateButton("ذخیره تنظیمات Backup", "✔", UiTheme.Success);
+            btnSaveSchedule.Size = new Size(180, 34);
+            btnSaveSchedule.Margin = new Padding(6, 26, 6, 4);
+            btnSaveSchedule.Click += BtnSaveBackupSettings_Click;
+            topFlow.Controls.Add(btnSaveSchedule);
+
+            _lblBackupStatus = new Label
+            {
+                AutoSize = false, Width = 880, Height = 26, Font = UiTheme.Font(UiTheme.SizeBody), ForeColor = UiTheme.TextDark,
+                TextAlign = ContentAlignment.MiddleRight, Margin = new Padding(6, 4, 6, 4)
+            };
+            topFlow.Controls.Add(_lblBackupStatus);
+
+            topPanel.Controls.Add(topFlow);
+
+            FlowLayoutPanel actionFlow = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Top, Height = 56, FlowDirection = FlowDirection.LeftToRight, Padding = new Padding(14, 8, 14, 8)
+            };
+
+            Button btnBackupNow = UiTheme.CreateButton("Backup الان", "⇑", UiTheme.Primary);
+            btnBackupNow.Size = new Size(140, 38);
+            btnBackupNow.Click += BtnBackupNow_Click;
+            actionFlow.Controls.Add(btnBackupNow);
+
+            Button btnRestore = UiTheme.CreateSecondaryButton("بارگذاری Backup (Restore)", "⬇");
+            btnRestore.Size = new Size(200, 38);
+            btnRestore.Click += BtnRestoreBackup_Click;
+            actionFlow.Controls.Add(btnRestore);
+
+            Button btnVerify = UiTheme.CreateSecondaryButton("بررسی صحت یک Backup", "✔");
+            btnVerify.Size = new Size(180, 38);
+            btnVerify.Click += BtnVerifyBackup_Click;
+            actionFlow.Controls.Add(btnVerify);
+
+            _txtBackupOutput = new TextBox
+            {
+                Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical,
+                TextAlign = HorizontalAlignment.Right, Font = UiTheme.Font(UiTheme.SizeSmall)
+            };
+            Panel outputWrap = new Panel { Dock = DockStyle.Fill, Padding = new Padding(14, 4, 14, 14) };
+            outputWrap.Controls.Add(_txtBackupOutput);
+
+            tab.Controls.Add(outputWrap);
+            tab.Controls.Add(actionFlow);
+            tab.Controls.Add(topPanel);
+
+            LoadBackupSettings();
+        }
+
+        private void LoadBackupSettings()
+        {
+            string schedule = SettingsHelper.Get(SettingsHelper.BackupSchedule, "Daily");
+            _radBackupWeekly.Checked = schedule == "Weekly";
+            _radBackupMonthly.Checked = schedule == "Monthly";
+            _radBackupDaily.Checked = !_radBackupWeekly.Checked && !_radBackupMonthly.Checked;
+            _numBackupRetention.Value = SettingsHelper.GetInt(SettingsHelper.BackupRetentionCount, 14);
+
+            string lastBackup = SettingsHelper.Get(SettingsHelper.LastBackupDate, "");
+            _lblBackupStatus.Text = "آخرین Backup: " + (string.IsNullOrEmpty(lastBackup) ? "هنوز گرفته نشده" : lastBackup);
+        }
+
+        private void BtnSaveBackupSettings_Click(object sender, EventArgs e)
+        {
+            string schedule = _radBackupWeekly.Checked ? "Weekly" : _radBackupMonthly.Checked ? "Monthly" : "Daily";
+            SettingsHelper.Set(SettingsHelper.BackupSchedule, schedule);
+            SettingsHelper.Set(SettingsHelper.BackupRetentionCount, ((int)_numBackupRetention.Value).ToString());
+            UiTheme.ShowSuccess(this, "تنظیمات Backup ذخیره شد.");
+        }
+
+        private void AppendBackupOutput(string text)
+        {
+            _txtBackupOutput.AppendText("[" + DateTime.Now.ToString("HH:mm:ss") + "] " + text + Environment.NewLine);
+        }
+
+        private void BtnBackupNow_Click(object sender, EventArgs e)
+        {
+            if (!SecurityContext.IsSuperAdmin())
+            {
+                UiTheme.ShowWarning(this, "Backup کامل دیتابیس (شامل داده همه مراکز) فقط برای مدیر کل (SuperAdmin) مجاز است.");
+                return;
+            }
+
+            using (FolderBrowserDialog fbd = new FolderBrowserDialog { Description = "پوشه‌ای برای ساخت Backup انتخاب کنید" })
+            {
+                if (fbd.ShowDialog(this) != DialogResult.OK) return;
+
+                try
+                {
+                    BackupHelper helper = new BackupHelper();
+                    string path = helper.ExportBackup(fbd.SelectedPath);
+                    SettingsHelper.Set(SettingsHelper.LastBackupDate, DateTime.Today.ToString("yyyy-MM-dd"));
+                    AppendBackupOutput("Backup با موفقیت ساخته شد: " + path);
+                    LoadBackupSettings();
+                }
+                catch (Exception ex)
+                {
+                    AppendBackupOutput("خطا در ساخت Backup: " + ex.Message);
+                }
+            }
+        }
+
+        private void BtnRestoreBackup_Click(object sender, EventArgs e)
+        {
+            if (!SecurityContext.IsSuperAdmin())
+            {
+                UiTheme.ShowWarning(this, "Restore کامل دیتابیس (شامل داده همه مراکز) فقط برای مدیر کل (SuperAdmin) مجاز است.");
+                return;
+            }
+
+            using (FolderBrowserDialog fbd = new FolderBrowserDialog { Description = "پوشه Backup را انتخاب کنید" })
+            {
+                if (fbd.ShowDialog(this) != DialogResult.OK) return;
+
+                if (!UiTheme.ShowConfirm(this,
+                    "بارگذاری Backup ممکن است داده‌های موجود را جایگزین یا ادغام کند.\nادامه می‌دهید؟",
+                    "بارگذاری Backup"))
+                    return;
+
+                try
+                {
+                    BackupHelper helper = new BackupHelper();
+                    BackupHelper.ImportResult res = helper.ImportBackup(fbd.SelectedPath);
+                    SettingsHelper.Set(SettingsHelper.LastRestoreDate, DateTime.Today.ToString("yyyy-MM-dd"));
+                    AppendBackupOutput("Restore انجام شد — جدید: " + res.CasesInserted + "، تکراری/رد شده: " + res.CasesSkipped);
+                }
+                catch (Exception ex)
+                {
+                    AppendBackupOutput("خطا در Restore: " + ex.Message);
+                }
+            }
+        }
+
+        // بررسی صحت Backup بدون تغییر دیتابیس فعلی — فقط فایل XML بکاپ را در
+        // یک DataSet موقت می‌خواند و تعداد ردیف هر جدول را گزارش می‌دهد.
+        private void BtnVerifyBackup_Click(object sender, EventArgs e)
+        {
+            using (FolderBrowserDialog fbd = new FolderBrowserDialog { Description = "پوشه Backup را برای بررسی انتخاب کنید" })
+            {
+                if (fbd.ShowDialog(this) != DialogResult.OK) return;
+
+                try
+                {
+                    string xmlPath = System.IO.Path.Combine(fbd.SelectedPath, "CaseManagementBackup.xml");
+                    if (!System.IO.File.Exists(xmlPath))
+                    {
+                        AppendBackupOutput("نامعتبر: فایل CaseManagementBackup.xml در این پوشه پیدا نشد.");
+                        return;
+                    }
+
+                    DataSet ds = new DataSet();
+                    ds.ReadXml(xmlPath);
+
+                    AppendBackupOutput("Backup معتبر است. جدول‌های موجود:");
+                    foreach (DataTable t in ds.Tables)
+                        AppendBackupOutput("  " + t.TableName + ": " + t.Rows.Count + " رکورد");
+                }
+                catch (Exception ex)
+                {
+                    AppendBackupOutput("نامعتبر یا خراب: " + ex.Message);
+                }
+            }
+        }
+
+        // ══════════════════════════════════════════════════════════════════
+        // تب اعلان‌ها
+        // ══════════════════════════════════════════════════════════════════
+        private void BuildNotificationsTab(TabPage tab)
+        {
+            Panel bottomBar = new Panel { Dock = DockStyle.Bottom, Height = 54, BackColor = UiTheme.CardBack };
+            FlowLayoutPanel saveFlow = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, Padding = new Padding(14, 8, 14, 8)
+            };
+            Button btnSave = UiTheme.CreateButton("ذخیره اعلان‌ها", "✔", UiTheme.Success);
+            btnSave.Size = new Size(160, 38);
+            btnSave.Click += BtnSaveNotifications_Click;
+            saveFlow.Controls.Add(btnSave);
+            bottomBar.Controls.Add(saveFlow);
+
+            FlowLayoutPanel flow = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown,
+                WrapContents = false, AutoScroll = true, Padding = new Padding(14, 12, 14, 12)
+            };
+
+            _chkNotifyBackupMissing     = MakeNotifyCheckbox(flow, "بکاپ امروز گرفته نشده");
+            _chkNotifyLowDisk           = MakeNotifyCheckbox(flow, "فضای دیسک کم است");
+            _chkNotifyIncompleteCase    = MakeNotifyCheckbox(flow, "پرونده ناقص است");
+            _chkNotifyNoPhoto           = MakeNotifyCheckbox(flow, "عکس ندارد");
+            _chkNotifyNoDocs            = MakeNotifyCheckbox(flow, "سند ندارد");
+            _chkNotifyIncompleteFamily  = MakeNotifyCheckbox(flow, "اعضای خانواده ناقص هستند");
+            _chkNotifyIncompleteFinance = MakeNotifyCheckbox(flow, "اطلاعات مالی ناقص است (پرونده فعال بدون هیچ کمک ثبت‌شده)");
+
+            tab.Controls.Add(flow);
+            tab.Controls.Add(bottomBar);
+
+            LoadNotificationSettings();
+        }
+
+        private CheckBox MakeNotifyCheckbox(FlowLayoutPanel parent, string text)
+        {
+            CheckBox chk = new CheckBox
+            {
+                Text = text, AutoSize = false, Width = 700, Height = 32,
+                Font = UiTheme.Font(UiTheme.SizeBody), TextAlign = ContentAlignment.MiddleRight
+            };
+            parent.Controls.Add(chk);
+            return chk;
+        }
+
+        private void LoadNotificationSettings()
+        {
+            _chkNotifyBackupMissing.Checked     = SettingsHelper.GetInt(SettingsHelper.Notify_BackupMissing, 1) == 1;
+            _chkNotifyLowDisk.Checked           = SettingsHelper.GetInt(SettingsHelper.Notify_LowDisk, 1) == 1;
+            _chkNotifyIncompleteCase.Checked    = SettingsHelper.GetInt(SettingsHelper.Notify_IncompleteCase, 1) == 1;
+            _chkNotifyNoPhoto.Checked           = SettingsHelper.GetInt(SettingsHelper.Notify_NoPhoto, 1) == 1;
+            _chkNotifyNoDocs.Checked            = SettingsHelper.GetInt(SettingsHelper.Notify_NoDocs, 1) == 1;
+            _chkNotifyIncompleteFamily.Checked  = SettingsHelper.GetInt(SettingsHelper.Notify_IncompleteFamily, 1) == 1;
+            _chkNotifyIncompleteFinance.Checked = SettingsHelper.GetInt(SettingsHelper.Notify_IncompleteFinance, 1) == 1;
+        }
+
+        private void BtnSaveNotifications_Click(object sender, EventArgs e)
+        {
+            SettingsHelper.Set(SettingsHelper.Notify_BackupMissing, _chkNotifyBackupMissing.Checked ? "1" : "0");
+            SettingsHelper.Set(SettingsHelper.Notify_LowDisk, _chkNotifyLowDisk.Checked ? "1" : "0");
+            SettingsHelper.Set(SettingsHelper.Notify_IncompleteCase, _chkNotifyIncompleteCase.Checked ? "1" : "0");
+            SettingsHelper.Set(SettingsHelper.Notify_NoPhoto, _chkNotifyNoPhoto.Checked ? "1" : "0");
+            SettingsHelper.Set(SettingsHelper.Notify_NoDocs, _chkNotifyNoDocs.Checked ? "1" : "0");
+            SettingsHelper.Set(SettingsHelper.Notify_IncompleteFamily, _chkNotifyIncompleteFamily.Checked ? "1" : "0");
+            SettingsHelper.Set(SettingsHelper.Notify_IncompleteFinance, _chkNotifyIncompleteFinance.Checked ? "1" : "0");
+            UiTheme.ShowSuccess(this, "تنظیمات اعلان‌ها ذخیره شد.");
+        }
+
+        // ─── کمکی‌ها ────────────────────────────────────────────────────────
+        private DataGridView CreateGrid()
+        {
+            DataGridView g = new DataGridView
+            {
+                Dock                  = DockStyle.Fill,
+                ReadOnly              = true,
+                AllowUserToAddRows    = false,
+                AllowUserToDeleteRows = false,
+                AutoSizeColumnsMode   = DataGridViewAutoSizeColumnsMode.Fill,
+                SelectionMode         = DataGridViewSelectionMode.FullRowSelect
+            };
+            UiTheme.StyleGrid(g);
+            return g;
+        }
+
+        // یک فیلد: برچسب بالا + کنترل پایین، با اندازه یکسان برای همه فیلدهای
+        // فرم (الگوی یکسان در کل فرم تنظیمات رعایت می‌شود).
+        private Panel MakeFieldPanel(string labelText, Control input)
+        {
+            Panel p = new Panel();
+            p.Width = 210;
+            p.Height = 58;
+            p.Margin = new Padding(6, 4, 6, 4);
+
+            Label lbl = new Label();
+            lbl.Text = labelText;
+            lbl.AutoSize = false;
+            lbl.Dock = DockStyle.Top;
+            lbl.Height = 22;
+            lbl.TextAlign = ContentAlignment.MiddleRight;
+            lbl.Font = UiTheme.FontBold(UiTheme.SizeSmall);
+            lbl.ForeColor = UiTheme.TextDark;
+
+            input.Dock = DockStyle.Top;
+            input.Width = 204;
+            input.Font = UiTheme.Font(UiTheme.SizeBody);
+            if (input is TextBox tb)
+                tb.Height = 28;
+            else if (input is NumericUpDown nud)
+                nud.Height = 28;
+            else if (input is ComboBox cb)
+                cb.Height = 28;
+
+            p.Controls.Add(input);
+            p.Controls.Add(lbl);
+            return p;
+        }
+    }
+}
