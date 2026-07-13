@@ -91,6 +91,7 @@ namespace CaseManagement
             toolButtons.Controls.Add(CreateToolButton("جستجوی پیشرفته", "⌕", delegate { using (var frm = new FrmAdvancedSearch()) frm.ShowDialog(this); }));
             toolButtons.Controls.Add(CreateToolButton("مالی", "$", delegate { using (var frm = new FrmFinance()) frm.ShowDialog(this); RefreshAll(); }));
             toolButtons.Controls.Add(CreateToolButton("حسابداری ایتام", "💰", delegate { using (var frm = new CaseManagement.Accounting.FrmAccounting()) frm.ShowDialog(this); }));
+            toolButtons.Controls.Add(CreateToolButton("همگام‌سازی", "🔄", delegate { using (var frm = new CaseManagement.Sync.FrmSyncWizard()) frm.ShowDialog(this); RefreshAll(); }));
             toolButtons.Controls.Add(CreateToolButton("تنظیمات", "⚙", OpenSettings));
             toolButtons.Controls.Add(CreateToolButton("جزوه آموزشی", "📘", OpenTrainingManual));
             toolButtons.Controls.Add(CreateToolButton("ارتباط با ما", "☎", OpenContactUs));

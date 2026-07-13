@@ -245,6 +245,7 @@
     <Compile Include="Sync\HtmlSyncProvider.cs" />
     <Compile Include="Sync\SyncComparer.cs" />
     <Compile Include="Sync\SyncEngine.cs" />
+    <Compile Include="Sync\FrmSyncWizard.cs" />
     <Compile Include="Helpers\OpenXmlCaseExporter.cs" />
     <Compile Include="Helpers\PasswordHelper.cs" />
     <Compile Include="Helpers\PersianDateHelper.cs" />
