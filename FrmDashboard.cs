@@ -112,6 +112,7 @@ namespace CaseManagement
             toolButtons.Controls.Add(CreateToolButton("جزوه آموزشی", "📘", OpenTrainingManual));
             toolButtons.Controls.Add(CreateToolButton("ارتباط با ما", "☎", OpenContactUs));
             toolButtons.Controls.Add(CreateToolButton("کاربران", "☺", OpenUsers));
+            toolButtons.Controls.Add(CreateToolButton("خروج از حساب", "⎋", delegate { LogoutCurrentUser(); }));
 
             // ─── پانل اطلاعات کاربر + مرکز (سمت چپِ نوار) ─────────────────
             Panel userPanel = new Panel();
@@ -385,6 +386,15 @@ namespace CaseManagement
                 catch { }
             }
             _cmbFilterDistrict.SelectedIndex = 0;
+        }
+
+        // خروج از حساب فعلی: برنامه ری‌استارت می‌شود و صفحه‌ی ورود دوباره می‌آید،
+        // پس کاربر دیگری می‌تواند وارد شود (بدون بستن دستیِ کل برنامه).
+        private void LogoutCurrentUser()
+        {
+            if (!UiTheme.ShowConfirm(this, "از حساب فعلی خارج می‌شوید؟ برنامه به صفحه‌ی ورود بازمی‌گردد.", "خروج از حساب"))
+                return;
+            Application.Restart();
         }
 
         private void ApplyDashboardFilter()

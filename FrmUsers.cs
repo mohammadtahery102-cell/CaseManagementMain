@@ -113,6 +113,12 @@ namespace CaseManagement
             btnToggle.Click += BtnToggle_Click;
             buttonFlow.Controls.Add(btnToggle);
 
+            Button btnDelete = UiTheme.CreateButton("حذف کاربر", "✕", UiTheme.Danger);
+            btnDelete.Size = new Size(140, 34);
+            btnDelete.Margin = new Padding(4);
+            btnDelete.Click += BtnDelete_Click;
+            buttonFlow.Controls.Add(btnDelete);
+
             topPanel.Controls.Add(buttonFlow);
             topPanel.Controls.Add(fieldsFlow);
 
@@ -349,6 +355,61 @@ WHERE  UserID = @UserID AND (@CID = 0 OR CenterID = @CID)", con))
             }
 
             AuditLogger.Log("تغییر وضعیت کاربر", "TblUsers", userId, "", "");
+            LoadUsers();
+        }
+
+        // ─── حذف کاربر ───────────────────────────────────────────────────────
+        private void BtnDelete_Click(object sender, EventArgs e)
+        {
+            if (!SecurityContext.IsAdmin())
+            {
+                UiTheme.ShowWarning(this, "مدیریت کاربران فقط برای مدیر مجاز است.");
+                return;
+            }
+            if (_dgvUsers.CurrentRow == null || !_dgvUsers.Columns.Contains("UserID"))
+            {
+                UiTheme.ShowWarning(this, "ابتدا یک کاربر را از لیست انتخاب کنید.");
+                return;
+            }
+
+            int userId = Convert.ToInt32(_dgvUsers.CurrentRow.Cells["UserID"].Value);
+            if (userId == SecurityContext.UserId)
+            {
+                UiTheme.ShowWarning(this, "کاربر جاری را نمی‌توان حذف کرد.");
+                return;
+            }
+
+            string username = _dgvUsers.Columns.Contains("Username")
+                ? Convert.ToString(_dgvUsers.CurrentRow.Cells["Username"].Value)
+                : "";
+
+            // فقط کاربر مرکز خودِ Admin قابل حذف است (لایه دفاعی چندمرکزی).
+            try { CenterGuard.EnsureUserAccess(_db, userId); }
+            catch (CenterAccessDeniedException ex) { UiTheme.ShowWarning(this, ex.Message); return; }
+
+            if (!UiTheme.ShowConfirm(this,
+                    "کاربر «" + username + "» برای همیشه حذف شود؟\nاین عملیات قابل بازگشت نیست.",
+                    "حذف کاربر"))
+                return;
+
+            using (SQLiteConnection con = _db.GetConnection())
+            using (SQLiteCommand cmd = new SQLiteCommand(
+                "DELETE FROM TblUsers WHERE UserID = @UserID AND UserID <> @Current AND (@CID = 0 OR CenterID = @CID)", con))
+            {
+                cmd.Parameters.AddWithValue("@UserID", userId);
+                cmd.Parameters.AddWithValue("@Current", SecurityContext.UserId);
+                cmd.Parameters.AddWithValue("@CID", SecurityContext.CenterFilterId);
+                con.Open();
+                int affected = cmd.ExecuteNonQuery();
+                if (affected == 0)
+                {
+                    UiTheme.ShowWarning(this, "این کاربر حذف نشد (متعلق به مرکز دیگر یا کاربر جاری).");
+                    return;
+                }
+            }
+
+            AuditLogger.Log("حذف کاربر", "TblUsers", userId, username, "");
+            UiTheme.ShowSuccess(this, "کاربر حذف شد.");
             LoadUsers();
         }
 
