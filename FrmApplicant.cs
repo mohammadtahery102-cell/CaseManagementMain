@@ -53,7 +53,7 @@ namespace CaseManagement
             FlowLayoutPanel flow = new FlowLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                FlowDirection = FlowDirection.RightToLeft,
+                FlowDirection = FlowDirection.LeftToRight,
                 WrapContents = true,
                 AutoScroll = true
             };

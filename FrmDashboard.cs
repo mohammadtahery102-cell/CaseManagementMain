@@ -113,10 +113,10 @@ namespace CaseManagement
             toolButtons.Controls.Add(CreateToolButton("ارتباط با ما", "☎", OpenContactUs));
             toolButtons.Controls.Add(CreateToolButton("کاربران", "☺", OpenUsers));
 
-            // ─── پانل اطلاعات کاربر + مرکز در سمت راست نوار ───────────────
+            // ─── پانل اطلاعات کاربر + مرکز (سمت چپِ نوار) ─────────────────
             Panel userPanel = new Panel();
             userPanel.Dock      = DockStyle.Left;
-            userPanel.Width     = 200;
+            userPanel.Width     = 165; // کوچک‌تر شد تا combo/کاربر روی دکمه‌های toolbar نیفتد
             userPanel.BackColor = Color.Transparent;
 
             Label lblUser = new Label();
@@ -158,8 +158,12 @@ namespace CaseManagement
                 userPanel.Controls.Add(lblUser);
             }
 
-            toolbar.Controls.Add(toolButtons);
+            // آموزش — ترتیب مهم است: پنل کاربر (Dock=Left) باید «اول» اضافه شود تا
+            // فضایش را از چپ بگیرد و سپس toolButtons (Dock=Fill) بقیه را پر کند؛
+            // در غیر این صورت Fill کل نوار را می‌گیرد و پنل کاربر روی دکمه‌ها می‌افتد
+            // (باگ «منو زیر combo رفت»).
             toolbar.Controls.Add(userPanel);
+            toolbar.Controls.Add(toolButtons);
 
             // ─── بنر عنوان بزرگ + لوگو (بندهای ۳ و ۹ بازطراحی ظاهری) ──────
             // آموزش — ارتفاع از ۸۴ به ۱۱۲ افزایش یافت تا خط کوچک «حدیث روز»
