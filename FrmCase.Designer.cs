@@ -437,10 +437,10 @@ namespace CaseManagement
             toolbar.Dock = System.Windows.Forms.DockStyle.Fill;
             toolbar.FlowDirection = System.Windows.Forms.FlowDirection.LeftToRight;
             toolbar.Padding = new System.Windows.Forms.Padding(8, 8, 8, 4);
-            StyleBtn(this.btnFamily, "اعضاء خانواده", 160, 40);
+            StyleBtn(this.btnFamily, "اعضاء خانواده", 150, 36);
             this.btnFamily.Click += new System.EventHandler(this.btnFamily_Click);
             this.btnFamily.BackColor = CaseManagement.Helpers.UiTheme.Success;
-            StyleBtn(this.btnDocs, "اسناد", 130, 40);
+            StyleBtn(this.btnDocs, "اسناد", 120, 36);
             this.btnDocs.Click += new System.EventHandler(this.btnDocs_Click);
             this.btnDocs.BackColor = CaseManagement.Helpers.UiTheme.PrimaryLight;
             toolbar.Controls.Add(this.btnFamily);
@@ -457,18 +457,18 @@ namespace CaseManagement
             bottomActionsRow.FlowDirection = System.Windows.Forms.FlowDirection.LeftToRight;
             bottomActionsRow.WrapContents = true;
             bottomActionsRow.Padding = new System.Windows.Forms.Padding(8, 6, 8, 6);
-            StyleBtn(this.btnNew, "جدید", 100, 38); this.btnNew.Click += new System.EventHandler(this.btnNew_Click);
-            StyleBtn(this.btnSave, "ذخیره", 100, 38); this.btnSave.Click += new System.EventHandler(this.btnSave_Click);
-            StyleBtn(this.btnEdit, "ویرایش", 100, 38); this.btnEdit.Click += new System.EventHandler(this.btnEdit_Click);
-            StyleBtn(this.btnDelete, "حذف", 100, 38); this.btnDelete.Click += new System.EventHandler(this.btnDelete_Click);
-            StyleBtn(this.btnSearch, "جستجو", 100, 38); this.btnSearch.Click += new System.EventHandler(this.btnSearch_Click);
-            this.lblExportSection.Text = "خروجی‌ها:"; this.lblExportSection.AutoSize = false; this.lblExportSection.Size = new System.Drawing.Size(74, 38); this.lblExportSection.TextAlign = System.Drawing.ContentAlignment.MiddleRight; this.lblExportSection.Font = new System.Drawing.Font("Segoe UI", 10.5F, System.Drawing.FontStyle.Bold);
-            StyleBtn(this.btnPrint, "چاپ پرونده", 96, 32); this.btnPrint.Click += new System.EventHandler(this.btnPrint_Click);
-            StyleBtn(this.btnExportWord, "ورد", 78, 32); this.btnExportWord.Click += new System.EventHandler(this.btnExportWord_Click);
-            StyleBtn(this.btnExportPdf, "پی دی اف", 88, 32); this.btnExportPdf.Click += new System.EventHandler(this.btnExportPdf_Click);
-            StyleBtn(this.btnExportExcel, "اکسل", 78, 32); this.btnExportExcel.Click += new System.EventHandler(this.btnExportExcel_Click);
-            StyleBtn(this.btnBatchExport, "خروجی جمعی", 122, 32); this.btnBatchExport.Click += new System.EventHandler(this.btnBatchExport_Click);
-            StyleBtn(this.btnChooseStorageFolder, "انتخاب محل ذخیره فایل‌ها", 190, 32); this.btnChooseStorageFolder.Click += new System.EventHandler(this.btnChooseStorageFolder_Click);
+            StyleBtn(this.btnNew, "جدید", 82, 32); this.btnNew.Click += new System.EventHandler(this.btnNew_Click);
+            StyleBtn(this.btnSave, "ذخیره", 82, 32); this.btnSave.Click += new System.EventHandler(this.btnSave_Click);
+            StyleBtn(this.btnEdit, "ویرایش", 82, 32); this.btnEdit.Click += new System.EventHandler(this.btnEdit_Click);
+            StyleBtn(this.btnDelete, "حذف", 82, 32); this.btnDelete.Click += new System.EventHandler(this.btnDelete_Click);
+            StyleBtn(this.btnSearch, "جستجو", 82, 32); this.btnSearch.Click += new System.EventHandler(this.btnSearch_Click);
+            this.lblExportSection.Text = "خروجی‌ها:"; this.lblExportSection.AutoSize = false; this.lblExportSection.Size = new System.Drawing.Size(60, 32); this.lblExportSection.TextAlign = System.Drawing.ContentAlignment.MiddleRight; this.lblExportSection.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
+            StyleBtn(this.btnPrint, "چاپ", 74, 32); this.btnPrint.Click += new System.EventHandler(this.btnPrint_Click);
+            StyleBtn(this.btnExportWord, "ورد", 62, 32); this.btnExportWord.Click += new System.EventHandler(this.btnExportWord_Click);
+            StyleBtn(this.btnExportPdf, "پی دی اف", 78, 32); this.btnExportPdf.Click += new System.EventHandler(this.btnExportPdf_Click);
+            StyleBtn(this.btnExportExcel, "اکسل", 62, 32); this.btnExportExcel.Click += new System.EventHandler(this.btnExportExcel_Click);
+            StyleBtn(this.btnBatchExport, "خروجی جمعی", 104, 32); this.btnBatchExport.Click += new System.EventHandler(this.btnBatchExport_Click);
+            StyleBtn(this.btnChooseStorageFolder, "محل ذخیره", 96, 32); this.btnChooseStorageFolder.Click += new System.EventHandler(this.btnChooseStorageFolder_Click);
             bottomActionsRow.Controls.Add(this.btnNew);
             bottomActionsRow.Controls.Add(this.btnSave);
             bottomActionsRow.Controls.Add(this.btnEdit);
@@ -496,9 +496,9 @@ namespace CaseManagement
             rootLayout.RowCount = 3;
             rootLayout.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 62F));
             rootLayout.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 38F));
-            rootLayout.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 54F));
+            rootLayout.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 50F));
             rootLayout.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
-            rootLayout.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 108F));
+            rootLayout.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 50F));
             rootLayout.Controls.Add(toolbar, 0, 0);
             rootLayout.SetColumnSpan(toolbar, 2);
             rootLayout.Controls.Add(fieldsPanel, 0, 1);
@@ -565,8 +565,10 @@ namespace CaseManagement
         {
             btn.Text = text;
             btn.Size = new System.Drawing.Size(width, height);
-            btn.Font = new System.Drawing.Font("Segoe UI", 10.5F, System.Drawing.FontStyle.Bold);
-            btn.Margin = new System.Windows.Forms.Padding(5, 4, 5, 4);
+            // فونت کمی کوچک‌تر و سبک‌تر برای ظاهر حرفه‌ای و جمع‌وجورتر (به‌جای
+            // دکمه‌های بزرگ و سنگین قبلی) — همه‌ی دکمه‌ها یکدست می‌شوند.
+            btn.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
+            btn.Margin = new System.Windows.Forms.Padding(3, 3, 3, 3);
         }
 
         // آموزش — رفع باگ اسکرول در فرم RTL: چون فرم RightToLeftLayout=true

@@ -100,9 +100,10 @@ namespace CaseManagement
         // بماند؛ چون آن پنل WrapContents=true دارد، افزودن یک دکمه دیگر کاملاً امن است.
         private void AddGuardianCardButton()
         {
-            Button btnGuardianCard = UiTheme.CreateSecondaryButton("کارت شناسایی سرپرست", "🪪");
-            btnGuardianCard.Size = new Size(190, 32);
-            btnGuardianCard.Margin = new Padding(5, 4, 5, 4);
+            Button btnGuardianCard = UiTheme.CreateSecondaryButton("کارت شناسایی", "🪪");
+            btnGuardianCard.Size = new Size(128, 32);
+            btnGuardianCard.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
+            btnGuardianCard.Margin = new Padding(3, 3, 3, 3);
             btnGuardianCard.TabStop = false;
             btnGuardianCard.Click += delegate
             {
@@ -908,23 +909,17 @@ namespace CaseManagement
             HideGridColumn("CaseDate");
             HideGridColumn("PhotoPath");
 
-            if (!dgvCases.Columns.Contains(PhotoThumbColumnName))
-            {
-                var photoColumn = new DataGridViewImageColumn
-                {
-                    Name = PhotoThumbColumnName,
-                    HeaderText = "عکس",
-                    ImageLayout = DataGridViewImageCellLayout.Zoom,
-                    Resizable = DataGridViewTriState.False
-                };
-                dgvCases.Columns.Add(photoColumn);
-            }
+            // آموزش — به درخواست کاربر: ستون «عکس» از لیست ثبت‌شده‌ها حذف شد.
+            // عکس‌های کوچک در گرید اغلب به‌صورت آیکون خطا (❌) نمایش داده می‌شدند
+            // (فایل پیدا نمی‌شد یا مسیر نامعتبر بود) و ظاهر غیرحرفه‌ای می‌ساختند.
+            // عکس اصلی همچنان با انتخاب پرونده در کادرهای بالای فرم دیده می‌شود.
+            if (dgvCases.Columns.Contains(PhotoThumbColumnName))
+                dgvCases.Columns.Remove(PhotoThumbColumnName);
 
             if (dgvCases.Columns.Contains("Code"))
                 dgvCases.Columns["Code"].DisplayIndex = 0;
             if (dgvCases.Columns.Contains("HeadFullName"))
                 dgvCases.Columns["HeadFullName"].DisplayIndex = 1;
-            dgvCases.Columns[PhotoThumbColumnName].DisplayIndex = dgvCases.Columns.Count - 1;
 
             dgvCases.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
             dgvCases.MultiSelect = false;
@@ -932,9 +927,9 @@ namespace CaseManagement
             dgvCases.AllowUserToAddRows = false;
             dgvCases.AllowUserToDeleteRows = false;
             dgvCases.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-            dgvCases.RowTemplate.Height = 46;
-
-            LoadCaseThumbnails();
+            // ردیف‌های جمع‌وجورتر و حرفه‌ای‌تر (چون دیگر thumbnail عکس نداریم).
+            dgvCases.RowTemplate.Height = 32;
+            dgvCases.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
         }
 
         private void HideGridColumn(string columnName)
