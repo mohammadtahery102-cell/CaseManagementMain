@@ -124,6 +124,22 @@ namespace CaseManagement
             }
         }
 
+        // فرم را داخل ناحیه‌ی کاری صفحه جا می‌دهد (مستقل از DPI/اندازه‌ی صفحه).
+        private void FitToScreen()
+        {
+            try
+            {
+                System.Drawing.Rectangle wa = Screen.FromControl(this).WorkingArea;
+                int w = Math.Min(Width, wa.Width - 8);
+                int h = Math.Min(Height, wa.Height - 8);
+                Size = new Size(w, h);
+                Location = new System.Drawing.Point(
+                    wa.Left + Math.Max(0, (wa.Width - w) / 2),
+                    wa.Top + Math.Max(0, (wa.Height - h) / 2));
+            }
+            catch { /* اگر به هر دلیل نشد، اندازه‌ی طراحی حفظ می‌شود */ }
+        }
+
         private void FrmCase_KeyDown(object sender, KeyEventArgs e)
         {
             if (e.KeyCode == Keys.Enter)
@@ -342,6 +358,14 @@ namespace CaseManagement
 
         private void FrmCase_Load(object sender, EventArgs e)
         {
+            // آموزش — رفع قطعی «دکمه‌ها زیر صفحه می‌روند»: به‌خاطر مقیاس‌بندی DPI
+            // ویندوز (۱۲۵٪/۱۵۰٪)، فرم بزرگ‌تر از اندازه‌ی طراحی رندر می‌شود و از
+            // ارتفاع صفحه بیرون می‌زند. اینجا فرم را با «ناحیه‌ی کاری واقعیِ صفحه»
+            // (زیر نوار عنوان، بالای تسک‌بار) تطبیق می‌دهیم و وسط‌چین می‌کنیم؛ چون
+            // ناحیه‌ی فیلدها اسکرول دارد، کوتاه‌شدن ارتفاع مشکلی ایجاد نمی‌کند و
+            // دکمه‌های پایین (که Dock=Bottom هستند) همیشه دیده می‌شوند.
+            FitToScreen();
+
             Text = "پرونده‌ها  —  " + SecurityContext.CenterDisplay;
             txtFormNo.ReadOnly = true;
             txtFormNo.Enabled = true;
