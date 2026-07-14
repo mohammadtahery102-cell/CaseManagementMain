@@ -11,53 +11,70 @@ namespace CaseManagement.Sync
     // ─────────────────────────────────────────────────────────────────────────
     // HtmlSyncProvider — منبع همگام‌سازی از خروجی HTML سامانه مرکزی.
     //
-    // دو فایل ورودی: (۱) سرپرستان (۲) اعضای خانواده. هر دو یک ستون «کد عمومی»
-    // دارند که شناسه‌ی یکتای خانواده است و تنها مبنای ارتباط بین دو فایل و با
-    // دیتابیس (TblCase.Code) است.
+    // دو فایل ورودی: (۱) سرپرستان (۲) اعضای خانواده. «کد عمومی» = کد اختصاصی
+    // سرپرست (TblCase.Code) و تنها مبنای ارتباط است. فایل اعضا کد مستقل ندارد؛
+    // همان کد عمومی سرپرست در هر ردیفِ عضو تکرار می‌شود — اگر یک خانواده ۱۰ یتیم
+    // داشته باشد، همان کد عمومی ۱۰ بار در فایل اعضا می‌آید و هر ۱۰ ردیف زیر همان
+    // پرونده (CasID) اضافه می‌شوند.
     //
-    // ★★★ نقطه‌ی کالیبراسیون ★★★
-    // تنها چیزی که با «فایل نمونه‌ی واقعی» باید تنظیم شود، جدول‌های نگاشت زیر
-    // (GuardianFieldMap / MemberFieldMap و نام ستون کد عمومی) است: هر ستون
-    // دیتابیس به فهرستی از «عناوین ممکن ستون در HTML» نگاشت می‌شود. Parser خودش
-    // ساختار جدول HTML را تشخیص می‌دهد؛ فقط باید بداند کدام عنوانِ ستون به کدام
-    // فیلد می‌رود. با دیدن فایل واقعی، این چند خط در چند دقیقه دقیق می‌شود.
+    // کالیبره‌شده روی فایل واقعی کاربر (۱۴۰۵/۰۴/۱۴):
+    //   • فایل سرپرستان: ردیف, کد عمومی, نام, نام پدر, وضعیت تأهل, تاریخ تولد,
+    //     ش تذکره, سیادت, تلفن همراه, آدرس, قطع, شماره پرونده, ولایت, تعداد یتیم,
+    //     ولسوالی, مذهب, وضعیت خدمات, وضعیت تذکره
+    //     - «آدرس» = محل سکونت فعلی سرپرست.
+    //     - «شماره پرونده» → ستون موجود TblCase.CaseNo.
+    //     - قطع/تعداد یتیم/وضعیت تذکره/تاریخ تولد سرپرست: بدون ستون متناظر در
+    //       دیتابیس فعلی → عمداً نادیده گرفته می‌شوند (طبق تصمیم کاربر).
+    //   • فایل اعضا: ردیف, کد عمومی, نام, نام پدر, ش تذکره, تاریخ تولد, تلفن همراه,
+    //     نام(۲), تاریخ تولد(۲), ش تذکره(۲), سیادت, جنسیت, وضعیت خدمات
+    //     - نام/تاریخ تولد/ش‌تذکره اول = خود عضو.
+    //     - نام/تاریخ تولد/ش‌تذکره دوم (تکراری) = کفیل/سرپرست دیگر — چون ستون
+    //       متناظر در TblFamily نداریم، به‌صورت یادداشت در ستون عمومی «Details»
+    //       نوشته می‌شود (قابل مشاهده و انتخاب/رد در Wizard، نه بازنویسی خاموش).
     // ─────────────────────────────────────────────────────────────────────────
     public sealed class HtmlSyncProvider : IDataSyncProvider
     {
         public string Name { get { return "خروجی HTML سامانه مرکزی"; } }
 
-        // عناوین ممکن ستون «کد عمومی» (کلید خانواده) در هر دو فایل.
+        // عناوین ممکن ستون «کد عمومی» (= کد اختصاصی سرپرست، کلید خانواده).
         private static readonly string[] PublicCodeHeaders =
-            { "کد عمومی", "کد خانواده", "کد اختصاصی", "کد فامیل", "کد" };
+            { "کد عمومی", "کد اختصاصی", "کد خانواده", "کد فامیل", "کد" };
 
-        // نگاشت ستون دیتابیس TblCase → عناوین ممکن ستون در فایل سرپرستان.
+        // نگاشت ستون دیتابیس TblCase → عناوین ستون در فایل سرپرستان (occurrence=1).
         private static readonly Dictionary<string, string[]> GuardianFieldMap =
             new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
         {
-            { "HeadFullName",     new[] { "نام سرپرست", "نام و تخلص", "نام کامل", "اسم سرپرست" } },
-            { "HeadFatherName",   new[] { "نام پدر", "ولد", "اسم پدر" } },
-            { "HeadTazkiraNo",    new[] { "شماره تذکره", "تذکره", "شماره تذکره سرپرست" } },
-            { "Phone",            new[] { "شماره تماس", "تلفن", "موبایل", "شماره" } },
-            { "Province",         new[] { "ولایت", "استان" } },
-            { "District",         new[] { "ولسوالی", "شهرستان" } },
-            { "RequestType",      new[] { "نوع درخواست", "نوع کمک" } },
-            { "MaritalStatus",    new[] { "وضعیت تأهل", "تاهل" } },
-            { "Job",              new[] { "شغل", "وظیفه" } },
+            { "HeadFullName",         new[] { "نام", "نام سرپرست", "نام و تخلص", "نام کامل" } },
+            { "HeadFatherName",       new[] { "نام پدر", "ولد" } },
+            { "HeadTazkiraNo",        new[] { "ش تذکره", "شماره تذکره", "تذکره" } },
+            { "HeadSadat",            new[] { "سیادت" } },
+            { "Phone",                new[] { "تلفن همراه", "شماره تماس", "تلفن", "موبایل" } },
+            { "HeadCurrentResidence", new[] { "آدرس" } },
+            { "CaseNo",               new[] { "شماره پرونده" } },
+            { "Province",             new[] { "ولایت", "استان" } },
+            { "District",             new[] { "ولسوالی", "شهرستان" } },
+            { "Religion",             new[] { "مذهب" } },
+            { "MaritalStatus",        new[] { "وضعیت تأهل", "تاهل" } },
+            { "ServiceStatus",        new[] { "وضعیت خدمات" } },
         };
 
-        // نگاشت ستون دیتابیس TblFamily → عناوین ممکن ستون در فایل اعضا.
+        // نگاشت ستون دیتابیس TblFamily → عناوین ستون در فایل اعضا (occurrence=1؛
+        // یعنی وقتی عنوان دوبار تکرار شده، همیشه اولین/خودِ عضو گرفته می‌شود).
         private static readonly Dictionary<string, string[]> MemberFieldMap =
             new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
         {
-            { "MemberName",       new[] { "نام عضو", "نام", "اسم" } },
+            { "MemberName",       new[] { "نام", "نام عضو" } },
             { "MemberFatherName", new[] { "نام پدر", "ولد" } },
-            { "MemberTazkiraNo",  new[] { "شماره تذکره", "تذکره" } },
-            { "BirthDate",        new[] { "تاریخ تولد", "تولد", "سن" } },
-            { "Gender",           new[] { "جنسیت", "جنس" } },
-            { "MemberSadat",      new[] { "سیادت", "سادات" } },
-            { "MemberEducation",  new[] { "تحصیلات", "سطح تحصیلات" } },
-            { "Skill",            new[] { "مهارت", "حرفه" } },
+            { "MemberTazkiraNo",  new[] { "ش تذکره", "شماره تذکره", "تذکره" } },
+            { "BirthDate",        new[] { "تاریخ تولد" } },
+            { "Gender",           new[] { "جنسیت" } },
+            { "MemberSadat",      new[] { "سیادت" } },
         };
+
+        // CHECK constraint واقعی TblCase.ServiceStatus — مقدار خارج از این فهرست
+        // هرگز نوشته نمی‌شود (تا کل تراکنش به‌خاطر یک مقدار نامعتبر Rollback نشود).
+        private static readonly HashSet<string> AllowedServiceStatuses =
+            new HashSet<string>(StringComparer.Ordinal) { "فعال", "در انتظار تأیید", "قطع موقت", "قطع" };
 
         // ─── مرحله ۲: تجزیه ──────────────────────────────────────────────────
         public ParsedSyncData Parse(SyncSource source, IProgress<SyncProgress> progress)
@@ -92,26 +109,86 @@ namespace CaseManagement.Sync
             return result;
         }
 
-        private SyncRecord BuildGuardian(Dictionary<string, string> row)
+        private SyncRecord BuildGuardian(HtmlRow row)
         {
             var rec = new SyncRecord { Entity = SyncEntity.Guardian };
             rec.PublicCode = ResolvePublicCode(row);
-            MapFields(row, GuardianFieldMap, rec.SourceValues);
+            MapFields(row, GuardianFieldMap, rec.SourceValues, occurrence: 1);
+
             // کد عمومی همیشه در ستون کلیدی دیتابیس (Code) هم قرار می‌گیرد.
             if (!string.IsNullOrWhiteSpace(rec.PublicCode))
                 rec.SourceValues["Code"] = rec.PublicCode;
+
+            // نرمال‌سازی وضعیت خدمات؛ اگر با CHECK constraint سازگار نبود، حذف
+            // می‌شود (نه این‌که کل تراکنش را با خطای دیتابیس Rollback کند).
+            string status;
+            if (rec.SourceValues.TryGetValue("ServiceStatus", out status))
+            {
+                string normalized = NormalizeServiceStatus(status);
+                if (AllowedServiceStatuses.Contains(normalized))
+                    rec.SourceValues["ServiceStatus"] = normalized;
+                else
+                    rec.SourceValues.Remove("ServiceStatus");
+            }
+
             rec.Title = rec.SourceValues.ContainsKey("HeadFullName") ? rec.SourceValues["HeadFullName"] : rec.PublicCode;
             return rec;
         }
 
-        private SyncRecord BuildMember(Dictionary<string, string> row)
+        private SyncRecord BuildMember(HtmlRow row)
         {
             var rec = new SyncRecord { Entity = SyncEntity.FamilyMember };
             rec.PublicCode = ResolvePublicCode(row);
-            MapFields(row, MemberFieldMap, rec.SourceValues);
+            MapFields(row, MemberFieldMap, rec.SourceValues, occurrence: 1);
+
+            // ─── ستون دوم (کفیل/سرپرست دیگر) + تلفن + وضعیت خدمات ─────────────
+            // این‌ها معادل مستقیمی در TblFamily ندارند؛ برای این‌که داده گم نشود
+            // (و در عین حال فیلد «خودِ عضو» را خراب نکند)، به‌صورت یادداشت خوانا
+            // در ستون عمومی TblFamily.Details نوشته می‌شوند. کاربر در Wizard
+            // (مرحله «جزئیات») دقیقاً همین متن را قبل از تأیید می‌بیند و می‌تواند
+            // اعمال/رد کند.
+            var noteLines = new List<string>();
+
+            string ownPhone = FindByHeader(row, "تلفن همراه", 1) ?? FindByHeader(row, "شماره تماس", 1);
+            if (!string.IsNullOrWhiteSpace(ownPhone))
+                noteLines.Add("تلفن: " + ownPhone.Trim());
+
+            string sponsorName = FindByHeader(row, "نام", 2);
+            string sponsorTazkira = FindByHeader(row, "ش تذکره", 2) ?? FindByHeader(row, "شماره تذکره", 2);
+            string sponsorDob = FindByHeader(row, "تاریخ تولد", 2);
+            if (!string.IsNullOrWhiteSpace(sponsorName) || !string.IsNullOrWhiteSpace(sponsorTazkira) || !string.IsNullOrWhiteSpace(sponsorDob))
+            {
+                string line = "کفیل/سرپرست دیگر:";
+                if (!string.IsNullOrWhiteSpace(sponsorName)) line += " " + sponsorName.Trim();
+                if (!string.IsNullOrWhiteSpace(sponsorTazkira)) line += " — تذکره " + sponsorTazkira.Trim();
+                if (!string.IsNullOrWhiteSpace(sponsorDob)) line += " — تولد " + sponsorDob.Trim();
+                noteLines.Add(line);
+            }
+
+            string serviceStatus = FindByHeader(row, "وضعیت خدمات", 1);
+            if (!string.IsNullOrWhiteSpace(serviceStatus))
+                noteLines.Add("وضعیت خدمات: " + serviceStatus.Trim());
+
+            if (noteLines.Count > 0)
+                rec.SourceValues["Details"] = string.Join("\n", noteLines);
+
             rec.Title = rec.SourceValues.ContainsKey("MemberName") ? rec.SourceValues["MemberName"] : "";
             rec.MemberKey = ComputeMemberKey(rec.SourceValues);
             return rec;
+        }
+
+        // نرمال‌سازی مقادیر متغیر «وضعیت خدمات» به ۴ مقدار مجاز CHECK constraint
+        // (هم‌راستا با FrmCase.NormalizeServiceStatus).
+        private static string NormalizeServiceStatus(string value)
+        {
+            value = (value ?? "").Trim();
+            if (value == "در حالت قطع") return "قطع";
+            if (value == "درانتظار" || value == "در انتظار" ||
+                value == "انتظار تاييد" || value == "انتظار تایید" ||
+                value == "در انتظار تاييد")
+                return "در انتظار تأیید";
+            if (value == "") return "فعال";
+            return value;
         }
 
         // کلید هویت عضو داخل خانواده: تذکره (اگر باشد) وگرنه نام+نام‌پدر.
@@ -133,25 +210,25 @@ namespace CaseManagement.Sync
             return (s ?? "").Trim();
         }
 
-        private string ResolvePublicCode(Dictionary<string, string> row)
+        private string ResolvePublicCode(HtmlRow row)
         {
             foreach (string header in PublicCodeHeaders)
             {
-                string val = FindByHeader(row, header);
+                string val = FindByHeader(row, header, 1);
                 if (!string.IsNullOrWhiteSpace(val))
                     return val.Trim();
             }
             return "";
         }
 
-        private void MapFields(Dictionary<string, string> row,
-            Dictionary<string, string[]> map, Dictionary<string, string> target)
+        private void MapFields(HtmlRow row, Dictionary<string, string[]> map,
+            Dictionary<string, string> target, int occurrence)
         {
             foreach (var kv in map)
             {
                 foreach (string candidate in kv.Value)
                 {
-                    string val = FindByHeader(row, candidate);
+                    string val = FindByHeader(row, candidate, occurrence);
                     if (val != null)
                     {
                         target[kv.Key] = val.Trim();
@@ -161,15 +238,22 @@ namespace CaseManagement.Sync
             }
         }
 
-        // جستجوی مقدار بر اساس عنوان ستون (تطبیق انعطاف‌پذیر: بی‌توجه به فاصله‌ی
-        // اضافی و «ي/ك» عربی در برابر «ی/ک» فارسی).
-        private static string FindByHeader(Dictionary<string, string> row, string header)
+        // جستجوی مقدار بر اساس عنوان ستون + شماره‌ی وقوع (برای ستون‌های هم‌نامِ
+        // تکراری مثل «نام» که یک‌بار برای خودِ عضو و یک‌بار برای کفیل می‌آید).
+        // occurrence=1 یعنی اولین ستونی که این عنوان را دارد (از راست به چپ فایل
+        // اصلی که هنگام تجزیه، ترتیب واقعی ستون‌ها حفظ شده است).
+        private static string FindByHeader(HtmlRow row, string header, int occurrence)
         {
             string norm = NormalizeHeader(header);
-            foreach (var kv in row)
+            int seen = 0;
+            for (int i = 0; i < row.Keys.Count; i++)
             {
-                if (NormalizeHeader(kv.Key) == norm)
-                    return kv.Value;
+                if (NormalizeHeader(row.Keys[i]) == norm)
+                {
+                    seen++;
+                    if (seen == occurrence)
+                        return row.Values[i];
+                }
             }
             return null;
         }
@@ -207,12 +291,25 @@ namespace CaseManagement.Sync
             return errors;
         }
 
+        // ─── ردیف تجزیه‌شده با حفظ ترتیب دقیق ستون‌ها ────────────────────────
+        // آموزش — رفع باگ بحرانی: نسخه‌ی قبلی از Dictionary<string,string> با
+        // کلید = نام ستون استفاده می‌کرد؛ وقتی دو ستون هم‌نام بودند (مثل «نام»ِ
+        // خودِ عضو و «نام»ِ کفیل)، مقدار دومی به‌خاطر «اگر کلید موجود بود
+        // نادیده بگیر» به‌طور کاملاً بی‌صدا گم می‌شد — نه خطا، نه هشدار، فقط
+        // حذف داده. حالا هر ردیف یک لیست هم‌ترتیب (Keys/Values) نگه می‌دارد که
+        // امکان جستجوی «امین وقوعِ فلان عنوان» را می‌دهد (FindByHeader بالا).
+        private sealed class HtmlRow
+        {
+            public readonly List<string> Keys = new List<string>();
+            public readonly List<string> Values = new List<string>();
+        }
+
         // ─── تجزیه‌ی جدول HTML (تحمل‌پذیر، بدون وابستگی خارجی) ────────────────
         // بزرگ‌ترین جدول فایل (بیشترین ردیف) به‌عنوان جدول داده انتخاب می‌شود؛
         // ردیف اول با <th> (یا اولین ردیف) به‌عنوان سرستون، بقیه داده.
-        public static List<Dictionary<string, string>> ParseHtmlTable(string filePath)
+        private static List<HtmlRow> ParseHtmlTable(string filePath)
         {
-            var rows = new List<Dictionary<string, string>>();
+            var rows = new List<HtmlRow>();
             if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
                 return rows;
 
@@ -242,18 +339,18 @@ namespace CaseManagement.Sync
 
                 if (headers == null)
                 {
-                    headers = cells; // اولین ردیف = سرستون
+                    headers = cells; // اولین ردیف = سرستون (ترتیب اصلی حفظ می‌شود)
                     continue;
                 }
 
-                var dict = new Dictionary<string, string>(StringComparer.Ordinal);
+                var row = new HtmlRow();
                 for (int i = 0; i < cells.Count && i < headers.Count; i++)
                 {
-                    string key = headers[i];
-                    if (string.IsNullOrWhiteSpace(key)) key = "col" + i;
-                    if (!dict.ContainsKey(key)) dict[key] = cells[i];
+                    string key = string.IsNullOrWhiteSpace(headers[i]) ? ("col" + i) : headers[i];
+                    row.Keys.Add(key);
+                    row.Values.Add(cells[i]);
                 }
-                rows.Add(dict);
+                rows.Add(row);
             }
 
             return rows;
