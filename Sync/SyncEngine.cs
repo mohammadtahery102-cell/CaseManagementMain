@@ -91,12 +91,20 @@ namespace CaseManagement.Sync
                         HashSet<string> caseCols = GetColumns(con, "TblCase");
                         HashSet<string> famCols = GetColumns(con, "TblFamily");
 
+                        // آموزش — رفع «پرونده‌های همگام‌شده شماره فرم ندارند»: مثل
+                        // فرم پرونده، به هر پرونده‌ی جدید یک «شماره فرم» یکتا و
+                        // افزایشی می‌دهیم تا خروجی جمعی (که به FormNo نیاز دارد) کار
+                        // کند. MAX یک‌بار داخل همین تراکنش گرفته می‌شود و برای هر
+                        // پرونده‌ی جدید یکی جلو می‌رود.
+                        int nextFormNo = GetNextFormNo(con, tr);
+
                         // ── سرپرستان ──────────────────────────────────────────
                         foreach (SyncRecord g in guardians)
                         {
                             if (g.Action == SyncAction.New)
                             {
-                                int newId = InsertCase(con, tr, g, caseCols, centerId);
+                                int newId = InsertCase(con, tr, g, caseCols, centerId, nextFormNo);
+                                nextFormNo++;
                                 codeToCasId[g.PublicCode] = newId;
                                 report.GuardiansInserted++;
                             }
@@ -185,8 +193,24 @@ namespace CaseManagement.Sync
         }
 
         // ─── درج یک سرپرست جدید (فقط ستون‌های موجود در جدول) ─────────────────
+        // بزرگ‌ترین شماره فرمِ عددیِ موجود +۱ (با رعایت تنظیم StartCaseNo) —
+        // هم‌منطق با FrmCase.GetNextFormNo، اما داخل همان تراکنش همگام‌سازی.
+        private int GetNextFormNo(SQLiteConnection con, SQLiteTransaction tr)
+        {
+            int next = 1;
+            using (var cmd = new SQLiteCommand(
+                "SELECT COALESCE(MAX(CAST(CASE WHEN FormNo GLOB '*[0-9]*' AND FormNo NOT GLOB '*[^0-9]*' THEN FormNo ELSE '0' END AS INTEGER)), 0) + 1 FROM TblCase", con, tr))
+            {
+                object r = cmd.ExecuteScalar();
+                if (r != null && r != DBNull.Value) next = Convert.ToInt32(r);
+            }
+            int start = SettingsHelper.GetInt(SettingsHelper.StartCaseNo, 0);
+            if (start > next) next = start;
+            return next;
+        }
+
         private int InsertCase(SQLiteConnection con, SQLiteTransaction tr,
-            SyncRecord rec, HashSet<string> tableCols, int centerId)
+            SyncRecord rec, HashSet<string> tableCols, int centerId, int formNo)
         {
             var cols = new List<string>();
             var pars = new List<string>();
@@ -215,6 +239,9 @@ namespace CaseManagement.Sync
                 cmd.Parameters.AddWithValue(pn, (object)(kv.Value ?? ""));
             }
 
+            // شماره فرم یکتا (اگر فایل خودش FormNo نداده که نمی‌دهد).
+            if (!written.Contains("FormNo"))
+                AddIfColumn(tableCols, cols, pars, cmd, "FormNo", formNo, ref p);
             AddIfColumn(tableCols, cols, pars, cmd, "CenterID", centerId, ref p);
             AddNowIfColumn(tableCols, cols, pars, cmd, "CreatedAt", ref p);
             AddNowIfColumn(tableCols, cols, pars, cmd, "UpdatedAt", ref p);

@@ -439,6 +439,49 @@ DELETE FROM TblLookup WHERE Category = 'ServiceStatus' AND Value = 'در انت�
 
                 // ─── ساخت admin پیش‌فرض ──────────────────────────────────────
                 EnsureDefaultAdmin(con);
+
+                // ─── شماره‌فرمِ گمشده را پر کن (مثلاً پرونده‌های همگام‌شده‌ی قدیمی
+                // که بدون FormNo ثبت شده‌اند) تا خروجی جمعی روی آن‌ها هم کار کند.
+                BackfillMissingFormNumbers(con);
+            }
+        }
+
+        // به پرونده‌هایی که «شماره فرم» ندارند (NULL/خالی/غیرعددی) یک شماره‌ی یکتا
+        // و افزایشی می‌دهد که از بزرگ‌ترین شماره‌ی فعلی شروع می‌شود. idempotent است:
+        // روی پرونده‌هایی که از قبل شماره دارند دست نمی‌زند.
+        private static void BackfillMissingFormNumbers(SQLiteConnection con)
+        {
+            int next;
+            using (var cmd = new SQLiteCommand(
+                "SELECT COALESCE(MAX(CAST(CASE WHEN FormNo GLOB '*[0-9]*' AND FormNo NOT GLOB '*[^0-9]*' THEN FormNo ELSE '0' END AS INTEGER)), 0) + 1 FROM TblCase", con))
+            {
+                object r = cmd.ExecuteScalar();
+                next = (r == null || r == DBNull.Value) ? 1 : Convert.ToInt32(r);
+            }
+
+            var missing = new System.Collections.Generic.List<long>();
+            using (var cmd = new SQLiteCommand(
+                "SELECT CasID FROM TblCase WHERE FormNo IS NULL OR TRIM(COALESCE(FormNo,'')) = '' OR FormNo GLOB '*[^0-9]*' ORDER BY CasID", con))
+            using (var dr = cmd.ExecuteReader())
+                while (dr.Read())
+                    missing.Add(Convert.ToInt64(dr["CasID"]));
+
+            if (missing.Count == 0) return;
+
+            using (var tr = con.BeginTransaction())
+            {
+                foreach (long casId in missing)
+                {
+                    using (var cmd = new SQLiteCommand(
+                        "UPDATE TblCase SET FormNo = @F WHERE CasID = @Id", con, tr))
+                    {
+                        cmd.Parameters.AddWithValue("@F", next.ToString());
+                        cmd.Parameters.AddWithValue("@Id", casId);
+                        cmd.ExecuteNonQuery();
+                    }
+                    next++;
+                }
+                tr.Commit();
             }
         }
 
