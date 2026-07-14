@@ -65,7 +65,11 @@ namespace CaseManagement
         {
             Text = "داشبورد مدیریتی";
             RightToLeft = RightToLeft.Yes;
-            RightToLeftLayout = true;
+            // آموزش — به درخواست کاربر: آینه‌ی «فرم» خاموش شد تا دکمه‌های بستن/
+            // کوچک نوار عنوان به سمت راست (استاندارد) بروند. اما آینه‌ی TabControl
+            // روشن می‌ماند (پایین‌تر) تا محتوای همه‌ی تب‌ها بدون تغییر و درست RTL
+            // بماند؛ فقط نوار ابزار و بنر بالای فرم دستی راست‌چین می‌شوند.
+            RightToLeftLayout = false;
             BackColor = UiTheme.Background;
             Font = UiTheme.Font(9.5F);
             // عرض کمی افزایش یافت (۱۲۰۰→۱۲۶۰) تا با دکمه‌های فشرده‌شده،
@@ -86,7 +90,9 @@ namespace CaseManagement
             // لبه راست نمی‌رسیدند). LeftToRight همراه با RightToLeft ارثی
             // فرم، دقیقاً یک‌بار آینه می‌شود و ترتیب/چیدمان درست از راست
             // شروع می‌شود.
-            toolButtons.FlowDirection = FlowDirection.LeftToRight;
+            // فرم دیگر آینه نمی‌شود، پس برای شروع دکمه‌ها از راست، جهت جریان
+            // مستقیماً RightToLeft می‌شود.
+            toolButtons.FlowDirection = FlowDirection.RightToLeft;
             toolButtons.WrapContents = false;
             toolButtons.Padding = new Padding(8, 6, 8, 6);
             toolButtons.AutoSize = false;
@@ -174,8 +180,9 @@ namespace CaseManagement
             picBannerLogo.Image = LogoHelper.GetLogoImage();
             picBannerLogo.SizeMode = PictureBoxSizeMode.Zoom;
             picBannerLogo.Size = new Size(72, 72);
-            picBannerLogo.Location = new Point(16, 6);
-            picBannerLogo.Anchor = AnchorStyles.Top | AnchorStyles.Left;
+            // فرم دیگر آینه نمی‌شود؛ لوگو دستی به سمت راست (Anchor=Right) می‌رود.
+            picBannerLogo.Location = new Point(1260 - 16 - 72, 6);
+            picBannerLogo.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             picBannerLogo.Cursor = Cursors.Hand;
             picBannerLogo.Click += delegate { using (var frm = new FrmAbout()) frm.ShowDialog(this); };
             titleBanner.Controls.Add(picBannerLogo);
@@ -186,8 +193,8 @@ namespace CaseManagement
             btnRefreshNearLogo.Text = "↻";
             btnRefreshNearLogo.Font = new Font("Segoe UI", 14F, FontStyle.Bold);
             btnRefreshNearLogo.Size = new Size(34, 34);
-            btnRefreshNearLogo.Location = new Point(54, 50);
-            btnRefreshNearLogo.Anchor = AnchorStyles.Top | AnchorStyles.Left;
+            btnRefreshNearLogo.Location = new Point(1260 - 16 - 72 - 40, 50);
+            btnRefreshNearLogo.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             btnRefreshNearLogo.FlatStyle = FlatStyle.Flat;
             btnRefreshNearLogo.FlatAppearance.BorderSize = 0;
             btnRefreshNearLogo.BackColor = UiTheme.Primary;
@@ -211,7 +218,8 @@ namespace CaseManagement
 
             Panel bannerTextArea = new Panel();
             bannerTextArea.Dock = DockStyle.Fill;
-            bannerTextArea.Padding = new Padding(104, 8, 14, 8);
+            // لوگو حالا سمت راست است؛ فضای خالی برای لوگو در سمت راست باز می‌شود.
+            bannerTextArea.Padding = new Padding(14, 8, 104, 8);
 
             TableLayoutPanel bannerStack = new TableLayoutPanel();
             bannerStack.Dock = DockStyle.Fill;
@@ -227,14 +235,14 @@ namespace CaseManagement
             lblBannerTitle.Font = UiTheme.FontBold(UiTheme.SizeTitle);
             lblBannerTitle.ForeColor = UiTheme.PrimaryDark;
             lblBannerTitle.Dock = DockStyle.Fill;
-            lblBannerTitle.TextAlign = ContentAlignment.MiddleLeft;
+            lblBannerTitle.TextAlign = ContentAlignment.MiddleRight;
 
             Label lblHadithText = new Label();
             lblHadithText.Text = hadithText;
             lblHadithText.Font = UiTheme.FontBold(9.5F);
             lblHadithText.ForeColor = UiTheme.TextDark;
             lblHadithText.Dock = DockStyle.Fill;
-            lblHadithText.TextAlign = ContentAlignment.MiddleLeft;
+            lblHadithText.TextAlign = ContentAlignment.MiddleRight;
             lblHadithText.AutoEllipsis = true;
 
             Label lblHadithSource = new Label();
@@ -242,7 +250,7 @@ namespace CaseManagement
             lblHadithSource.Font = new Font(UiTheme.Font(8F), FontStyle.Italic);
             lblHadithSource.ForeColor = UiTheme.TextMuted;
             lblHadithSource.Dock = DockStyle.Fill;
-            lblHadithSource.TextAlign = ContentAlignment.TopLeft;
+            lblHadithSource.TextAlign = ContentAlignment.TopRight;
             lblHadithSource.AutoEllipsis = true;
 
             bannerStack.Controls.Add(lblBannerTitle, 0, 0);
