@@ -159,6 +159,8 @@ namespace CaseManagement
             TabPage tabNotify       = new TabPage("🔔  اعلان‌ها");
             TabPage tabLookup       = new TabPage("📋  اطلاعات پایه");
             TabPage tabMaintenance  = new TabPage("🛠️  نگهداری سیستم");
+            TabPage tabAbout        = new TabPage("ℹ️  درباره و لایسنس");
+            tabAbout.BackColor       = UiTheme.Background;
             tabGeneral.BackColor     = UiTheme.Background;
             tabCenters.BackColor     = UiTheme.Background;
             tabNumbering.BackColor   = UiTheme.Background;
@@ -178,6 +180,7 @@ namespace CaseManagement
             BuildNotificationsTab(tabNotify);
             BuildLookupTab(tabLookup);
             BuildMaintenanceTab(tabMaintenance);
+            BuildAboutTab(tabAbout);
 
             tabs.TabPages.Add(tabGeneral);
 
@@ -198,7 +201,150 @@ namespace CaseManagement
             tabs.TabPages.Add(tabNotify);
             tabs.TabPages.Add(tabLookup);
             tabs.TabPages.Add(tabMaintenance);
+            tabs.TabPages.Add(tabAbout);
             Controls.Add(tabs);
+        }
+
+        // ══════════════════════════════════════════════════════════════════
+        // تب: درباره و لایسنس
+        // آموزش — این تب سه فیلد قبلاً «اعلام‌شده ولی بلااستفاده» را فعال می‌کند
+        // (_txtDeveloperName / _txtLicenseInfo / _txtMachineId) و وضعیت لایسنس را
+        // با زیرساخت LicenseManager نمایش/فعال می‌کند. بدون هیچ enforcement.
+        // ══════════════════════════════════════════════════════════════════
+        private Label _lblAboutLicenseStatus;
+
+        private void BuildAboutTab(TabPage tab)
+        {
+            FlowLayoutPanel flow = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = true, AutoScroll = true, Padding = new Padding(14, 12, 14, 12)
+            };
+
+            // نسخه‌ی نرم‌افزار (فقط‌خواندنی)
+            var ver = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
+            TextBox txtVersion = new TextBox { ReadOnly = true, Text = ver == null ? "" : ver.ToString() };
+            flow.Controls.Add(MakeFieldPanel("نسخه نرم‌افزار", txtVersion));
+
+            _txtDeveloperName = new TextBox();
+            flow.Controls.Add(MakeFieldPanel("توسعه‌دهنده", _txtDeveloperName));
+
+            _txtLicenseInfo = new TextBox();
+            flow.Controls.Add(MakeFieldPanel("اطلاعات لایسنس (یادداشت)", _txtLicenseInfo));
+
+            // شناسه دستگاه (فقط‌خواندنی) — برای ارسال به فروشنده جهت صدور لایسنس.
+            _txtMachineId = new TextBox { ReadOnly = true, Text = LicenseManager.GetHardwareId() };
+            flow.Controls.Add(MakeFieldPanel("شناسه این دستگاه", _txtMachineId));
+
+            // ─── وضعیت لایسنس ─────────────────────────────────────────────────
+            Panel statusField = new Panel { Width = 430, Height = 58, Margin = new Padding(6, 26, 6, 4) };
+            _lblAboutLicenseStatus = new Label
+            {
+                Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleRight,
+                Font = UiTheme.FontBold(UiTheme.SizeBody)
+            };
+            statusField.Controls.Add(_lblAboutLicenseStatus);
+            flow.Controls.Add(statusField);
+
+            // ─── دکمه‌های لایسنس ──────────────────────────────────────────────
+            Button btnActivate = UiTheme.CreateButton("فعال‌سازی لایسنس", "🔑", UiTheme.Primary);
+            btnActivate.Size = new Size(190, 34); btnActivate.Margin = new Padding(6, 30, 6, 4);
+            btnActivate.Click += delegate
+            {
+                string token = PromptForLicenseToken();
+                if (string.IsNullOrWhiteSpace(token)) return;
+                string message;
+                bool ok = LicenseManager.Activate(token, out message);
+                if (ok) UiTheme.ShowSuccess(this, message); else UiTheme.ShowError(this, message);
+                RefreshAboutLicenseStatus();
+            };
+            flow.Controls.Add(btnActivate);
+
+            Button btnCopyId = UiTheme.CreateSecondaryButton("کپی شناسه دستگاه", "⧉");
+            btnCopyId.Size = new Size(190, 34); btnCopyId.Margin = new Padding(6, 30, 6, 4);
+            btnCopyId.Click += delegate
+            {
+                try { Clipboard.SetText(_txtMachineId.Text); UiTheme.ShowSuccess(this, "شناسه دستگاه کپی شد."); } catch { }
+            };
+            flow.Controls.Add(btnCopyId);
+
+            // ─── نوار ذخیره ───────────────────────────────────────────────────
+            Panel bottomBar = new Panel { Dock = DockStyle.Bottom, Height = 54, BackColor = UiTheme.CardBack };
+            FlowLayoutPanel saveFlow = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, Padding = new Padding(14, 8, 14, 8)
+            };
+            Button btnSave = UiTheme.CreateButton("ذخیره", "✔", UiTheme.Success);
+            btnSave.Size = new Size(150, 38);
+            btnSave.Click += delegate
+            {
+                SettingsHelper.Set(SettingsHelper.DeveloperName, _txtDeveloperName.Text.Trim());
+                SettingsHelper.Set(SettingsHelper.LicenseInfo, _txtLicenseInfo.Text.Trim());
+                SettingsHelper.Set(SettingsHelper.MachineId, _txtMachineId.Text.Trim());
+                UiTheme.ShowSuccess(this, "اطلاعات ذخیره شد.");
+            };
+            saveFlow.Controls.Add(btnSave);
+            bottomBar.Controls.Add(saveFlow);
+
+            tab.Controls.Add(flow);
+            tab.Controls.Add(bottomBar);
+
+            _txtDeveloperName.Text = SettingsHelper.Get(SettingsHelper.DeveloperName);
+            _txtLicenseInfo.Text   = SettingsHelper.Get(SettingsHelper.LicenseInfo);
+            RefreshAboutLicenseStatus();
+        }
+
+        private void RefreshAboutLicenseStatus()
+        {
+            LicenseManager.Invalidate();
+            LicenseInfo lic = LicenseManager.Current;
+            _lblAboutLicenseStatus.Text = "وضعیت لایسنس: " + lic.StatusDisplay +
+                (string.IsNullOrWhiteSpace(lic.LicensedTo) ? "" : "  —  " + lic.LicensedTo);
+            _lblAboutLicenseStatus.ForeColor =
+                lic.Status == LicenseStatus.Active ? UiTheme.Success :
+                lic.Status == LicenseStatus.Trial ? UiTheme.Warning : UiTheme.Danger;
+        }
+
+        private string PromptForLicenseToken()
+        {
+            using (Form dlg = new Form())
+            {
+                dlg.Text = "فعال‌سازی لایسنس";
+                dlg.RightToLeft = RightToLeft.Yes; dlg.RightToLeftLayout = true;
+                dlg.FormBorderStyle = FormBorderStyle.FixedDialog;
+                dlg.StartPosition = FormStartPosition.CenterParent;
+                dlg.MaximizeBox = false; dlg.MinimizeBox = false; dlg.ShowInTaskbar = false;
+                dlg.ClientSize = new Size(460, 220);
+                dlg.BackColor = UiTheme.CardBack; dlg.Font = UiTheme.Font(UiTheme.SizeBody);
+
+                Label lbl = new Label
+                {
+                    Text = "توکن لایسنس دریافتی از فروشنده را وارد کنید:",
+                    Font = UiTheme.FontBold(UiTheme.SizeSmall), ForeColor = UiTheme.TextDark,
+                    AutoSize = false, TextAlign = ContentAlignment.MiddleRight
+                };
+                lbl.SetBounds(16, 12, dlg.ClientSize.Width - 32, 24);
+                dlg.Controls.Add(lbl);
+
+                TextBox txt = new TextBox
+                {
+                    Multiline = true, ScrollBars = ScrollBars.Vertical, BorderStyle = BorderStyle.FixedSingle,
+                    Font = new Font("Consolas", 9.5F)
+                };
+                txt.SetBounds(16, 42, dlg.ClientSize.Width - 32, 110);
+                dlg.Controls.Add(txt);
+
+                Button ok = UiTheme.CreateButton("فعال‌سازی", "", UiTheme.Primary);
+                ok.SetBounds(dlg.ClientSize.Width - 150, 164, 134, 36);
+                ok.DialogResult = DialogResult.OK; dlg.Controls.Add(ok);
+
+                Button cancel = UiTheme.CreateSecondaryButton("انصراف", "");
+                cancel.SetBounds(dlg.ClientSize.Width - 290, 164, 130, 36);
+                cancel.DialogResult = DialogResult.Cancel; dlg.Controls.Add(cancel);
+
+                dlg.AcceptButton = ok; dlg.CancelButton = cancel;
+                return dlg.ShowDialog(this) == DialogResult.OK ? txt.Text.Trim() : null;
+            }
         }
 
         // ══════════════════════════════════════════════════════════════════
