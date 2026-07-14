@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
+using CaseManagement.Helpers;
 
 namespace CaseManagement.Sync
 {
@@ -171,7 +173,13 @@ namespace CaseManagement.Sync
 
                 val = val.Trim();
                 if (DateColumns.Contains(rule.DbColumn))
-                    val = NormalizePersianDate(val);
+                {
+                    // تاریخِ شمسیِ فایل → میلادیِ ISO (فرمت ذخیره‌ی نرم‌افزار). اگر
+                    // تاریخ نامعتبر بود، فیلد اصلاً نوشته نمی‌شود (خالی می‌ماند) تا
+                    // محاسبه‌ی سن/نمایش خراب نشود.
+                    val = ConvertPersianDateToStored(val);
+                    if (string.IsNullOrWhiteSpace(val)) continue;
+                }
 
                 rec.SourceValues[rule.DbColumn] = val;
             }
@@ -181,24 +189,29 @@ namespace CaseManagement.Sync
             return rec;
         }
 
-        // ─── نرمال‌سازی تاریخ به فرمت «سال/ماه/روز» ──────────────────────────
-        // ورودی فایل به شکل روز-ماه-سال است (مثل 22-05-1387) و عددِ ۴رقمی همیشه
-        // «سال» است (سال شمسی 13xx/14xx). خروجی: yyyy/MM/dd (سال، بعد ماه، بعد
-        // روز — همان فرمت داخلی نرم‌افزار). این تبدیل قطعی است، پس همگام‌سازی
-        // مجدد همان مقدار را می‌سازد و «بدون تغییر» تشخیص داده می‌شود (idempotent).
-        private static string NormalizePersianDate(string raw)
+        // ─── تبدیل تاریخِ شمسیِ فایل → تاریخِ میلادیِ ذخیره‌ای نرم‌افزار ──────
+        // نکته‌ی مهم: نرم‌افزار تاریخ‌ها را «میلادی ISO» (yyyy-MM-dd) ذخیره می‌کند
+        // (چون سن با julianday(BirthDate) محاسبه می‌شود و نمایش شمسی فقط در
+        // لحظه‌ی نمایش انجام می‌شود). پس اگر تاریخ شمسی را مستقیم بنویسیم،
+        // محاسبه‌ی سن و نمایش خراب می‌شود.
+        // ورودی فایل «روز-ماه-سالِ شمسی» است (مثل 23-04-1405؛ عددِ ۴رقمی = سال).
+        // این متد آن را به همان DateTime میلادی‌ای تبدیل می‌کند که خودِ فرم
+        // خانواده هنگام ذخیره تولید می‌کند (PersianDateHelper.ParsePersianDate)،
+        // سپس به رشته‌ی "yyyy-MM-dd" برمی‌گرداند. تبدیل قطعی است → همگام‌سازیِ
+        // مجدد همان مقدار را می‌سازد (idempotent). تاریخ نامعتبر → null (ننوشتن).
+        private static string ConvertPersianDateToStored(string raw)
         {
-            if (string.IsNullOrWhiteSpace(raw)) return raw;
+            if (string.IsNullOrWhiteSpace(raw)) return null;
 
             var nums = new List<string>();
-            foreach (Match m in Regex.Matches(raw, "[0-9۰-۹]+"))
+            foreach (Match m in Regex.Matches(ToLatinDigits(raw), "[0-9]+"))
                 nums.Add(m.Value);
-            if (nums.Count != 3) return raw.Trim(); // قابل‌تشخیص نیست → دست‌نخورده
+            if (nums.Count != 3) return null;
 
             int yearIdx = -1;
             for (int i = 0; i < 3; i++)
                 if (nums[i].Length == 4) { yearIdx = i; break; }
-            if (yearIdx < 0) return raw.Trim();
+            if (yearIdx < 0) return null;
 
             string year = nums[yearIdx];
             var others = new List<string>();
@@ -209,13 +222,30 @@ namespace CaseManagement.Sync
             if (yearIdx == 0) { month = others[0]; day = others[1]; } // yyyy-mm-dd
             else               { day = others[0]; month = others[1]; } // dd-mm-yyyy (حالت رایج فایل)
 
-            return year + "/" + Pad2(month) + "/" + Pad2(day);
+            try
+            {
+                DateTime gregorian = PersianDateHelper.ParsePersianDate(year + "/" + month + "/" + day);
+                if (gregorian == DateTime.MinValue) return null;
+                return gregorian.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            }
+            catch
+            {
+                return null; // تاریخ شمسیِ نامعتبر (مثلاً ۳۱ برجِ ۳۰روزه)
+            }
         }
 
-        private static string Pad2(string s)
+        // تبدیل ارقام فارسی/عربی به لاتین (فایل واقعی لاتین است؛ این فقط دفاعی است).
+        private static string ToLatinDigits(string s)
         {
-            s = (s ?? "").Trim();
-            return s.Length == 1 ? "0" + s : s;
+            if (string.IsNullOrEmpty(s)) return s;
+            var sb = new StringBuilder(s.Length);
+            foreach (char c in s)
+            {
+                if (c >= '۰' && c <= '۹') sb.Append((char)('0' + (c - '۰')));       // فارسی
+                else if (c >= '٠' && c <= '٩') sb.Append((char)('0' + (c - '٠')));  // عربی
+                else sb.Append(c);
+            }
+            return sb.ToString();
         }
 
         // نرمال‌سازی مقادیر متغیر «وضعیت خدمات» به ۴ مقدار مجاز CHECK constraint
