@@ -50,7 +50,9 @@ namespace CaseManagement
         {
             Text = "جستجوی پیشرفته  —  " + SecurityContext.CenterDisplay;
             RightToLeft = RightToLeft.Yes;
-            RightToLeftLayout = true;
+            // دکمه‌های نوار عنوان به راست؛ محتوا (FlowLayoutPanel + تب‌ها) با
+            // RightToLeft=Yes و tabs.RightToLeftLayout=true درست RTL می‌ماند.
+            RightToLeftLayout = false;
             BackColor = UiTheme.Background;
             Font = UiTheme.Font(UiTheme.SizeBody);
             UiTheme.MakeFixedSize(this, 1280, 720);

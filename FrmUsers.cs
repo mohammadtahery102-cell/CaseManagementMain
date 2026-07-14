@@ -29,7 +29,9 @@ namespace CaseManagement
         {
             Text              = "مدیریت کاربران";
             RightToLeft       = RightToLeft.Yes;
-            RightToLeftLayout = true;
+            // دکمه‌های نوار عنوان به راست (استاندارد). محتوا با RightToLeft=Yes
+            // همچنان راست‌چین می‌ماند (این فرم فقط Flow/Dock دارد، بی‌مختصات مطلق).
+            RightToLeftLayout = false;
             BackColor         = UiTheme.Background;
             Font              = UiTheme.Font(UiTheme.SizeBody);
             UiTheme.MakeFixedSize(this, 880, 590);
