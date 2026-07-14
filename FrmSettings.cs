@@ -1,6 +1,7 @@
 using CaseManagement.DAL;
 using CaseManagement.Helpers;
 using System;
+using System.Collections.Generic;
 using System.Data;
 using System.Data.SQLite;
 using System.Drawing;
@@ -159,7 +160,9 @@ namespace CaseManagement
             TabPage tabNotify       = new TabPage("🔔  اعلان‌ها");
             TabPage tabLookup       = new TabPage("📋  اطلاعات پایه");
             TabPage tabMaintenance  = new TabPage("🛠️  نگهداری سیستم");
+            TabPage tabDeleteCases  = new TabPage("🗑️  حذف پرونده‌ها");
             TabPage tabAbout        = new TabPage("ℹ️  درباره و لایسنس");
+            tabDeleteCases.BackColor = UiTheme.Background;
             tabAbout.BackColor       = UiTheme.Background;
             tabGeneral.BackColor     = UiTheme.Background;
             tabCenters.BackColor     = UiTheme.Background;
@@ -180,6 +183,8 @@ namespace CaseManagement
             BuildNotificationsTab(tabNotify);
             BuildLookupTab(tabLookup);
             BuildMaintenanceTab(tabMaintenance);
+            if (SecurityContext.CanDelete())
+                BuildDeleteCasesTab(tabDeleteCases);
             BuildAboutTab(tabAbout);
 
             tabs.TabPages.Add(tabGeneral);
@@ -201,8 +206,242 @@ namespace CaseManagement
             tabs.TabPages.Add(tabNotify);
             tabs.TabPages.Add(tabLookup);
             tabs.TabPages.Add(tabMaintenance);
+            // حذف پرونده‌ها فقط برای کاربر دارای مجوز حذف (مدیر) نمایش داده می‌شود.
+            if (SecurityContext.CanDelete())
+                tabs.TabPages.Add(tabDeleteCases);
             tabs.TabPages.Add(tabAbout);
             Controls.Add(tabs);
+        }
+
+        // ══════════════════════════════════════════════════════════════════
+        // تب: حذف پرونده‌ها (دسته‌جمعی/تکی) — فقط برای مدیر (CanDelete)
+        // آموزش — عملیات پرخطر: با تیک هر ردیف (یا «انتخاب همه») پرونده‌ها
+        // انتخاب و پس از تأیید صریح حذف می‌شوند. دو حالت: «فقط دیتابیس» یا
+        // «کامل (همراه پوشه‌ی فایل‌ها)». حذف TblCase با FK آبشاری، اعضا/اسناد/
+        // کمک‌های همان پرونده را هم پاک می‌کند. همه‌چیز به مرکز کاربر محدود است.
+        // ══════════════════════════════════════════════════════════════════
+        private DataGridView _gridDeleteCases;
+        private TextBox _txtDeleteSearch;
+        private RadioButton _radDeleteDbOnly;
+        private RadioButton _radDeleteComplete;
+        private Label _lblDeleteCount;
+
+        private const string DelSelCol = "sel";
+        private const string DelIdCol = "CasID";
+        private const string DelCodeCol = "Code";
+
+        private void BuildDeleteCasesTab(TabPage tab)
+        {
+            Panel top = new Panel { Dock = DockStyle.Top, Height = 96, BackColor = UiTheme.CardBack, Padding = new Padding(14, 8, 14, 4) };
+
+            FlowLayoutPanel searchFlow = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Top, Height = 44, FlowDirection = FlowDirection.RightToLeft
+            };
+            _txtDeleteSearch = new TextBox { Width = 240, Height = 28 };
+            UiTheme.StyleTextBox(_txtDeleteSearch);
+            _txtDeleteSearch.Margin = new Padding(4, 8, 4, 4);
+            searchFlow.Controls.Add(_txtDeleteSearch);
+
+            Button btnSearch = UiTheme.CreateButton("جستجو", "⌕", UiTheme.Primary);
+            btnSearch.Size = new Size(110, 30); btnSearch.Margin = new Padding(4, 7, 4, 4);
+            btnSearch.Click += delegate { LoadDeleteCases(); };
+            searchFlow.Controls.Add(btnSearch);
+
+            Button btnSelectAll = UiTheme.CreateSecondaryButton("انتخاب همه", "☑");
+            btnSelectAll.Size = new Size(120, 30); btnSelectAll.Margin = new Padding(4, 7, 4, 4);
+            btnSelectAll.Click += delegate { SetAllDeleteSelection(true); };
+            searchFlow.Controls.Add(btnSelectAll);
+
+            Button btnSelectNone = UiTheme.CreateSecondaryButton("لغو انتخاب", "☐");
+            btnSelectNone.Size = new Size(120, 30); btnSelectNone.Margin = new Padding(4, 7, 4, 4);
+            btnSelectNone.Click += delegate { SetAllDeleteSelection(false); };
+            searchFlow.Controls.Add(btnSelectNone);
+
+            top.Controls.Add(searchFlow);
+
+            // نوار گزینه‌ها + دکمه حذف
+            FlowLayoutPanel optFlow = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Bottom, Height = 44, FlowDirection = FlowDirection.RightToLeft
+            };
+            _radDeleteDbOnly = new RadioButton
+            {
+                Text = "فقط از نرم‌افزار (دیتابیس)", Checked = true, AutoSize = true,
+                Font = UiTheme.Font(UiTheme.SizeBody), Margin = new Padding(6, 10, 6, 4)
+            };
+            _radDeleteComplete = new RadioButton
+            {
+                Text = "کامل (همراه پوشه‌ی فایل‌ها)", AutoSize = true,
+                Font = UiTheme.Font(UiTheme.SizeBody), Margin = new Padding(6, 10, 6, 4)
+            };
+            optFlow.Controls.Add(_radDeleteDbOnly);
+            optFlow.Controls.Add(_radDeleteComplete);
+
+            Button btnDelete = UiTheme.CreateButton("حذف انتخاب‌شده‌ها", "✕", UiTheme.Danger);
+            btnDelete.Size = new Size(180, 32); btnDelete.Margin = new Padding(16, 6, 6, 4);
+            btnDelete.Click += BtnDeleteCases_Click;
+            optFlow.Controls.Add(btnDelete);
+
+            _lblDeleteCount = new Label
+            {
+                AutoSize = false, Width = 180, Height = 30, TextAlign = ContentAlignment.MiddleRight,
+                ForeColor = UiTheme.TextMuted, Font = UiTheme.Font(UiTheme.SizeSmall), Margin = new Padding(6, 8, 6, 4)
+            };
+            optFlow.Controls.Add(_lblDeleteCount);
+
+            top.Controls.Add(optFlow);
+
+            _gridDeleteCases = new DataGridView
+            {
+                Dock = DockStyle.Fill, AllowUserToAddRows = false, AllowUserToDeleteRows = false,
+                RowHeadersVisible = false, MultiSelect = false,
+                SelectionMode = DataGridViewSelectionMode.FullRowSelect,
+                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill
+            };
+            UiTheme.StyleGrid(_gridDeleteCases);
+            _gridDeleteCases.Columns.Add(new DataGridViewCheckBoxColumn { Name = DelSelCol, HeaderText = "انتخاب", FillWeight = 30 });
+            _gridDeleteCases.Columns.Add(new DataGridViewTextBoxColumn { Name = DelIdCol, HeaderText = "شناسه", ReadOnly = true, FillWeight = 30, Visible = false });
+            _gridDeleteCases.Columns.Add(new DataGridViewTextBoxColumn { Name = DelCodeCol, HeaderText = "کد اختصاصی", ReadOnly = true, FillWeight = 60 });
+            _gridDeleteCases.Columns.Add(new DataGridViewTextBoxColumn { Name = "HeadFullName", HeaderText = "نام سرپرست", ReadOnly = true, FillWeight = 110 });
+            _gridDeleteCases.Columns.Add(new DataGridViewTextBoxColumn { Name = "Province", HeaderText = "ولایت", ReadOnly = true, FillWeight = 60 });
+            _gridDeleteCases.Columns.Add(new DataGridViewTextBoxColumn { Name = "ServiceStatus", HeaderText = "وضعیت", ReadOnly = true, FillWeight = 60 });
+            _gridDeleteCases.CurrentCellDirtyStateChanged += delegate
+            {
+                if (_gridDeleteCases.IsCurrentCellDirty)
+                    _gridDeleteCases.CommitEdit(DataGridViewDataErrorContexts.Commit);
+            };
+            _gridDeleteCases.CellValueChanged += delegate { UpdateDeleteCount(); };
+
+            tab.Controls.Add(_gridDeleteCases);
+            tab.Controls.Add(top);
+
+            LoadDeleteCases();
+        }
+
+        private void LoadDeleteCases()
+        {
+            string term = _txtDeleteSearch == null ? "" : _txtDeleteSearch.Text.Trim();
+            _gridDeleteCases.Rows.Clear();
+
+            using (var con = _db.GetConnection())
+            using (var cmd = new SQLiteCommand(@"
+SELECT CasID, Code, HeadFullName, Province, ServiceStatus
+FROM TblCase
+WHERE (@CID = 0 OR CenterID = @CID)
+  AND (@Term = '' OR Code LIKE '%' || @Term || '%' OR HeadFullName LIKE '%' || @Term || '%')
+ORDER BY CasID DESC", con))
+            {
+                cmd.Parameters.AddWithValue("@CID", SecurityContext.CenterFilterId);
+                cmd.Parameters.AddWithValue("@Term", term);
+                con.Open();
+                using (var dr = cmd.ExecuteReader())
+                {
+                    while (dr.Read())
+                    {
+                        _gridDeleteCases.Rows.Add(
+                            false,
+                            Convert.ToInt32(dr["CasID"]),
+                            dr["Code"] == DBNull.Value ? "" : dr["Code"].ToString(),
+                            dr["HeadFullName"] == DBNull.Value ? "" : dr["HeadFullName"].ToString(),
+                            dr["Province"] == DBNull.Value ? "" : dr["Province"].ToString(),
+                            dr["ServiceStatus"] == DBNull.Value ? "" : dr["ServiceStatus"].ToString());
+                    }
+                }
+            }
+            UpdateDeleteCount();
+        }
+
+        private void SetAllDeleteSelection(bool selected)
+        {
+            foreach (DataGridViewRow row in _gridDeleteCases.Rows)
+                if (!row.IsNewRow) row.Cells[DelSelCol].Value = selected;
+            UpdateDeleteCount();
+        }
+
+        private void UpdateDeleteCount()
+        {
+            if (_lblDeleteCount == null) return;
+            int n = 0;
+            foreach (DataGridViewRow row in _gridDeleteCases.Rows)
+                if (!row.IsNewRow && Convert.ToBoolean(row.Cells[DelSelCol].Value ?? false)) n++;
+            _lblDeleteCount.Text = "انتخاب‌شده: " + n;
+        }
+
+        private void BtnDeleteCases_Click(object sender, EventArgs e)
+        {
+            if (!SecurityContext.CanDelete())
+            {
+                UiTheme.ShowWarning(this, "حذف پرونده فقط برای مدیر مجاز است.");
+                return;
+            }
+
+            var targets = new List<KeyValuePair<int, string>>(); // CasID -> Code
+            foreach (DataGridViewRow row in _gridDeleteCases.Rows)
+            {
+                if (row.IsNewRow) continue;
+                if (!Convert.ToBoolean(row.Cells[DelSelCol].Value ?? false)) continue;
+                targets.Add(new KeyValuePair<int, string>(
+                    Convert.ToInt32(row.Cells[DelIdCol].Value),
+                    (row.Cells[DelCodeCol].Value ?? "").ToString()));
+            }
+
+            if (targets.Count == 0)
+            {
+                UiTheme.ShowWarning(this, "هیچ پرونده‌ای انتخاب نشده است.");
+                return;
+            }
+
+            bool complete = _radDeleteComplete.Checked;
+            string mode = complete ? "به‌همراه پوشه‌ی فایل‌ها (عکس/سند/خروجی)" : "فقط از دیتابیس نرم‌افزار";
+            if (!UiTheme.ShowConfirm(this,
+                    "تعداد " + targets.Count + " پرونده " + mode + " حذف می‌شود.\n" +
+                    "این عملیات همه‌ی اعضا، اسناد و کمک‌های همان پرونده‌ها را نیز حذف می‌کند و قابل بازگشت نیست.\n" +
+                    "آیا مطمئن هستید؟",
+                    "تأیید حذف پرونده‌ها"))
+                return;
+
+            int deleted = 0, folderFailed = 0;
+            foreach (var t in targets)
+            {
+                try
+                {
+                    // ۱) حذف رکورد پرونده (FK آبشاری: اعضا/اسناد/کمک‌ها هم پاک می‌شوند)
+                    //    محدود به مرکز کاربر جاری (لایه‌ی دفاعی).
+                    using (var con = _db.GetConnection())
+                    using (var cmd = new SQLiteCommand(
+                        "DELETE FROM TblCase WHERE CasID = @Id AND (@CID = 0 OR CenterID = @CID)", con))
+                    {
+                        cmd.Parameters.AddWithValue("@Id", t.Key);
+                        cmd.Parameters.AddWithValue("@CID", SecurityContext.CenterFilterId);
+                        con.Open();
+                        int affected = cmd.ExecuteNonQuery();
+                        if (affected == 0) continue; // متعلق به مرکز دیگر — رد شد
+                    }
+
+                    // ۲) در حالت «کامل»، پوشه‌ی فایل‌های پرونده هم حذف می‌شود.
+                    if (complete && !string.IsNullOrWhiteSpace(t.Value))
+                    {
+                        if (!FileHelper.DeleteCaseFolder(t.Value))
+                            folderFailed++;
+                    }
+
+                    AuditLogger.Log("حذف پرونده", "TblCase", t.Key, "Code=" + t.Value,
+                        complete ? "کامل (با پوشه)" : "فقط دیتابیس");
+                    deleted++;
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine("[DeleteCase " + t.Key + "] " + ex.Message);
+                }
+            }
+
+            string msg = deleted + " پرونده حذف شد.";
+            if (folderFailed > 0)
+                msg += "\nتوجه: پوشه‌ی " + folderFailed + " پرونده حذف نشد (شاید در حال استفاده بود).";
+            UiTheme.ShowSuccess(this, msg);
+
+            LoadDeleteCases();
         }
 
         // ══════════════════════════════════════════════════════════════════

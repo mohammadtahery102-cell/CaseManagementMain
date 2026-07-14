@@ -440,6 +440,39 @@ namespace CaseManagement.Helpers
             }
         }
 
+        // ─── حذف کامل پوشه‌ی فایل‌های یک پرونده (عکس/سند/خروجی) ─────────────
+        // آموزش — امنیت: پوشه فقط وقتی حذف می‌شود که «داخل پوشه‌ی اصلی ذخیره»
+        // باشد (IsPathInsideFolder) تا هرگز مسیری بیرون از ریشه پاک نشود. اگر
+        // پوشه‌ای وجود نداشته باشد، بی‌خطر true برمی‌گرداند (چیزی برای حذف نبود).
+        public static bool DeleteCaseFolder(string caseCode)
+        {
+            try
+            {
+                string root, cleanCaseCode, caseFolder;
+                // allowChooseDialog=false و create=false → فقط مسیر را محاسبه می‌کند،
+                // نه دیالوگ می‌آورد نه پوشه می‌سازد.
+                if (!TryGetCaseContext(caseCode, false, false, out root, out cleanCaseCode, out caseFolder))
+                    return false;
+
+                if (string.IsNullOrWhiteSpace(caseFolder) || !Directory.Exists(caseFolder))
+                    return true; // پوشه‌ای نبود
+
+                if (string.IsNullOrWhiteSpace(root) || !IsPathInsideFolder(caseFolder, root))
+                {
+                    SetLastError("حذف پوشه خارج از پوشه اصلی مجاز نیست.", null);
+                    return false;
+                }
+
+                Directory.Delete(caseFolder, true);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                SetLastError("خطا در حذف پوشه‌ی پرونده.", ex);
+                return false;
+            }
+        }
+
         private static bool TryGetCaseContext(
             string caseCode,
             bool allowChooseDialog,
