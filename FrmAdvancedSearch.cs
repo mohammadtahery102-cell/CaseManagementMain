@@ -150,6 +150,18 @@ namespace CaseManagement
             btnExport.Click += delegate { ExportGridToExcel(dgvHeadResults, "جستجوی_سرپرست"); };
             filters.Controls.Add(btnExport);
 
+            Button btnWordH = UiTheme.CreateSecondaryButton("خروجی Word", "➤");
+            btnWordH.Size = new Size(120, 34);
+            btnWordH.Margin = new Padding(6, 30, 6, 6);
+            btnWordH.Click += delegate { ExportGridToWord(dgvHeadResults, "گزارش_سرپرستان", "گزارش سرپرستان", HeadFilterSubtitle()); };
+            filters.Controls.Add(btnWordH);
+
+            Button btnPdfH = UiTheme.CreateSecondaryButton("خروجی PDF", "➤");
+            btnPdfH.Size = new Size(120, 34);
+            btnPdfH.Margin = new Padding(6, 30, 6, 6);
+            btnPdfH.Click += delegate { ExportGridToPdf(dgvHeadResults, "گزارش_سرپرستان", "گزارش سرپرستان", HeadFilterSubtitle()); };
+            filters.Controls.Add(btnPdfH);
+
             dgvHeadResults = new DataGridView();
             dgvHeadResults.Dock = DockStyle.Fill;
             dgvHeadResults.ReadOnly = true;
@@ -334,6 +346,18 @@ WHERE 1 = 1");
             btnExport.Click += delegate { ExportGridToExcel(dgvMemberResults, "جستجوی_اعضاء_خانواده"); };
             filters.Controls.Add(btnExport);
 
+            Button btnWordM = UiTheme.CreateSecondaryButton("خروجی Word", "➤");
+            btnWordM.Size = new Size(120, 34);
+            btnWordM.Margin = new Padding(6, 30, 6, 6);
+            btnWordM.Click += delegate { ExportGridToWord(dgvMemberResults, "گزارش_اعضای_خانواده", "گزارش اعضای خانواده", MemberFilterSubtitle()); };
+            filters.Controls.Add(btnWordM);
+
+            Button btnPdfM = UiTheme.CreateSecondaryButton("خروجی PDF", "➤");
+            btnPdfM.Size = new Size(120, 34);
+            btnPdfM.Margin = new Padding(6, 30, 6, 6);
+            btnPdfM.Click += delegate { ExportGridToPdf(dgvMemberResults, "گزارش_اعضای_خانواده", "گزارش اعضای خانواده", MemberFilterSubtitle()); };
+            filters.Controls.Add(btnPdfM);
+
             dgvMemberResults = new DataGridView();
             dgvMemberResults.Dock = DockStyle.Fill;
             dgvMemberResults.ReadOnly = true;
@@ -512,6 +536,116 @@ WHERE 1 = 1");
         }
 
         // خروجی اکسل نتیجه فیلترشده فعلی (همان چیزی که در گرید نمایش داده می‌شود).
+        // ─── زیرعنوان گزارش: خلاصه‌ی فیلترِ ولایت/ولسوالی + تعداد + تاریخ ───
+        private string HeadFilterSubtitle()
+        {
+            return BuildSubtitle(cmbHProvince.Text, txtHDistrict.Text, dgvHeadResults);
+        }
+
+        private string MemberFilterSubtitle()
+        {
+            return BuildSubtitle(cmbMProvince.Text, txtMDistrict.Text, dgvMemberResults);
+        }
+
+        private string BuildSubtitle(string province, string district, DataGridView grid)
+        {
+            var parts = new System.Collections.Generic.List<string>();
+            if (!string.IsNullOrWhiteSpace(province) && province.Trim() != "همه")
+                parts.Add("ولایت: " + province.Trim());
+            if (!string.IsNullOrWhiteSpace(district))
+                parts.Add("ولسوالی: " + district.Trim());
+            parts.Add("مرکز: " + SecurityContext.CenterDisplay);
+            int count = grid.Rows.Count - (grid.Rows.Count > 0 && grid.Rows[grid.Rows.Count - 1].IsNewRow ? 1 : 0);
+            parts.Add("تعداد: " + count);
+            parts.Add("تاریخ: " + Helpers.PersianDateHelper.ToPersianDateString(DateTime.Now));
+            return string.Join("   |   ", parts);
+        }
+
+        // ─── خروجی جمعی Word از نتایج فیلترشده ───────────────────────────────
+        private void ExportGridToWord(DataGridView grid, string suggestedName, string title, string subtitle)
+        {
+            if (!HasRows(grid))
+            {
+                UiTheme.ShowWarning(this, "داده‌ای برای خروجی Word وجود ندارد.");
+                return;
+            }
+            try
+            {
+                string outputPath = BuildReportPath(suggestedName, "WordReports", ".docx");
+                if (outputPath == null) return;
+
+                Cursor old = Cursor; Cursor = Cursors.WaitCursor;
+                try { GridReportExporter.ExportToWord(grid, title, subtitle, outputPath); }
+                finally { Cursor = old; }
+
+                UiTheme.ShowSuccess(this, "خروجی Word ذخیره شد:" + Environment.NewLine + outputPath);
+            }
+            catch (Exception ex)
+            {
+                UiTheme.ShowError(this, "خطا در ساخت خروجی Word: " + ex.Message);
+            }
+        }
+
+        // ─── خروجی جمعی PDF (از روی Word با LibreOffice) ─────────────────────
+        private void ExportGridToPdf(DataGridView grid, string suggestedName, string title, string subtitle)
+        {
+            if (!HasRows(grid))
+            {
+                UiTheme.ShowWarning(this, "داده‌ای برای خروجی PDF وجود ندارد.");
+                return;
+            }
+            if (!GridReportExporter.IsPdfAvailable())
+            {
+                UiTheme.ShowWarning(this,
+                    "برای خروجی PDF باید LibreOffice نصب باشد. می‌توانید خروجی Word بگیرید و آن را به PDF تبدیل کنید.");
+                return;
+            }
+            try
+            {
+                string docxPath = BuildReportPath(suggestedName, "PdfReports", ".docx");
+                if (docxPath == null) return;
+
+                Cursor old = Cursor; Cursor = Cursors.WaitCursor;
+                string pdfPath;
+                try
+                {
+                    GridReportExporter.ExportToWord(grid, title, subtitle, docxPath);
+                    pdfPath = GridReportExporter.ConvertDocxToPdf(docxPath);
+                }
+                finally { Cursor = old; }
+
+                try { if (File.Exists(docxPath)) File.Delete(docxPath); } catch { }
+
+                UiTheme.ShowSuccess(this, "خروجی PDF ذخیره شد:" + Environment.NewLine + pdfPath);
+            }
+            catch (Exception ex)
+            {
+                UiTheme.ShowError(this, "خطا در ساخت خروجی PDF: " + ex.Message);
+            }
+        }
+
+        private static bool HasRows(DataGridView grid)
+        {
+            foreach (DataGridViewRow r in grid.Rows)
+                if (!r.IsNewRow) return true;
+            return false;
+        }
+
+        private string BuildReportPath(string suggestedName, string subFolder, string extension)
+        {
+            string rootFolder = FileHelper.GetOrChooseBaseRootFolder();
+            if (string.IsNullOrWhiteSpace(rootFolder))
+            {
+                UiTheme.ShowWarning(this, "محل ذخیره فایل‌ها مشخص نیست");
+                return null;
+            }
+            string reportsFolder = Path.Combine(rootFolder, subFolder);
+            Directory.CreateDirectory(reportsFolder);
+            string safeName = FileHelper.CleanName(suggestedName);
+            return Path.Combine(reportsFolder,
+                safeName + "_" + DateTime.Now.ToString("yyyyMMdd_HHmmss", System.Globalization.CultureInfo.InvariantCulture) + extension);
+        }
+
         private void ExportGridToExcel(DataGridView grid, string suggestedName)
         {
             DataTable table = grid.DataSource as DataTable;

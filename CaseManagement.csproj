@@ -238,6 +238,7 @@
     <Compile Include="Helpers\ExcelReportExporter.cs" />
     <Compile Include="Helpers\ExcelCaseImporter.cs" />
     <Compile Include="Helpers\FileCleanupHelper.cs" />
+    <Compile Include="Helpers\GridReportExporter.cs" />
     <Compile Include="Helpers\LicenseInfo.cs" />
     <Compile Include="Helpers\LicenseManager.cs" />
     <Compile Include="Sync\SyncModels.cs" />
