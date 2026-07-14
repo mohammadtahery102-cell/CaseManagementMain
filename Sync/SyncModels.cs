@@ -60,6 +60,12 @@ namespace CaseManagement.Sync
         // مقادیر منبع نگاشت‌شده به نام ستون دیتابیس (فقط فیلدهای قابل‌همگام‌سازی).
         public Dictionary<string, string> SourceValues { get; set; }
 
+        // مقادیر «پیش‌فرضِ فقط‌هنگام‌ثبت»: فقط برای رکوردهای جدید (Insert) نوشته
+        // می‌شوند و هرگز در مقایسه/بروزرسانی دخالت نمی‌کنند. کاربرد: تعیین یک
+        // مقدار پیش‌فرض منطقی برای ستونی که در فایل نیست (مثل PhysicalStatus="سالم")
+        // بدون این‌که در همگام‌سازی‌های بعدی ویرایش دستی کاربر را بازنویسی کند.
+        public Dictionary<string, string> InsertOnlyValues { get; set; }
+
         // تغییرات فیلدی (برای Update). برای New این لیست خالی است و همه‌ی
         // SourceValues درج می‌شوند.
         public List<FieldChange> Changes { get; set; }
@@ -74,6 +80,7 @@ namespace CaseManagement.Sync
         public SyncRecord()
         {
             SourceValues = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            InsertOnlyValues = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             Changes = new List<FieldChange>();
             Selected = true;
         }

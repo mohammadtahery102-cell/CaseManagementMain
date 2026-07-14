@@ -193,13 +193,26 @@ namespace CaseManagement.Sync
             var cmd = new SQLiteCommand { Connection = con, Transaction = tr };
 
             int p = 0;
+            var written = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var kv in rec.SourceValues)
             {
                 if (!tableCols.Contains(kv.Key)) continue;
+                written.Add(kv.Key);
                 cols.Add("[" + kv.Key + "]");
                 string pn = "@p" + (p++);
                 pars.Add(pn);
                 cmd.Parameters.AddWithValue(pn, (object)(kv.Value ?? "") );
+            }
+
+            // مقادیر پیش‌فرضِ فقط‌هنگام‌ثبت (اگر ستون موجود و قبلاً از فایل نیامده).
+            foreach (var kv in rec.InsertOnlyValues)
+            {
+                if (!tableCols.Contains(kv.Key) || written.Contains(kv.Key)) continue;
+                written.Add(kv.Key);
+                cols.Add("[" + kv.Key + "]");
+                string pn = "@p" + (p++);
+                pars.Add(pn);
+                cmd.Parameters.AddWithValue(pn, (object)(kv.Value ?? ""));
             }
 
             AddIfColumn(tableCols, cols, pars, cmd, "CenterID", centerId, ref p);
@@ -227,10 +240,25 @@ namespace CaseManagement.Sync
             cmd.Parameters.AddWithValue("@cas", casId);
 
             int p = 0;
+            var written = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var kv in rec.SourceValues)
             {
                 if (!tableCols.Contains(kv.Key)) continue;
                 if (string.Equals(kv.Key, "CasID", StringComparison.OrdinalIgnoreCase)) continue;
+                written.Add(kv.Key);
+                cols.Add("[" + kv.Key + "]");
+                string pn = "@m" + (p++);
+                pars.Add(pn);
+                cmd.Parameters.AddWithValue(pn, (object)(kv.Value ?? ""));
+            }
+
+            // مقادیر پیش‌فرضِ فقط‌هنگام‌ثبت (مثل PhysicalStatus="سالم") — فقط اگر
+            // ستون موجود باشد و از فایل نیامده باشد. در بروزرسانی هرگز اعمال نمی‌شوند.
+            foreach (var kv in rec.InsertOnlyValues)
+            {
+                if (!tableCols.Contains(kv.Key) || written.Contains(kv.Key)) continue;
+                if (string.Equals(kv.Key, "CasID", StringComparison.OrdinalIgnoreCase)) continue;
+                written.Add(kv.Key);
                 cols.Add("[" + kv.Key + "]");
                 string pn = "@m" + (p++);
                 pars.Add(pn);

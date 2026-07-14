@@ -184,6 +184,11 @@ namespace CaseManagement.Sync
                 rec.SourceValues[rule.DbColumn] = val;
             }
 
+            // پیش‌فرضِ «وضعیت جسمی = سالم» فقط برای اعضای جدید (فایل چیزی درباره‌ی
+            // معلولیت نمی‌گوید). این مقدار در بروزرسانی‌های بعدی دخالت نمی‌کند، پس
+            // اگر کاربر بعداً عضوی را «معلول» ثبت کند، همگام‌سازی آن را بازنویسی نمی‌کند.
+            rec.InsertOnlyValues["PhysicalStatus"] = "سالم";
+
             rec.Title = rec.SourceValues.ContainsKey("MemberName") ? rec.SourceValues["MemberName"] : "";
             rec.MemberKey = ComputeMemberKey(rec.SourceValues);
             return rec;
