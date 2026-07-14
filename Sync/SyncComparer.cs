@@ -238,8 +238,9 @@ namespace CaseManagement.Sync
             if (idList.Count == 0) return result;
 
             List<string> cols = SanitizeColumns(fields);
-            // ستون‌های لازم برای ساخت memberKey همیشه خوانده می‌شوند.
-            foreach (string need in new[] { "MemberTazkiraNo", "MemberName", "MemberFatherName" })
+            // ستون‌های لازم برای ساخت memberKey همیشه خوانده می‌شوند (شامل
+            // BirthDate چون کلیدِ fallback حالا نام+نام‌پدر+تاریخ تولد است).
+            foreach (string need in new[] { "MemberTazkiraNo", "MemberName", "MemberFatherName", "BirthDate" })
                 if (!cols.Contains(need)) cols.Add(need);
 
             string colList = string.Join(", ", cols.Select(c => "[" + c + "]"));

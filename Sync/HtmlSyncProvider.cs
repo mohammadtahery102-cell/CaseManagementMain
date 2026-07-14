@@ -262,18 +262,46 @@ namespace CaseManagement.Sync
             return value;
         }
 
-        // کلید هویت عضو داخل خانواده: تذکره (اگر باشد) وگرنه نام+نام‌پدر.
-        // آموزش: بدون یک کلید پایدار، یک عضو در هر بار همگام‌سازی «جدید» به‌نظر
-        // می‌رسد و تکراری ثبت می‌شود. تذکره پایدارترین گزینه است.
+        // کلید هویت عضو داخل خانواده.
+        // آموزش — رفع باگ «۵۰ عضو همیشه بروزرسانی»: در فایل واقعی، خیلی از
+        // فرزندان به‌جای شماره تذکره یک «متن توضیحی» یکسان دارند (مثل «الی برج ۶
+        // سال ۱۴۰۳ تذکره دریافت خواهد شد»). اگر این متن را به‌عنوان تذکره کلید
+        // بگیریم، همه‌ی فرزندانِ آن خانواده کلید یکسان می‌گیرند و فقط یکی match
+        // می‌شود؛ بقیه هر بار «بروزرسانی» می‌مانند (idempotent نمی‌شود).
+        // پس تذکره فقط وقتی کلید می‌شود که «واقعاً شماره» باشد (فقط رقم/خط‌تیره/
+        // اسلش)، وگرنه از نام+نام‌پدر+تاریخ تولد استفاده می‌شود که برای
+        // خواهر/برادرها یکتاست (نام یا تاریخ تولدشان فرق دارد).
         public static string ComputeMemberKey(Dictionary<string, string> values)
         {
             string tazkira;
-            if (values.TryGetValue("MemberTazkiraNo", out tazkira) && !string.IsNullOrWhiteSpace(tazkira))
-                return "T:" + Normalize(tazkira);
+            values.TryGetValue("MemberTazkiraNo", out tazkira);
+            string birth = values.ContainsKey("BirthDate") ? values["BirthDate"] : "";
+
+            // تاریخ تولد به کلید تذکره هم افزوده می‌شود تا حتی اگر منبع اشتباهاً
+            // یک شماره تذکره را به دو فرزند مختلف داده باشد (خطای داده‌ی واقعی)،
+            // باز هم دو کلید مجزا بسازند و همگام‌سازی مجدد «بدون تغییر» بماند.
+            if (IsRealTazkira(tazkira))
+                return "T:" + Normalize(tazkira) + "|" + Normalize(birth);
 
             string name = values.ContainsKey("MemberName") ? values["MemberName"] : "";
             string father = values.ContainsKey("MemberFatherName") ? values["MemberFatherName"] : "";
-            return "N:" + Normalize(name) + "|" + Normalize(father);
+            return "N:" + Normalize(name) + "|" + Normalize(father) + "|" + Normalize(birth);
+        }
+
+        // «شماره تذکره واقعی» = شامل حداقل یک رقم و فقط از رقم/خط‌تیره/اسلش/فاصله
+        // تشکیل شده (نه متن توضیحی مثل «... تذکره دریافت خواهد شد»).
+        private static bool IsRealTazkira(string s)
+        {
+            if (string.IsNullOrWhiteSpace(s)) return false;
+            string latin = ToLatinDigits(s.Trim());
+            bool hasDigit = false;
+            foreach (char c in latin)
+            {
+                if (c >= '0' && c <= '9') { hasDigit = true; continue; }
+                if (c == '-' || c == '/' || c == ' ' || c == '‌') continue; // خط‌تیره/اسلش/فاصله/نیم‌فاصله
+                return false; // هر کاراکتر دیگر (حرف) = تذکره واقعی نیست
+            }
+            return hasDigit;
         }
 
         private static string Normalize(string s)
