@@ -197,8 +197,14 @@ namespace CaseManagement.Sync
             if (!cols.Contains(keyColumn)) cols.Add(keyColumn);
 
             string colList = string.Join(", ", cols.Select(c => "[" + c + "]"));
+            // آموزش — رفع نوسان شمارش (۴۳۸↔۴۳۵ در آپلودهای یکسان): بدون ORDER BY،
+            // SQLite ترتیب ردیف‌ها را تضمین نمی‌کند و بعد از insert/update ممکن است
+            // ردیف‌ها را به ترتیب متفاوتی برگرداند. اگر کدِ تکراری در دیتابیس باشد،
+            // «آخرین برنده» با ترتیبِ نامعین یعنی نتیجه‌ی نامعین. حالا ORDER BY صعودی
+            // + «اولین برنده» → همیشه قطعی و تکرارپذیر.
             string sql = "SELECT [" + idColumn + "], " + colList +
-                         " FROM " + table + " WHERE (@CID = 0 OR CenterID = @CID)";
+                         " FROM " + table + " WHERE (@CID = 0 OR CenterID = @CID)" +
+                         " ORDER BY [" + idColumn + "]";
 
             using (SQLiteConnection con = _db.GetConnection())
             using (var cmd = new SQLiteCommand(sql, con))
@@ -211,11 +217,12 @@ namespace CaseManagement.Sync
                     {
                         string key = dr[keyColumn] == DBNull.Value ? "" : dr[keyColumn].ToString().Trim();
                         if (key.Length == 0) continue;
+                        if (map.ContainsKey(key)) continue; // اولین برنده (قطعی)
 
                         var row = new ExistingRow { Id = Convert.ToInt32(dr[idColumn]) };
                         foreach (string c in cols)
                             row.Values[c] = dr[c] == DBNull.Value ? "" : dr[c].ToString();
-                        map[key] = row; // در صورت کد تکراری در دیتابیس، آخرین برنده است
+                        map[key] = row;
                     }
                 }
             }
@@ -238,8 +245,9 @@ namespace CaseManagement.Sync
             string colList = string.Join(", ", cols.Select(c => "[" + c + "]"));
 
             // برای پرهیز از IN بزرگ، همه‌ی اعضای مراکز مرتبط را می‌خوانیم و در حافظه فیلتر می‌کنیم.
+            // ORDER BY FamID → ترتیب قطعی (رفع نوسان شمارش هنگام کلید تکراری عضو).
             var idSet = new HashSet<int>(idList);
-            string sql = "SELECT FamID, CasID, " + colList + " FROM TblFamily";
+            string sql = "SELECT FamID, CasID, " + colList + " FROM TblFamily ORDER BY FamID";
 
             using (SQLiteConnection con = _db.GetConnection())
             using (var cmd = new SQLiteCommand(sql, con))

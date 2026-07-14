@@ -58,18 +58,34 @@ namespace CaseManagement.Sync
             { "ServiceStatus",        new[] { "وضعیت خدمات" } },
         };
 
-        // نگاشت ستون دیتابیس TblFamily → عناوین ستون در فایل اعضا (occurrence=1؛
-        // یعنی وقتی عنوان دوبار تکرار شده، همیشه اولین/خودِ عضو گرفته می‌شود).
-        private static readonly Dictionary<string, string[]> MemberFieldMap =
-            new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+        // ─── نگاشت اعضا: ستون‌های تکراری («نام/نام پدر/ش تذکره/تاریخ تولد») در
+        // فایل اعضا دو بار می‌آیند. طبق تصحیح کاربر: گروه اول = سرپرست/والد،
+        // گروه دوم = خودِ فرزند (عضو). پس فیلدهای عضو از «وقوع دوم» گرفته می‌شوند.
+        // «جنسیت» و «سیادت» تک‌ستونه‌اند (وقوع اول). این نگاشت به‌صورت
+        // (ستون دیتابیس، عنوان HTML، شماره‌ی وقوع) در BuildMember اعمال می‌شود.
+        private static readonly MemberFieldRule[] MemberFieldRules =
         {
-            { "MemberName",       new[] { "نام", "نام عضو" } },
-            { "MemberFatherName", new[] { "نام پدر", "ولد" } },
-            { "MemberTazkiraNo",  new[] { "ش تذکره", "شماره تذکره", "تذکره" } },
-            { "BirthDate",        new[] { "تاریخ تولد" } },
-            { "Gender",           new[] { "جنسیت" } },
-            { "MemberSadat",      new[] { "سیادت" } },
+            new MemberFieldRule("MemberName",       new[] { "نام", "نام عضو" },                 2),
+            new MemberFieldRule("MemberFatherName", new[] { "نام پدر", "ولد" },                 2),
+            new MemberFieldRule("MemberTazkiraNo",  new[] { "ش تذکره", "شماره تذکره", "تذکره" }, 2),
+            new MemberFieldRule("BirthDate",        new[] { "تاریخ تولد" },                     2),
+            new MemberFieldRule("Gender",           new[] { "جنسیت" },                          1),
+            new MemberFieldRule("MemberSadat",      new[] { "سیادت" },                          1),
         };
+
+        private sealed class MemberFieldRule
+        {
+            public readonly string DbColumn;
+            public readonly string[] Headers;
+            public readonly int Occurrence;
+            public MemberFieldRule(string dbColumn, string[] headers, int occurrence)
+            { DbColumn = dbColumn; Headers = headers; Occurrence = occurrence; }
+        }
+
+        // ستون‌های دیتابیس که مقدارشان تاریخ است و باید به فرمت «سال/ماه/روز»
+        // نرمال شوند (تشخیص خودکار: عددِ ۴رقمی = سال).
+        private static readonly HashSet<string> DateColumns =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "BirthDate" };
 
         // CHECK constraint واقعی TblCase.ServiceStatus — مقدار خارج از این فهرست
         // هرگز نوشته نمی‌شود (تا کل تراکنش به‌خاطر یک مقدار نامعتبر Rollback نشود).
@@ -139,42 +155,67 @@ namespace CaseManagement.Sync
         {
             var rec = new SyncRecord { Entity = SyncEntity.FamilyMember };
             rec.PublicCode = ResolvePublicCode(row);
-            MapFields(row, MemberFieldMap, rec.SourceValues, occurrence: 1);
 
-            // ─── ستون دوم (کفیل/سرپرست دیگر) + تلفن + وضعیت خدمات ─────────────
-            // این‌ها معادل مستقیمی در TblFamily ندارند؛ برای این‌که داده گم نشود
-            // (و در عین حال فیلد «خودِ عضو» را خراب نکند)، به‌صورت یادداشت خوانا
-            // در ستون عمومی TblFamily.Details نوشته می‌شوند. کاربر در Wizard
-            // (مرحله «جزئیات») دقیقاً همین متن را قبل از تأیید می‌بیند و می‌تواند
-            // اعمال/رد کند.
-            var noteLines = new List<string>();
-
-            string ownPhone = FindByHeader(row, "تلفن همراه", 1) ?? FindByHeader(row, "شماره تماس", 1);
-            if (!string.IsNullOrWhiteSpace(ownPhone))
-                noteLines.Add("تلفن: " + ownPhone.Trim());
-
-            string sponsorName = FindByHeader(row, "نام", 2);
-            string sponsorTazkira = FindByHeader(row, "ش تذکره", 2) ?? FindByHeader(row, "شماره تذکره", 2);
-            string sponsorDob = FindByHeader(row, "تاریخ تولد", 2);
-            if (!string.IsNullOrWhiteSpace(sponsorName) || !string.IsNullOrWhiteSpace(sponsorTazkira) || !string.IsNullOrWhiteSpace(sponsorDob))
+            // فقط فیلدهایی که واقعاً در فایل هستند نوشته می‌شوند؛ ستون‌هایی که فایل
+            // نمی‌دهد (وضعیت جسمی/تحصیلی/درمانی و ...) اصلاً لمس نمی‌شوند و خالی
+            // می‌مانند. گروه دوم عناوینِ تکراری = خودِ عضو (طبق تصحیح کاربر).
+            foreach (MemberFieldRule rule in MemberFieldRules)
             {
-                string line = "کفیل/سرپرست دیگر:";
-                if (!string.IsNullOrWhiteSpace(sponsorName)) line += " " + sponsorName.Trim();
-                if (!string.IsNullOrWhiteSpace(sponsorTazkira)) line += " — تذکره " + sponsorTazkira.Trim();
-                if (!string.IsNullOrWhiteSpace(sponsorDob)) line += " — تولد " + sponsorDob.Trim();
-                noteLines.Add(line);
+                string val = null;
+                foreach (string header in rule.Headers)
+                {
+                    val = FindByHeader(row, header, rule.Occurrence);
+                    if (val != null) break;
+                }
+                if (string.IsNullOrWhiteSpace(val)) continue;
+
+                val = val.Trim();
+                if (DateColumns.Contains(rule.DbColumn))
+                    val = NormalizePersianDate(val);
+
+                rec.SourceValues[rule.DbColumn] = val;
             }
-
-            string serviceStatus = FindByHeader(row, "وضعیت خدمات", 1);
-            if (!string.IsNullOrWhiteSpace(serviceStatus))
-                noteLines.Add("وضعیت خدمات: " + serviceStatus.Trim());
-
-            if (noteLines.Count > 0)
-                rec.SourceValues["Details"] = string.Join("\n", noteLines);
 
             rec.Title = rec.SourceValues.ContainsKey("MemberName") ? rec.SourceValues["MemberName"] : "";
             rec.MemberKey = ComputeMemberKey(rec.SourceValues);
             return rec;
+        }
+
+        // ─── نرمال‌سازی تاریخ به فرمت «سال/ماه/روز» ──────────────────────────
+        // ورودی فایل به شکل روز-ماه-سال است (مثل 22-05-1387) و عددِ ۴رقمی همیشه
+        // «سال» است (سال شمسی 13xx/14xx). خروجی: yyyy/MM/dd (سال، بعد ماه، بعد
+        // روز — همان فرمت داخلی نرم‌افزار). این تبدیل قطعی است، پس همگام‌سازی
+        // مجدد همان مقدار را می‌سازد و «بدون تغییر» تشخیص داده می‌شود (idempotent).
+        private static string NormalizePersianDate(string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) return raw;
+
+            var nums = new List<string>();
+            foreach (Match m in Regex.Matches(raw, "[0-9۰-۹]+"))
+                nums.Add(m.Value);
+            if (nums.Count != 3) return raw.Trim(); // قابل‌تشخیص نیست → دست‌نخورده
+
+            int yearIdx = -1;
+            for (int i = 0; i < 3; i++)
+                if (nums[i].Length == 4) { yearIdx = i; break; }
+            if (yearIdx < 0) return raw.Trim();
+
+            string year = nums[yearIdx];
+            var others = new List<string>();
+            for (int i = 0; i < 3; i++)
+                if (i != yearIdx) others.Add(nums[i]);
+
+            string day, month;
+            if (yearIdx == 0) { month = others[0]; day = others[1]; } // yyyy-mm-dd
+            else               { day = others[0]; month = others[1]; } // dd-mm-yyyy (حالت رایج فایل)
+
+            return year + "/" + Pad2(month) + "/" + Pad2(day);
+        }
+
+        private static string Pad2(string s)
+        {
+            s = (s ?? "").Trim();
+            return s.Length == 1 ? "0" + s : s;
         }
 
         // نرمال‌سازی مقادیر متغیر «وضعیت خدمات» به ۴ مقدار مجاز CHECK constraint

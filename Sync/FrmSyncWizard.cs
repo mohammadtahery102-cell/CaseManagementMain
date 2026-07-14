@@ -482,6 +482,14 @@ namespace CaseManagement.Sync
 
         private async Task RunSync()
         {
+            // رعایت قوانین کاربران: کاربر «فقط مشاهده» (Viewer) اجازه‌ی نوشتن ندارد.
+            if (!SecurityContext.CanEdit())
+            {
+                UiTheme.ShowWarning(this, "کاربر فقط‌مشاهده اجازه‌ی همگام‌سازی (ثبت/ویرایش) ندارد.");
+                ShowStep(5);
+                return;
+            }
+
             SetBusy(true, "در حال همگام‌سازی...");
             _btnNext.Enabled = false; _btnBack.Enabled = false; _btnCancel.Enabled = false;
 

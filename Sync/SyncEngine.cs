@@ -167,12 +167,15 @@ namespace CaseManagement.Sync
 
             report.FinishedAt = DateTime.Now;
 
-            // ثبت یک رکورد خلاصه در audit (نه هر رکورد — برای کارایی).
+            // ثبت یک رکورد خلاصه در audit (نه هر رکورد — برای کارایی). AuditLogger
+            // خودش نام کاربر جاری و مرکزش را از SecurityContext ثبت می‌کند، پس
+            // همگام‌سازی «به نام همان کاربر و با عملیات ویرایش» ثبت می‌شود.
             try
             {
-                AuditLogger.Log(report.Success ? "همگام‌سازی HTML" : "همگام‌سازی HTML (ناموفق)",
-                    "Sync", 0, "",
-                    string.Format("جدید سرپرست={0}، بروزرسانی سرپرست={1}، جدید عضو={2}، بروزرسانی عضو={3}",
+                AuditLogger.Log(report.Success ? "ویرایش (همگام‌سازی HTML)" : "ویرایش (همگام‌سازی HTML — ناموفق)",
+                    "TblCase", 0, "",
+                    string.Format("توسط {0} در مرکز {1} — جدید سرپرست={2}، بروزرسانی سرپرست={3}، جدید عضو={4}، بروزرسانی عضو={5}",
+                        SecurityContext.Username, SecurityContext.CurrentCenterName,
                         report.GuardiansInserted, report.GuardiansUpdated,
                         report.MembersInserted, report.MembersUpdated));
             }
