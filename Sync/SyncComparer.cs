@@ -37,6 +37,13 @@ namespace CaseManagement.Sync
 
             int centerFilter = SecurityContext.CenterFilterId;
 
+            // آموزش — تحملِ «فیلدهای اضافه»: اگر فایل ورودی ستونی داشته باشد که به
+            // یک ستونِ ناموجود در دیتابیس نگاشت شده (یا نگاشتی برای نسخه‌ی دیگری از
+            // schema)، آن فیلد بی‌صدا حذف می‌شود تا نه کوئری crash کند و نه
+            // «بروزرسانی کاذب» بسازد. ستون‌های واقعیِ جدول مبنا هستند.
+            FilterRecordsToTable(data.Guardians, "TblCase");
+            FilterRecordsToTable(data.Members, "TblFamily");
+
             // ── سرپرستان ─────────────────────────────────────────────────────
             var guardianFields = CollectFields(data.Guardians);
             Dictionary<string, ExistingRow> existingCases = LoadExisting(
@@ -282,6 +289,39 @@ namespace CaseManagement.Sync
                 }
             }
             return result;
+        }
+
+        // حذف فیلدهایی از رکوردها که ستون متناظرشان در جدول مقصد وجود ندارد.
+        private void FilterRecordsToTable(List<SyncRecord> records, string table)
+        {
+            HashSet<string> cols = GetTableColumns(table);
+            if (cols.Count == 0) return; // نتوانستیم ستون‌ها را بخوانیم → دست‌نخورده
+
+            foreach (SyncRecord r in records)
+            {
+                foreach (string k in r.SourceValues.Keys.Where(k => !cols.Contains(k)).ToList())
+                    r.SourceValues.Remove(k);
+                foreach (string k in r.InsertOnlyValues.Keys.Where(k => !cols.Contains(k)).ToList())
+                    r.InsertOnlyValues.Remove(k);
+            }
+        }
+
+        private HashSet<string> GetTableColumns(string table)
+        {
+            var cols = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                using (SQLiteConnection con = _db.GetConnection())
+                {
+                    con.Open();
+                    using (var cmd = new SQLiteCommand("PRAGMA table_info(" + table + ")", con))
+                    using (var dr = cmd.ExecuteReader())
+                        while (dr.Read())
+                            cols.Add(dr["name"].ToString());
+                }
+            }
+            catch { }
+            return cols;
         }
 
         private static List<string> CollectFields(IEnumerable<SyncRecord> records)
