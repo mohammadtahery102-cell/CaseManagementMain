@@ -256,7 +256,13 @@ namespace CaseManagement
             lblHadithText.ForeColor = UiTheme.TextDark;
             lblHadithText.Dock = DockStyle.Fill;
             lblHadithText.TextAlign = ContentAlignment.MiddleLeft;
-            lblHadithText.AutoEllipsis = true;
+            // آموزش — رفع «چند کلمه‌ی حدیث گم می‌شود»: ترکیب AutoEllipsis با متن
+            // دوجهته‌ی (bidi) فارسی گاهی باعث می‌شود Windows به‌جای «...» یک
+            // کلمه‌ی وسط متن را بی‌صدا حذف کند. AutoEllipsis خاموش شد. همچنین طبق
+            // درخواست کاربر، شروع متن حدود ۱۰ فاصله (اسپیس) از لبه‌ی نزدیک به لوگو
+            // عقب‌تر برده شد تا هرگز نزدیک/چسبیده به لبه نباشد.
+            lblHadithText.AutoEllipsis = false;
+            lblHadithText.Padding = new Padding(0, 0, 60, 0);
 
             Label lblHadithSource = new Label();
             lblHadithSource.Text = daily.Source;
