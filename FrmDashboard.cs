@@ -90,9 +90,10 @@ namespace CaseManagement
             // لبه راست نمی‌رسیدند). LeftToRight همراه با RightToLeft ارثی
             // فرم، دقیقاً یک‌بار آینه می‌شود و ترتیب/چیدمان درست از راست
             // شروع می‌شود.
-            // فرم دیگر آینه نمی‌شود، پس برای شروع دکمه‌ها از راست، جهت جریان
-            // مستقیماً RightToLeft می‌شود.
-            toolButtons.FlowDirection = FlowDirection.RightToLeft;
+            // آموزش — جریانِ دکمه‌ها با «RightToLeft=Yes» ارثیِ فرم (که هنوز روشن
+            // است) آینه می‌شود؛ پس LeftToRight درست است تا دکمه‌ها از راست شروع
+            // شوند. (این ربطی به RightToLeftLayout هندسی ندارد که خاموش شد.)
+            toolButtons.FlowDirection = FlowDirection.LeftToRight;
             toolButtons.WrapContents = false;
             toolButtons.Padding = new Padding(8, 6, 8, 6);
             toolButtons.AutoSize = false;
@@ -176,25 +177,29 @@ namespace CaseManagement
             // آموزش — به درخواست کاربر: دکمه «درباره برنامه» از نوار ابزار حذف
             // شد؛ حالا با کلیک روی همین لوگو باز می‌شود (Cursor=Hand برای نشان
             // دادن قابل‌کلیک‌بودن).
+            // آموزش — چون فرم دیگر آینه‌ی هندسی ندارد، لوگو و دکمه‌ی تازه‌سازی در
+            // یک پنلِ Dock=Right قرار می‌گیرند تا قطعاً و پایدار در سمت راست بنر
+            // بمانند (بدون وابستگی به مختصات مطلق/آینه).
+            Panel logoArea = new Panel();
+            logoArea.Dock = DockStyle.Right;
+            logoArea.Width = 100;
+            logoArea.BackColor = UiTheme.CardBack;
+
             PictureBox picBannerLogo = new PictureBox();
             picBannerLogo.Image = LogoHelper.GetLogoImage();
             picBannerLogo.SizeMode = PictureBoxSizeMode.Zoom;
             picBannerLogo.Size = new Size(72, 72);
-            // فرم دیگر آینه نمی‌شود؛ لوگو دستی به سمت راست (Anchor=Right) می‌رود.
-            picBannerLogo.Location = new Point(1260 - 16 - 72, 6);
-            picBannerLogo.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            picBannerLogo.Location = new Point(14, 6);
             picBannerLogo.Cursor = Cursors.Hand;
             picBannerLogo.Click += delegate { using (var frm = new FrmAbout()) frm.ShowDialog(this); };
-            titleBanner.Controls.Add(picBannerLogo);
+            logoArea.Controls.Add(picBannerLogo);
 
-            // آموزش — به درخواست کاربر: دکمه «تازه‌سازی» از نوار ابزار بالا
-            // حذف و کنار لوگو منتقل شد (دکمه کوچک گرد کنار تصویر لوگو).
+            // دکمه «تازه‌سازی» گرد، زیر لوگو.
             Button btnRefreshNearLogo = new Button();
             btnRefreshNearLogo.Text = "↻";
             btnRefreshNearLogo.Font = new Font("Segoe UI", 14F, FontStyle.Bold);
             btnRefreshNearLogo.Size = new Size(34, 34);
-            btnRefreshNearLogo.Location = new Point(1260 - 16 - 72 - 40, 50);
-            btnRefreshNearLogo.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            btnRefreshNearLogo.Location = new Point(33, 78);
             btnRefreshNearLogo.FlatStyle = FlatStyle.Flat;
             btnRefreshNearLogo.FlatAppearance.BorderSize = 0;
             btnRefreshNearLogo.BackColor = UiTheme.Primary;
@@ -204,7 +209,9 @@ namespace CaseManagement
             var refreshTip = new ToolTip();
             refreshTip.SetToolTip(btnRefreshNearLogo, "تازه‌سازی");
             btnRefreshNearLogo.Click += delegate { RefreshAll(); };
-            titleBanner.Controls.Add(btnRefreshNearLogo);
+            logoArea.Controls.Add(btnRefreshNearLogo);
+
+            titleBanner.Controls.Add(logoArea);
 
             // آموزش — رفع باگ «حدیث گم شد»: قبلاً عنوان و حدیث با مختصات مطلق
             // و Anchor=Left|Right چیده شده بودند که در فرم RightToLeftLayout
@@ -218,8 +225,8 @@ namespace CaseManagement
 
             Panel bannerTextArea = new Panel();
             bannerTextArea.Dock = DockStyle.Fill;
-            // لوگو حالا سمت راست است؛ فضای خالی برای لوگو در سمت راست باز می‌شود.
-            bannerTextArea.Padding = new Padding(14, 8, 104, 8);
+            // لوگو در پنلِ جداگانه‌ی Dock=Right است؛ این ناحیه فقط فضای متن را می‌گیرد.
+            bannerTextArea.Padding = new Padding(14, 8, 14, 8);
 
             TableLayoutPanel bannerStack = new TableLayoutPanel();
             bannerStack.Dock = DockStyle.Fill;
@@ -235,14 +242,15 @@ namespace CaseManagement
             lblBannerTitle.Font = UiTheme.FontBold(UiTheme.SizeTitle);
             lblBannerTitle.ForeColor = UiTheme.PrimaryDark;
             lblBannerTitle.Dock = DockStyle.Fill;
-            lblBannerTitle.TextAlign = ContentAlignment.MiddleRight;
+            // تراز متن با RightToLeft=Yes ارثی آینه می‌شود؛ MiddleLeft یعنی راستِ بصری.
+            lblBannerTitle.TextAlign = ContentAlignment.MiddleLeft;
 
             Label lblHadithText = new Label();
             lblHadithText.Text = hadithText;
             lblHadithText.Font = UiTheme.FontBold(9.5F);
             lblHadithText.ForeColor = UiTheme.TextDark;
             lblHadithText.Dock = DockStyle.Fill;
-            lblHadithText.TextAlign = ContentAlignment.MiddleRight;
+            lblHadithText.TextAlign = ContentAlignment.MiddleLeft;
             lblHadithText.AutoEllipsis = true;
 
             Label lblHadithSource = new Label();
@@ -250,15 +258,14 @@ namespace CaseManagement
             lblHadithSource.Font = new Font(UiTheme.Font(8F), FontStyle.Italic);
             lblHadithSource.ForeColor = UiTheme.TextMuted;
             lblHadithSource.Dock = DockStyle.Fill;
-            lblHadithSource.TextAlign = ContentAlignment.TopRight;
+            lblHadithSource.TextAlign = ContentAlignment.TopLeft;
             lblHadithSource.AutoEllipsis = true;
 
             bannerStack.Controls.Add(lblBannerTitle, 0, 0);
             bannerStack.Controls.Add(lblHadithText, 0, 1);
             bannerStack.Controls.Add(lblHadithSource, 0, 2);
             bannerTextArea.Controls.Add(bannerStack);
-            titleBanner.Controls.Add(bannerTextArea);
-            bannerTextArea.SendToBack(); // پشتِ لوگو/دکمه تازه‌سازی که مطلق‌اند
+            titleBanner.Controls.Add(bannerTextArea); // Fill — سمت چپِ logoArea قرار می‌گیرد
 
             TabControl tabs = new TabControl();
             tabs.Dock = DockStyle.Fill;
