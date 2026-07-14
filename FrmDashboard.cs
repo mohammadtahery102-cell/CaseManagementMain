@@ -46,6 +46,15 @@ namespace CaseManagement
         // ComboBox برای تغییر مرکز توسط SuperAdmin (بدون نیاز به logout)
         private ComboBox _cmbCenterSwitch;
 
+        // ─── فیلتر ولایت/ولسوالی روی کل داشبورد ─────────────────────────────
+        // آموزش: این دو مقدار به همه‌ی کوئری‌های پرونده‌محورِ داشبورد تزریق می‌شوند
+        // (CaseFilterSql/AddCaseFilterParams). وقتی خالی‌اند، شرط «(@Prov=''...)»
+        // همیشه درست است، پس رفتار دقیقاً مثل قبل می‌ماند (بدون هیچ تغییر/رگرسیون).
+        private ComboBox _cmbFilterProvince;
+        private TextBox _txtFilterDistrict;
+        private string _filterProvince = "";
+        private string _filterDistrict = "";
+
         public FrmDashboard()
         {
             BuildUi();
@@ -269,10 +278,94 @@ namespace CaseManagement
             tabs.SelectedIndex = 0; // پیش‌فرض روی «اعضای خانواده»
 
             Controls.Add(tabs);
+            Controls.Add(BuildFilterBar());
             Controls.Add(titleBanner);
             Controls.Add(toolbar);
 
             RefreshAll();
+        }
+
+        // ─── نوار فیلتر ولایت/ولسوالی (زیر بنر، بالای تب‌ها) ─────────────────
+        private Panel BuildFilterBar()
+        {
+            Panel bar = new Panel { Dock = DockStyle.Top, Height = 46, BackColor = UiTheme.CardBack };
+
+            FlowLayoutPanel flow = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(12, 7, 12, 6)
+            };
+
+            Label lbl = new Label
+            {
+                Text = "فیلتر:", AutoSize = false, Width = 46, Height = 30,
+                TextAlign = ContentAlignment.MiddleRight, Font = UiTheme.FontBold(UiTheme.SizeBody),
+                ForeColor = UiTheme.TextDark, Margin = new Padding(2, 4, 2, 2)
+            };
+            flow.Controls.Add(lbl);
+
+            _cmbFilterProvince = new ComboBox
+            {
+                DropDownStyle = ComboBoxStyle.DropDownList, Width = 170, Height = 30,
+                Font = UiTheme.Font(UiTheme.SizeBody), Margin = new Padding(4, 3, 4, 2)
+            };
+            _cmbFilterProvince.Items.Add("همه ولایت‌ها");
+            try
+            {
+                foreach (string prov in Helpers.LookupHelper.GetValues("Province"))
+                    _cmbFilterProvince.Items.Add(prov);
+            }
+            catch { }
+            _cmbFilterProvince.SelectedIndex = 0;
+            flow.Controls.Add(_cmbFilterProvince);
+
+            _txtFilterDistrict = new TextBox { Width = 150, Height = 28, Margin = new Padding(4, 4, 4, 2) };
+            UiTheme.StyleTextBox(_txtFilterDistrict);
+            _txtFilterDistrict.Text = "";
+            var districtTip = new ToolTip();
+            districtTip.SetToolTip(_txtFilterDistrict, "ولسوالی (اختیاری)");
+            flow.Controls.Add(_txtFilterDistrict);
+
+            Button btnApply = UiTheme.CreateButton("اعمال فیلتر", "⌕", UiTheme.Primary);
+            btnApply.Size = new Size(130, 30); btnApply.Margin = new Padding(4, 3, 4, 2);
+            btnApply.Click += delegate { ApplyDashboardFilter(); };
+            flow.Controls.Add(btnApply);
+
+            Button btnClear = UiTheme.CreateSecondaryButton("حذف فیلتر", "✕");
+            btnClear.Size = new Size(120, 30); btnClear.Margin = new Padding(4, 3, 4, 2);
+            btnClear.Click += delegate
+            {
+                _cmbFilterProvince.SelectedIndex = 0;
+                _txtFilterDistrict.Text = "";
+                ApplyDashboardFilter();
+            };
+            flow.Controls.Add(btnClear);
+
+            bar.Controls.Add(flow);
+            return bar;
+        }
+
+        private void ApplyDashboardFilter()
+        {
+            _filterProvince = (_cmbFilterProvince.SelectedIndex <= 0) ? "" : _cmbFilterProvince.Text.Trim();
+            _filterDistrict = (_txtFilterDistrict.Text ?? "").Trim();
+            RefreshAll();
+        }
+
+        // شرط SQL فیلتر پرونده برای یک alias مشخص از TblCase (خالی = بی‌اثر).
+        // alias خالی یعنی ستون‌ها بدون پیشوند (مثل «FROM TblCase» بدون نام مستعار).
+        private string CaseFilterSql(string alias)
+        {
+            string a = string.IsNullOrEmpty(alias) ? "" : alias + ".";
+            return " AND (@Prov = '' OR " + a + "Province = @Prov)" +
+                   " AND (@Dist = '' OR " + a + "District LIKE '%' || @Dist || '%')";
+        }
+
+        // افزودن پارامترهای فیلتر به یک Command (یک‌بار در هر Command کافی است،
+        // حتی اگر شرط چند بار در کوئری تکرار شده باشد).
+        private void AddCaseFilterParams(SQLiteCommand cmd)
+        {
+            cmd.Parameters.AddWithValue("@Prov", _filterProvince ?? "");
+            cmd.Parameters.AddWithValue("@Dist", _filterDistrict ?? "");
         }
 
         private TabPage BuildSummaryTab()
@@ -694,12 +787,13 @@ FROM (
     FROM TblFamily f
     JOIN TblCase c ON c.CasID = f.CasID
     WHERE (@CID = 0 OR c.CenterID = @CID)
-      AND (@Status = '' OR c.ServiceStatus = @Status)
+      AND (@Status = '' OR c.ServiceStatus = @Status)" + CaseFilterSql("c") + @"
 ) x
 GROUP BY MemberEducation", con))
             {
                 cmd.Parameters.AddWithValue("@CID", cid);
                 cmd.Parameters.AddWithValue("@Status", _familyServiceStatusFilter);
+                AddCaseFilterParams(cmd);
                 con.Open();
                 using (var dr = cmd.ExecuteReader())
                 {
@@ -739,13 +833,14 @@ FROM (
     JOIN TblCase c ON c.CasID = f.CasID
     WHERE f.MemberEducation IN ('دانشگاه', 'مکتب', 'بی‌سواد', 'ترک تحصیل', 'طلبه')
       AND (@CID = 0 OR c.CenterID = @CID)
-      AND (@Status = '' OR c.ServiceStatus = @Status)
+      AND (@Status = '' OR c.ServiceStatus = @Status)" + CaseFilterSql("c") + @"
 ) x
 GROUP BY [دسته]
 ORDER BY [دسته]", con))
             {
                 cmd.Parameters.AddWithValue("@CID", cid);
                 cmd.Parameters.AddWithValue("@Status", _familyServiceStatusFilter);
+                AddCaseFilterParams(cmd);
                 using (SQLiteDataAdapter da = new SQLiteDataAdapter(cmd))
                 {
                     DataTable t = new DataTable();
@@ -778,11 +873,12 @@ FROM (
     FROM TblFamily f
     JOIN TblCase c ON c.CasID = f.CasID
     WHERE (@CID = 0 OR c.CenterID = @CID)
-      AND (@Status = '' OR c.ServiceStatus = @Status)
+      AND (@Status = '' OR c.ServiceStatus = @Status)" + CaseFilterSql("c") + @"
 ) x", con))
             {
                 cmd.Parameters.AddWithValue("@CID", cid);
                 cmd.Parameters.AddWithValue("@Status", _familyServiceStatusFilter);
+                AddCaseFilterParams(cmd);
                 using (SQLiteDataAdapter da = new SQLiteDataAdapter(cmd))
                 {
                     DataTable t = new DataTable();
@@ -1056,7 +1152,7 @@ SELECT * FROM (
     JOIN TblCase c ON c.CasID = f.CasID
     WHERE f.MemberEducation = @Edu
       AND (@CID = 0 OR c.CenterID = @CID)
-      AND (@Status = '' OR c.ServiceStatus = @Status)
+      AND (@Status = '' OR c.ServiceStatus = @Status)" + CaseFilterSql("c") + @"
 ) x
 WHERE 1 = 1 " + genderSql + " " + ageSql + @"
 ORDER BY [نام سرپرست]", con))
@@ -1064,6 +1160,7 @@ ORDER BY [نام سرپرست]", con))
                 cmd.Parameters.AddWithValue("@Edu", educationValue);
                 cmd.Parameters.AddWithValue("@CID", cid);
                 cmd.Parameters.AddWithValue("@Status", _familyServiceStatusFilter);
+                AddCaseFilterParams(cmd);
                 if (gender != null)
                     cmd.Parameters.AddWithValue("@Gender", gender);
 
@@ -1146,13 +1243,14 @@ SELECT
 FROM TblFamily f
 JOIN TblCase c ON c.CasID = f.CasID
 WHERE (@CID = 0 OR c.CenterID = @CID)
-  AND (@Status = '' OR c.ServiceStatus = @Status)
+  AND (@Status = '' OR c.ServiceStatus = @Status)" + CaseFilterSql("c") + @"
   AND NULLIF(f.HasDisability, '') IS NOT NULL
   AND f.HasDisability NOT IN ('0', 'false', 'False', 'نخیر', 'خیر', 'No', 'سالم')
 ORDER BY c.HeadFullName, f.MemberName", con))
             {
                 cmd.Parameters.AddWithValue("@CID", cid);
                 cmd.Parameters.AddWithValue("@Status", _familyServiceStatusFilter);
+                AddCaseFilterParams(cmd);
                 using (SQLiteDataAdapter da = new SQLiteDataAdapter(cmd))
                 {
                     DataTable t = new DataTable();
@@ -1675,18 +1773,19 @@ ORDER BY RemindAt", con))
             using (SQLiteConnection con = db.GetConnection())
             using (SQLiteCommand cmd = new SQLiteCommand(@"
 SELECT
-    (SELECT COUNT(1) FROM TblCase        WHERE (@CID=0 OR CenterID=@CID)) AS Total,
+    (SELECT COUNT(1) FROM TblCase        WHERE (@CID=0 OR CenterID=@CID)" + CaseFilterSql("") + @") AS Total,
     (SELECT COUNT(1) FROM TblFamily f
       JOIN TblCase c ON c.CasID = f.CasID
-      WHERE (@CID=0 OR c.CenterID=@CID))                                  AS FamilyCount,
+      WHERE (@CID=0 OR c.CenterID=@CID)" + CaseFilterSql("c") + @")                                  AS FamilyCount,
     SUM(CASE WHEN ServiceStatus = 'فعال' THEN 1 ELSE 0 END)       AS Active,
     SUM(CASE WHEN ServiceStatus = 'در انتظار تأیید' THEN 1 ELSE 0 END)  AS Waiting,
     SUM(CASE WHEN ServiceStatus = 'قطع' THEN 1 ELSE 0 END)        AS Stopped,
     SUM(CASE WHEN ServiceStatus = 'قطع موقت' THEN 1 ELSE 0 END)   AS StoppedTemp
 FROM TblCase
-WHERE (@CID = 0 OR CenterID = @CID)", con))
+WHERE (@CID = 0 OR CenterID = @CID)" + CaseFilterSql("") + @"", con))
             {
                 cmd.Parameters.AddWithValue("@CID", cid);
+                AddCaseFilterParams(cmd);
                 con.Open();
 
                 using (var dr = cmd.ExecuteReader())
@@ -1736,28 +1835,29 @@ WHERE (@CID = 0 OR CenterID = @CID)", con))
             {
                 con.Open();
 
-                registered = GetTableCid(con, @"
+                registered = GetTableCidF(con, @"
 SELECT " + groupExpression + @" AS Period, COUNT(1) AS CountValue
 FROM TblCase
 WHERE CaseDate >= date('now', '-12 months')
-  AND (@CID = 0 OR CenterID = @CID)
+  AND (@CID = 0 OR CenterID = @CID)" + CaseFilterSql("") + @"
 GROUP BY " + groupExpression + @"
 ORDER BY Period", cid);
 
-                // TblCaseStatusHistory مرتبط است با TblCase از طریق CasID
-                activated = GetTableCid(con, @"
+                // TblCaseStatusHistory مرتبط است با TblCase از طریق CasID.
+                // فیلتر ولایت/ولسوالی داخل همان EXISTS روی TblCase c اعمال می‌شود.
+                activated = GetTableCidF(con, @"
 SELECT " + statusGroupExpression + @" AS Period, COUNT(1) AS CountValue
 FROM TblCaseStatusHistory sh
 WHERE sh.NewStatus = 'فعال' AND sh.ChangedAt >= date('now', '-12 months')
-  AND (@CID = 0 OR EXISTS (SELECT 1 FROM TblCase c WHERE c.CasID = sh.CasID AND c.CenterID = @CID))
+  AND EXISTS (SELECT 1 FROM TblCase c WHERE c.CasID = sh.CasID AND (@CID = 0 OR c.CenterID = @CID)" + CaseFilterSql("c") + @")
 GROUP BY " + statusGroupExpression + @"
 ORDER BY Period", cid);
 
-                stopped = GetTableCid(con, @"
+                stopped = GetTableCidF(con, @"
 SELECT " + statusGroupExpression + @" AS Period, COUNT(1) AS CountValue
 FROM TblCaseStatusHistory sh
 WHERE sh.NewStatus = 'قطع' AND sh.ChangedAt >= date('now', '-12 months')
-  AND (@CID = 0 OR EXISTS (SELECT 1 FROM TblCase c WHERE c.CasID = sh.CasID AND c.CenterID = @CID))
+  AND EXISTS (SELECT 1 FROM TblCase c WHERE c.CasID = sh.CasID AND (@CID = 0 OR c.CenterID = @CID)" + CaseFilterSql("c") + @")
 GROUP BY " + statusGroupExpression + @"
 ORDER BY Period", cid);
             }
@@ -1783,11 +1883,11 @@ ORDER BY Period", cid);
                 where = "NULLIF(UrgentSituation, '') IS NOT NULL";
 
             int cid = SecurityContext.CenterFilterId;
-            dgvCritical.DataSource = GetTableCid(@"
+            dgvCritical.DataSource = GetTableCidF(@"
 SELECT c.CasID, c.FormNo, c.Code, c.HeadFullName, c.Phone, c.Province, c.District, c.ServiceStatus, c.UrgentSituation
 FROM TblCase c
 WHERE " + where + @"
-  AND (@CID = 0 OR c.CenterID = @CID)
+  AND (@CID = 0 OR c.CenterID = @CID)" + CaseFilterSql("c") + @"
 ORDER BY c.CasID DESC", cid);
         }
 
@@ -1865,7 +1965,7 @@ SELECT Province AS [ولایت], COUNT(1) AS [تعداد پرونده]
 FROM TblCase
 WHERE NULLIF(Province, '') IS NOT NULL
   AND (@District = '' OR District LIKE @DistrictLike)
-  AND (@CID = 0 OR CenterID = @CID)
+  AND (@CID = 0 OR CenterID = @CID)" + CaseFilterSql("") + @"
 GROUP BY Province
 ORDER BY [تعداد پرونده] DESC";
 
@@ -1876,6 +1976,7 @@ ORDER BY [تعداد پرونده] DESC";
                 cmd.Parameters.AddWithValue("@District", district);
                 cmd.Parameters.AddWithValue("@DistrictLike", "%" + district + "%");
                 cmd.Parameters.AddWithValue("@CID", cid);
+                AddCaseFilterParams(cmd);
 
                 DataTable table = new DataTable();
                 da.Fill(table);
@@ -1887,11 +1988,11 @@ ORDER BY [تعداد پرونده] DESC";
         private void LoadReminders()
         {
             int cid = SecurityContext.CenterFilterId;
-            DataTable table = GetTableCid(@"
+            DataTable table = GetTableCidF(@"
 SELECT CasID, FormNo, Code, HeadFullName, Phone, SurveyDate, ServiceStatus
 FROM TblCase
 WHERE (SurveyDate IS NULL OR SurveyDate < date('now', '-6 months'))
-  AND (@CID = 0 OR CenterID = @CID)
+  AND (@CID = 0 OR CenterID = @CID)" + CaseFilterSql("") + @"
 ORDER BY SurveyDate, CasID DESC", cid);
 
             lblReminderSummary.Text = "پرونده‌های نیازمند پیگیری سروی: " + table.Rows.Count;
@@ -1903,7 +2004,7 @@ ORDER BY SurveyDate, CasID DESC", cid);
         private void LoadQuality()
         {
             int cid = SecurityContext.CenterFilterId;
-            DataTable table = GetTableCid(@"
+            DataTable table = GetTableCidF(@"
 SELECT
     CasID,
     FormNo,
@@ -1919,7 +2020,7 @@ WHERE (NULLIF(Code, '') IS NULL
    OR NULLIF(Phone, '') IS NULL
    OR (NULLIF(PhotoPath, '') IS NULL AND NULLIF(FamilyPhotoPath, '') IS NULL)
    OR NULLIF(HeadFullName, '') IS NULL)
-  AND (@CID = 0 OR CenterID = @CID)
+  AND (@CID = 0 OR CenterID = @CID)" + CaseFilterSql("") + @"
 ORDER BY CasID DESC", cid);
 
             lblQualitySummary.Text = "پرونده‌های دارای مشکل کیفیت داده: " + table.Rows.Count;
@@ -2064,6 +2165,32 @@ ORDER BY LogID DESC", cid);
             using (SQLiteCommand cmd = new SQLiteCommand(query, con))
             {
                 cmd.Parameters.AddWithValue("@CID", centerId);
+                using (SQLiteDataAdapter da = new SQLiteDataAdapter(cmd))
+                {
+                    DataTable table = new DataTable();
+                    da.Fill(table);
+                    return table;
+                }
+            }
+        }
+
+        // نسخه با @CID + پارامترهای فیلتر ولایت/ولسوالی (@Prov/@Dist) — برای
+        // کوئری‌هایی که علاوه بر فیلتر مرکز، CaseFilterSql هم در آن‌ها تزریق شده.
+        private DataTable GetTableCidF(string query, int centerId)
+        {
+            using (SQLiteConnection con = db.GetConnection())
+            {
+                con.Open();
+                return GetTableCidF(con, query, centerId);
+            }
+        }
+
+        private DataTable GetTableCidF(SQLiteConnection con, string query, int centerId)
+        {
+            using (SQLiteCommand cmd = new SQLiteCommand(query, con))
+            {
+                cmd.Parameters.AddWithValue("@CID", centerId);
+                AddCaseFilterParams(cmd);
                 using (SQLiteDataAdapter da = new SQLiteDataAdapter(cmd))
                 {
                     DataTable table = new DataTable();
