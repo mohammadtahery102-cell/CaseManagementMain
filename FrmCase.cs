@@ -584,6 +584,23 @@ namespace CaseManagement
             txtPhotoPath.Text = "";
             txtFamilyPhotoPath.Text = "";
 
+            // آموزش — رفع باگ «دکمه جدید همه فیلدها را خالی نمی‌کند»: این کمبوها
+            // DropDownStyle=DropDownList دارند و برای آن‌ها «.Text = ""» هیچ اثری
+            // ندارد (مقدار انتخاب‌شده باقی می‌ماند). پس صریحاً SelectedIndex=-1
+            // می‌شوند تا واقعاً خالی شوند. (txtServiceStatus عمداً اینجا نیست چون
+            // CHECK constraint دارد و بالاتر روی «فعال» تنظیم می‌شود.)
+            ComboBox[] dropdowns =
+            {
+                txtZone, txtProvince, txtDistrict, txtRequestType, txtPriorityLevel,
+                txtHeadSadat, txtReligion, txtCoveredByOrg, txtDisabilityType,
+                txtDisabilityDegree, txtMaritalStatus, txtEducationLevel
+            };
+            foreach (ComboBox cmb in dropdowns)
+            {
+                cmb.SelectedIndex = -1;
+                cmb.Text = "";
+            }
+
             dtpCaseDate.Value = DateTime.Today;
             dtpSurveyDate.Value = DateTime.Today;
 
