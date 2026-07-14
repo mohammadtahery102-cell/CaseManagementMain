@@ -1757,9 +1757,54 @@ ORDER BY RemindAt", con))
 
             lblQualitySummary = CreateHeaderLabel();
             dgvQuality = CreateGrid();
+
+            // ─── منوی راست‌کلیک: باز کردن پرونده‌ی مشکل‌دار برای اصلاح ─────────
+            ContextMenuStrip menu = new ContextMenuStrip { RightToLeft = RightToLeft.Yes };
+            ToolStripMenuItem miOpen = new ToolStripMenuItem("✎  باز کردن پرونده برای اصلاح");
+            miOpen.Click += delegate { OpenQualityCaseForEdit(); };
+            ToolStripMenuItem miCopy = new ToolStripMenuItem("⧉  کپی کد اختصاصی");
+            miCopy.Click += delegate
+            {
+                if (dgvQuality.CurrentRow != null && dgvQuality.Columns.Contains("Code"))
+                {
+                    try { Clipboard.SetText(Convert.ToString(dgvQuality.CurrentRow.Cells["Code"].Value)); } catch { }
+                }
+            };
+            menu.Items.Add(miOpen);
+            menu.Items.Add(miCopy);
+            dgvQuality.ContextMenuStrip = menu;
+            // با راست‌کلیک، همان ردیفِ زیر ماوس انتخاب می‌شود (تا منو روی رکورد درست عمل کند).
+            dgvQuality.CellMouseDown += delegate (object s, DataGridViewCellMouseEventArgs e)
+            {
+                if (e.Button == MouseButtons.Right && e.RowIndex >= 0 && e.ColumnIndex >= 0)
+                    dgvQuality.CurrentCell = dgvQuality.Rows[e.RowIndex].Cells[e.ColumnIndex];
+            };
+            // دابل‌کلیک هم پرونده را برای اصلاح باز می‌کند (میان‌بر سریع).
+            dgvQuality.CellDoubleClick += delegate (object s, DataGridViewCellEventArgs e)
+            {
+                if (e.RowIndex >= 0) OpenQualityCaseForEdit();
+            };
+
             page.Controls.Add(dgvQuality);
             page.Controls.Add(lblQualitySummary);
             return page;
+        }
+
+        // باز کردن پرونده‌ی انتخاب‌شده در تب «کیفیت داده» داخل فرم پرونده برای اصلاح.
+        private void OpenQualityCaseForEdit()
+        {
+            if (dgvQuality.CurrentRow == null || !dgvQuality.Columns.Contains("CasID"))
+            {
+                UiTheme.ShowWarning(this, "ابتدا یک پرونده را انتخاب کنید.");
+                return;
+            }
+            object v = dgvQuality.CurrentRow.Cells["CasID"].Value;
+            if (v == null || v == DBNull.Value) return;
+
+            int casId = Convert.ToInt32(v);
+            using (var frm = new FrmCase(casId))
+                frm.ShowDialog(this);
+            RefreshAll(); // پس از اصلاح، آمار به‌روز شود
         }
 
         private TabPage BuildAuditTab()

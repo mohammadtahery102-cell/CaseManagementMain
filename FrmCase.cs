@@ -38,10 +38,19 @@ namespace CaseManagement
         private const long MinFamilyPhotoFileSizeBytes = 50L * 1024;
         private const long MaxFamilyPhotoFileSizeBytes = 1L * 1024 * 1024;
 
+        private int _pendingOpenCaseId = 0;
+
         public FrmCase()
         {
             InitializeComponent();
             ApplyCustomTheme();
+        }
+
+        // باز کردن مستقیم یک پرونده‌ی مشخص برای ویرایش (مثلاً از تب «کیفیت داده»
+        // داشبورد با راست‌کلیک). پرونده پس از بارگذاری فرم به‌طور خودکار لود می‌شود.
+        public FrmCase(int openCaseId) : this()
+        {
+            _pendingOpenCaseId = openCaseId;
         }
 
         // ─── اعمال ظاهر یکسان روی فرمی که با طراح (Designer) ساخته شده ──────
@@ -402,6 +411,14 @@ namespace CaseManagement
             LoadLookupCombos();
             LoadCases();
             ClearForm();
+
+            // اگر فرم برای «باز کردن یک پرونده‌ی مشخص» فراخوانی شده، همان را لود کن.
+            if (_pendingOpenCaseId > 0)
+            {
+                try { LoadCaseById(_pendingOpenCaseId); }
+                catch (Exception ex) { Debug.WriteLine("[FrmCase open pending] " + ex.Message); }
+                _pendingOpenCaseId = 0;
+            }
         }
 
         // آموزش — بارگذاری کمبوها از TblLookup در Load (نه InitializeComponent):
