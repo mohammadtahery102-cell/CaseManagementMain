@@ -51,7 +51,7 @@ namespace CaseManagement
         // (CaseFilterSql/AddCaseFilterParams). وقتی خالی‌اند، شرط «(@Prov=''...)»
         // همیشه درست است، پس رفتار دقیقاً مثل قبل می‌ماند (بدون هیچ تغییر/رگرسیون).
         private ComboBox _cmbFilterProvince;
-        private TextBox _txtFilterDistrict;
+        private ComboBox _cmbFilterDistrict;
         private string _filterProvince = "";
         private string _filterDistrict = "";
 
@@ -316,14 +316,19 @@ namespace CaseManagement
             }
             catch { }
             _cmbFilterProvince.SelectedIndex = 0;
+            // با تغییر ولایت، فهرست ولسوالی‌های همان ولایت در کمبوی بعدی پر می‌شود.
+            _cmbFilterProvince.SelectedIndexChanged += delegate { LoadFilterDistricts(); };
             flow.Controls.Add(_cmbFilterProvince);
 
-            _txtFilterDistrict = new TextBox { Width = 150, Height = 28, Margin = new Padding(4, 4, 4, 2) };
-            UiTheme.StyleTextBox(_txtFilterDistrict);
-            _txtFilterDistrict.Text = "";
+            _cmbFilterDistrict = new ComboBox
+            {
+                DropDownStyle = ComboBoxStyle.DropDownList, Width = 160, Height = 30,
+                Font = UiTheme.Font(UiTheme.SizeBody), Margin = new Padding(4, 3, 4, 2)
+            };
             var districtTip = new ToolTip();
-            districtTip.SetToolTip(_txtFilterDistrict, "ولسوالی (اختیاری)");
-            flow.Controls.Add(_txtFilterDistrict);
+            districtTip.SetToolTip(_cmbFilterDistrict, "ولسوالی (وابسته به ولایت انتخاب‌شده)");
+            flow.Controls.Add(_cmbFilterDistrict);
+            LoadFilterDistricts();
 
             Button btnApply = UiTheme.CreateButton("اعمال فیلتر", "⌕", UiTheme.Primary);
             btnApply.Size = new Size(130, 30); btnApply.Margin = new Padding(4, 3, 4, 2);
@@ -335,7 +340,7 @@ namespace CaseManagement
             btnClear.Click += delegate
             {
                 _cmbFilterProvince.SelectedIndex = 0;
-                _txtFilterDistrict.Text = "";
+                LoadFilterDistricts();
                 ApplyDashboardFilter();
             };
             flow.Controls.Add(btnClear);
@@ -344,10 +349,29 @@ namespace CaseManagement
             return bar;
         }
 
+        // پر کردن کمبوی ولسوالی بر اساس ولایت انتخاب‌شده (وابسته/آبشاری).
+        private void LoadFilterDistricts()
+        {
+            if (_cmbFilterDistrict == null) return;
+            _cmbFilterDistrict.Items.Clear();
+            _cmbFilterDistrict.Items.Add("همه ولسوالی‌ها");
+
+            if (_cmbFilterProvince.SelectedIndex > 0)
+            {
+                try
+                {
+                    foreach (string d in Helpers.AfghanGeoData.GetDistricts(_cmbFilterProvince.Text.Trim()))
+                        _cmbFilterDistrict.Items.Add(d);
+                }
+                catch { }
+            }
+            _cmbFilterDistrict.SelectedIndex = 0;
+        }
+
         private void ApplyDashboardFilter()
         {
             _filterProvince = (_cmbFilterProvince.SelectedIndex <= 0) ? "" : _cmbFilterProvince.Text.Trim();
-            _filterDistrict = (_txtFilterDistrict.Text ?? "").Trim();
+            _filterDistrict = (_cmbFilterDistrict.SelectedIndex <= 0) ? "" : _cmbFilterDistrict.Text.Trim();
             RefreshAll();
         }
 

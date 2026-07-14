@@ -623,19 +623,34 @@ namespace CaseManagement.Helpers
                 lblMessage.Text = message;
                 lblMessage.Font = UiTheme.Font(10.5f);
                 lblMessage.ForeColor = UiTheme.TextMuted;
-                lblMessage.SetBounds(30, 62, ClientSize.Width - 60, 68);
                 lblMessage.TextAlign = ContentAlignment.TopRight;
                 Controls.Add(lblMessage);
+
+                // آموزش — رفع «خطوط روی هم»: قبلاً ارتفاع پیام ثابت (۶۸px) بود و
+                // پیام‌های چندخطی/بلند سرریز و روی هم می‌افتادند. حالا ارتفاعِ لازم
+                // با اندازه‌گیری متنِ wrap‌شده در همان عرض محاسبه و فرم به‌اندازه‌ی
+                // متن بزرگ می‌شود (با حداقل و حداکثر معقول).
+                int msgWidth = ClientSize.Width - 60;
+                int measuredHeight = TextRenderer.MeasureText(
+                    string.IsNullOrEmpty(message) ? " " : message,
+                    lblMessage.Font,
+                    new Size(msgWidth, int.MaxValue),
+                    TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl).Height;
+                int msgHeight = Math.Max(56, Math.Min(measuredHeight + 8, 420));
+                lblMessage.SetBounds(30, 62, msgWidth, msgHeight);
+
+                int buttonsTop = lblMessage.Bottom + 16;
+                ClientSize = new Size(ClientSize.Width, buttonsTop + 34 + 16);
 
                 if (isConfirm)
                 {
                     Button btnYes = UiTheme.CreateButton("بله", "", accent);
-                    btnYes.SetBounds(ClientSize.Width - 130, 138, 100, 34);
+                    btnYes.SetBounds(ClientSize.Width - 130, buttonsTop, 100, 34);
                     btnYes.DialogResult = DialogResult.Yes;
                     Controls.Add(btnYes);
 
                     Button btnNo = UiTheme.CreateSecondaryButton("انصراف", "");
-                    btnNo.SetBounds(ClientSize.Width - 240, 138, 100, 34);
+                    btnNo.SetBounds(ClientSize.Width - 240, buttonsTop, 100, 34);
                     btnNo.DialogResult = DialogResult.No;
                     Controls.Add(btnNo);
 
@@ -645,7 +660,7 @@ namespace CaseManagement.Helpers
                 else
                 {
                     Button btnOk = UiTheme.CreateButton("متوجه شدم", "", accent);
-                    btnOk.SetBounds(ClientSize.Width - 150, 138, 120, 34);
+                    btnOk.SetBounds(ClientSize.Width - 150, buttonsTop, 120, 34);
                     btnOk.DialogResult = DialogResult.OK;
                     Controls.Add(btnOk);
 
