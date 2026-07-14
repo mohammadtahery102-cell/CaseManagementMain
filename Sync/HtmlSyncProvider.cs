@@ -304,9 +304,19 @@ namespace CaseManagement.Sync
             public readonly List<string> Values = new List<string>();
         }
 
+        // عنوان‌هایی که «قطعاً نشان می‌دهند این ردیف، ردیف سرستون است».
+        private static readonly string[] HeaderAnchors = { "کد عمومی", "ردیف" };
+
         // ─── تجزیه‌ی جدول HTML (تحمل‌پذیر، بدون وابستگی خارجی) ────────────────
-        // بزرگ‌ترین جدول فایل (بیشترین ردیف) به‌عنوان جدول داده انتخاب می‌شود؛
-        // ردیف اول با <th> (یا اولین ردیف) به‌عنوان سرستون، بقیه داده.
+        // آموزش — رفع باگ بحرانی «همه بدون کد عمومی»: نسخه‌ی قبلی فرض می‌کرد
+        // «اولین <tr> = سرستون». اما در فایل‌های واقعی، بالای جدول اعضا یک عنوان
+        // بزرگ («اسماء خانواده») به‌صورت یک ردیف/سلولِ colspan وجود دارد، یا
+        // جدول‌ها تودرتو (nested) هستند، یا ردیف سرستون در هر صفحه تکرار می‌شود.
+        // در همه‌ی این حالت‌ها ردیف اول، سرستونِ واقعی نبود و همه‌ی ستون‌ها اشتباه
+        // نگاشت می‌شدند (کد عمومی/نام «خالی» به‌نظر می‌رسیدند).
+        // حالا: همه‌ی <tr>های کل سند خوانده می‌شوند، ردیفِ سرستونِ واقعی با «لنگر»
+        // (وجود «کد عمومی» یا «ردیف») پیدا می‌شود، ردیف‌های عنوان/بنر قبل از آن
+        // نادیده گرفته می‌شوند، و ردیف‌های سرستونِ تکراری (صفحه‌بندی) هم رد می‌شوند.
         private static List<HtmlRow> ParseHtmlTable(string filePath)
         {
             var rows = new List<HtmlRow>();
@@ -315,33 +325,42 @@ namespace CaseManagement.Sync
 
             string html = File.ReadAllText(filePath, DetectEncoding(filePath));
 
-            // همه‌ی جدول‌ها را پیدا کن؛ آن‌که بیشترین <tr> دارد جدول داده است.
-            var tables = Regex.Matches(html, "<table[^>]*>(.*?)</table>",
-                RegexOptions.Singleline | RegexOptions.IgnoreCase);
-            string bestTable = null;
-            int bestRowCount = -1;
-            foreach (Match t in tables)
-            {
-                int rc = Regex.Matches(t.Groups[1].Value, "<tr", RegexOptions.IgnoreCase).Count;
-                if (rc > bestRowCount) { bestRowCount = rc; bestTable = t.Groups[1].Value; }
-            }
-            if (bestTable == null) return rows;
-
-            var trMatches = Regex.Matches(bestTable, "<tr[^>]*>(.*?)</tr>",
+            // همه‌ی ردیف‌های کل سند (مستقل از تودرتو بودن جدول‌ها).
+            var trMatches = Regex.Matches(html, "<tr[^>]*>(.*?)</tr>",
                 RegexOptions.Singleline | RegexOptions.IgnoreCase);
             if (trMatches.Count == 0) return rows;
 
-            List<string> headers = null;
+            var allRows = new List<List<string>>();
             foreach (Match tr in trMatches)
             {
                 List<string> cells = ExtractCells(tr.Groups[1].Value);
-                if (cells.Count == 0) continue;
+                if (cells.Count > 0) allRows.Add(cells);
+            }
+            if (allRows.Count == 0) return rows;
 
-                if (headers == null)
-                {
-                    headers = cells; // اولین ردیف = سرستون (ترتیب اصلی حفظ می‌شود)
-                    continue;
-                }
+            // ردیف سرستون واقعی را پیدا کن (اولین ردیفی که یک لنگر معتبر دارد).
+            int headerIndex = -1;
+            for (int r = 0; r < allRows.Count; r++)
+            {
+                if (IsHeaderRow(allRows[r])) { headerIndex = r; break; }
+            }
+            // اگر لنگری پیدا نشد، به رفتار قدیمی (اولین ردیف = سرستون) برگرد.
+            if (headerIndex < 0) headerIndex = 0;
+
+            List<string> headers = allRows[headerIndex];
+            int headerCount = headers.Count;
+
+            for (int r = headerIndex + 1; r < allRows.Count; r++)
+            {
+                List<string> cells = allRows[r];
+
+                // ردیف سرستونِ تکراری (صفحه‌بندی) را رد کن.
+                if (IsHeaderRow(cells)) continue;
+
+                // ردیف‌های پرت/خلاصه با تعداد ستون بسیار کمتر را رد کن، و
+                // ردیف‌های کاملاً خالی را هم.
+                if (cells.Count < Math.Max(3, headerCount / 2)) continue;
+                if (cells.All(c => string.IsNullOrWhiteSpace(c))) continue;
 
                 var row = new HtmlRow();
                 for (int i = 0; i < cells.Count && i < headers.Count; i++)
@@ -354,6 +373,19 @@ namespace CaseManagement.Sync
             }
 
             return rows;
+        }
+
+        // آیا این ردیف، ردیف سرستون است؟ (شامل یکی از لنگرهای شناخته‌شده)
+        private static bool IsHeaderRow(List<string> cells)
+        {
+            foreach (string cell in cells)
+            {
+                string norm = NormalizeHeader(cell);
+                foreach (string anchor in HeaderAnchors)
+                    if (norm == NormalizeHeader(anchor))
+                        return true;
+            }
+            return false;
         }
 
         private static List<string> ExtractCells(string trInner)
