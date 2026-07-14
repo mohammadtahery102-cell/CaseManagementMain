@@ -523,7 +523,7 @@ namespace CaseManagement
             this.Font = new System.Drawing.Font("Segoe UI", 9.75F);
             // آموزش — ارتفاع فرم افزایش یافت (۷۲۰→۱۰۴۰) تا سه گروه (سرپرست/
             // جسمی/پرونده) بدون فشردگی و با فاصله حرفه‌ای جا شوند.
-            this.ClientSize = new System.Drawing.Size(1180, 1040);
+            this.ClientSize = new System.Drawing.Size(1180, 730);
             this.Controls.Add(rootLayout);
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedSingle;
             this.MaximizeBox = false;
