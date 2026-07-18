@@ -2,6 +2,7 @@ using CaseManagement.DAL;
 using CaseManagement.Helpers;
 using ClosedXML.Excel;
 using System;
+using System.Collections.Generic;
 using System.Data;
 using System.Data.SQLite;
 using System.Drawing;
@@ -85,15 +86,6 @@ namespace CaseManagement
         // ══════════════════════════════════════════════════════════════════
         private void BuildHeadSearchTab(TabPage page)
         {
-            FlowLayoutPanel filters = new FlowLayoutPanel();
-            filters.Dock = DockStyle.Top;
-            filters.Height = 190;
-            filters.Padding = new Padding(12, 8, 12, 8);
-            filters.BackColor = UiTheme.CardBack;
-            filters.FlowDirection = FlowDirection.RightToLeft;
-            filters.WrapContents = true;
-            filters.AutoScroll = true;
-
             txtHCode = new TextBox();
             txtHFormNo = new TextBox();
             txtHName = new TextBox();
@@ -120,49 +112,56 @@ namespace CaseManagement
             dtpHFrom = new Helpers.PersianDatePicker { ShowCheckBox = true, Checked = false };
             dtpHTo = new Helpers.PersianDatePicker { ShowCheckBox = true, Checked = false };
 
-            filters.Controls.Add(MakeFieldPanel("کد اختصاصی", txtHCode));
-            filters.Controls.Add(MakeFieldPanel("شماره فرم", txtHFormNo));
-            filters.Controls.Add(MakeFieldPanel("نام سرپرست", txtHName));
-            filters.Controls.Add(MakeFieldPanel("نام پدر سرپرست", txtHFatherName));
-            filters.Controls.Add(MakeFieldPanel("شماره تذکره", txtHTazkira));
-            filters.Controls.Add(MakeFieldPanel("شماره تماس", txtHPhone));
-            filters.Controls.Add(MakeFieldPanel("ولایت", cmbHProvince));
-            filters.Controls.Add(MakeFieldPanel("ولسوالی", txtHDistrict));
-            filters.Controls.Add(MakeFieldPanel("نوع درخواست", cmbHRequestType));
-            filters.Controls.Add(MakeFieldPanel("اولویت‌بندی", cmbHPriority));
-            filters.Controls.Add(MakeFieldPanel("سیادت", cmbHSadat));
-            filters.Controls.Add(MakeFieldPanel("مذهب", cmbHReligion));
-            filters.Controls.Add(MakeFieldPanel("وضعیت تأهل", cmbHMarital));
-            filters.Controls.Add(MakeFieldPanel("تحصیلات", cmbHEducationTier));
-            filters.Controls.Add(MakeFieldPanel("شغل", txtHJob));
-            filters.Controls.Add(MakeFieldPanel("نوع معلولیت", cmbHDisabilityType));
-            filters.Controls.Add(MakeFieldPanel("وضعیت خدمات", cmbHStatus));
-            filters.Controls.Add(MakeFieldPanel("از تاریخ", dtpHFrom));
-            filters.Controls.Add(MakeFieldPanel("تا تاریخ", dtpHTo));
+            var fields = new List<KeyValuePair<string, Control>>
+            {
+                new KeyValuePair<string, Control>("کد اختصاصی", txtHCode),
+                new KeyValuePair<string, Control>("شماره فرم", txtHFormNo),
+                new KeyValuePair<string, Control>("نام سرپرست", txtHName),
+                new KeyValuePair<string, Control>("نام پدر سرپرست", txtHFatherName),
+                new KeyValuePair<string, Control>("شماره تذکره", txtHTazkira),
+                new KeyValuePair<string, Control>("شماره تماس", txtHPhone),
+                new KeyValuePair<string, Control>("ولایت", cmbHProvince),
+                new KeyValuePair<string, Control>("ولسوالی", txtHDistrict),
+                new KeyValuePair<string, Control>("نوع درخواست", cmbHRequestType),
+                new KeyValuePair<string, Control>("اولویت‌بندی", cmbHPriority),
+                new KeyValuePair<string, Control>("سیادت", cmbHSadat),
+                new KeyValuePair<string, Control>("مذهب", cmbHReligion),
+                new KeyValuePair<string, Control>("وضعیت تأهل", cmbHMarital),
+                new KeyValuePair<string, Control>("تحصیلات", cmbHEducationTier),
+                new KeyValuePair<string, Control>("شغل", txtHJob),
+                new KeyValuePair<string, Control>("نوع معلولیت", cmbHDisabilityType),
+                new KeyValuePair<string, Control>("وضعیت خدمات", cmbHStatus),
+                new KeyValuePair<string, Control>("از تاریخ", dtpHFrom),
+                new KeyValuePair<string, Control>("تا تاریخ", dtpHTo),
+            };
+
+            TableLayoutPanel filterGrid = BuildFilterGrid(fields, 6);
+
+            FlowLayoutPanel buttonRow = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Top, Height = 42, FlowDirection = FlowDirection.LeftToRight,
+                Padding = new Padding(10, 4, 10, 4), BackColor = UiTheme.CardBack
+            };
 
             Button btnSearch = UiTheme.CreateButton("جستجو", "⌕", UiTheme.Primary);
-            btnSearch.Size = new Size(110, 34);
-            btnSearch.Margin = new Padding(6, 30, 6, 6);
+            btnSearch.Size = new Size(96, 32); btnSearch.Margin = new Padding(3);
             btnSearch.Click += delegate { LoadHeadResults(); };
-            filters.Controls.Add(btnSearch);
+            buttonRow.Controls.Add(btnSearch);
 
             Button btnExport = UiTheme.CreateSecondaryButton("خروجی Excel", "⇑");
-            btnExport.Size = new Size(120, 34);
-            btnExport.Margin = new Padding(6, 30, 6, 6);
+            btnExport.Size = new Size(110, 32); btnExport.Margin = new Padding(3);
             btnExport.Click += delegate { ExportGridToExcel(dgvHeadResults, "جستجوی_سرپرست"); };
-            filters.Controls.Add(btnExport);
+            buttonRow.Controls.Add(btnExport);
 
             Button btnWordH = UiTheme.CreateSecondaryButton("خروجی Word", "➤");
-            btnWordH.Size = new Size(120, 34);
-            btnWordH.Margin = new Padding(6, 30, 6, 6);
+            btnWordH.Size = new Size(110, 32); btnWordH.Margin = new Padding(3);
             btnWordH.Click += delegate { ExportGridToWord(dgvHeadResults, "گزارش_سرپرستان", "گزارش سرپرستان", HeadFilterSubtitle()); };
-            filters.Controls.Add(btnWordH);
+            buttonRow.Controls.Add(btnWordH);
 
             Button btnPdfH = UiTheme.CreateSecondaryButton("خروجی PDF", "➤");
-            btnPdfH.Size = new Size(120, 34);
-            btnPdfH.Margin = new Padding(6, 30, 6, 6);
+            btnPdfH.Size = new Size(100, 32); btnPdfH.Margin = new Padding(3);
             btnPdfH.Click += delegate { ExportGridToPdf(dgvHeadResults, "گزارش_سرپرستان", "گزارش سرپرستان", HeadFilterSubtitle()); };
-            filters.Controls.Add(btnPdfH);
+            buttonRow.Controls.Add(btnPdfH);
 
             dgvHeadResults = new DataGridView();
             dgvHeadResults.Dock = DockStyle.Fill;
@@ -178,7 +177,79 @@ namespace CaseManagement
             gridWrap.Controls.Add(dgvHeadResults);
 
             page.Controls.Add(gridWrap);
-            page.Controls.Add(filters);
+            page.Controls.Add(buttonRow);
+            page.Controls.Add(filterGrid);
+        }
+
+        // ─── شبکه‌ی فیلترِ جمع‌وجور و بدون فضای خالی ─────────────────────────
+        // آموزش — رفع بی‌نظمی/فضای‌خالی/اسکرول جستجوی پیشرفته: به‌جای
+        // FlowLayoutPanel با Margin/ارتفاع ثابت (که فضای خالی و ردیف نصفه‌کات‌شده
+        // می‌ساخت)، از TableLayoutPanel با ستون‌های Percent مساوی استفاده می‌شود؛
+        // هر سلول با Dock=Fill دقیقاً کنار سلول بعدی می‌چسبد، و ارتفاع کانتینر
+        // دقیقاً بر اساس تعداد ردیف‌های واقعی محاسبه می‌شود (هرگز اسکرول لازم
+        // نیست، هرگز ردیف آخر کات نمی‌شود). چون این فرم RightToLeftLayout=false
+        // دارد (فقط RightToLeft=Yes)، TableLayoutPanel ستون‌ها را خودکار آینه
+        // نمی‌کند؛ پس فیلد اول را در دورترین ستونِ راست می‌گذاریم و به چپ می‌رویم.
+        private TableLayoutPanel BuildFilterGrid(List<KeyValuePair<string, Control>> fields, int columns)
+        {
+            const int RowHeight = 46;
+            int rows = (int)Math.Ceiling(fields.Count / (double)columns);
+
+            var tbl = new TableLayoutPanel();
+            tbl.Dock = DockStyle.Top;
+            tbl.ColumnCount = columns;
+            tbl.RowCount = rows;
+            tbl.BackColor = UiTheme.CardBack;
+            tbl.Padding = new Padding(10, 6, 10, 2);
+            for (int c = 0; c < columns; c++)
+                tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F / columns));
+            for (int r = 0; r < rows; r++)
+                tbl.RowStyles.Add(new RowStyle(SizeType.Absolute, RowHeight));
+            tbl.Height = rows * RowHeight + tbl.Padding.Top + tbl.Padding.Bottom;
+
+            for (int i = 0; i < fields.Count; i++)
+            {
+                int row = i / columns;
+                int colFromRight = i % columns;
+                int col = columns - 1 - colFromRight; // شروع پرشدن از راست به چپ
+                Panel cell = MakeCompactFieldPanel(fields[i].Key, fields[i].Value);
+                tbl.Controls.Add(cell, col, row);
+            }
+            return tbl;
+        }
+
+        // یک فیلد جمع‌وجور: برچسب کوچک بالا + ورودی پایین، با فاصله‌ی یکنواخت و
+        // کمِ ۳px از سلولِ جدول (بدون فضای خالی اضافه).
+        private Panel MakeCompactFieldPanel(string labelText, Control input)
+        {
+            Panel p = new Panel();
+            p.Dock = DockStyle.Fill;
+            p.Margin = new Padding(3, 2, 3, 2);
+
+            Label lbl = new Label();
+            lbl.Text = labelText;
+            lbl.AutoSize = false;
+            lbl.Dock = DockStyle.Top;
+            lbl.Height = 17;
+            lbl.TextAlign = ContentAlignment.MiddleRight;
+            lbl.Font = UiTheme.FontBold(8.5F);
+            lbl.ForeColor = UiTheme.TextDark;
+
+            input.Dock = DockStyle.Top;
+            input.Font = UiTheme.Font(9F);
+
+            TextBox tb = input as TextBox;
+            if (tb != null) { tb.Height = 24; UiTheme.StyleTextBox(tb); }
+
+            ComboBox cb = input as ComboBox;
+            if (cb != null) cb.Height = 24;
+
+            Helpers.PersianDatePicker dp = input as Helpers.PersianDatePicker;
+            if (dp != null) dp.Height = 24;
+
+            p.Controls.Add(input);
+            p.Controls.Add(lbl);
+            return p;
         }
 
         // آموزش — رده‌بندی تحصیلات سرپرست به سه گروه، چون مقادیر خام
@@ -298,15 +369,6 @@ WHERE 1 = 1");
         // ══════════════════════════════════════════════════════════════════
         private void BuildMemberSearchTab(TabPage page)
         {
-            FlowLayoutPanel filters = new FlowLayoutPanel();
-            filters.Dock = DockStyle.Top;
-            filters.Height = 190;
-            filters.Padding = new Padding(12, 8, 12, 8);
-            filters.BackColor = UiTheme.CardBack;
-            filters.FlowDirection = FlowDirection.RightToLeft;
-            filters.WrapContents = true;
-            filters.AutoScroll = true;
-
             txtMName = new TextBox();
             txtMFatherName = new TextBox();
             txtMTazkira = new TextBox();
@@ -322,43 +384,50 @@ WHERE 1 = 1");
             cmbMDisabilityType = MakeCombo("همه", new[] { "جسمی", "ذهنی", "بینایی", "شنوایی", "گفتاری", "حسی" });
             cmbMStatus = MakeCombo("همه", new[] { "فعال", "در انتظار تأیید", "قطع موقت", "قطع" });
 
-            filters.Controls.Add(MakeFieldPanel("نام عضو", txtMName));
-            filters.Controls.Add(MakeFieldPanel("نام پدر عضو", txtMFatherName));
-            filters.Controls.Add(MakeFieldPanel("شماره تذکره", txtMTazkira));
-            filters.Controls.Add(MakeFieldPanel("جنسیت", cmbMGender));
-            filters.Controls.Add(MakeFieldPanel("ولایت", cmbMProvince));
-            filters.Controls.Add(MakeFieldPanel("ولسوالی", txtMDistrict));
-            filters.Controls.Add(MakeFieldPanel("تحصیلات", cmbMEducationTier));
-            filters.Controls.Add(MakeFieldPanel("وضعیت تأهل", cmbMMarital));
-            filters.Controls.Add(MakeFieldPanel("مذهب", cmbMReligion));
-            filters.Controls.Add(MakeFieldPanel("وضعیت جسمی", cmbMPhysical));
-            filters.Controls.Add(MakeFieldPanel("نوع معلولیت", cmbMDisabilityType));
-            filters.Controls.Add(MakeFieldPanel("مهارت", txtMSkill));
-            filters.Controls.Add(MakeFieldPanel("وضعیت خدمات", cmbMStatus));
+            var fields = new List<KeyValuePair<string, Control>>
+            {
+                new KeyValuePair<string, Control>("نام عضو", txtMName),
+                new KeyValuePair<string, Control>("نام پدر عضو", txtMFatherName),
+                new KeyValuePair<string, Control>("شماره تذکره", txtMTazkira),
+                new KeyValuePair<string, Control>("جنسیت", cmbMGender),
+                new KeyValuePair<string, Control>("ولایت", cmbMProvince),
+                new KeyValuePair<string, Control>("ولسوالی", txtMDistrict),
+                new KeyValuePair<string, Control>("تحصیلات", cmbMEducationTier),
+                new KeyValuePair<string, Control>("وضعیت تأهل", cmbMMarital),
+                new KeyValuePair<string, Control>("مذهب", cmbMReligion),
+                new KeyValuePair<string, Control>("وضعیت جسمی", cmbMPhysical),
+                new KeyValuePair<string, Control>("نوع معلولیت", cmbMDisabilityType),
+                new KeyValuePair<string, Control>("مهارت", txtMSkill),
+                new KeyValuePair<string, Control>("وضعیت خدمات", cmbMStatus),
+            };
+
+            TableLayoutPanel filterGrid = BuildFilterGrid(fields, 6);
+
+            FlowLayoutPanel buttonRow = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Top, Height = 42, FlowDirection = FlowDirection.LeftToRight,
+                Padding = new Padding(10, 4, 10, 4), BackColor = UiTheme.CardBack
+            };
 
             Button btnSearch = UiTheme.CreateButton("جستجو", "⌕", UiTheme.Primary);
-            btnSearch.Size = new Size(110, 34);
-            btnSearch.Margin = new Padding(6, 30, 6, 6);
+            btnSearch.Size = new Size(96, 32); btnSearch.Margin = new Padding(3);
             btnSearch.Click += delegate { LoadMemberResults(); };
-            filters.Controls.Add(btnSearch);
+            buttonRow.Controls.Add(btnSearch);
 
             Button btnExport = UiTheme.CreateSecondaryButton("خروجی Excel", "⇑");
-            btnExport.Size = new Size(120, 34);
-            btnExport.Margin = new Padding(6, 30, 6, 6);
+            btnExport.Size = new Size(110, 32); btnExport.Margin = new Padding(3);
             btnExport.Click += delegate { ExportGridToExcel(dgvMemberResults, "جستجوی_اعضاء_خانواده"); };
-            filters.Controls.Add(btnExport);
+            buttonRow.Controls.Add(btnExport);
 
             Button btnWordM = UiTheme.CreateSecondaryButton("خروجی Word", "➤");
-            btnWordM.Size = new Size(120, 34);
-            btnWordM.Margin = new Padding(6, 30, 6, 6);
+            btnWordM.Size = new Size(110, 32); btnWordM.Margin = new Padding(3);
             btnWordM.Click += delegate { ExportGridToWord(dgvMemberResults, "گزارش_اعضای_خانواده", "گزارش اعضای خانواده", MemberFilterSubtitle()); };
-            filters.Controls.Add(btnWordM);
+            buttonRow.Controls.Add(btnWordM);
 
             Button btnPdfM = UiTheme.CreateSecondaryButton("خروجی PDF", "➤");
-            btnPdfM.Size = new Size(120, 34);
-            btnPdfM.Margin = new Padding(6, 30, 6, 6);
+            btnPdfM.Size = new Size(100, 32); btnPdfM.Margin = new Padding(3);
             btnPdfM.Click += delegate { ExportGridToPdf(dgvMemberResults, "گزارش_اعضای_خانواده", "گزارش اعضای خانواده", MemberFilterSubtitle()); };
-            filters.Controls.Add(btnPdfM);
+            buttonRow.Controls.Add(btnPdfM);
 
             dgvMemberResults = new DataGridView();
             dgvMemberResults.Dock = DockStyle.Fill;
@@ -373,7 +442,8 @@ WHERE 1 = 1");
             gridWrap.Controls.Add(dgvMemberResults);
 
             page.Controls.Add(gridWrap);
-            page.Controls.Add(filters);
+            page.Controls.Add(buttonRow);
+            page.Controls.Add(filterGrid);
         }
 
         private void LoadMemberResults()
@@ -481,42 +551,6 @@ WHERE 1 = 1");
         {
             if (grid.Columns.Contains(column))
                 grid.Columns[column].HeaderText = header;
-        }
-
-        // یک فیلد فیلتر: برچسب بالا + کنترل پایین، با اندازه یکسان.
-        private Panel MakeFieldPanel(string labelText, Control input)
-        {
-            Panel p = new Panel();
-            p.Width = 150;
-            p.Height = 78;
-            p.Margin = new Padding(4, 2, 4, 2);
-
-            Label lbl = new Label();
-            lbl.Text = labelText;
-            lbl.AutoSize = false;
-            lbl.Dock = DockStyle.Top;
-            lbl.Height = 24;
-            lbl.TextAlign = ContentAlignment.MiddleRight;
-            lbl.Font = UiTheme.FontBold(UiTheme.SizeSmall);
-            lbl.ForeColor = UiTheme.TextDark;
-
-            input.Dock = DockStyle.Top;
-            input.Width = 144;
-            input.Font = UiTheme.Font(UiTheme.SizeBody);
-            TextBox tb = input as TextBox;
-            if (tb != null)
-            {
-                tb.Height = 26;
-                UiTheme.StyleTextBox(tb);
-            }
-            else if (input is ComboBox cb)
-            {
-                cb.Height = 26;
-            }
-
-            p.Controls.Add(input);
-            p.Controls.Add(lbl);
-            return p;
         }
 
         private void AddLikeFilter(StringBuilder sql, SQLiteCommand cmd, string column, string parameter, string value)

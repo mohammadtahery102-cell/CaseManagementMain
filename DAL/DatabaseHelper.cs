@@ -2,7 +2,7 @@
 using System.Configuration;
 using System.Data;
 using System.Data.SQLite;
-
+using System.IO;
 namespace CaseManagement.DAL
 {
     public class DatabaseHelper
@@ -33,7 +33,7 @@ namespace CaseManagement.DAL
                         dataDir = AppDomain.CurrentDomain.BaseDirectory;
                         AppDomain.CurrentDomain.SetData("DataDirectory", dataDir);
                     }
-                    cs = cs.Replace("|DataDirectory|", dataDir);
+                    
                 }
             }
             catch
