@@ -218,29 +218,15 @@ namespace CaseManagement
 
             titleBanner.Controls.Add(logoArea);
 
-            // آموزش — رفع باگ «حدیث گم شد»: قبلاً عنوان و حدیث با مختصات مطلق
-            // و Anchor=Left|Right چیده شده بودند که در فرم RightToLeftLayout
-            // به‌شکل غیرقابل‌پیش‌بینی آینه/جابه‌جا می‌شدند و حدیث نامرئی می‌شد.
-            // حالا از یک TableLayoutPanel سه‌ردیفه (عنوان/حدیث/منبع) داخل یک
-            // پنل Dock=Fill استفاده می‌شود که چیدمان عمودی‌اش مستقل از آینه‌شدن
-            // افقی RTL است و همیشه درست رندر می‌شود. Padding چپِ ۱۰۴ (که پس از
-            // آینه‌شدن به سمت راست بصری می‌رود) جای لوگو را در سمت چپ باز نگه می‌دارد.
-            HadithProvider.DailyItem daily = HadithProvider.GetRandom();
-            string hadithText = (daily.Text ?? "").Trim().TrimEnd('.', '۔', '؛', ' ');
-
+            // آموزش — رفع «چند کلمه‌ی حدیث گم می‌شود»: علت واقعی این بود که حدیث
+            // در یک ردیفِ باریک (فقط ۲۴px، تک‌خط، فشرده بین عنوان و لوگو) جا داده
+            // شده بود؛ برای جمله‌های بلندتر جا کم می‌آمد و بخشی از متن قطع
+            // می‌شد. به‌درخواست کاربر، حدیث کاملاً از بنر جدا و در یک نوارِ
+            // پهن و وسط‌چین (تمام عرض داشبورد) زیر بنر عنوان قرار گرفت؛ اینجا
+            // فضای کافی برای دوخطی‌شدن و نمایش کامل جمله وجود دارد.
             Panel bannerTextArea = new Panel();
             bannerTextArea.Dock = DockStyle.Fill;
-            // لوگو در پنلِ جداگانه‌ی Dock=Right است؛ این ناحیه فقط فضای متن را می‌گیرد.
             bannerTextArea.Padding = new Padding(14, 8, 14, 8);
-
-            TableLayoutPanel bannerStack = new TableLayoutPanel();
-            bannerStack.Dock = DockStyle.Fill;
-            bannerStack.ColumnCount = 1;
-            bannerStack.RowCount = 3;
-            bannerStack.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            bannerStack.RowStyles.Add(new RowStyle(SizeType.Absolute, 42F));
-            bannerStack.RowStyles.Add(new RowStyle(SizeType.Absolute, 24F));
-            bannerStack.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
 
             Label lblBannerTitle = new Label();
             lblBannerTitle.Text = "داشبورد مدیریتی";
@@ -249,34 +235,11 @@ namespace CaseManagement
             lblBannerTitle.Dock = DockStyle.Fill;
             // تراز متن با RightToLeft=Yes ارثی آینه می‌شود؛ MiddleLeft یعنی راستِ بصری.
             lblBannerTitle.TextAlign = ContentAlignment.MiddleLeft;
-
-            Label lblHadithText = new Label();
-            lblHadithText.Text = hadithText;
-            lblHadithText.Font = UiTheme.FontBold(9.5F);
-            lblHadithText.ForeColor = UiTheme.TextDark;
-            lblHadithText.Dock = DockStyle.Fill;
-            lblHadithText.TextAlign = ContentAlignment.MiddleLeft;
-            // آموزش — رفع «چند کلمه‌ی حدیث گم می‌شود»: ترکیب AutoEllipsis با متن
-            // دوجهته‌ی (bidi) فارسی گاهی باعث می‌شود Windows به‌جای «...» یک
-            // کلمه‌ی وسط متن را بی‌صدا حذف کند. AutoEllipsis خاموش شد. همچنین طبق
-            // درخواست کاربر، شروع متن حدود ۱۰ فاصله (اسپیس) از لبه‌ی نزدیک به لوگو
-            // عقب‌تر برده شد تا هرگز نزدیک/چسبیده به لبه نباشد.
-            lblHadithText.AutoEllipsis = false;
-            lblHadithText.Padding = new Padding(0, 0, 60, 0);
-
-            Label lblHadithSource = new Label();
-            lblHadithSource.Text = daily.Source;
-            lblHadithSource.Font = new Font(UiTheme.Font(8F), FontStyle.Italic);
-            lblHadithSource.ForeColor = UiTheme.TextMuted;
-            lblHadithSource.Dock = DockStyle.Fill;
-            lblHadithSource.TextAlign = ContentAlignment.TopLeft;
-            lblHadithSource.AutoEllipsis = true;
-
-            bannerStack.Controls.Add(lblBannerTitle, 0, 0);
-            bannerStack.Controls.Add(lblHadithText, 0, 1);
-            bannerStack.Controls.Add(lblHadithSource, 0, 2);
-            bannerTextArea.Controls.Add(bannerStack);
+            bannerTextArea.Controls.Add(lblBannerTitle);
             titleBanner.Controls.Add(bannerTextArea); // Fill — سمت چپِ logoArea قرار می‌گیرد
+
+            // ─── نوار حدیث روز — پهن، تمام‌عرض، وسط‌چین (زیر بنر عنوان) ──────
+            Panel hadithBar = BuildHadithBar();
 
             TabControl tabs = new TabControl();
             tabs.Dock = DockStyle.Fill;
@@ -305,10 +268,44 @@ namespace CaseManagement
 
             Controls.Add(tabs);
             Controls.Add(BuildFilterBar());
+            Controls.Add(hadithBar);
             Controls.Add(titleBanner);
             Controls.Add(toolbar);
 
             RefreshAll();
+        }
+
+        // نوار حدیث روز: تمام‌عرض داشبورد، وسط‌چین، با ارتفاع کافی برای دوخطی
+        // شدن (متن اصلی + منبع) تا هرگز جمله بریده/گم نشود.
+        private Panel BuildHadithBar()
+        {
+            HadithProvider.DailyItem daily = HadithProvider.GetRandom();
+            string hadithText = (daily.Text ?? "").Trim().TrimEnd('.', '۔', '؛', ' ');
+
+            Panel bar = new Panel { Dock = DockStyle.Top, Height = 56, BackColor = UiTheme.HoverTint, Padding = new Padding(20, 4, 20, 4) };
+
+            TableLayoutPanel stack = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
+            stack.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            stack.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            stack.RowStyles.Add(new RowStyle(SizeType.Absolute, 16F));
+
+            Label lblHadithText = new Label
+            {
+                Text = hadithText, Dock = DockStyle.Fill,
+                Font = UiTheme.FontBold(9.5F), ForeColor = UiTheme.TextDark,
+                TextAlign = ContentAlignment.MiddleCenter, AutoEllipsis = false
+            };
+            Label lblHadithSource = new Label
+            {
+                Text = daily.Source, Dock = DockStyle.Fill,
+                Font = new Font(UiTheme.Font(8F), FontStyle.Italic), ForeColor = UiTheme.TextMuted,
+                TextAlign = ContentAlignment.TopCenter, AutoEllipsis = true
+            };
+
+            stack.Controls.Add(lblHadithText, 0, 0);
+            stack.Controls.Add(lblHadithSource, 0, 1);
+            bar.Controls.Add(stack);
+            return bar;
         }
 
         // ─── نوار فیلتر ولایت/ولسوالی (زیر بنر، بالای تب‌ها) ─────────────────
