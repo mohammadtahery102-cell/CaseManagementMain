@@ -125,11 +125,24 @@ namespace CaseManagement
                     frm.ShowDialog(this);
             };
 
+            Button btnGuardianCardBatch = UiTheme.CreateSecondaryButton("چاپ جمعی کارت‌ها", "🪪");
+            btnGuardianCardBatch.Size = new Size(150, 32);
+            btnGuardianCardBatch.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
+            btnGuardianCardBatch.Margin = new Padding(3, 3, 3, 3);
+            btnGuardianCardBatch.TabStop = false;
+            btnGuardianCardBatch.Click += delegate
+            {
+                using (var frm = new GuardianCardIntegration.FrmGuardianCardBatchPrint())
+                    frm.ShowDialog(this);
+            };
+
             Control parent = btnExportExcel.Parent;
             if (parent != null)
             {
                 parent.Controls.Add(btnGuardianCard);
                 parent.Controls.SetChildIndex(btnGuardianCard, parent.Controls.IndexOf(btnExportExcel) + 1);
+                parent.Controls.Add(btnGuardianCardBatch);
+                parent.Controls.SetChildIndex(btnGuardianCardBatch, parent.Controls.IndexOf(btnGuardianCard) + 1);
             }
         }
 

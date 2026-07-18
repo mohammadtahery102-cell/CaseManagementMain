@@ -193,7 +193,11 @@
     <Compile Include="GuardianCardIntegration\CaseCardRepository.cs" />
     <Compile Include="GuardianCardIntegration\CardService.cs" />
     <Compile Include="GuardianCardIntegration\GuardianCardRenderer.cs" />
+    <Compile Include="GuardianCardIntegration\Code128Barcode.cs" />
     <Compile Include="GuardianCardIntegration\FrmGuardianCardPreview.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="GuardianCardIntegration\FrmGuardianCardBatchPrint.cs">
       <SubType>Form</SubType>
     </Compile>
     <Compile Include="Accounting\FrmAccounting.cs">

@@ -29,6 +29,11 @@ namespace CaseManagement.GuardianCardIntegration
         public string District { get; set; }
         public string Village { get; set; }
 
+        // متن ریزِ تزئینی دور کارت (نوار بالا/پایین) — طبق ولایتِ همین پرونده،
+        // نه یک نام مرکز ثابت (پیش‌تر در خودِ index.html به‌صورت «بامیان» ثابت
+        // بود). نگاه کنید CardService.BuildCardData.
+        public string MicrotextLabel { get; set; }
+
         public string Notice1 { get; set; }
         public string Notice2 { get; set; }
         public string Notice3 { get; set; }

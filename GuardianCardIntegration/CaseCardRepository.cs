@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Data;
 using System.Data.SQLite;
 using CaseManagement.DAL;
@@ -44,6 +45,35 @@ namespace CaseManagement.GuardianCardIntegration
                     return MapCase(dt.Rows[0]);
                 }
             }
+        }
+
+        // آموزش — چاپ جمعی کارت‌ها: شناسه پرونده‌های دارای شماره فرم در بازه‌ی
+        // [fromFormNo, toFormNo] را برمی‌گرداند، مرتب بر اساس شماره فرم. دقیقاً
+        // همان الگوی امنیتی چندمرکزیِ بقیه‌ی کوئری‌های پروژه («@CID = 0 یا
+        // CenterID = @CID») رعایت می‌شود تا مدیر یک مرکز نتواند کارت پرونده‌ی
+        // مرکز دیگر را چاپ کند.
+        public List<int> GetCaseIdsByFormNoRange(int fromFormNo, int toFormNo)
+        {
+            var ids = new List<int>();
+            int cid = SecurityContext.CenterFilterId;
+
+            using (SQLiteConnection con = _db.GetConnection())
+            using (SQLiteCommand cmd = new SQLiteCommand(@"
+SELECT CasID FROM TblCase
+WHERE FormNo IS NOT NULL AND FormNo BETWEEN @From AND @To
+  AND (@CID = 0 OR CenterID = @CID)
+ORDER BY FormNo", con))
+            {
+                cmd.Parameters.AddWithValue("@From", fromFormNo);
+                cmd.Parameters.AddWithValue("@To", toFormNo);
+                cmd.Parameters.AddWithValue("@CID", cid);
+                con.Open();
+                using (SQLiteDataReader dr = cmd.ExecuteReader())
+                    while (dr.Read())
+                        ids.Add(Convert.ToInt32(dr["CasID"]));
+            }
+
+            return ids;
         }
 
         // تعداد اعضای خانواده (ایتام) این پرونده — برای فیلد OrphansCount.

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Web.Script.Serialization;
@@ -50,15 +51,15 @@ namespace CaseManagement.GuardianCardIntegration
         }
 
         // کپی کامل بسته + نوشتن JSON واقعی این پرونده + کپی تصاویر اختصاصی
-        // (عکس سرپرست/لوگو مؤسسه) داخل پوشه کاری. خروجی: مسیر پوشه کاری (ریشه‌ای
-        // که index.html در آن است) برای نگاشت virtual-host توسط فراخوان.
-        public string StageAndPopulate(GuardianCardData data, string guardianPhotoPath, string orgLogoPath)
+        // (عکس سرپرست/لوگو مؤسسه/امضا/مهر) داخل پوشه کاری + ساخت بارکد واقعی
+        // (Code128) از شماره کارت. خروجی: مسیر پوشه کاری (ریشه‌ای که
+        // index.html در آن است) برای نگاشت virtual-host توسط فراخوان.
+        public string StageAndPopulate(
+            GuardianCardData data, string guardianPhotoPath, string orgLogoPath,
+            string signaturePath = null, string stampPath = null)
         {
             if (data == null) throw new ArgumentNullException("data");
-            if (!IsBundledPackagePresent())
-                throw new DirectoryNotFoundException(
-                    "پوشه GuardianCard کنار برنامه پیدا نشد: " + BundledSourceFolder +
-                    "\nاین پوشه باید همراه نصب برنامه دیپلوی شده باشد.");
+            EnsureBundledPackagePresent();
 
             if (Directory.Exists(WorkingFolder))
                 Directory.Delete(WorkingFolder, true);
@@ -69,11 +70,76 @@ namespace CaseManagement.GuardianCardIntegration
 
             data.Photo = StageImage(guardianPhotoPath, uploadsDir, "guardian_photo");
             data.Logo = StageImage(orgLogoPath, uploadsDir, "org_logo");
+            data.Signature = StageImage(signaturePath, uploadsDir, "signature");
+            data.Stamp = StageImage(stampPath, uploadsDir, "stamp");
+            data.Barcode = StageBarcode(data.CardNumber, uploadsDir, "barcode");
 
             string json = new JavaScriptSerializer().Serialize(data);
             File.WriteAllText(Path.Combine(WorkingFolder, "sample", "SAMPLE_DATA.json"), json, new UTF8Encoding(false));
 
             return WorkingFolder;
+        }
+
+        // نسخه‌ی چاپ جمعی — همان بسته یک‌بار کپی می‌شود، لوگو/امضا/مهر (که
+        // مؤسسه‌ای و مشترک بین همه کارت‌هاست) فقط یک‌بار Stage می‌شوند، اما هر
+        // پرونده عکس و بارکد اختصاصی خودش را می‌گیرد (نام فایل با اندیس یکتا
+        // می‌شود تا رونویسی نشود). خروجی JSON یک آرایه است؛ guardian-card.js
+        // این حالت را با Array.isArray تشخیص می‌دهد و کارت را به تعداد آیتم‌ها
+        // Clone می‌کند (نگاه کنید populateBatch در guardian-card.js).
+        public string StageAndPopulateBatch(
+            IList<GuardianCardData> items, Func<GuardianCardData, string> guardianPhotoPathSelector,
+            string orgLogoPath, string signaturePath = null, string stampPath = null)
+        {
+            if (items == null) throw new ArgumentNullException("items");
+            EnsureBundledPackagePresent();
+
+            if (Directory.Exists(WorkingFolder))
+                Directory.Delete(WorkingFolder, true);
+            CopyDirectory(BundledSourceFolder, WorkingFolder);
+
+            string uploadsDir = Path.Combine(WorkingFolder, "uploads");
+            Directory.CreateDirectory(uploadsDir);
+
+            string logoRel = StageImage(orgLogoPath, uploadsDir, "org_logo");
+            string signatureRel = StageImage(signaturePath, uploadsDir, "signature");
+            string stampRel = StageImage(stampPath, uploadsDir, "stamp");
+
+            for (int i = 0; i < items.Count; i++)
+            {
+                GuardianCardData data = items[i];
+                string photoPath = guardianPhotoPathSelector != null ? guardianPhotoPathSelector(data) : data.Photo;
+                data.Photo = StageImage(photoPath, uploadsDir, "guardian_photo_" + i);
+                data.Logo = logoRel;
+                data.Signature = signatureRel;
+                data.Stamp = stampRel;
+                data.Barcode = StageBarcode(data.CardNumber, uploadsDir, "barcode_" + i);
+            }
+
+            string json = new JavaScriptSerializer().Serialize(items);
+            File.WriteAllText(Path.Combine(WorkingFolder, "sample", "SAMPLE_DATA.json"), json, new UTF8Encoding(false));
+
+            return WorkingFolder;
+        }
+
+        private void EnsureBundledPackagePresent()
+        {
+            if (!IsBundledPackagePresent())
+                throw new DirectoryNotFoundException(
+                    "پوشه GuardianCard کنار برنامه پیدا نشد: " + BundledSourceFolder +
+                    "\nاین پوشه باید همراه نصب برنامه دیپلوی شده باشد.");
+        }
+
+        // بارکد Code128 واقعی از شماره کارت می‌سازد (هر پرونده بارکد خودش را
+        // دارد، چون شماره کارتش یکتاست)؛ اگر شماره کارت خالی باشد، بارکدی
+        // ساخته نمی‌شود (placeholder خالیِ guardian-card.js جایش می‌ماند).
+        private static string StageBarcode(string cardNumber, string uploadsDir, string destBaseName)
+        {
+            if (string.IsNullOrWhiteSpace(cardNumber))
+                return "";
+
+            string destName = destBaseName + ".png";
+            Code128Barcode.SaveToFile(cardNumber, Path.Combine(uploadsDir, destName));
+            return "uploads/" + destName;
         }
 
         // کپی یک تصویر منبع (اگر موجود باشد) به uploads/ داخل پوشه کاری و

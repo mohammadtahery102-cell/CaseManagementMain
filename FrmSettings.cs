@@ -127,6 +127,12 @@ namespace CaseManagement
         private Panel _pnlFontColorSwatch;
         private Color _selectedFontColor = UiTheme.TextDark;
         private PictureBox _picLogoPreview;
+        // آموزش — امضا/مهر مؤسسه (برای کارت شناسایی سرپرست و اسناد چاپی):
+        // فیلدهای _txtSignaturePath/_txtStampPath از قبل برای یک تب «چاپ و
+        // گزارش» نیمه‌کاره تعریف شده بودند ولی هیچ UI برایشان ساخته نشده بود
+        // (warning CS0169). همان دو فیلد اینجا با UI واقعی (کنار لوگو) استفاده
+        // می‌شوند؛ کلید تنظیمات هم همانی است که از قبل وجود داشت.
+        private PictureBox _picSignaturePreview, _picStampPreview;
 
         public FrmSettings()
         {
@@ -690,6 +696,17 @@ ORDER BY CasID DESC", con))
             });
             fieldsFlow.Controls.Add(logoField);
 
+            // ─── امضای مسئول و مهر رسمی (برای کارت شناسایی/اسناد چاپی) ────────
+            _txtSignaturePath = new TextBox();
+            _picSignaturePreview = new PictureBox();
+            fieldsFlow.Controls.Add(MakeImageUploadField(
+                "امضای مسئول دفتر", _txtSignaturePath, _picSignaturePreview, BtnBrowseSignature_Click));
+
+            _txtStampPath = new TextBox();
+            _picStampPreview = new PictureBox();
+            fieldsFlow.Controls.Add(MakeImageUploadField(
+                "مهر رسمی", _txtStampPath, _picStampPreview, BtnBrowseStamp_Click));
+
             // ─── رنگ نرم‌افزار (فیلد ترکیبی) ────────────────────────────────
             Panel colorField = new Panel { Width = 260, Height = 78, Margin = new Padding(6, 4, 6, 4) };
             Panel colorRow = new Panel { Dock = DockStyle.Top, Height = 32 };
@@ -785,6 +802,64 @@ ORDER BY CasID DESC", con))
             }
         }
 
+        // فیلد ترکیبی مشترک برای آپلود تصویر (لوگو/امضا/مهر): تکست‌باکس
+        // فقط‌خواندنی + دکمه انتخاب + پیش‌نمایش — دقیقاً همان الگوی فیلد لوگو.
+        private Panel MakeImageUploadField(string labelText, TextBox textBox, PictureBox preview, EventHandler onBrowse)
+        {
+            Panel field = new Panel { Width = 300, Height = 130, Margin = new Padding(6, 4, 6, 4) };
+            Panel row = new Panel { Dock = DockStyle.Top, Height = 100 };
+            preview.Dock = DockStyle.Right;
+            preview.Width = 100;
+            preview.BorderStyle = BorderStyle.FixedSingle;
+            preview.SizeMode = PictureBoxSizeMode.Zoom;
+
+            Panel browseRow = new Panel { Dock = DockStyle.Fill };
+            Button btnBrowse = UiTheme.CreateSecondaryButton("انتخاب تصویر", "▤");
+            btnBrowse.Dock = DockStyle.Top;
+            btnBrowse.Height = 30;
+            btnBrowse.Click += onBrowse;
+            textBox.Dock = DockStyle.Top;
+            textBox.ReadOnly = true;
+            UiTheme.StyleTextBox(textBox);
+            browseRow.Controls.Add(btnBrowse);
+            browseRow.Controls.Add(textBox);
+            row.Controls.Add(browseRow);
+            row.Controls.Add(preview);
+            field.Controls.Add(row);
+            field.Controls.Add(new Label
+            {
+                Text = labelText, AutoSize = false, Dock = DockStyle.Top, Height = 22,
+                TextAlign = ContentAlignment.MiddleRight, Font = UiTheme.FontBold(UiTheme.SizeSmall), ForeColor = UiTheme.TextDark
+            });
+            return field;
+        }
+
+        private void BtnBrowseSignature_Click(object sender, EventArgs e)
+        {
+            using (OpenFileDialog ofd = new OpenFileDialog())
+            {
+                ofd.Filter = "فایل‌های تصویری|*.jpg;*.jpeg;*.png;*.bmp";
+                ofd.CheckFileExists = true;
+                if (ofd.ShowDialog(this) != DialogResult.OK) return;
+
+                _txtSignaturePath.Text = ofd.FileName;
+                ShowImagePreview(_picSignaturePreview, ofd.FileName);
+            }
+        }
+
+        private void BtnBrowseStamp_Click(object sender, EventArgs e)
+        {
+            using (OpenFileDialog ofd = new OpenFileDialog())
+            {
+                ofd.Filter = "فایل‌های تصویری|*.jpg;*.jpeg;*.png;*.bmp";
+                ofd.CheckFileExists = true;
+                if (ofd.ShowDialog(this) != DialogResult.OK) return;
+
+                _txtStampPath.Text = ofd.FileName;
+                ShowImagePreview(_picStampPreview, ofd.FileName);
+            }
+        }
+
         private void ShowImagePreview(PictureBox target, string path)
         {
             try
@@ -845,6 +920,8 @@ ORDER BY CasID DESC", con))
             _txtRegNumber.Text        = SettingsHelper.Get(SettingsHelper.RegNumber);
             _txtManagerName.Text      = SettingsHelper.Get(SettingsHelper.ManagerName);
             _txtLogoPath.Text         = SettingsHelper.Get(SettingsHelper.LogoPath);
+            _txtSignaturePath.Text    = SettingsHelper.Get(SettingsHelper.SignaturePath);
+            _txtStampPath.Text        = SettingsHelper.Get(SettingsHelper.StampPath);
             _txtAddress.Text          = SettingsHelper.Get(SettingsHelper.Address);
             _txtGeneralPhone.Text     = SettingsHelper.Get(SettingsHelper.Phone);
             _txtMobile.Text           = SettingsHelper.Get(SettingsHelper.Mobile);
@@ -870,6 +947,8 @@ ORDER BY CasID DESC", con))
             _pnlFontColorSwatch.BackColor = _selectedFontColor;
 
             ShowImagePreview(_picLogoPreview, _txtLogoPath.Text);
+            ShowImagePreview(_picSignaturePreview, _txtSignaturePath.Text);
+            ShowImagePreview(_picStampPreview, _txtStampPath.Text);
         }
 
         private void BtnSaveGeneral_Click(object sender, EventArgs e)
@@ -881,6 +960,8 @@ ORDER BY CasID DESC", con))
             SettingsHelper.Set(SettingsHelper.RegNumber, _txtRegNumber.Text.Trim());
             SettingsHelper.Set(SettingsHelper.ManagerName, _txtManagerName.Text.Trim());
             SettingsHelper.Set(SettingsHelper.LogoPath, _txtLogoPath.Text.Trim());
+            SettingsHelper.Set(SettingsHelper.SignaturePath, _txtSignaturePath.Text.Trim());
+            SettingsHelper.Set(SettingsHelper.StampPath, _txtStampPath.Text.Trim());
             SettingsHelper.Set(SettingsHelper.Address, _txtAddress.Text.Trim());
             SettingsHelper.Set(SettingsHelper.Phone, _txtGeneralPhone.Text.Trim());
             SettingsHelper.Set(SettingsHelper.Mobile, _txtMobile.Text.Trim());

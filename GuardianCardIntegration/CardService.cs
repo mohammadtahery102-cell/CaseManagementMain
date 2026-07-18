@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Web.Script.Serialization;
 using CaseManagement.Helpers;
@@ -54,6 +55,12 @@ namespace CaseManagement.GuardianCardIntegration
 
                 Province = c.Province,
                 District = c.District,
+                // آموزش — رفع باگ «همیشه نوشته می‌شد بامیان»: نوار تزئینی دور
+                // کارت قبلاً در خودِ index.html به یک نام مرکز ثابت (بامیان)
+                // Hardcode شده بود. حالا طبق ولایتِ واقعیِ همین پرونده ساخته
+                // می‌شود؛ اگر ولایت ثبت نشده باشد، به نام مرکز فعال برمی‌گردیم
+                // تا نوار هرگز خالی/گمراه‌کننده نماند.
+                MicrotextLabel = "دفتر نمایندگی " + (string.IsNullOrWhiteSpace(c.Province) ? SecurityContext.CurrentCenterName : c.Province),
                 // آموزش — این پروژه فیلد مجزای «قریه» ندارد (فقط ولایت/ولسوالی)؛
                 // به‌جای حدس زدن مقداری نادرست، خالی می‌ماند تا داده اشتباه روی
                 // کارت چاپ نشود.
@@ -72,6 +79,14 @@ namespace CaseManagement.GuardianCardIntegration
 
                 Logo = SettingsHelper.Get(SettingsHelper.LogoPath),
                 Photo = c.PhotoPath,
+                // آموزش — امضا/مهر مؤسسه‌ای هستند (یکسان روی همه کارت‌ها)، نه
+                // داده‌ی پرونده؛ از همان کلیدهای تنظیماتِ از قبل موجود خوانده
+                // می‌شوند (SignaturePath/StampPath — قبلاً در تب چاپ نیمه‌کاره
+                // تعریف شده بودند ولی هیچ UI برایشان ساخته نشده بود؛ اکنون در
+                // تب «اطلاعات مؤسسه» آپلود می‌شوند). مسیر مطلق اینجا؛ Stage
+                // واقعی (کپی داخل پوشه کاری + مسیر نسبی) در GuardianCardRenderer.
+                Signature = SettingsHelper.Get(SettingsHelper.SignaturePath),
+                Stamp = SettingsHelper.Get(SettingsHelper.StampPath),
 
                 // آموزش — Notice1‑5 / SignatureLabel / LegalLine در قالب
                 // «dom-text-static» هستند: بر خلاف Portrait (که در index.html
@@ -110,6 +125,27 @@ namespace CaseManagement.GuardianCardIntegration
             }
 
             return data;
+        }
+
+        // چاپ جمعی: بازه‌ی شماره فرم را به فهرست پرونده گرفته (مرکز‌محور) و
+        // برای هرکدام داده کارت را می‌سازد. یک پرونده‌ی خراب/ناقص کل دسته را
+        // متوقف نمی‌کند — فقط از فهرست حذف می‌شود و شمارنده‌ی خطا بالا می‌رود.
+        public List<GuardianCardData> BuildCardDataRange(int fromFormNo, int toFormNo, out int failedCount)
+        {
+            failedCount = 0;
+            var result = new List<GuardianCardData>();
+            foreach (int caseId in _repo.GetCaseIdsByFormNoRange(fromFormNo, toFormNo))
+            {
+                try
+                {
+                    result.Add(BuildCardData(caseId));
+                }
+                catch
+                {
+                    failedCount++;
+                }
+            }
+            return result;
         }
 
         // خروجی JSON مطابق دقیق قرارداد GuardianCard (کلید هر پراپرتی، طبق

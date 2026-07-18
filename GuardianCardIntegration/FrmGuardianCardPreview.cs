@@ -122,7 +122,9 @@ namespace CaseManagement.GuardianCardIntegration
                 string workingFolder = renderer.StageAndPopulate(
                     data,
                     guardianPhotoPath: data.Photo,
-                    orgLogoPath: data.Logo);
+                    orgLogoPath: data.Logo,
+                    signaturePath: data.Signature,
+                    stampPath: data.Stamp);
 
                 _webView.CoreWebView2.SetVirtualHostNameToFolderMapping(
                     GuardianCardRenderer.VirtualHostName, workingFolder,
