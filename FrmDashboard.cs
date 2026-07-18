@@ -429,23 +429,26 @@ namespace CaseManagement
             TabPage page = new TabPage("داشبورد کل پرونده‌ها");
             page.BackColor = UiTheme.Background;
 
-            SplitContainer split = new SplitContainer();
-            split.Dock = DockStyle.Fill;
-            split.Orientation = Orientation.Horizontal;
-            split.SplitterDistance = 250;
-
+            // آموزش — رفع «فضای خالی بزرگ زیر کارت‌ها»: قبلاً از SplitContainer با
+            // SplitterDistance ثابت (۲۵۰) استفاده می‌شد، در حالی که ردیف کارت‌ها فقط
+            // ~۱۲۰px ارتفاع دارد؛ نتیجه یک فاصله‌ی خالیِ بزرگ زیر کارت‌ها و نمودار
+            // دایره‌ای فشرده/بریده در پایین صفحه بود. حالا کارت‌ها در یک نوار
+            // Dock=Top با ارتفاعِ دقیقاً هم‌اندازه‌ی محتوایشان قرار می‌گیرند و نمودار
+            // Dock=Fill تمام فضای باقی‌مانده (که حالا خیلی بزرگ‌تر است) را می‌گیرد.
             summaryPanel = new FlowLayoutPanel();
-            summaryPanel.Dock = DockStyle.Fill;
+            summaryPanel.Dock = DockStyle.Top;
+            summaryPanel.Height = 132;
             summaryPanel.BackColor = UiTheme.Background;
-            summaryPanel.Padding = new Padding(12);
+            summaryPanel.Padding = new Padding(12, 12, 12, 4);
             summaryPanel.AutoScroll = false;
             summaryPanel.WrapContents = true;
 
             statusChart = CreateChart("وضعیت پرونده‌ها", SeriesChartType.Pie);
 
-            split.Panel1.Controls.Add(summaryPanel);
-            split.Panel2.Controls.Add(statusChart);
-            page.Controls.Add(split);
+            // Fill باید قبل از Top اضافه شود تا کارت‌ها (که آخر اضافه می‌شوند) در
+            // بالای صفحه بمانند و نمودار باقی‌مانده‌ی زیرشان را پر کند.
+            page.Controls.Add(statusChart);
+            page.Controls.Add(summaryPanel);
             return page;
         }
 
