@@ -713,7 +713,7 @@ namespace CaseManagement.Accounting
         // ═══════════════════════════════════════════════════════════════════
         // تب: شهریه ایتام (مطابق شیت «فرمت جزیی»)
         // ═══════════════════════════════════════════════════════════════════
-        private ComboBox _stPeriod, _stSadat, _stSize;
+        private ComboBox _stPeriod, _stSadat, _stSize, _stFund;
         private TextBox _stProvince, _stDistrict, _stCenter;
         private NumericUpDown _stFamilyCount, _stOrphanCount, _stAmount;
         private DataGridView _gridStipend;
@@ -729,6 +729,10 @@ namespace CaseManagement.Accounting
             _stSadat = NewCombo(); _stSadat.Items.AddRange(new object[] { "عام", "سادات", "اهل سنت", "غیرحاضران" });
             _stSize = NewCombo(); for (int i = 1; i <= 8; i++) _stSize.Items.Add(i);
             _stFamilyCount = new NumericUpDown { Maximum = 100000 }; _stOrphanCount = new NumericUpDown { Maximum = 100000 }; _stAmount = NewAmountBox();
+            // آموزش — رفع باگ حسابداری «مانده صندوق هم‌خوان نبود»: هر پرداخت
+            // شهریه باید مشخص کند از کدام صندوق پرداخت شده، وگرنه آن صندوق
+            // این خروج پول را در مانده‌اش نمی‌دید.
+            _stFund = NewCombo();
 
             form.Controls.Add(Field("دوره مالی", _stPeriod, 180));
             form.Controls.Add(Field("ولایت", _stProvince, 130));
@@ -739,6 +743,7 @@ namespace CaseManagement.Accounting
             form.Controls.Add(Field("تعداد خانوار", _stFamilyCount, 110));
             form.Controls.Add(Field("تعداد یتیم", _stOrphanCount, 110));
             form.Controls.Add(Field("مبلغ شهریه هر خانواده", _stAmount, 160));
+            form.Controls.Add(Field("پرداخت از صندوق", _stFund, 170));
 
             var btnBar = new Panel { Dock = DockStyle.Top, Height = 46, BackColor = UiTheme.CardBack };
             var btnSave = UiTheme.CreateButton("ذخیره", "✔", UiTheme.Success); btnSave.SetBounds(14, 6, 110, 34); btnSave.Click += delegate { SaveStipend(); };
@@ -767,12 +772,14 @@ namespace CaseManagement.Accounting
                 _stFamilyCount.Value = (decimal)ParseNum(row.Cells["تعداد خانوار"].Value?.ToString());
                 _stOrphanCount.Value = (decimal)ParseNum(row.Cells["تعداد یتیم"].Value?.ToString());
                 _stAmount.Value = (decimal)ParseNum(row.Cells["مبلغ شهریه"].Value?.ToString());
+                SelectComboValue(_stFund, _gridStipend.Columns.Contains("FundID") ? row.Cells["FundID"].Value : null);
             };
 
             var gw = new Panel { Dock = DockStyle.Fill, Padding = new Padding(8) }; gw.Controls.Add(_gridStipend);
             page.Controls.Add(gw); page.Controls.Add(btnBar); page.Controls.Add(form);
 
             BindCombo(_stPeriod, _repo.GetPeriodsForCombo(), "PeriodID", "Display", true);
+            BindCombo(_stFund, _repo.GetFundsForCombo(), "FundID", "Display", true);
             _stPeriod.SelectedIndexChanged += delegate { LoadStipends(); };
             LoadStipends();
             return page;
@@ -783,6 +790,16 @@ namespace CaseManagement.Accounting
         {
             _editingStipendId = 0; _stProvince.Text = ""; _stDistrict.Text = ""; _stCenter.Text = "";
             _stSadat.SelectedIndex = -1; _stSize.SelectedIndex = -1; _stFamilyCount.Value = 0; _stOrphanCount.Value = 0; _stAmount.Value = 0;
+            _stFund.SelectedIndex = -1;
+        }
+
+        // انتخاب مقدار یک ComboBox متصل به دیتاسورس بر اساس ValueMember (برای
+        // بازگرداندن انتخاب صندوق هنگام کلیک روی ردیف گرید جهت ویرایش).
+        private static void SelectComboValue(ComboBox cmb, object value)
+        {
+            if (value == null || value == DBNull.Value) { cmb.SelectedIndex = -1; return; }
+            try { cmb.SelectedValue = Convert.ToInt32(value); }
+            catch { cmb.SelectedIndex = -1; }
         }
 
         // پاک‌سازی نرم بعد از ثبت: ولایت/ولسوالی/مرکز/نوع حفظ می‌شوند (چون
@@ -806,11 +823,12 @@ namespace CaseManagement.Accounting
             int familyCount = (int)_stFamilyCount.Value;
             int orphanCount = (int)_stOrphanCount.Value;
             double amount = (double)_stAmount.Value;
+            int? fund = ComboIntValue(_stFund);
 
             if (_editingStipendId == 0)
-                _repo.AddStipend(period, _stProvince.Text.Trim(), _stDistrict.Text.Trim(), _stCenter.Text.Trim(), _stSadat.Text, size, familyCount, orphanCount, amount);
+                _repo.AddStipend(period, _stProvince.Text.Trim(), _stDistrict.Text.Trim(), _stCenter.Text.Trim(), _stSadat.Text, size, familyCount, orphanCount, amount, fund);
             else
-                _repo.UpdateStipend(_editingStipendId, _stProvince.Text.Trim(), _stDistrict.Text.Trim(), _stCenter.Text.Trim(), _stSadat.Text, size, familyCount, orphanCount, amount);
+                _repo.UpdateStipend(_editingStipendId, _stProvince.Text.Trim(), _stDistrict.Text.Trim(), _stCenter.Text.Trim(), _stSadat.Text, size, familyCount, orphanCount, amount, fund);
 
             UiTheme.ShowSuccess(this, "شهریه ذخیره شد.");
             SoftResetStipendForm();
@@ -842,6 +860,7 @@ namespace CaseManagement.Accounting
             _gridStipend.DataSource = _repo.GetStipends(period);
             if (_gridStipend.Columns.Contains("StipendID")) _gridStipend.Columns["StipendID"].Visible = false;
             if (_gridStipend.Columns.Contains("PeriodID")) _gridStipend.Columns["PeriodID"].Visible = false;
+            if (_gridStipend.Columns.Contains("FundID")) _gridStipend.Columns["FundID"].Visible = false;
             FormatAmountColumn(_gridStipend, "مبلغ شهریه");
             FormatAmountColumn(_gridStipend, "جمع پرداختی");
 
@@ -854,7 +873,7 @@ namespace CaseManagement.Accounting
         // ═══════════════════════════════════════════════════════════════════
         // تب: حقوق کارکنان
         // ═══════════════════════════════════════════════════════════════════
-        private ComboBox _saPeriod;
+        private ComboBox _saPeriod, _saFund;
         private TextBox _saName, _saPosition, _saNote;
         private NumericUpDown _saAmount;
         private DataGridView _gridSalary;
@@ -867,10 +886,12 @@ namespace CaseManagement.Accounting
             var form = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 78, FlowDirection = FlowDirection.RightToLeft, WrapContents = true, BackColor = UiTheme.CardBack, Padding = new Padding(10, 6, 10, 2) };
 
             _saPeriod = NewCombo(); _saName = new TextBox(); _saPosition = new TextBox(); _saAmount = NewAmountBox(); _saNote = new TextBox();
+            _saFund = NewCombo();
             form.Controls.Add(Field("دوره مالی", _saPeriod, 180));
             form.Controls.Add(Field("نام", _saName, 180));
             form.Controls.Add(Field("سمت", _saPosition, 150));
             form.Controls.Add(Field("مبلغ", _saAmount, 130));
+            form.Controls.Add(Field("پرداخت از صندوق", _saFund, 170));
             form.Controls.Add(Field("توضیح", _saNote, 220));
 
             var btnBar = new Panel { Dock = DockStyle.Top, Height = 46, BackColor = UiTheme.CardBack };
@@ -894,18 +915,20 @@ namespace CaseManagement.Accounting
                 _saPosition.Text = row.Cells["سمت"].Value?.ToString() ?? "";
                 _saAmount.Value = (decimal)ParseNum(row.Cells["مبلغ"].Value?.ToString());
                 _saNote.Text = row.Cells["توضیح"].Value?.ToString() ?? "";
+                SelectComboValue(_saFund, _gridSalary.Columns.Contains("FundID") ? row.Cells["FundID"].Value : null);
             };
 
             var gw = new Panel { Dock = DockStyle.Fill, Padding = new Padding(8) }; gw.Controls.Add(_gridSalary);
             page.Controls.Add(gw); page.Controls.Add(btnBar); page.Controls.Add(form);
 
             BindCombo(_saPeriod, _repo.GetPeriodsForCombo(), "PeriodID", "Display", true);
+            BindCombo(_saFund, _repo.GetFundsForCombo(), "FundID", "Display", true);
             _saPeriod.SelectedIndexChanged += delegate { LoadSalaries(); };
             LoadSalaries();
             return page;
         }
 
-        private void ClearSalaryForm() { _editingSalaryId = 0; _saName.Text = ""; _saPosition.Text = ""; _saAmount.Value = 0; _saNote.Text = ""; }
+        private void ClearSalaryForm() { _editingSalaryId = 0; _saName.Text = ""; _saPosition.Text = ""; _saAmount.Value = 0; _saNote.Text = ""; _saFund.SelectedIndex = -1; }
 
         private void SaveSalary()
         {
@@ -914,8 +937,9 @@ namespace CaseManagement.Accounting
             if (!_repo.IsPeriodOpen(period.Value)) { UiTheme.ShowWarning(this, "این دوره مالی «بسته» است و امکان ثبت حقوق در آن وجود ندارد."); return; }
             if (string.IsNullOrWhiteSpace(_saName.Text)) { UiTheme.ShowWarning(this, "نام کارمند را وارد کنید."); return; }
             double amount = (double)_saAmount.Value;
-            if (_editingSalaryId == 0) _repo.AddSalary(period, _saName.Text.Trim(), _saPosition.Text.Trim(), amount, _saNote.Text.Trim());
-            else _repo.UpdateSalary(_editingSalaryId, _saName.Text.Trim(), _saPosition.Text.Trim(), amount, _saNote.Text.Trim());
+            int? fund = ComboIntValue(_saFund);
+            if (_editingSalaryId == 0) _repo.AddSalary(period, _saName.Text.Trim(), _saPosition.Text.Trim(), amount, _saNote.Text.Trim(), fund);
+            else _repo.UpdateSalary(_editingSalaryId, _saName.Text.Trim(), _saPosition.Text.Trim(), amount, _saNote.Text.Trim(), fund);
             // دوره مالی حفظ می‌شود؛ فقط فیلدهای هر کارمند پاک می‌شوند.
             UiTheme.ShowSuccess(this, "حقوق ذخیره شد."); ClearSalaryForm(); LoadSalaries();
         }
@@ -943,6 +967,7 @@ namespace CaseManagement.Accounting
             _gridSalary.DataSource = _repo.GetSalaries(period);
             if (_gridSalary.Columns.Contains("SalaryID")) _gridSalary.Columns["SalaryID"].Visible = false;
             if (_gridSalary.Columns.Contains("PeriodID")) _gridSalary.Columns["PeriodID"].Visible = false;
+            if (_gridSalary.Columns.Contains("FundID")) _gridSalary.Columns["FundID"].Visible = false;
             FormatAmountColumn(_gridSalary, "مبلغ");
 
             double total = 0;
@@ -954,7 +979,7 @@ namespace CaseManagement.Accounting
         // ═══════════════════════════════════════════════════════════════════
         // تب: هزینه‌های جاری (مطابق شیت «حساب جاری»)
         // ═══════════════════════════════════════════════════════════════════
-        private ComboBox _exPeriod, _exCategory;
+        private ComboBox _exPeriod, _exCategory, _exFund;
         private TextBox _exDesc, _exQty, _exDocNo;
         private NumericUpDown _exPrice;
         private MaskedTextBox _exDate;
@@ -968,13 +993,14 @@ namespace CaseManagement.Accounting
             var form = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 110, FlowDirection = FlowDirection.RightToLeft, WrapContents = true, BackColor = UiTheme.CardBack, Padding = new Padding(10, 6, 10, 2), AutoScroll = true };
 
             _exPeriod = NewCombo(); _exCategory = NewCombo(); _exDesc = new TextBox(); _exQty = new TextBox(); _exPrice = NewAmountBox(); _exDocNo = new TextBox();
-            _exDate = NewDateBox();
+            _exDate = NewDateBox(); _exFund = NewCombo();
 
             form.Controls.Add(Field("دوره مالی", _exPeriod, 170));
             form.Controls.Add(Field("دسته‌بندی", _exCategory, 180));
             form.Controls.Add(Field("شرح", _exDesc, 320));
             form.Controls.Add(Field("تعداد/مقدار", _exQty, 120));
             form.Controls.Add(Field("قیمت", _exPrice, 120));
+            form.Controls.Add(Field("پرداخت از صندوق", _exFund, 170));
             form.Controls.Add(Field("شماره سند", _exDocNo, 110));
             form.Controls.Add(DateField("تاریخ", _exDate));
 
@@ -1000,6 +1026,7 @@ namespace CaseManagement.Accounting
                 _exQty.Text = row.Cells["تعداد/مقدار"].Value?.ToString() ?? "";
                 _exPrice.Value = (decimal)ParseNum(row.Cells["قیمت"].Value?.ToString());
                 _exDocNo.Text = row.Cells["شماره سند"].Value?.ToString() ?? "";
+                SelectComboValue(_exFund, _gridExpense.Columns.Contains("FundID") ? row.Cells["FundID"].Value : null);
             };
 
             var gw = new Panel { Dock = DockStyle.Fill, Padding = new Padding(8) }; gw.Controls.Add(_gridExpense);
@@ -1007,6 +1034,7 @@ namespace CaseManagement.Accounting
 
             BindCombo(_exPeriod, _repo.GetPeriodsForCombo(), "PeriodID", "Display", true);
             BindCombo(_exCategory, _repo.GetCategoriesForCombo(false), "CatID", "Display", true);
+            BindCombo(_exFund, _repo.GetFundsForCombo(), "FundID", "Display", true);
             _exPeriod.SelectedIndexChanged += delegate { LoadExpenseItems(); };
             LoadExpenseItems();
             return page;
@@ -1017,9 +1045,10 @@ namespace CaseManagement.Accounting
         {
             _editingExpenseId = 0; _exCategory.SelectedIndex = -1; _exDesc.Text = ""; _exQty.Text = ""; _exPrice.Value = 0; _exDocNo.Text = "";
             _exDate.Text = PersianDateHelper.ToPersianDateString(DateTime.Today);
+            _exFund.SelectedIndex = -1;
         }
 
-        // پاک‌سازی نرم بعد از ثبت: دوره/دسته‌بندی/تاریخ حفظ می‌شوند، فقط
+        // پاک‌سازی نرم بعد از ثبت: دوره/دسته‌بندی/تاریخ/صندوق حفظ می‌شوند، فقط
         // شرح/تعداد/قیمت/شماره سند پاک می‌شوند تا ثبت اقلام متوالی سریع باشد.
         private void SoftResetExpenseForm()
         {
@@ -1035,11 +1064,12 @@ namespace CaseManagement.Accounting
             if (!_exDate.MaskCompleted) { UiTheme.ShowWarning(this, "تاریخ را کامل وارد کنید (سال/ماه/روز)."); _exDate.Focus(); return; }
             int? cat = ComboIntValue(_exCategory);
             double price = (double)_exPrice.Value;
+            int? fund = ComboIntValue(_exFund);
 
             if (_editingExpenseId == 0)
-                _repo.AddExpenseItem(period, cat, _exCategory.Text, _exDesc.Text.Trim(), _exQty.Text.Trim(), price, _exDocNo.Text.Trim(), _exDate.Text);
+                _repo.AddExpenseItem(period, cat, _exCategory.Text, _exDesc.Text.Trim(), _exQty.Text.Trim(), price, _exDocNo.Text.Trim(), _exDate.Text, fund);
             else
-                _repo.UpdateExpenseItem(_editingExpenseId, cat, _exCategory.Text, _exDesc.Text.Trim(), _exQty.Text.Trim(), price, _exDocNo.Text.Trim(), _exDate.Text);
+                _repo.UpdateExpenseItem(_editingExpenseId, cat, _exCategory.Text, _exDesc.Text.Trim(), _exQty.Text.Trim(), price, _exDocNo.Text.Trim(), _exDate.Text, fund);
 
             UiTheme.ShowSuccess(this, "هزینه ذخیره شد."); SoftResetExpenseForm(); LoadExpenseItems();
         }
@@ -1067,6 +1097,7 @@ namespace CaseManagement.Accounting
             _gridExpense.DataSource = _repo.GetExpenseItems(period);
             if (_gridExpense.Columns.Contains("ItemID")) _gridExpense.Columns["ItemID"].Visible = false;
             if (_gridExpense.Columns.Contains("PeriodID")) _gridExpense.Columns["PeriodID"].Visible = false;
+            if (_gridExpense.Columns.Contains("FundID")) _gridExpense.Columns["FundID"].Visible = false;
             FormatAmountColumn(_gridExpense, "قیمت");
 
             double total = 0;

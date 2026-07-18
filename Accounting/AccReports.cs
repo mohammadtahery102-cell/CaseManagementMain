@@ -889,6 +889,36 @@ namespace CaseManagement.Accounting
                     isIncome ? amount.ToString("N0") : "", isIncome ? "" : amount.ToString("N0"), N(balance)
                 });
             }
+
+            // آموزش — رفع باگ عدم‌تطابق: شهریه/حقوق/هزینه‌های وصل‌شده به همین صندوق
+            // هم باید این‌جا کم شوند، وگرنه «مانده فعلی صندوق» این گزارش با
+            // GetFundBalance (که این سه را حساب می‌کند) یکی نمی‌شود. فیلتر دوره
+            // فقط وقتی اعمال می‌شود که کاربر دوره‌ی خاصی انتخاب کرده باشد؛ چون
+            // این سه رکورد بدون فیلتر گزارش هم روی مانده‌ی نهایی اثر دارند (تا
+            // مانده‌ی «فعلی» همیشه با GetFundBalance درست بماند).
+            DataTable stipends = _repo.GetStipendsByFund(fundId);
+            foreach (DataRow r in stipends.Rows)
+            {
+                double amt = Convert.ToDouble(r["TotalPaid"]);
+                balance -= amt;
+                model.Rows.Add(new[] { "", "", "شهریه ایتام — " + r["SadatType"] + " (" + r["FamilySize"] + " نفره)", "", amt.ToString("N0"), N(balance) });
+            }
+            DataTable salaries = _repo.GetSalariesByFund(fundId);
+            foreach (DataRow r in salaries.Rows)
+            {
+                double amt = Convert.ToDouble(r["Amount"]);
+                balance -= amt;
+                model.Rows.Add(new[] { "", "", "حقوق — " + r["EmployeeName"], "", amt.ToString("N0"), N(balance) });
+            }
+            DataTable expenses = _repo.GetExpenseItemsByFund(fundId);
+            foreach (DataRow r in expenses.Rows)
+            {
+                double amt = Convert.ToDouble(r["Price"]);
+                balance -= amt;
+                string date = r["ItemDate"] != DBNull.Value ? r["ItemDate"].ToString() : "";
+                model.Rows.Add(new[] { date, "", "هزینه — " + r["Description"], "", amt.ToString("N0"), N(balance) });
+            }
+
             model.BoldRows.Add(model.Rows.Count);
             model.Rows.Add(new[] { "", "", "مانده فعلی صندوق", "", "", N(balance) });
             return model;

@@ -182,6 +182,19 @@ CREATE TABLE IF NOT EXISTS AccAudit (
     CreatedAt  TEXT NOT NULL DEFAULT (datetime('now'))
 );");
 
+                // ─── رفع باگ حسابداریِ جدی: «مانده صندوق» با «مانده کل دوره» هم‌خوان نبود ─
+                // آموزش: AccStipend/AccSalary/AccExpenseItem هرگز به هیچ صندوقی وصل
+                // نبودند (فقط AccTransaction ستون FundID داشت). نتیجه: GetPeriodClosing
+                // درست همه‌ی این پرداخت‌ها را از مانده‌ی کل کم می‌کرد، اما GetFundBalance
+                // (که «دفتر صندوق» و برچسب مانده در تب تراکنش از آن استفاده می‌کنند) این
+                // پرداخت‌ها را نمی‌دید — یعنی مانده‌ی نمایش‌داده‌شده‌ی هر صندوق با مانده‌ی
+                // واقعی صورت‌حساب کلی هم‌خوان نبود. حالا هر سه جدول یک ستون FundID
+                // اختیاری دارند تا هر پرداخت به صندوق واقعی‌اش وصل و در محاسبه‌ی مانده‌ی
+                // آن صندوق لحاظ شود.
+                EnsureColumn(con, "AccStipend", "FundID", "INTEGER NULL");
+                EnsureColumn(con, "AccSalary", "FundID", "INTEGER NULL");
+                EnsureColumn(con, "AccExpenseItem", "FundID", "INTEGER NULL");
+
                 SeedDefaults(con);
             }
         }

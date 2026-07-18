@@ -144,13 +144,22 @@ ORDER BY FundID", P("@cid", Cid));
             _db.ExecuteNonQuery("UPDATE AccFund SET IsActive = CASE WHEN IsActive=1 THEN 0 ELSE 1 END WHERE FundID=@id", P("@id", id));
         }
 
-        // مانده صندوق = مانده اولیه + دریافت‌ها − پرداخت‌ها
+        // مانده صندوق = مانده اولیه + دریافت‌ها − پرداخت‌ها − شهریه − حقوق − هزینه‌های همین صندوق
+        // آموزش — رفع باگ جدی حسابداری (یافته‌ی حسابرسی): قبلاً این متد فقط
+        // AccTransaction را می‌دید. چون شهریه/حقوق/هزینه به هیچ صندوقی وصل
+        // نبودند، «مانده صندوق» نمایش‌داده‌شده هرگز با «مانده کل دوره»
+        // (GetPeriodClosing که همه‌ی این‌ها را کم می‌کند) هم‌خوان نبود — یعنی
+        // دفتر صندوق مبلغی بیشتر از واقعیت نشان می‌داد. حالا با FundID جدید
+        // روی این سه جدول، مانده‌ی هر صندوق دقیقاً با مانده‌ی کل تطبیق می‌کند.
         public double GetFundBalance(int fundId)
         {
             double opening = ToDouble(_db.ExecuteScalar("SELECT OpeningBalance FROM AccFund WHERE FundID=@id AND (@cid = 0 OR CenterID = @cid)", P("@id", fundId), P("@cid", Cid)));
             double income = ToDouble(_db.ExecuteScalar("SELECT COALESCE(SUM(Amount),0) FROM AccTransaction WHERE FundID=@id AND Direction='دریافت' AND (@cid = 0 OR CenterID = @cid)", P("@id", fundId), P("@cid", Cid)));
             double payments = ToDouble(_db.ExecuteScalar("SELECT COALESCE(SUM(Amount),0) FROM AccTransaction WHERE FundID=@id AND Direction='پرداخت' AND (@cid = 0 OR CenterID = @cid)", P("@id", fundId), P("@cid", Cid)));
-            return opening + income - payments;
+            double stipend = ToDouble(_db.ExecuteScalar("SELECT COALESCE(SUM(TotalPaid),0) FROM AccStipend WHERE FundID=@id AND (@cid = 0 OR CenterID = @cid)", P("@id", fundId), P("@cid", Cid)));
+            double salary = ToDouble(_db.ExecuteScalar("SELECT COALESCE(SUM(Amount),0) FROM AccSalary WHERE FundID=@id AND (@cid = 0 OR CenterID = @cid)", P("@id", fundId), P("@cid", Cid)));
+            double expense = ToDouble(_db.ExecuteScalar("SELECT COALESCE(SUM(Price),0) FROM AccExpenseItem WHERE FundID=@id AND (@cid = 0 OR CenterID = @cid)", P("@id", fundId), P("@cid", Cid)));
+            return opening + income - payments - stipend - salary - expense;
         }
 
         // ═══════════════════════════════════════════════════════════════════
@@ -338,41 +347,43 @@ ORDER BY t.TxnID DESC",
         public DataTable GetStipends(int? periodId)
         {
             return _db.Query(@"
-SELECT StipendID, PeriodID, Province AS [ولایت], District AS [ولسوالی], Center AS [مرکز],
-       SadatType AS [نوع], FamilySize AS [چند نفره], FamilyCount AS [تعداد خانوار],
-       OrphanCount AS [تعداد یتیم], AmountPerFamily AS [مبلغ شهریه], TotalPaid AS [جمع پرداختی]
-FROM AccStipend
-WHERE (@cid = 0 OR CenterID = @cid) AND (@per IS NULL OR PeriodID = @per)
-ORDER BY SadatType, FamilySize",
+SELECT s.StipendID, s.PeriodID, s.Province AS [ولایت], s.District AS [ولسوالی], s.Center AS [مرکز],
+       s.SadatType AS [نوع], s.FamilySize AS [چند نفره], s.FamilyCount AS [تعداد خانوار],
+       s.OrphanCount AS [تعداد یتیم], s.AmountPerFamily AS [مبلغ شهریه], s.TotalPaid AS [جمع پرداختی],
+       s.FundID, f.Name AS [صندوق]
+FROM AccStipend s
+LEFT JOIN AccFund f ON f.FundID = s.FundID
+WHERE (@cid = 0 OR s.CenterID = @cid) AND (@per IS NULL OR s.PeriodID = @per)
+ORDER BY s.SadatType, s.FamilySize",
                 P("@cid", Cid), P("@per", (object)periodId ?? DBNull.Value));
         }
 
         public int AddStipend(int? periodId, string province, string district, string center, string sadatType,
-            int familySize, int familyCount, int orphanCount, double amountPerFamily)
+            int familySize, int familyCount, int orphanCount, double amountPerFamily, int? fundId)
         {
             double total = familyCount * amountPerFamily;
             _db.ExecuteNonQuery(@"
-INSERT INTO AccStipend (PeriodID, Province, District, Center, SadatType, FamilySize, FamilyCount, OrphanCount, AmountPerFamily, TotalPaid, CenterID)
-VALUES (@per,@prov,@dist,@cen,@sadat,@size,@fc,@oc,@amt,@tot,@cid)",
+INSERT INTO AccStipend (PeriodID, Province, District, Center, SadatType, FamilySize, FamilyCount, OrphanCount, AmountPerFamily, TotalPaid, FundID, CenterID)
+VALUES (@per,@prov,@dist,@cen,@sadat,@size,@fc,@oc,@amt,@tot,@fund,@cid)",
                 P("@per", (object)periodId ?? DBNull.Value), P("@prov", province), P("@dist", district), P("@cen", center),
                 P("@sadat", sadatType), P("@size", familySize), P("@fc", familyCount), P("@oc", orphanCount),
-                P("@amt", amountPerFamily), P("@tot", total), P("@cid", CurrentCid));
+                P("@amt", amountPerFamily), P("@tot", total), P("@fund", (object)fundId ?? DBNull.Value), P("@cid", CurrentCid));
             int id = Convert.ToInt32(_db.ExecuteScalar("SELECT last_insert_rowid()"));
             AccAudit.Log("ثبت شهریه", "AccStipend", id, sadatType + " / " + familySize + "نفره / " + total.ToString("N0"));
             return id;
         }
 
         public void UpdateStipend(int id, string province, string district, string center, string sadatType,
-            int familySize, int familyCount, int orphanCount, double amountPerFamily)
+            int familySize, int familyCount, int orphanCount, double amountPerFamily, int? fundId)
         {
             double total = familyCount * amountPerFamily;
             _db.ExecuteNonQuery(@"
 UPDATE AccStipend SET Province=@prov, District=@dist, Center=@cen, SadatType=@sadat, FamilySize=@size,
-       FamilyCount=@fc, OrphanCount=@oc, AmountPerFamily=@amt, TotalPaid=@tot
+       FamilyCount=@fc, OrphanCount=@oc, AmountPerFamily=@amt, TotalPaid=@tot, FundID=@fund
 WHERE StipendID=@id",
                 P("@prov", province), P("@dist", district), P("@cen", center), P("@sadat", sadatType),
                 P("@size", familySize), P("@fc", familyCount), P("@oc", orphanCount), P("@amt", amountPerFamily),
-                P("@tot", total), P("@id", id));
+                P("@tot", total), P("@fund", (object)fundId ?? DBNull.Value), P("@id", id));
         }
 
         public void DeleteStipend(int id)
@@ -400,26 +411,29 @@ WHERE s.StipendID = @id AND (@cid = 0 OR s.CenterID = @cid)", P("@id", id), P("@
         public DataTable GetSalaries(int? periodId)
         {
             return _db.Query(@"
-SELECT SalaryID, PeriodID, EmployeeName AS [نام], Position AS [سمت], Amount AS [مبلغ], Note AS [توضیح]
-FROM AccSalary
-WHERE (@cid = 0 OR CenterID = @cid) AND (@per IS NULL OR PeriodID = @per)
-ORDER BY EmployeeName",
+SELECT s.SalaryID, s.PeriodID, s.EmployeeName AS [نام], s.Position AS [سمت], s.Amount AS [مبلغ], s.Note AS [توضیح],
+       s.FundID, f.Name AS [صندوق]
+FROM AccSalary s
+LEFT JOIN AccFund f ON f.FundID = s.FundID
+WHERE (@cid = 0 OR s.CenterID = @cid) AND (@per IS NULL OR s.PeriodID = @per)
+ORDER BY s.EmployeeName",
                 P("@cid", Cid), P("@per", (object)periodId ?? DBNull.Value));
         }
 
-        public int AddSalary(int? periodId, string name, string position, double amount, string note)
+        public int AddSalary(int? periodId, string name, string position, double amount, string note, int? fundId)
         {
-            _db.ExecuteNonQuery("INSERT INTO AccSalary (PeriodID, EmployeeName, Position, Amount, Note, CenterID) VALUES (@per,@n,@p,@a,@note,@cid)",
-                P("@per", (object)periodId ?? DBNull.Value), P("@n", name), P("@p", position), P("@a", amount), P("@note", note), P("@cid", CurrentCid));
+            _db.ExecuteNonQuery("INSERT INTO AccSalary (PeriodID, EmployeeName, Position, Amount, Note, FundID, CenterID) VALUES (@per,@n,@p,@a,@note,@fund,@cid)",
+                P("@per", (object)periodId ?? DBNull.Value), P("@n", name), P("@p", position), P("@a", amount), P("@note", note),
+                P("@fund", (object)fundId ?? DBNull.Value), P("@cid", CurrentCid));
             int id = Convert.ToInt32(_db.ExecuteScalar("SELECT last_insert_rowid()"));
             AccAudit.Log("ثبت حقوق", "AccSalary", id, name + " / " + amount.ToString("N0"));
             return id;
         }
 
-        public void UpdateSalary(int id, string name, string position, double amount, string note)
+        public void UpdateSalary(int id, string name, string position, double amount, string note, int? fundId)
         {
-            _db.ExecuteNonQuery("UPDATE AccSalary SET EmployeeName=@n, Position=@p, Amount=@a, Note=@note WHERE SalaryID=@id",
-                P("@n", name), P("@p", position), P("@a", amount), P("@note", note), P("@id", id));
+            _db.ExecuteNonQuery("UPDATE AccSalary SET EmployeeName=@n, Position=@p, Amount=@a, Note=@note, FundID=@fund WHERE SalaryID=@id",
+                P("@n", name), P("@p", position), P("@a", amount), P("@note", note), P("@fund", (object)fundId ?? DBNull.Value), P("@id", id));
         }
 
         public void DeleteSalary(int id)
@@ -447,33 +461,35 @@ WHERE s.SalaryID = @id AND (@cid = 0 OR s.CenterID = @cid)", P("@id", id), P("@c
         {
             return _db.Query(@"
 SELECT e.ItemID, e.PeriodID, ec.Name AS [دسته‌بندی], e.Description AS [شرح], e.Qty AS [تعداد/مقدار],
-       e.Price AS [قیمت], e.DocNo AS [شماره سند], e.ItemDate AS [تاریخ]
+       e.Price AS [قیمت], e.DocNo AS [شماره سند], e.ItemDate AS [تاریخ], e.FundID, f.Name AS [صندوق]
 FROM AccExpenseItem e
 LEFT JOIN AccExpenseCategory ec ON ec.CatID = e.CategoryID
+LEFT JOIN AccFund f ON f.FundID = e.FundID
 WHERE (@cid = 0 OR e.CenterID = @cid) AND (@per IS NULL OR e.PeriodID = @per)
 ORDER BY e.ItemID",
                 P("@cid", Cid), P("@per", (object)periodId ?? DBNull.Value));
         }
 
-        public int AddExpenseItem(int? periodId, int? categoryId, string categoryName, string description, string qty, double price, string docNo, string itemDate)
+        public int AddExpenseItem(int? periodId, int? categoryId, string categoryName, string description, string qty, double price, string docNo, string itemDate, int? fundId)
         {
             _db.ExecuteNonQuery(@"
-INSERT INTO AccExpenseItem (PeriodID, CategoryID, CategoryName, Description, Qty, Price, DocNo, ItemDate, CenterID)
-VALUES (@per,@cat,@catn,@desc,@qty,@price,@doc,@date,@cid)",
+INSERT INTO AccExpenseItem (PeriodID, CategoryID, CategoryName, Description, Qty, Price, DocNo, ItemDate, FundID, CenterID)
+VALUES (@per,@cat,@catn,@desc,@qty,@price,@doc,@date,@fund,@cid)",
                 P("@per", (object)periodId ?? DBNull.Value), P("@cat", (object)categoryId ?? DBNull.Value), P("@catn", categoryName),
-                P("@desc", description), P("@qty", qty), P("@price", price), P("@doc", docNo), P("@date", itemDate), P("@cid", CurrentCid));
+                P("@desc", description), P("@qty", qty), P("@price", price), P("@doc", docNo), P("@date", itemDate),
+                P("@fund", (object)fundId ?? DBNull.Value), P("@cid", CurrentCid));
             int id = Convert.ToInt32(_db.ExecuteScalar("SELECT last_insert_rowid()"));
             AccAudit.Log("ثبت هزینه جاری", "AccExpenseItem", id, description + " / " + price.ToString("N0"));
             return id;
         }
 
-        public void UpdateExpenseItem(int id, int? categoryId, string categoryName, string description, string qty, double price, string docNo, string itemDate)
+        public void UpdateExpenseItem(int id, int? categoryId, string categoryName, string description, string qty, double price, string docNo, string itemDate, int? fundId)
         {
             _db.ExecuteNonQuery(@"
-UPDATE AccExpenseItem SET CategoryID=@cat, CategoryName=@catn, Description=@desc, Qty=@qty, Price=@price, DocNo=@doc, ItemDate=@date
+UPDATE AccExpenseItem SET CategoryID=@cat, CategoryName=@catn, Description=@desc, Qty=@qty, Price=@price, DocNo=@doc, ItemDate=@date, FundID=@fund
 WHERE ItemID=@id",
                 P("@cat", (object)categoryId ?? DBNull.Value), P("@catn", categoryName), P("@desc", description),
-                P("@qty", qty), P("@price", price), P("@doc", docNo), P("@date", itemDate), P("@id", id));
+                P("@qty", qty), P("@price", price), P("@doc", docNo), P("@date", itemDate), P("@fund", (object)fundId ?? DBNull.Value), P("@id", id));
         }
 
         public void DeleteExpenseItem(int id)
@@ -599,6 +615,30 @@ ON CONFLICT(SettingKey) DO UPDATE SET SettingValue=@v, UpdatedAt=datetime('now')
         {
             object v = _db.ExecuteScalar("SELECT Name FROM AccParty WHERE PartyID=@id AND (@cid = 0 OR CenterID = @cid)", P("@id", partyId), P("@cid", Cid));
             return v == null ? "" : v.ToString();
+        }
+
+        // آموزش — این سه متد برای «دفتر صندوق» (گزارش ۶) لازم شدند تا مانده‌ی
+        // نهایی گزارش با GetFundBalance (که حالا این سه را هم کم می‌کند)
+        // هم‌خوان بماند؛ بدون این‌ها گزارش عددی متفاوت و اشتباه نشان می‌داد.
+        public DataTable GetStipendsByFund(int fundId)
+        {
+            return _db.Query(@"
+SELECT SadatType, FamilySize, TotalPaid FROM AccStipend
+WHERE FundID=@fund AND (@cid = 0 OR CenterID = @cid)", P("@fund", fundId), P("@cid", Cid));
+        }
+
+        public DataTable GetSalariesByFund(int fundId)
+        {
+            return _db.Query(@"
+SELECT EmployeeName, Amount FROM AccSalary
+WHERE FundID=@fund AND (@cid = 0 OR CenterID = @cid)", P("@fund", fundId), P("@cid", Cid));
+        }
+
+        public DataTable GetExpenseItemsByFund(int fundId)
+        {
+            return _db.Query(@"
+SELECT Description, ItemDate, Price FROM AccExpenseItem
+WHERE FundID=@fund AND (@cid = 0 OR CenterID = @cid)", P("@fund", fundId), P("@cid", Cid));
         }
 
         // تمام تراکنش‌های یک صندوق به ترتیب ثبت (برای محاسبه مانده تجمعی صحیح)
