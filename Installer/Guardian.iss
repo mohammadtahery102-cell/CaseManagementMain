@@ -73,6 +73,60 @@ Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdi
 ; آموزش — دیتابیس عمداً bundle نمی‌شود: برنامه در اولین اجرا خودش CaseDB.sqlite را
 ; در |DataDirectory| می‌سازد و کاربر پیش‌فرض admin (رمز موقت) را ایجاد می‌کند.
 
+[Code]
+// ─────────────────────────────────────────────────────────────────────────
+// آموزش — رفع خطای «Unable to load DLL 'SQLite.Interop.dll'» بعد از نصب:
+// این DLL بومی (native, بدون امضای دیجیتال) برای اجرا به Visual C++
+// Redistributable x64 نیاز دارد. روی دستگاه توسعه (که Visual Studio نصب است)
+// این runtime از قبل حاضر است، پس مستقیماً از پوشه‌ی build اجرا می‌شود؛ اما
+// روی دستگاه مشتری/کاربر نهایی (بدون Visual Studio) ممکن است نصب نباشد —
+// دقیقاً همین خطا را می‌دهد. این تابع وجودش را در رجیستری چک می‌کند و اگر
+// نبود، قبل از ادامه‌ی نصب به کاربر هشدار روشن می‌دهد (نه فقط شکست خاموش).
+function VCRedistX64Installed(): Boolean;
+var
+  Installed: Cardinal;
+begin
+  Result := RegQueryDWordValue(HKLM64, 'SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X64', 'Installed', Installed)
+    and (Installed = 1);
+end;
+
+function InitializeSetup(): Boolean;
+begin
+  Result := True;
+  if not VCRedistX64Installed() then
+  begin
+    if MsgBox(
+      'به نظر می‌رسد «Microsoft Visual C++ Redistributable (x64) 2015-2022» روی این دستگاه نصب نیست.' + #13#10 +
+      'بدون آن، نرم‌افزار هنگام اجرا خطای زیر می‌دهد:' + #13#10 +
+      '  Unable to load DLL ''SQLite.Interop.dll''' + #13#10#13#10 +
+      'پیشنهاد می‌شود ابتدا آن را از آدرس رسمی مایکروسافت نصب کنید:' + #13#10 +
+      '  https://aka.ms/vs/17/release/vc_redist.x64.exe' + #13#10#13#10 +
+      'آیا می‌خواهید بدون نصب آن ادامه دهید؟ (در این صورت ممکن است برنامه اجرا نشود)',
+      mbConfirmation, MB_YESNO) = IDNO then
+      Result := False;
+  end;
+end;
+
+// آموزش — رفع خطای «کار می‌کند اما نه از داخل Program Files»: دلیل شایع این
+// الگو، مسدودسازیِ خودکارِ DLLهای بومیِ بدون امضا توسط آنتی‌ویروس/Windows
+// Defender هنگام نصب در Program Files است (این نصب‌کننده امضای دیجیتال
+// ندارد). این پیام بعد از اتمام نصب راهنمایی می‌دهد تا کاربر متوجه علت
+// احتمالی شود و لازم نباشد دوباره از ابتدا حدس بزند.
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssPostInstall then
+  begin
+    MsgBox(
+      'نصب کامل شد.' + #13#10#13#10 +
+      'اگر هنگام اجرا خطای «Unable to load DLL SQLite.Interop.dll» دیدید:' + #13#10 +
+      '۱) مطمئن شوید Visual C++ Redistributable (x64) نصب است (پیام بالا).' + #13#10 +
+      '۲) در Windows Security > Protection history بررسی کنید آیا فایلی از پوشه‌ی' + #13#10 +
+      '   نصب (مخصوصاً SQLite.Interop.dll) قرنطینه/حذف شده؛ اگر بله، پوشه‌ی نصب را' + #13#10 +
+      '   به لیست استثناهای آنتی‌ویروس اضافه کرده و دوباره نصب کنید.',
+      mbInformation, MB_OK);
+  end;
+end;
+
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"
 Name: "{group}\حذف {#AppName}"; Filename: "{uninstallexe}"
