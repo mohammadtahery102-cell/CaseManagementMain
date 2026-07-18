@@ -227,28 +227,36 @@ ORDER BY Name", P("@cid", Cid));
         // ═══════════════════════════════════════════════════════════════════
         // تراکنش (دریافت/پرداخت)
         // ═══════════════════════════════════════════════════════════════════
-        // شماره سند خودکار بعدی
-        // شماره سند بعدی: مسلسل و بزرگ‌ترینِ موجود + ۱. اگر هیچ سندی نباشد از ۱
-        // شروع می‌شود. برای هر مرکز جداگانه محاسبه می‌شود.
-        public int NextDocNoInt()
+        // شماره سند خودکار بعدی — مسلسل و بزرگ‌ترینِ موجود + ۱.
+        // آموزش — رفع درخواست جدی کاربر: شماره سند باید با تغییر دوره مالی
+        // «ریستارت» شود (هر دوره از شماره ۱ شروع کند)، نه این‌که برای همیشه
+        // مسلسل بماند. پس MAX حالا به‌ازای همان PeriodID محاسبه می‌شود، نه کل
+        // تاریخچه‌ی مرکز. اگر هنوز دوره‌ای انتخاب نشده (periodId=null)، محاسبه
+        // بدون فیلتر دوره انجام می‌شود (فقط برای نمایش اولیه‌ی فرم، قبل از
+        // انتخاب دوره؛ به‌محض انتخاب دوره در UI دوباره محاسبه می‌شود).
+        public int NextDocNoInt(int? periodId)
         {
             object v = _db.ExecuteScalar(@"
 SELECT COALESCE(MAX(CAST(CASE WHEN DocNo GLOB '*[0-9]*' AND DocNo NOT GLOB '*[^0-9]*' THEN DocNo ELSE '0' END AS INTEGER)),0)+1
-FROM AccTransaction WHERE (@cid = 0 OR CenterID = @cid)", P("@cid", Cid));
+FROM AccTransaction WHERE (@cid = 0 OR CenterID = @cid) AND (@per IS NULL OR PeriodID = @per)",
+                P("@cid", Cid), P("@per", (object)periodId ?? DBNull.Value));
             return v == null || v == DBNull.Value ? 1 : Convert.ToInt32(v);
         }
 
-        public string NextDocNo()
+        public string NextDocNo(int? periodId)
         {
-            return NextDocNoInt().ToString();
+            return NextDocNoInt(periodId).ToString();
         }
 
-        // آیا این شماره سند قبلاً استفاده شده؟ (برای جلوگیری از تداخل هنگام ثبت هم‌زمان)
-        public bool DocNoExists(string docNo)
+        // آیا این شماره سند در همین دوره مالی قبلاً استفاده شده؟ (برای جلوگیری
+        // از تداخل هنگام ثبت هم‌زمان). چون شماره سند اکنون به‌ازای هر دوره از
+        // نو شروع می‌شود، تکرار همان عدد در دوره‌های دیگر طبیعی و مجاز است؛
+        // فقط یکتایی «در همان دوره» بررسی می‌شود.
+        public bool DocNoExists(string docNo, int? periodId)
         {
             object v = _db.ExecuteScalar(
-                "SELECT COUNT(1) FROM AccTransaction WHERE DocNo=@d AND (@cid = 0 OR CenterID = @cid)",
-                P("@d", docNo), P("@cid", Cid));
+                "SELECT COUNT(1) FROM AccTransaction WHERE DocNo=@d AND (@cid = 0 OR CenterID = @cid) AND (@per IS NULL OR PeriodID = @per)",
+                P("@d", docNo), P("@cid", Cid), P("@per", (object)periodId ?? DBNull.Value));
             return Convert.ToInt32(v) > 0;
         }
 
@@ -373,6 +381,19 @@ WHERE StipendID=@id",
             AccAudit.Log("حذف شهریه", "AccStipend", id, "");
         }
 
+        // یک ردیف شهریه کامل برای ساخت رسید/فاکتور چاپی
+        public DataRow GetStipendById(int id)
+        {
+            DataTable dt = _db.Query(@"
+SELECT s.StipendID, s.Province, s.District, s.Center, s.SadatType, s.FamilySize,
+       s.FamilyCount, s.OrphanCount, s.AmountPerFamily, s.TotalPaid, s.CreatedAt,
+       COALESCE(p.Title, ('برج ' || p.Month || ' سال ' || p.Year)) AS PeriodTitle
+FROM AccStipend s
+LEFT JOIN AccPeriod p ON p.PeriodID = s.PeriodID
+WHERE s.StipendID = @id AND (@cid = 0 OR s.CenterID = @cid)", P("@id", id), P("@cid", Cid));
+            return dt.Rows.Count > 0 ? dt.Rows[0] : null;
+        }
+
         // ═══════════════════════════════════════════════════════════════════
         // حقوق کارکنان
         // ═══════════════════════════════════════════════════════════════════
@@ -405,6 +426,18 @@ ORDER BY EmployeeName",
         {
             _db.ExecuteNonQuery("DELETE FROM AccSalary WHERE SalaryID=@id", P("@id", id));
             AccAudit.Log("حذف حقوق", "AccSalary", id, "");
+        }
+
+        // یک ردیف حقوق کامل برای ساخت فیش حقوقی چاپی
+        public DataRow GetSalaryById(int id)
+        {
+            DataTable dt = _db.Query(@"
+SELECT s.SalaryID, s.EmployeeName, s.Position, s.Amount, s.Note, s.CreatedAt,
+       COALESCE(p.Title, ('برج ' || p.Month || ' سال ' || p.Year)) AS PeriodTitle
+FROM AccSalary s
+LEFT JOIN AccPeriod p ON p.PeriodID = s.PeriodID
+WHERE s.SalaryID = @id AND (@cid = 0 OR s.CenterID = @cid)", P("@id", id), P("@cid", Cid));
+            return dt.Rows.Count > 0 ? dt.Rows[0] : null;
         }
 
         // ═══════════════════════════════════════════════════════════════════
@@ -449,6 +482,18 @@ WHERE ItemID=@id",
             AccAudit.Log("حذف هزینه جاری", "AccExpenseItem", id, "");
         }
 
+        // یک ردیف هزینه جاری کامل برای ساخت سند هزینه چاپی
+        public DataRow GetExpenseItemById(int id)
+        {
+            DataTable dt = _db.Query(@"
+SELECT e.ItemID, e.CategoryName, e.Description, e.Qty, e.Price, e.DocNo, e.ItemDate, e.CreatedAt,
+       COALESCE(p.Title, ('برج ' || p.Month || ' سال ' || p.Year)) AS PeriodTitle
+FROM AccExpenseItem e
+LEFT JOIN AccPeriod p ON p.PeriodID = e.PeriodID
+WHERE e.ItemID = @id AND (@cid = 0 OR e.CenterID = @cid)", P("@id", id), P("@cid", Cid));
+            return dt.Rows.Count > 0 ? dt.Rows[0] : null;
+        }
+
         // ═══════════════════════════════════════════════════════════════════
         // پشتیبانی گزارش‌ها — جمع‌های دوره برای صورت حساب کلی/جزیی
         // ═══════════════════════════════════════════════════════════════════
@@ -459,9 +504,16 @@ WHERE ItemID=@id",
                 P("@per", (object)periodId ?? DBNull.Value), P("@st", (object)sadatType ?? DBNull.Value), P("@cid", Cid)));
         }
 
+        // آموزش — رفع باگ نشتِ چندمرکزی (یافته‌ی حسابرسی): بر خلاف
+        // SumStipend/SumExpenseItems/SumTransactions، این متد فیلتر CenterID
+        // نداشت؛ یعنی «صورت حساب کلی» و «صورت حساب دریافت بودجه» یک مرکز،
+        // حقوق کارکنانِ مراکز دیگر را هم در همان دوره جمع می‌زد و مانده‌ی
+        // گزارش‌شده را اشتباه نشان می‌داد. حالا مثل بقیه فیلتر مرکز دارد.
         public double SumSalary(int? periodId)
         {
-            return ToDouble(_db.ExecuteScalar("SELECT COALESCE(SUM(Amount),0) FROM AccSalary WHERE (@per IS NULL OR PeriodID=@per)", P("@per", (object)periodId ?? DBNull.Value)));
+            return ToDouble(_db.ExecuteScalar(
+                "SELECT COALESCE(SUM(Amount),0) FROM AccSalary WHERE (@per IS NULL OR PeriodID=@per) AND (@cid = 0 OR CenterID = @cid)",
+                P("@per", (object)periodId ?? DBNull.Value), P("@cid", Cid)));
         }
 
         public double SumExpenseItems(int? periodId)

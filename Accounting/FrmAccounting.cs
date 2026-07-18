@@ -212,7 +212,9 @@ namespace CaseManagement.Accounting
             _txnDirection.SelectedIndexChanged += delegate { ReloadTxnCategories(); };
             // آموزش — شماره سند مسلسل، خودکار و غیرقابل ویرایش (به‌درخواست کاربر
             // و طبق اصول حسابداری). ReadOnly + رنگ متمایز تا کاربر متوجه شود دستی نیست.
-            _txnDocNo = new TextBox { Text = _repo.NextDocNo(), ReadOnly = true, BackColor = UiTheme.Background, TabStop = false };
+            // با تغییر «دوره مالی» (رویداد پایین‌تر پس از ساخت _txnPeriod)، این
+            // شماره دوباره محاسبه می‌شود تا در هر دوره از ۱ ریستارت شود.
+            _txnDocNo = new TextBox { Text = _repo.NextDocNo(null), ReadOnly = true, BackColor = UiTheme.Background, TabStop = false };
             _txnDate = NewDateBox();
             _txnPeriod = NewCombo(); _txnParty = NewCombo(); _txnFund = NewCombo(); _txnCategory = NewCombo();
             _txnAmount = NewAmountBox(); _txnQty = new TextBox(); _txnDollar = NewAmountBox(2); _txnRate = NewAmountBox(2); _txnDesc = new TextBox();
@@ -267,9 +269,17 @@ namespace CaseManagement.Accounting
             return page;
         }
 
+        // شماره سند را برای دوره‌ی فعلاً انتخاب‌شده دوباره محاسبه می‌کند
+        // (بدون دوره انتخاب‌شده = شماره‌ی سراسری فقط برای پیش‌نمایش اولیه).
+        private void RefreshDocNo()
+        {
+            _txnDocNo.Text = _repo.NextDocNo(ComboIntValue(_txnPeriod));
+        }
+
         private void LoadTxnCombos()
         {
             BindCombo(_txnPeriod, _repo.GetPeriodsForCombo(), "PeriodID", "Display", true);
+            _txnPeriod.SelectedIndexChanged += delegate { RefreshDocNo(); };
             BindCombo(_txnParty, _repo.GetPartiesForCombo(), "PartyID", "Display", true);
             BindCombo(_txnFund, _repo.GetFundsForCombo(), "FundID", "Display", true);
             _txnFund.SelectedIndexChanged += delegate { UpdateFundBalanceLabel(); };
@@ -298,23 +308,25 @@ namespace CaseManagement.Accounting
             _lblFundBalance.Text = "مانده فعلی صندوق «" + _txnFund.Text + "»:  " + bal.ToString("N0") + " افغانی";
         }
 
-        // پاک‌سازی کامل فرم (دکمه «فرم جدید») — همه‌چیز خالی می‌شود.
+        // پاک‌سازی کامل فرم (دکمه «فرم جدید») — همه‌چیز خالی می‌شود، از جمله دوره
+        // (پس شماره سند به حالت «بدون دوره» = پیش‌نمایش سراسری برمی‌گردد تا
+        // کاربر دوباره دوره انتخاب کند و شماره‌ی واقعیِ همان دوره محاسبه شود).
         private void ResetTxnForm()
         {
-            _txnDocNo.Text = _repo.NextDocNo();
-            _txnDate.Text = PersianDateHelper.ToPersianDateString(DateTime.Today);
             _txnPeriod.SelectedIndex = -1; _txnParty.SelectedIndex = -1; _txnFund.SelectedIndex = -1; _txnCategory.SelectedIndex = -1;
+            RefreshDocNo();
+            _txnDate.Text = PersianDateHelper.ToPersianDateString(DateTime.Today);
             _txnAmount.Value = 0; _txnQty.Text = ""; _txnDollar.Value = 0; _txnRate.Value = 0; _txnDesc.Text = "";
             _txnDirection.Focus();
         }
 
         // آموزش — «پاک‌سازی نرم» بعد از ثبت موفق: به‌درخواست کاربر، فیلدهای پایه
         // (دوره/طرف‌حساب/صندوق/دسته/نوع/تاریخ) که معمولاً برای چند سند پشت‌سرهم
-        // یکسان‌اند حفظ می‌شوند و فقط شماره سند (به بعدی) و فیلدهای جزئیات
-        // (مبلغ/تعداد/دلاری/نرخ/توضیح) پاک می‌شوند تا دوباره‌کاری نشود.
+        // یکسان‌اند حفظ می‌شوند و فقط شماره سند (به بعدیِ همین دوره) و فیلدهای
+        // جزئیات (مبلغ/تعداد/دلاری/نرخ/توضیح) پاک می‌شوند تا دوباره‌کاری نشود.
         private void SoftResetTxnForm()
         {
-            _txnDocNo.Text = _repo.NextDocNo();
+            RefreshDocNo();
             _txnAmount.Value = 0; _txnQty.Text = ""; _txnDollar.Value = 0; _txnRate.Value = 0; _txnDesc.Text = "";
             _txnAmount.Focus();
         }
@@ -343,10 +355,11 @@ namespace CaseManagement.Accounting
                 double? dollar = (double)_txnDollar.Value; if (dollar <= 0) dollar = null;
                 double? rate = (double)_txnRate.Value; if (rate <= 0) rate = null;
 
-                // اطمینان از یکتا بودن شماره سند (اگر پنجره مدتی باز مانده و سند
-                // دیگری هم‌زمان ثبت شده باشد، شماره بعدی تازه گرفته می‌شود).
+                // اطمینان از یکتا بودن شماره سند «در همین دوره مالی» (اگر پنجره
+                // مدتی باز مانده و سند دیگری هم‌زمان در همین دوره ثبت شده باشد،
+                // شماره بعدیِ همان دوره تازه گرفته می‌شود).
                 string docNo = _txnDocNo.Text.Trim();
-                if (_repo.DocNoExists(docNo)) docNo = _repo.NextDocNo();
+                if (_repo.DocNoExists(docNo, period)) docNo = _repo.NextDocNo(period);
 
                 // هشدار (نه ممانعت) در صورت منفی شدن مانده صندوق بعد از پرداخت
                 if (!income)
