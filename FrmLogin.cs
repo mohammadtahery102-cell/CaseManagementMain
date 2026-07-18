@@ -4,6 +4,7 @@ using System;
 using System.Data;
 using System.Data.SQLite;
 using System.Drawing;
+using System.Globalization;
 using System.Windows.Forms;
 
 namespace CaseManagement
@@ -320,16 +321,32 @@ LIMIT  1", con))
                             {
                                 object refDateObj = dr["LastPasswordChangeAt"] != DBNull.Value
                                     ? dr["LastPasswordChangeAt"] : dr["CreatedAt"];
-                                DateTime refDate;
-                                if (DateTime.TryParse(Convert.ToString(refDateObj), out refDate) &&
-                                    (DateTime.Now - refDate).TotalDays >= forceDays)
+                                // آموزش — رفع باگ بحرانی «۳۲۶ میلیون دقیقه قفل»: DateTime.TryParse
+                                // بدون فرهنگِ صریح از فرهنگِ نخِ جاری (که در کل برنامه روی تقویم
+                                // شمسی تنظیم شده — نگاه کنید Program.cs) استفاده می‌کند؛ اما این
+                                // مقدار در دیتابیس همیشه میلادی (Invariant) ذخیره شده. نتیجه: سال
+                                // میلادی (مثلاً ۲۰۲۶) به‌اشتباه «سال شمسی» تفسیر می‌شد که معادل
+                                // حدود سال ۲۶۴۷ میلادی است — تفاوتِ ~۶۲۱ سال، دقیقاً همان چیزی که
+                                // به‌صورت «۳۲۶٬۷۳۴٬۵۱۳ دقیقه» نمایش داده می‌شد. PersianDateHelper.
+                                // ParseStoredDate همیشه با InvariantCulture (میلادی) می‌خواند.
+                                DateTime refDate = PersianDateHelper.ParseStoredDate(refDateObj, DateTime.Now);
+                                if ((DateTime.Now - refDate).TotalDays >= forceDays)
                                     mustChange = true;
                             }
 
                             if (dr["LockoutUntil"] != DBNull.Value)
                             {
+                                // توجه: از ParseStoredDate استفاده نمی‌شود چون آن تابع مخصوص
+                                // فیلدهای «تاریخ» است و ساعت را به نیمه‌شب گرد می‌کند (dt.Date).
+                                // LockoutUntil به دقتِ ساعت/دقیقه نیاز دارد وگرنه شمارشِ دقیقه‌های
+                                // باقی‌مانده کاملاً غلط می‌شود؛ اینجا مستقیماً با InvariantCulture
+                                // و بدون از دست دادن جزء ساعت پارس می‌کنیم.
                                 DateTime parsed;
-                                if (DateTime.TryParse(dr["LockoutUntil"].ToString(), out parsed))
+                                if (DateTime.TryParse(
+                                        dr["LockoutUntil"].ToString(),
+                                        CultureInfo.InvariantCulture,
+                                        DateTimeStyles.None,
+                                        out parsed))
                                     lockoutUntil = parsed;
                             }
                         }
