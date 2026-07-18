@@ -361,6 +361,137 @@ namespace CaseManagement.Accounting
             return row[col].ToString();
         }
 
+        // ─── چاپ سند/فاکتورِ عمومیِ یک‌رویداد (زیرساخت مشترک) ────────────────
+        // آموزش — به‌درخواست جدی کاربر: «هر رویداد مالی یک فاکتور رسمی قابل
+        // چاپ و نمایش داشته باشد». قبلاً فقط تراکنش (دریافت/پرداخت) این را
+        // داشت؛ این متد مشترک همان چیدمان حرفه‌ای (سربرگ/جعبه مبلغ/مبلغ به
+        // حروف/امضاها/پاورقی) را برای شهریه، حقوق و هزینه‌های جاری هم فراهم
+        // می‌کند تا هر سه رویداد مالی دیگر هم سند رسمی چاپی داشته باشند.
+        private void PrintGenericVoucher(IWin32Window owner, string docTitle,
+            List<KeyValuePair<string, string>> pairs, double amount, string description)
+        {
+            using (PrintDocument doc = new PrintDocument())
+            {
+                doc.DocumentName = docTitle;
+                doc.PrintPage += delegate (object s, PrintPageEventArgs e)
+                {
+                    Graphics g = e.Graphics;
+                    int y = e.MarginBounds.Top;
+                    DrawHeader(g, e, docTitle, ref y);
+
+                    int left = e.MarginBounds.Left;
+                    int width = e.MarginBounds.Width;
+                    int right = e.MarginBounds.Right;
+                    y += 6;
+
+                    int rowH = 30;
+                    int colW = width / 2;
+                    StringFormat sfLabel = new StringFormat { Alignment = StringAlignment.Far, LineAlignment = StringAlignment.Center };
+                    StringFormat sfValue = new StringFormat { Alignment = StringAlignment.Far, LineAlignment = StringAlignment.Center };
+
+                    for (int i = 0; i < pairs.Count; i += 2)
+                    {
+                        for (int c = 0; c < 2 && (i + c) < pairs.Count; c++)
+                        {
+                            int cellRight = right - c * colW;
+                            Rectangle cell = new Rectangle(cellRight - colW, y, colW, rowH);
+                            g.DrawRectangle(Pens.LightGray, cell);
+                            RectangleF lblR = new RectangleF(cellRight - 130, y, 122, rowH);
+                            RectangleF valR = new RectangleF(cellRight - colW + 6, y, colW - 140, rowH);
+                            g.DrawString(pairs[i + c].Key + " :", LabelFont, Brushes.Black, lblR, sfLabel);
+                            g.DrawString(pairs[i + c].Value, ValueFont, Brushes.Black, valR, sfValue);
+                        }
+                        y += rowH;
+                    }
+
+                    y += 10;
+                    Rectangle amountBox = new Rectangle(left, y, width, 44);
+                    g.FillRectangle(new SolidBrush(UiTheme.HoverTint), amountBox);
+                    g.DrawRectangle(Pens.Gray, amountBox);
+                    g.DrawString("مبلغ :  " + N(amount) + "  افغانی", new Font("B Nazanin", 14F, FontStyle.Bold), Brushes.Black,
+                        new RectangleF(left + 8, y, width - 16, 44), new StringFormat { Alignment = StringAlignment.Far, LineAlignment = StringAlignment.Center });
+                    y += 50;
+
+                    Rectangle wordsBox = new Rectangle(left, y, width, 34);
+                    g.DrawRectangle(Pens.LightGray, wordsBox);
+                    g.DrawString("به حروف :  " + NumberToPersianWords((long)Math.Round(amount)) + " افغانی", LabelFont, Brushes.Black,
+                        new RectangleF(left + 8, y, width - 16, 34), new StringFormat { Alignment = StringAlignment.Far, LineAlignment = StringAlignment.Center });
+                    y += 40;
+
+                    if (!string.IsNullOrWhiteSpace(description))
+                    {
+                        Rectangle descBox = new Rectangle(left, y, width, 60);
+                        g.DrawRectangle(Pens.LightGray, descBox);
+                        g.DrawString("شرح :  " + description, ValueFont, Brushes.Black,
+                            new RectangleF(left + 8, y + 4, width - 16, 52), new StringFormat { Alignment = StringAlignment.Far, LineAlignment = StringAlignment.Near });
+                        y += 66;
+                    }
+
+                    DrawSignatures(g, e);
+                    DrawFooter(g, e);
+                    e.HasMorePages = false;
+                };
+
+                ShowPreview(owner, doc, docTitle);
+            }
+        }
+
+        // سند/رسید پرداخت شهریه ایتام برای یک ردیف شهریه
+        public void PrintStipendVoucher(IWin32Window owner, int stipendId)
+        {
+            DataRow row = _repo.GetStipendById(stipendId);
+            if (row == null) { UiTheme.ShowWarning(owner, "ردیف شهریه پیدا نشد."); return; }
+
+            double total = Convert.ToDouble(row["TotalPaid"]);
+            var pairs = new List<KeyValuePair<string, string>>
+            {
+                new KeyValuePair<string, string>("دوره مالی", GetStr(row, "PeriodTitle")),
+                new KeyValuePair<string, string>("ولایت", GetStr(row, "Province")),
+                new KeyValuePair<string, string>("ولسوالی", GetStr(row, "District")),
+                new KeyValuePair<string, string>("مرکز", GetStr(row, "Center")),
+                new KeyValuePair<string, string>("نوع", GetStr(row, "SadatType")),
+                new KeyValuePair<string, string>("چند نفره", GetStr(row, "FamilySize")),
+                new KeyValuePair<string, string>("تعداد خانوار", GetStr(row, "FamilyCount")),
+                new KeyValuePair<string, string>("تعداد یتیم", GetStr(row, "OrphanCount")),
+                new KeyValuePair<string, string>("مبلغ هر خانواده", Convert.ToDouble(row["AmountPerFamily"]).ToString("N0")),
+            };
+            PrintGenericVoucher(owner, "رسید پرداخت شهریه ایتام", pairs, total, "");
+        }
+
+        // فیش حقوقی برای یک ردیف حقوق کارمند
+        public void PrintSalaryVoucher(IWin32Window owner, int salaryId)
+        {
+            DataRow row = _repo.GetSalaryById(salaryId);
+            if (row == null) { UiTheme.ShowWarning(owner, "ردیف حقوق پیدا نشد."); return; }
+
+            double amount = Convert.ToDouble(row["Amount"]);
+            var pairs = new List<KeyValuePair<string, string>>
+            {
+                new KeyValuePair<string, string>("دوره مالی", GetStr(row, "PeriodTitle")),
+                new KeyValuePair<string, string>("نام کارمند", GetStr(row, "EmployeeName")),
+                new KeyValuePair<string, string>("سمت", GetStr(row, "Position")),
+            };
+            PrintGenericVoucher(owner, "فیش حقوقی", pairs, amount, GetStr(row, "Note"));
+        }
+
+        // سند هزینه برای یک قلم هزینه جاری
+        public void PrintExpenseVoucher(IWin32Window owner, int itemId)
+        {
+            DataRow row = _repo.GetExpenseItemById(itemId);
+            if (row == null) { UiTheme.ShowWarning(owner, "قلم هزینه پیدا نشد."); return; }
+
+            double price = Convert.ToDouble(row["Price"]);
+            var pairs = new List<KeyValuePair<string, string>>
+            {
+                new KeyValuePair<string, string>("دوره مالی", GetStr(row, "PeriodTitle")),
+                new KeyValuePair<string, string>("دسته‌بندی", GetStr(row, "CategoryName")),
+                new KeyValuePair<string, string>("تاریخ", GetStr(row, "ItemDate")),
+                new KeyValuePair<string, string>("شماره سند مرجع", GetStr(row, "DocNo")),
+                new KeyValuePair<string, string>("تعداد/مقدار", GetStr(row, "Qty")),
+            };
+            PrintGenericVoucher(owner, "سند هزینه", pairs, price, GetStr(row, "Description"));
+        }
+
         // ─── تبدیل عدد به حروف فارسی (برای «مبلغ به حروف» روی سند) ─────────────
         private static readonly string[] _ones = { "", "یک", "دو", "سه", "چهار", "پنج", "شش", "هفت", "هشت", "نه",
             "ده", "یازده", "دوازده", "سیزده", "چهارده", "پانزده", "شانزده", "هفده", "هجده", "نوزده" };

@@ -743,11 +743,16 @@ namespace CaseManagement.Accounting
             var btnSave = UiTheme.CreateButton("ذخیره", "✔", UiTheme.Success); btnSave.SetBounds(14, 6, 110, 34); btnSave.Click += delegate { SaveStipend(); };
             var btnNew = UiTheme.CreateSecondaryButton("جدید", "＋"); btnNew.SetBounds(132, 6, 90, 34); btnNew.Click += delegate { ClearStipendForm(); };
             var btnDelete = UiTheme.CreateButton("حذف", "✕", UiTheme.Danger); btnDelete.SetBounds(230, 6, 100, 34); btnDelete.Click += delegate { DeleteSelectedStipend(); };
+            // آموزش — به‌درخواست کاربر: هر رویداد مالی (از جمله ردیف شهریه) باید
+            // یک فاکتور/رسید رسمی قابل چاپ داشته باشد.
+            var btnVoucherSt = UiTheme.CreateButton("چاپ رسید شهریه", "🧾", UiTheme.Primary); btnVoucherSt.SetBounds(340, 6, 150, 34);
+            btnVoucherSt.Click += delegate { PrintSelectedStipendVoucher(); };
             _lblStipendTotal = new Label { AutoSize = false, Font = UiTheme.FontBold(11F), ForeColor = UiTheme.PrimaryDark, TextAlign = ContentAlignment.MiddleRight };
-            _lblStipendTotal.SetBounds(350, 6, 500, 34);
-            btnBar.Controls.Add(btnSave); btnBar.Controls.Add(btnNew); btnBar.Controls.Add(btnDelete); btnBar.Controls.Add(_lblStipendTotal);
+            _lblStipendTotal.SetBounds(500, 6, 500, 34);
+            btnBar.Controls.Add(btnSave); btnBar.Controls.Add(btnNew); btnBar.Controls.Add(btnDelete); btnBar.Controls.Add(btnVoucherSt); btnBar.Controls.Add(_lblStipendTotal);
 
             _gridStipend = NewGrid();
+            _gridStipend.CellDoubleClick += delegate (object s, DataGridViewCellEventArgs e) { if (e.RowIndex >= 0) PrintSelectedStipendVoucher(); };
             _gridStipend.CellClick += delegate (object s, DataGridViewCellEventArgs e)
             {
                 if (e.RowIndex < 0 || !_gridStipend.Columns.Contains("StipendID")) return;
@@ -820,6 +825,16 @@ namespace CaseManagement.Accounting
             LoadStipends();
         }
 
+        private void PrintSelectedStipendVoucher()
+        {
+            if (_gridStipend.CurrentRow == null || !_gridStipend.Columns.Contains("StipendID"))
+            { UiTheme.ShowWarning(this, "ابتدا یک ردیف شهریه را از جدول انتخاب کنید."); return; }
+            object idv = _gridStipend.CurrentRow.Cells["StipendID"].Value;
+            if (idv == null || idv == DBNull.Value) return;
+            try { new AccReports(_repo).PrintStipendVoucher(this, Convert.ToInt32(idv)); }
+            catch (Exception ex) { UiTheme.ShowError(this, "خطا در ساخت رسید: " + ex.Message); }
+        }
+
         private void LoadStipends()
         {
             int? period = ComboIntValue(_stPeriod);
@@ -861,11 +876,14 @@ namespace CaseManagement.Accounting
             var btnSave = UiTheme.CreateButton("ذخیره", "✔", UiTheme.Success); btnSave.SetBounds(14, 6, 110, 34); btnSave.Click += delegate { SaveSalary(); };
             var btnNew = UiTheme.CreateSecondaryButton("جدید", "＋"); btnNew.SetBounds(132, 6, 90, 34); btnNew.Click += delegate { ClearSalaryForm(); };
             var btnDelete = UiTheme.CreateButton("حذف", "✕", UiTheme.Danger); btnDelete.SetBounds(230, 6, 100, 34); btnDelete.Click += delegate { DeleteSelectedSalary(); };
+            var btnVoucherSa = UiTheme.CreateButton("چاپ فیش حقوق", "🧾", UiTheme.Primary); btnVoucherSa.SetBounds(340, 6, 150, 34);
+            btnVoucherSa.Click += delegate { PrintSelectedSalaryVoucher(); };
             _lblSalaryTotal = new Label { AutoSize = false, Font = UiTheme.FontBold(11F), ForeColor = UiTheme.PrimaryDark, TextAlign = ContentAlignment.MiddleRight };
-            _lblSalaryTotal.SetBounds(350, 6, 500, 34);
-            btnBar.Controls.Add(btnSave); btnBar.Controls.Add(btnNew); btnBar.Controls.Add(btnDelete); btnBar.Controls.Add(_lblSalaryTotal);
+            _lblSalaryTotal.SetBounds(500, 6, 500, 34);
+            btnBar.Controls.Add(btnSave); btnBar.Controls.Add(btnNew); btnBar.Controls.Add(btnDelete); btnBar.Controls.Add(btnVoucherSa); btnBar.Controls.Add(_lblSalaryTotal);
 
             _gridSalary = NewGrid();
+            _gridSalary.CellDoubleClick += delegate (object s, DataGridViewCellEventArgs e) { if (e.RowIndex >= 0) PrintSelectedSalaryVoucher(); };
             _gridSalary.CellClick += delegate (object s, DataGridViewCellEventArgs e)
             {
                 if (e.RowIndex < 0 || !_gridSalary.Columns.Contains("SalaryID")) return;
@@ -906,6 +924,16 @@ namespace CaseManagement.Accounting
             if (_editingSalaryId == 0) { UiTheme.ShowWarning(this, "ابتدا یک ردیف را انتخاب کنید."); return; }
             if (!UiTheme.ShowConfirm(this, "این ردیف حقوق حذف شود؟", "حذف حقوق")) return;
             _repo.DeleteSalary(_editingSalaryId); ClearSalaryForm(); LoadSalaries();
+        }
+
+        private void PrintSelectedSalaryVoucher()
+        {
+            if (_gridSalary.CurrentRow == null || !_gridSalary.Columns.Contains("SalaryID"))
+            { UiTheme.ShowWarning(this, "ابتدا یک ردیف حقوق را از جدول انتخاب کنید."); return; }
+            object idv = _gridSalary.CurrentRow.Cells["SalaryID"].Value;
+            if (idv == null || idv == DBNull.Value) return;
+            try { new AccReports(_repo).PrintSalaryVoucher(this, Convert.ToInt32(idv)); }
+            catch (Exception ex) { UiTheme.ShowError(this, "خطا در ساخت فیش: " + ex.Message); }
         }
 
         private void LoadSalaries()
@@ -953,11 +981,14 @@ namespace CaseManagement.Accounting
             var btnSave = UiTheme.CreateButton("ذخیره", "✔", UiTheme.Success); btnSave.SetBounds(14, 6, 110, 34); btnSave.Click += delegate { SaveExpenseItem(); };
             var btnNew = UiTheme.CreateSecondaryButton("جدید", "＋"); btnNew.SetBounds(132, 6, 90, 34); btnNew.Click += delegate { ClearExpenseForm(); };
             var btnDelete = UiTheme.CreateButton("حذف", "✕", UiTheme.Danger); btnDelete.SetBounds(230, 6, 100, 34); btnDelete.Click += delegate { DeleteSelectedExpenseItem(); };
+            var btnVoucherEx = UiTheme.CreateButton("چاپ سند هزینه", "🧾", UiTheme.Primary); btnVoucherEx.SetBounds(340, 6, 150, 34);
+            btnVoucherEx.Click += delegate { PrintSelectedExpenseVoucher(); };
             _lblExpenseTotal = new Label { AutoSize = false, Font = UiTheme.FontBold(11F), ForeColor = UiTheme.PrimaryDark, TextAlign = ContentAlignment.MiddleRight };
-            _lblExpenseTotal.SetBounds(350, 6, 500, 34);
-            btnBar.Controls.Add(btnSave); btnBar.Controls.Add(btnNew); btnBar.Controls.Add(btnDelete); btnBar.Controls.Add(_lblExpenseTotal);
+            _lblExpenseTotal.SetBounds(500, 6, 500, 34);
+            btnBar.Controls.Add(btnSave); btnBar.Controls.Add(btnNew); btnBar.Controls.Add(btnDelete); btnBar.Controls.Add(btnVoucherEx); btnBar.Controls.Add(_lblExpenseTotal);
 
             _gridExpense = NewGrid();
+            _gridExpense.CellDoubleClick += delegate (object s, DataGridViewCellEventArgs e) { if (e.RowIndex >= 0) PrintSelectedExpenseVoucher(); };
             _gridExpense.CellClick += delegate (object s, DataGridViewCellEventArgs e)
             {
                 if (e.RowIndex < 0 || !_gridExpense.Columns.Contains("ItemID")) return;
@@ -1017,6 +1048,16 @@ namespace CaseManagement.Accounting
             if (_editingExpenseId == 0) { UiTheme.ShowWarning(this, "ابتدا یک ردیف را انتخاب کنید."); return; }
             if (!UiTheme.ShowConfirm(this, "این هزینه حذف شود؟", "حذف هزینه")) return;
             _repo.DeleteExpenseItem(_editingExpenseId); ClearExpenseForm(); LoadExpenseItems();
+        }
+
+        private void PrintSelectedExpenseVoucher()
+        {
+            if (_gridExpense.CurrentRow == null || !_gridExpense.Columns.Contains("ItemID"))
+            { UiTheme.ShowWarning(this, "ابتدا یک قلم هزینه را از جدول انتخاب کنید."); return; }
+            object idv = _gridExpense.CurrentRow.Cells["ItemID"].Value;
+            if (idv == null || idv == DBNull.Value) return;
+            try { new AccReports(_repo).PrintExpenseVoucher(this, Convert.ToInt32(idv)); }
+            catch (Exception ex) { UiTheme.ShowError(this, "خطا در ساخت سند: " + ex.Message); }
         }
 
         private void LoadExpenseItems()
