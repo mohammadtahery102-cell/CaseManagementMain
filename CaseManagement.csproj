@@ -331,6 +331,12 @@
     <Content Include="Templates\FullCaseTemplate.docx">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <!-- آموزش — جزوه‌ی آموزشی کامل کاربری؛ همان فایلی که دکمه‌ی «جزوه آموزشی»
+         در داشبورد (FrmDashboard.OpenTrainingManual) از مسیر
+         Application.StartupPath\Manual\TrainingManual.pdf باز می‌کند. -->
+    <Content Include="Manual\TrainingManual.pdf">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
     <!-- آموزش — لودر بومی WebView2 (WebView2Loader.dll) باید کنار exe اصلی
          باشد تا CoreWebView2Environment.CreateAsync آن را پیدا کند. این پروژه
          روی ویندوز ۶۴بیتی همیشه به‌صورت فرآیند x64 اجرا می‌شود (چه AnyCPU
