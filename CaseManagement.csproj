@@ -247,6 +247,7 @@
     <Compile Include="Helpers\DatabaseInitializer.cs" />
     <Compile Include="Helpers\ExcelReportExporter.cs" />
     <Compile Include="Helpers\ExcelCaseImporter.cs" />
+    <Compile Include="Helpers\AccountingBackupHelper.cs" />
     <Compile Include="Helpers\FileCleanupHelper.cs" />
     <Compile Include="Helpers\GridReportExporter.cs" />
     <Compile Include="Helpers\LicenseInfo.cs" />

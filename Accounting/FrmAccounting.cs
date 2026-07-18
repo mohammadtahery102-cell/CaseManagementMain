@@ -57,6 +57,7 @@ namespace CaseManagement.Accounting
             tabs.TabPages.Add(BuildCategoriesTab(true)); // دسته‌بندی درآمد
             tabs.TabPages.Add(BuildCategoriesTab(false));// دسته‌بندی هزینه
             tabs.TabPages.Add(BuildSettingsTab());       // تنظیمات گزارش
+            tabs.TabPages.Add(BuildAccBackupTab());      // بکاپ/بازیابی مستقل حسابداری
 
             Controls.Add(tabs);
             Controls.Add(banner);
@@ -1217,6 +1218,107 @@ namespace CaseManagement.Accounting
             page.Controls.Add(panel);
             LoadAccSettings();
             return page;
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // تب: بکاپ/بازیابی مستقل حسابداری
+        // آموزش — به‌درخواست جدی کاربر: بکاپ اصلی برنامه اصلاً جداول حسابداری
+        // را نمی‌گرفت. این تب کاملاً مستقل است تا بتوان فقط داده‌های مالی را
+        // (دوره/صندوق/طرف‌حساب/دسته‌بندی/تراکنش/شهریه/حقوق/هزینه/تنظیمات) بدون
+        // لمس پرونده‌ها/کاربران پشتیبان گرفت یا بازیابی کرد.
+        // ═══════════════════════════════════════════════════════════════════
+        private TextBox _accBackupOutput;
+
+        private TabPage BuildAccBackupTab()
+        {
+            var page = new TabPage("بکاپ حسابداری") { BackColor = UiTheme.Background };
+
+            var info = new Label
+            {
+                Text = "این بخش فقط داده‌های حسابداری (دوره مالی، صندوق، طرف حساب، دسته‌بندی‌ها، تراکنش‌ها، شهریه، حقوق، هزینه‌های جاری و تنظیمات گزارش) را بکاپ/بازیابی می‌کند — کاملاً مستقل از بکاپ کلی نرم‌افزار.",
+                Dock = DockStyle.Top, Height = 50, AutoSize = false, TextAlign = ContentAlignment.MiddleRight,
+                Font = UiTheme.Font(9.5F), ForeColor = UiTheme.TextMuted, Padding = new Padding(14, 8, 14, 4)
+            };
+
+            var btnBar = new Panel { Dock = DockStyle.Top, Height = 56, BackColor = UiTheme.CardBack };
+            var btnExport = UiTheme.CreateButton("گرفتن بکاپ حسابداری", "⇩", UiTheme.Success);
+            btnExport.SetBounds(14, 10, 200, 36);
+            btnExport.Click += delegate { ExportAccountingBackup(); };
+
+            var btnImport = UiTheme.CreateButton("بازیابی بکاپ حسابداری", "⇧", UiTheme.Warning);
+            btnImport.SetBounds(224, 10, 210, 36);
+            btnImport.Click += delegate { ImportAccountingBackup(); };
+
+            btnBar.Controls.Add(btnExport);
+            btnBar.Controls.Add(btnImport);
+
+            _accBackupOutput = new TextBox
+            {
+                Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical,
+                Font = new Font("Consolas", 9.5F), RightToLeft = RightToLeft.No
+            };
+
+            page.Controls.Add(_accBackupOutput);
+            page.Controls.Add(btnBar);
+            page.Controls.Add(info);
+            return page;
+        }
+
+        private void AppendAccBackupOutput(string line)
+        {
+            _accBackupOutput.AppendText((_accBackupOutput.TextLength > 0 ? Environment.NewLine : "") +
+                "[" + DateTime.Now.ToString("HH:mm:ss") + "] " + line);
+        }
+
+        private void ExportAccountingBackup()
+        {
+            if (!SecurityContext.IsSuperAdmin())
+            { UiTheme.ShowWarning(this, "بکاپ‌گیری حسابداری فقط برای مدیر کل مجاز است."); return; }
+
+            using (var fbd = new FolderBrowserDialog { Description = "پوشه‌ای برای ذخیره‌ی بکاپ حسابداری انتخاب کنید" })
+            {
+                if (fbd.ShowDialog(this) != DialogResult.OK) return;
+                try
+                {
+                    string path = AccountingBackupHelper.ExportBackup(fbd.SelectedPath);
+                    AppendAccBackupOutput("بکاپ حسابداری با موفقیت ساخته شد: " + path);
+                    UiTheme.ShowSuccess(this, "بکاپ حسابداری ذخیره شد:" + Environment.NewLine + path);
+                }
+                catch (Exception ex)
+                {
+                    AppendAccBackupOutput("خطا در بکاپ‌گیری: " + ex.Message);
+                    UiTheme.ShowError(this, "خطا در بکاپ‌گیری حسابداری: " + ex.Message);
+                }
+            }
+        }
+
+        private void ImportAccountingBackup()
+        {
+            if (!SecurityContext.IsSuperAdmin())
+            { UiTheme.ShowWarning(this, "بازیابی حسابداری فقط برای مدیر کل مجاز است."); return; }
+
+            using (var fbd = new FolderBrowserDialog { Description = "پوشه‌ی بکاپ حسابداری را انتخاب کنید" })
+            {
+                if (fbd.ShowDialog(this) != DialogResult.OK) return;
+
+                if (!UiTheme.ShowConfirm(this,
+                    "با بازیابی، تمام داده‌های فعلیِ حسابداری (همه‌ی مراکز) با محتوای این بکاپ جایگزین می‌شود.\n" +
+                    "قبل از شروع، یک بکاپ ایمنیِ خودکار از وضعیت فعلی گرفته می‌شود.\n" +
+                    "آیا مطمئن هستید؟", "تأیید بازیابی حسابداری"))
+                    return;
+
+                try
+                {
+                    AccountingBackupHelper.ImportBackup(fbd.SelectedPath);
+                    AppendAccBackupOutput("بازیابی حسابداری با موفقیت انجام شد از: " + fbd.SelectedPath);
+                    UiTheme.ShowSuccess(this, "بازیابی حسابداری با موفقیت انجام شد.\nبرای بارگذاری اطلاعات تازه، پنجره حسابداری را ببندید و دوباره باز کنید.");
+                }
+                catch (Exception ex)
+                {
+                    AppendAccBackupOutput("خطا در بازیابی: " + ex.Message);
+                    UiTheme.ShowError(this, "خطا در بازیابی حسابداری: " + ex.Message);
+                }
+            }
         }
 
         private Panel BuildImagePicker(string label, TextBox pathBox)
