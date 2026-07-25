@@ -221,9 +221,16 @@ namespace CaseManagement
             //
             // FrmDocs
             //
-            // چیدمان کاملاً responsive (Dock/TableLayout) است، پس AutoScale لازم
-            // نیست و خاموش می‌شود تا اندازه دکمه‌ها/فیلدها ثابت و خوانا بماند.
-            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.None;
+            // آموزش — این یادداشت قبلاً می‌گفت «چون چیدمان Dock/TableLayout است
+            // AutoScale لازم نیست». آن استدلال فقط برای «تغییر اندازه‌ی پنجره»
+            // درست است، نه برای «تغییر DPI»: با AutoScaleMode.None، روی
+            // نمایشگر ۱۵۰٪ خودِ کنترل‌ها و فونت‌ها کوچک می‌مانند و فرم ریز و
+            // ناخوانا دیده می‌شود (حالا که برنامه واقعاً DPI-aware شده، ویندوز
+            // دیگر تصویر را کش نمی‌آورد تا این را بپوشاند).
+            // مهاجرت به مقیاسِ DPI — لایه ۲ چارچوب چیدمان واکنش‌گرا؛ توضیح کامل
+            // اینکه چرا هر دو خط لازم است در FrmCase.Designer.cs آمده.
+            this.AutoScaleDimensions = new System.Drawing.SizeF(96F, 96F);
+            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Dpi;
             this.Font = new System.Drawing.Font("Segoe UI", 9.75F);
             this.RightToLeft = System.Windows.Forms.RightToLeft.Yes;
             this.RightToLeftLayout = true;
