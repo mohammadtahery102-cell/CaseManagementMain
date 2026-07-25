@@ -146,6 +146,54 @@ namespace CaseManagement
             }
         }
 
+        // ─── مقیدکردن عرضِ نوار دکمه‌ها به عرضِ والد ───────────────────────────
+        // آموزش — چرا لازم است: نوار دکمه‌ها AutoSize دارد تا وقتی دکمه‌ها به خط
+        // بعد می‌شکنند ارتفاعش زیاد شود و هیچ دکمه‌ای پنهان نماند. اما AutoSize
+        // در FlowLayoutPanel هر دو بُعد را بزرگ می‌کند؛ یعنی به‌جای شکستنِ خط،
+        // خودِ نوار در عرض رشد می‌کرد و دکمه‌های انتهایی از لبه‌ی فرم بیرون
+        // می‌زدند (در تستِ تصویری «چاپ جمعی کارت‌ها» دقیقاً همین‌طور بریده شد).
+        // با تعیین MaximumSize.Width برابرِ عرضِ والد، رشدِ افقی متوقف می‌شود و
+        // AutoSize فقط ارتفاع را تنظیم می‌کند — یعنی شکستِ خط درست کار می‌کند.
+        private void ConstrainBottomActionsWidth()
+        {
+            AdjustBottomBarHeight();
+        }
+
+        // ارتفاعِ نوار دکمه‌ها را با «تعدادِ خطوطی که واقعاً اشغال کرده‌اند»
+        // تطبیق می‌دهد. چون Dock=Fill عرض را به والد مقید می‌کند، شکستِ خط درست
+        // انجام می‌شود؛ فقط باید ردیفِ نگه‌دارنده به‌اندازه‌ی کافی بلند باشد.
+        // این کار در هر تغییر اندازه انجام می‌شود، پس روی هر عرض/رزولوشنی
+        // (و با هر تعداد دکمه‌ای که در آینده اضافه شود) هیچ دکمه‌ای پنهان نمی‌ماند.
+        private void AdjustBottomBarHeight()
+        {
+            if (bottomActionsRow == null || rootLayout == null) return;
+            if (rootLayout.RowStyles.Count < 3) return;
+
+            int contentBottom = 0;
+            foreach (Control c in bottomActionsRow.Controls)
+            {
+                int b = c.Bottom + c.Margin.Bottom;
+                if (b > contentBottom) contentBottom = b;
+            }
+            if (contentBottom <= 0) return;
+
+            float needed = contentBottom + bottomActionsRow.Padding.Bottom + 4;
+            if (needed < 52f) needed = 52f;   // حداقلِ یک خط
+
+            RowStyle bottomRow = rootLayout.RowStyles[2];
+            if (bottomRow.SizeType != SizeType.Absolute || Math.Abs(bottomRow.Height - needed) > 1f)
+            {
+                bottomRow.SizeType = SizeType.Absolute;
+                bottomRow.Height = needed;
+            }
+        }
+
+        protected override void OnResize(EventArgs e)
+        {
+            base.OnResize(e);
+            AdjustBottomBarHeight();
+        }
+
         // فرم را داخل ناحیه‌ی کاری صفحه جا می‌دهد (مستقل از DPI/اندازه‌ی صفحه).
         private void FitToScreen()
         {
@@ -387,6 +435,7 @@ namespace CaseManagement
             // ناحیه‌ی فیلدها اسکرول دارد، کوتاه‌شدن ارتفاع مشکلی ایجاد نمی‌کند و
             // دکمه‌های پایین (که Dock=Bottom هستند) همیشه دیده می‌شوند.
             FitToScreen();
+            ConstrainBottomActionsWidth();
 
             Text = "پرونده‌ها  —  " + SecurityContext.CenterDisplay;
             txtFormNo.ReadOnly = true;

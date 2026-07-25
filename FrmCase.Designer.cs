@@ -452,10 +452,24 @@ namespace CaseManagement
             // (دقیقاً بعد از دکمه «جستجو») با فاصله یکنواخت؛ اگر عرض فرم کافی
             // نباشد، خودکار به خط بعد می‌شکند (WrapContents) نه اینکه از فرم
             // بیرون بزند.
-            System.Windows.Forms.FlowLayoutPanel bottomActionsRow = new System.Windows.Forms.FlowLayoutPanel();
+            bottomActionsRow = new System.Windows.Forms.FlowLayoutPanel();
             bottomActionsRow.Dock = System.Windows.Forms.DockStyle.Fill;
             bottomActionsRow.FlowDirection = System.Windows.Forms.FlowDirection.LeftToRight;
             bottomActionsRow.WrapContents = true;
+            // آموزش — رفع باگ «دکمه‌ی خروجی جمعی ناپدید شد»: این نوار WrapContents
+            // دارد، پس وقتی مجموع عرض دکمه‌ها از عرض فرم بیشتر شود به خط بعد
+            // می‌شکند. اما ارتفاعِ ردیفِ نگه‌دارنده ثابت (۵۰px) بود و فقط یک خط
+            // جا می‌داد؛ در نتیجه خطِ دومِ دکمه‌ها (خروجی جمعی و محل ذخیره)
+            // نامرئی می‌شد — دقیقاً وقتی رخ داد که دو دکمه‌ی کارت شناسایی اضافه
+            // شدند. با AutoSize، نوار به‌اندازه‌ی خطوطش بلند می‌شود و هیچ دکمه‌ای
+            // هرگز پنهان نمی‌ماند (و با تغییر عرض پنجره هم خودکار تنظیم می‌شود).
+            // AutoSize عمداً خاموش است: در FlowLayoutPanel هر دو بُعد را بزرگ
+            // می‌کند، یعنی به‌جای شکستنِ خط، خودِ نوار در عرض رشد می‌کرد و
+            // دکمه‌های انتهایی از لبه‌ی فرم بیرون می‌زدند (در تست تصویری دیده
+            // شد). با Dock=Fill عرض به والد مقید می‌شود ⇒ شکستِ خط درست کار
+            // می‌کند، و ارتفاعِ لازم را کدِ فرم (AdjustBottomBarHeight) حساب
+            // و به ردیفِ نگه‌دارنده اعمال می‌کند.
+            bottomActionsRow.AutoSize = false;
             bottomActionsRow.Padding = new System.Windows.Forms.Padding(8, 6, 8, 6);
             StyleBtn(this.btnNew, "جدید", 82, 32); this.btnNew.Click += new System.EventHandler(this.btnNew_Click);
             StyleBtn(this.btnSave, "ذخیره", 82, 32); this.btnSave.Click += new System.EventHandler(this.btnSave_Click);
@@ -486,6 +500,8 @@ namespace CaseManagement
             bottomBar.Dock = System.Windows.Forms.DockStyle.Fill;
             bottomBar.ColumnCount = 1;
             bottomBar.RowCount = 1;
+            // ردیف هم‌اندازه‌ی محتوا (نه درصدِ ثابت) تا ارتفاعِ خودکارِ نوارِ
+            // دکمه‌ها واقعاً منتقل شود.
             bottomBar.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
             bottomBar.Controls.Add(bottomActionsRow, 0, 0);
 
@@ -498,7 +514,11 @@ namespace CaseManagement
             rootLayout.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 38F));
             rootLayout.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 50F));
             rootLayout.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
-            rootLayout.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 50F));
+            // ردیف نوار دکمه‌ها — ارتفاع اولیه برای دو خط دکمه؛ کدِ فرم
+            // (AdjustBottomBarHeight) آن را با تعداد خطوطِ واقعی تنظیم می‌کند تا
+            // هیچ دکمه‌ای در هیچ عرضی پنهان نماند.
+            rootLayout.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 96F));
+            this.rootLayout = rootLayout;
             rootLayout.Controls.Add(toolbar, 0, 0);
             rootLayout.SetColumnSpan(toolbar, 2);
             rootLayout.Controls.Add(fieldsPanel, 0, 1);
@@ -644,6 +664,10 @@ namespace CaseManagement
         private System.Windows.Forms.Button btnExportWord;
         private System.Windows.Forms.Button btnExportExcel;
         private System.Windows.Forms.Button btnBatchExport;
+        // آموزش — به فیلد ارتقا یافت تا کد فرم بتواند هنگام تغییر اندازه،
+        // بیشینه‌ی عرضش را به عرضِ والد مقید کند (توضیح کامل کنار ساختش).
+        internal System.Windows.Forms.FlowLayoutPanel bottomActionsRow;
+        internal System.Windows.Forms.TableLayoutPanel rootLayout;
         private System.Windows.Forms.Button btnPrint;
         private System.Windows.Forms.Label lblServiceStatusFilter;
         private System.Windows.Forms.CheckBox chkHeadHealthy;
