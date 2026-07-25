@@ -148,26 +148,24 @@ namespace CaseManagement
             Font              = UiTheme.Font(UiTheme.SizeBody);
             UiTheme.MakeFixedSize(this, 980, 680);
 
-            TabControl tabs = new TabControl();
-            tabs.Dock = DockStyle.Fill;
-            tabs.Font = UiTheme.FontBold(UiTheme.SizeSmall);
-            tabs.RightToLeft = RightToLeft.Yes;
-            tabs.RightToLeftLayout = true;
-
-            // آموزش — به درخواست کاربر (بازطراحی مدرن): یک نماد کوچک قبل از
-            // عنوان هر تب اضافه شد تا نوار تب‌ها در نگاه اول خواناتر و شبیه
-            // نرم‌افزارهای تجاری به‌نظر برسد؛ متن/عملکرد هر تب دست‌نخورده ماند.
-            TabPage tabGeneral      = new TabPage("🏢  اطلاعات مؤسسه");
-            TabPage tabCenters      = new TabPage("🏬  مدیریت مراکز");
-            TabPage tabNumbering    = new TabPage("🔢  شماره‌گذاری");
-            TabPage tabPaths        = new TabPage("📁  مسیرها و فایل‌ها");
-            TabPage tabSecurity     = new TabPage("🔒  امنیت");
-            TabPage tabBackup       = new TabPage("💾  Backup و Restore");
-            TabPage tabNotify       = new TabPage("🔔  اعلان‌ها");
-            TabPage tabLookup       = new TabPage("📋  اطلاعات پایه");
-            TabPage tabMaintenance  = new TabPage("🛠️  نگهداری سیستم");
-            TabPage tabDeleteCases  = new TabPage("🗑️  حذف پرونده‌ها");
-            TabPage tabAbout        = new TabPage("ℹ️  درباره و لایسنس");
+            // آموزش — بازطراحی ظاهری (به درخواست کاربر): TabControl بومیِ ویندوز
+            // با یک نوار «دکمه‌های بیضی‌شکل» (PillTabStrip) جایگزین شد. WinForms
+            // صریحاً اجازه نمی‌دهد TabPage به هر کانتینری غیر از TabControl
+            // اضافه شود (ArgumentException در زمان اجرا) — پس این ۱۱ صفحه حالا
+            // Panel ساده‌اند، نه TabPage؛ چون همه‌ی متدهای BuildXxxTab فقط از
+            // اعضای سطح Panel (Controls.Add/BackColor) استفاده می‌کردند، این
+            // تغییرِ نوع پارامتر است، نه تغییرِ منطق — هیچ متدی داخلش عوض نشده.
+            Panel tabGeneral      = new Panel();
+            Panel tabCenters      = new Panel();
+            Panel tabNumbering    = new Panel();
+            Panel tabPaths        = new Panel();
+            Panel tabSecurity     = new Panel();
+            Panel tabBackup       = new Panel();
+            Panel tabNotify       = new Panel();
+            Panel tabLookup       = new Panel();
+            Panel tabMaintenance  = new Panel();
+            Panel tabDeleteCases  = new Panel();
+            Panel tabAbout        = new Panel();
             tabDeleteCases.BackColor = UiTheme.Background;
             tabAbout.BackColor       = UiTheme.Background;
             tabGeneral.BackColor     = UiTheme.Background;
@@ -193,30 +191,53 @@ namespace CaseManagement
                 BuildDeleteCasesTab(tabDeleteCases);
             BuildAboutTab(tabAbout);
 
-            tabs.TabPages.Add(tabGeneral);
+            Panel contentHost = new Panel { Dock = DockStyle.Fill, BackColor = UiTheme.Background };
+            PillTabStrip pillTabs = new PillTabStrip();
+            List<Panel> pages = new List<Panel>();
+
+            Action<string, string, Panel> addPage = delegate (string icon, string label, Panel page)
+            {
+                page.Dock = DockStyle.Fill;
+                page.Visible = false;
+                contentHost.Controls.Add(page);
+                pages.Add(page);
+                pillTabs.AddTab(icon, label);
+            };
+
+            addPage("🏢", "اطلاعات مؤسسه", tabGeneral);
 
             // آموزش — رفع باگ امنیتی چندمرکزی: «مدیریت مراکز» و «Backup/Restore»
             // کل سیستم را تحت تأثیر قرار می‌دهند (همه مراکز)، پس فقط SuperAdmin
             // این دو تب را می‌بیند؛ Admin مرکز (نه SuperAdmin) اصلاً این
             // امکانات را نمی‌بیند، نه فقط دکمه‌هایش غیرفعال باشد.
             if (SecurityContext.IsSuperAdmin())
-                tabs.TabPages.Add(tabCenters);
+                addPage("🏬", "مدیریت مراکز", tabCenters);
 
-            tabs.TabPages.Add(tabNumbering);
-            tabs.TabPages.Add(tabPaths);
-            tabs.TabPages.Add(tabSecurity);
+            addPage("🔢", "شماره‌گذاری", tabNumbering);
+            addPage("📁", "مسیرها و فایل‌ها", tabPaths);
+            addPage("🔒", "امنیت", tabSecurity);
 
             if (SecurityContext.IsSuperAdmin())
-                tabs.TabPages.Add(tabBackup);
+                addPage("💾", "Backup و Restore", tabBackup);
 
-            tabs.TabPages.Add(tabNotify);
-            tabs.TabPages.Add(tabLookup);
-            tabs.TabPages.Add(tabMaintenance);
+            addPage("🔔", "اعلان‌ها", tabNotify);
+            addPage("📋", "اطلاعات پایه", tabLookup);
+            addPage("🛠️", "نگهداری سیستم", tabMaintenance);
             // حذف پرونده‌ها فقط برای کاربر دارای مجوز حذف (مدیر) نمایش داده می‌شود.
             if (SecurityContext.CanDelete())
-                tabs.TabPages.Add(tabDeleteCases);
-            tabs.TabPages.Add(tabAbout);
-            Controls.Add(tabs);
+                addPage("🗑️", "حذف پرونده‌ها", tabDeleteCases);
+            addPage("ℹ️", "درباره و لایسنس", tabAbout);
+
+            pillTabs.SelectedIndexChanged += delegate
+            {
+                for (int i = 0; i < pages.Count; i++)
+                    pages[i].Visible = (i == pillTabs.SelectedIndex);
+            };
+
+            Controls.Add(contentHost);
+            Controls.Add(pillTabs);
+
+            pillTabs.SelectedIndex = 0; // تب اول پیش‌فرض (همان رفتار قبلی)
         }
 
         // ══════════════════════════════════════════════════════════════════
@@ -236,7 +257,7 @@ namespace CaseManagement
         private const string DelIdCol = "CasID";
         private const string DelCodeCol = "Code";
 
-        private void BuildDeleteCasesTab(TabPage tab)
+        private void BuildDeleteCasesTab(Panel tab)
         {
             Panel top = new Panel { Dock = DockStyle.Top, Height = 96, BackColor = UiTheme.CardBack, Padding = new Padding(14, 8, 14, 4) };
 
@@ -458,7 +479,7 @@ ORDER BY CasID DESC", con))
         // ══════════════════════════════════════════════════════════════════
         private Label _lblAboutLicenseStatus;
 
-        private void BuildAboutTab(TabPage tab)
+        private void BuildAboutTab(Panel tab)
         {
             FlowLayoutPanel flow = new FlowLayoutPanel
             {
@@ -595,7 +616,7 @@ ORDER BY CasID DESC", con))
         // ══════════════════════════════════════════════════════════════════
         // تب ۱: اطلاعات مؤسسه
         // ══════════════════════════════════════════════════════════════════
-        private void BuildGeneralTab(TabPage tab)
+        private void BuildGeneralTab(Panel tab)
         {
             Panel bottomBar = new Panel { Dock = DockStyle.Bottom, Height = 54, BackColor = UiTheme.CardBack };
             FlowLayoutPanel saveFlow = new FlowLayoutPanel
@@ -978,7 +999,7 @@ ORDER BY CasID DESC", con))
         // ══════════════════════════════════════════════════════════════════
         // تب ۲: مدیریت مراکز
         // ══════════════════════════════════════════════════════════════════
-        private void BuildCentersTab(TabPage tab)
+        private void BuildCentersTab(Panel tab)
         {
             Panel panel = new Panel
             {
@@ -1360,7 +1381,7 @@ WHERE CenterID = @ID", con))
         // ══════════════════════════════════════════════════════════════════
         // تب ۱۰: اطلاعات پایه (مدیریت لیست‌های کشویی)
         // ══════════════════════════════════════════════════════════════════
-        private void BuildLookupTab(TabPage tab)
+        private void BuildLookupTab(Panel tab)
         {
             Panel topPanel = new Panel
             {
@@ -1592,7 +1613,7 @@ ORDER BY SortOrder, Value", con))
         // ══════════════════════════════════════════════════════════════════
         // تب ۳: شماره‌گذاری
         // ══════════════════════════════════════════════════════════════════
-        private void BuildNumberingTab(TabPage tab)
+        private void BuildNumberingTab(Panel tab)
         {
             Panel bottomBar = new Panel { Dock = DockStyle.Bottom, Height = 54, BackColor = UiTheme.CardBack };
             FlowLayoutPanel saveFlow = new FlowLayoutPanel
@@ -1704,7 +1725,7 @@ ORDER BY SortOrder, Value", con))
         // ══════════════════════════════════════════════════════════════════
         // تب ۴: مسیرها و فایل‌ها
         // ══════════════════════════════════════════════════════════════════
-        private void BuildPathsTab(TabPage tab)
+        private void BuildPathsTab(Panel tab)
         {
             Panel bottomBar = new Panel { Dock = DockStyle.Bottom, Height = 54, BackColor = UiTheme.CardBack };
             FlowLayoutPanel saveFlow = new FlowLayoutPanel
@@ -1784,7 +1805,7 @@ ORDER BY SortOrder, Value", con))
         // ══════════════════════════════════════════════════════════════════
         // تب نگهداری سیستم
         // ══════════════════════════════════════════════════════════════════
-        private void BuildMaintenanceTab(TabPage tab)
+        private void BuildMaintenanceTab(Panel tab)
         {
             Panel statsPanel = new Panel { Dock = DockStyle.Top, Height = 130, BackColor = UiTheme.CardBack, Padding = new Padding(14) };
             _lblMaintenanceStats = new Label
@@ -2153,7 +2174,7 @@ WHERE UserID = @ID", con))
         // ══════════════════════════════════════════════════════════════════
         // تب امنیت
         // ══════════════════════════════════════════════════════════════════
-        private void BuildSecurityTab(TabPage tab)
+        private void BuildSecurityTab(Panel tab)
         {
             Panel bottomBar = new Panel { Dock = DockStyle.Bottom, Height = 54, BackColor = UiTheme.CardBack };
             FlowLayoutPanel saveFlow = new FlowLayoutPanel
@@ -2235,7 +2256,7 @@ WHERE UserID = @ID", con))
         // ══════════════════════════════════════════════════════════════════
         // تب Backup و Restore
         // ══════════════════════════════════════════════════════════════════
-        private void BuildBackupTab(TabPage tab)
+        private void BuildBackupTab(Panel tab)
         {
             Panel topPanel = new Panel { Dock = DockStyle.Top, Height = 170, BackColor = UiTheme.CardBack, Padding = new Padding(14) };
             FlowLayoutPanel topFlow = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = true };
@@ -2424,7 +2445,7 @@ WHERE UserID = @ID", con))
         // ══════════════════════════════════════════════════════════════════
         // تب اعلان‌ها
         // ══════════════════════════════════════════════════════════════════
-        private void BuildNotificationsTab(TabPage tab)
+        private void BuildNotificationsTab(Panel tab)
         {
             Panel bottomBar = new Panel { Dock = DockStyle.Bottom, Height = 54, BackColor = UiTheme.CardBack };
             FlowLayoutPanel saveFlow = new FlowLayoutPanel

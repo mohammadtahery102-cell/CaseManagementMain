@@ -278,6 +278,10 @@
     <Compile Include="Helpers\SettingsHelper.cs" />
     <Compile Include="Helpers\SqlHelpers.cs" />
     <Compile Include="Helpers\UiTheme.cs" />
+    <Compile Include="Helpers\ToggleSwitch.cs" />
+    <Compile Include="Helpers\PillTabStrip.cs" />
+    <Compile Include="Helpers\SettingsCardPanel.cs" />
+    <Compile Include="Helpers\ColorSwatchButton.cs" />
     <Compile Include="Models\CaseModel.cs" />
     <Compile Include="Models\FamilyModel.cs" />
     <Compile Include="Models\DocumentModel.cs" />
