@@ -545,8 +545,10 @@ namespace CaseManagement
             // جسمی/پرونده) بدون فشردگی و با فاصله حرفه‌ای جا شوند.
             this.ClientSize = new System.Drawing.Size(1180, 880);
             this.Controls.Add(rootLayout);
-            this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedSingle;
-            this.MaximizeBox = false;
+            // تمام‌صفحه‌ی خودکار (درخواست کاربر). حداقلِ اندازه و بیشینه‌سازی در
+            // FrmCase_Load اعمال می‌شود — آن‌جا اندازه‌ی واقعی صفحه در دسترس است.
+            this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.Sizable;
+            this.MaximizeBox = true;
             this.MinimizeBox = true;
             this.Name = "FrmCase";
             this.RightToLeft = System.Windows.Forms.RightToLeft.Yes;

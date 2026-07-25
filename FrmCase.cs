@@ -434,7 +434,12 @@ namespace CaseManagement
             // (زیر نوار عنوان، بالای تسک‌بار) تطبیق می‌دهیم و وسط‌چین می‌کنیم؛ چون
             // ناحیه‌ی فیلدها اسکرول دارد، کوتاه‌شدن ارتفاع مشکلی ایجاد نمی‌کند و
             // دکمه‌های پایین (که Dock=Bottom هستند) همیشه دیده می‌شوند.
+            // آموزش — FitToScreen اندازه‌ی پنجره را با ناحیه‌ی کاریِ صفحه تطبیق
+            // می‌دهد (برای نمایشگرهای کوچک/مقیاس‌دار)؛ سپس MakeMainWindow همان
+            // اندازه را به‌عنوان «حداقل» قفل می‌کند و پنجره را تمام‌صفحه می‌کند.
+            // ترتیب مهم است: اول تطبیق با صفحه، بعد قفلِ حداقل.
             FitToScreen();
+            UiTheme.MakeMainWindow(this, ClientSize.Width, ClientSize.Height);
             ConstrainBottomActionsWidth();
 
             Text = "پرونده‌ها  —  " + SecurityContext.CenterDisplay;

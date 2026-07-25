@@ -410,9 +410,14 @@ namespace CaseManagement
             this.Font              = new System.Drawing.Font("Segoe UI", 9.75F);
             this.RightToLeft       = System.Windows.Forms.RightToLeft.Yes;
             this.RightToLeftLayout = true;
+            // آموزش — تمام‌صفحه‌ی خودکار (درخواست کاربر) + حداقلِ اندازه روی
+            // اندازه‌ی طراحی، تا اگر کاربر از تمام‌صفحه خارج شد پنجره نتواند
+            // آن‌قدر کوچک شود که چیدمان بشکند. اعمالِ نهاییِ حداقل‌اندازه و
+            // بیشینه‌سازی در FrmFamily_Load انجام می‌شود (آن‌جا اندازه‌ی واقعیِ
+            // صفحه‌نمایش در دسترس است).
             this.ClientSize        = new System.Drawing.Size(1160, 560);
-            this.FormBorderStyle   = System.Windows.Forms.FormBorderStyle.FixedSingle;
-            this.MaximizeBox       = false;
+            this.FormBorderStyle   = System.Windows.Forms.FormBorderStyle.Sizable;
+            this.MaximizeBox       = true;
             this.MinimizeBox       = true;
             this.StartPosition     = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Name              = "FrmFamily";

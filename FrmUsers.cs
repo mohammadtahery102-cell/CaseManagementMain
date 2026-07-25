@@ -34,7 +34,7 @@ namespace CaseManagement
             RightToLeftLayout = false;
             BackColor         = UiTheme.Background;
             Font              = UiTheme.Font(UiTheme.SizeBody);
-            UiTheme.MakeFixedSize(this, 880, 590);
+            UiTheme.MakeMainWindow(this, 880, 590);
 
             Panel topPanel = new Panel { Dock = DockStyle.Top, Height = 190, BackColor = UiTheme.CardBack };
 

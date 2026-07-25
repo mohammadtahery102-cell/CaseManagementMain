@@ -45,7 +45,7 @@ namespace CaseManagement
             RightToLeftLayout = true;
             BackColor = UiTheme.Background;
             Font = UiTheme.Font(UiTheme.SizeBody);
-            UiTheme.MakeFixedSize(this, 1080, 620);
+            UiTheme.MakeMainWindow(this, 1080, 620);
 
             // ─── فرم ورودی (سمت راست) ────────────────────────────────────────
             Panel form = new Panel { Dock = DockStyle.Right, Width = 420, BackColor = UiTheme.CardBack, Padding = new Padding(14) };

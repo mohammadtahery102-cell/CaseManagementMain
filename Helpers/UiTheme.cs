@@ -461,6 +461,33 @@ namespace CaseManagement.Helpers
             TryApplyIcon(form);
         }
 
+        // ─── پنجره‌ی اصلیِ کاری: تمام‌صفحه‌ی خودکار ────────────────────────────
+        // آموزش — به درخواست کاربر، فرم‌های کاریِ اصلی باید خودکار تمام‌صفحه
+        // باز شوند. دو نکته‌ی مهم:
+        //   ۱) MinimumSize (که MakeFixedSize روی اندازه‌ی طراحی قفل می‌کند)
+        //      همچنان برقرار می‌ماند، پس اگر کاربر از تمام‌صفحه خارج شد،
+        //      پنجره نمی‌تواند کوچک‌تر از اندازه‌ی طراحی شود و چیدمان
+        //      نمی‌شکند — دقیقاً همان چیزی که کاربر خواست.
+        //   ۲) اگر اندازه‌ی طراحی از خودِ صفحه‌نمایش بزرگ‌تر باشد (نمایشگرهای
+        //      کوچک یا مقیاس ۱۵۰٪ ویندوز)، MinimumSize به ناحیه‌ی کاریِ صفحه
+        //      محدود می‌شود؛ وگرنه پنجره بزرگ‌تر از صفحه می‌ماند و دکمه‌های
+        //      پایینش دór دسترس نخواهند بود.
+        public static void MakeMainWindow(Form form, int width, int height)
+        {
+            MakeFixedSize(form, width, height);
+
+            try
+            {
+                Rectangle workingArea = Screen.PrimaryScreen.WorkingArea;
+                int minW = Math.Min(form.MinimumSize.Width, workingArea.Width);
+                int minH = Math.Min(form.MinimumSize.Height, workingArea.Height);
+                form.MinimumSize = new Size(minW, minH);
+            }
+            catch { /* اگر اطلاعات صفحه در دسترس نبود، همان MinimumSize قبلی می‌ماند */ }
+
+            form.WindowState = FormWindowState.Maximized;
+        }
+
         // آیکون فرم = لوگوی نرم‌افزار (بند ۹ بازطراحی ظاهری)
         private static void TryApplyIcon(Form form)
         {

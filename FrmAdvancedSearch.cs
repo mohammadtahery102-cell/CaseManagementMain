@@ -56,7 +56,7 @@ namespace CaseManagement
             RightToLeftLayout = false;
             BackColor = UiTheme.Background;
             Font = UiTheme.Font(UiTheme.SizeBody);
-            UiTheme.MakeFixedSize(this, 1280, 720);
+            UiTheme.MakeMainWindow(this, 1280, 720);
 
             TabControl tabs = new TabControl();
             tabs.Dock = DockStyle.Fill;

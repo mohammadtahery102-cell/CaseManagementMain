@@ -28,7 +28,7 @@ namespace CaseManagement.Accounting
             RightToLeftLayout = true;
             BackColor = UiTheme.Background;
             Font = UiTheme.Font(UiTheme.SizeBody);
-            UiTheme.MakeFixedSize(this, 1280, 740);
+            UiTheme.MakeMainWindow(this, 1280, 740);
 
             // سربرگ
             Panel banner = new Panel { Dock = DockStyle.Top, Height = 54, BackColor = UiTheme.PrimaryDark };

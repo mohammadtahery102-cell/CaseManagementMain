@@ -87,6 +87,9 @@ namespace CaseManagement
 
         private void FrmFamily_Load(object sender, EventArgs e)
         {
+            // تمام‌صفحه‌ی خودکار + قفلِ حداقل اندازه (توضیح در UiTheme.MakeMainWindow)
+            UiTheme.MakeMainWindow(this, ClientSize.Width, ClientSize.Height);
+
             Text = "اعضای خانواده" +
                    (string.IsNullOrEmpty(CurrentCaseCode) ? "" : "  —  پرونده: " + CurrentCaseCode) +
                    "  [" + SecurityContext.CenterDisplay + "]";

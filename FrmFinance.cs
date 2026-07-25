@@ -38,7 +38,7 @@ namespace CaseManagement
             RightToLeftLayout = true;
             BackColor = UiTheme.Background;
             Font = UiTheme.Font(UiTheme.SizeBody);
-            UiTheme.MakeFixedSize(this, 1080, 690);
+            UiTheme.MakeMainWindow(this, 1080, 690);
 
             // به‌جای SplitContainer (که در RTL و اندازه ثابت سهم پنل‌ها را
             // نامتوازن می‌کرد) از TableLayoutPanel با دو ستون استفاده می‌شود:
