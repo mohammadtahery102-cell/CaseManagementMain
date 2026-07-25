@@ -134,6 +134,17 @@ namespace CaseManagement
         // می‌شوند؛ کلید تنظیمات هم همانی است که از قبل وجود داشت.
         private PictureBox _picSignaturePreview, _picStampPreview;
 
+        // آموزش — ردیف پیش‌فرض‌های رنگ (بازطراحی ظاهری): علاوه بر دکمه‌ی «انتخاب
+        // رنگ» موجود (که هر رنگ دلخواه را می‌دهد و دست‌نخورده مانده)، چند رنگ
+        // پرکاربرد به‌صورت دکمه‌ی گرد قابل‌کلیک اضافه شد تا انتخاب سریع‌تر باشد.
+        private readonly List<ColorSwatchButton> _themeColorSwatches = new List<ColorSwatchButton>();
+        private static readonly Color[] PresetThemeColors =
+        {
+            ColorTranslator.FromHtml("#2F6FED"), ColorTranslator.FromHtml("#8B5CF6"),
+            ColorTranslator.FromHtml("#14B8A6"), ColorTranslator.FromHtml("#F97316"),
+            ColorTranslator.FromHtml("#EF4444"), ColorTranslator.FromHtml("#334155")
+        };
+
         public FrmSettings()
         {
             BuildUi();
@@ -631,48 +642,67 @@ ORDER BY CasID DESC", con))
             saveFlow.Controls.Add(btnSaveGeneral);
             bottomBar.Controls.Add(saveFlow);
 
-            FlowLayoutPanel fieldsFlow = new FlowLayoutPanel();
-            fieldsFlow.Dock = DockStyle.Fill;
-            fieldsFlow.FlowDirection = FlowDirection.LeftToRight;
-            fieldsFlow.WrapContents = true;
-            fieldsFlow.AutoScroll = true;
-            fieldsFlow.Padding = new Padding(14, 12, 14, 12);
+            // آموزش — بازطراحی ظاهری (طبق عکسِ درخواستی کاربر): فیلدها دیگر در
+            // یک FlowLayoutPanel شناور تنها نیستند، بلکه داخل دو «کارت» سفید
+            // گردگوشه (SettingsCardPanel) گروه‌بندی شده‌اند: «تنظیمات مؤسسه»
+            // (همان فیلدهای قبلی، بدون کم/زیاد) و «ظاهر و نمایش» (رنگ‌ها).
+            // هیچ فیلد/کلید تنظیماتی جدید اضافه نشده — فقط چیدمانِ بصری عوض شده.
+            //
+            // آموزش — چرا Panel با Dock به‌جای FlowLayoutPanel+AutoSize: ترکیب
+            // Dock=Top با AutoSize روی FlowLayoutPanel در عمل قابل‌اعتماد نبود
+            // (با تست واقعی/اسکرین‌شات کشف شد: کارتِ دوم اصلاً رندر نمی‌شد،
+            // چون FlowLayoutPanel عرضش را به‌جای عرضِ والد، بر اساس محتوا
+            // محاسبه می‌کرد). دو Panel با Dock=Fill/Right رفتارِ قابل‌پیش‌بینی
+            // و همان الگوی اثبات‌شده در این پروژه (userPanel/logoArea در
+            // داشبورد) را دارد.
+            Panel cardsHost = new Panel { Dock = DockStyle.Fill, BackColor = UiTheme.Background, Padding = new Padding(16) };
+
+            // ─── کارت ۱: تنظیمات مؤسسه ──────────────────────────────────────
+            SettingsCardPanel cardInstitution = new SettingsCardPanel("🏢", "تنظیمات مؤسسه")
+            {
+                Dock = DockStyle.Fill
+            };
+            FlowLayoutPanel instFlow = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = true, AutoScroll = true
+            };
 
             _txtOrgName = NewStyledTextBox();
-            fieldsFlow.Controls.Add(MakeFieldPanel("نام مؤسسه", _txtOrgName));
+            instFlow.Controls.Add(MakeFieldPanel("نام مؤسسه", _txtOrgName));
 
             _txtOrgNameEn = NewStyledTextBox();
-            fieldsFlow.Controls.Add(MakeFieldPanel("نام انگلیسی مؤسسه", _txtOrgNameEn));
+            instFlow.Controls.Add(MakeFieldPanel("نام انگلیسی مؤسسه", _txtOrgNameEn));
 
             _txtSlogan = NewStyledTextBox();
-            fieldsFlow.Controls.Add(MakeFieldPanel("شعار", _txtSlogan));
+            instFlow.Controls.Add(MakeFieldPanel("شعار", _txtSlogan));
 
             _txtOrgCode = NewStyledTextBox();
-            fieldsFlow.Controls.Add(MakeFieldPanel("کد مؤسسه", _txtOrgCode));
+            instFlow.Controls.Add(MakeFieldPanel("کد مؤسسه", _txtOrgCode));
 
             _txtRegNumber = NewStyledTextBox();
-            fieldsFlow.Controls.Add(MakeFieldPanel("شماره ثبت", _txtRegNumber));
+            instFlow.Controls.Add(MakeFieldPanel("شماره ثبت", _txtRegNumber));
 
             _txtManagerName = NewStyledTextBox();
-            fieldsFlow.Controls.Add(MakeFieldPanel("نام مسئول", _txtManagerName));
+            instFlow.Controls.Add(MakeFieldPanel("نام مسئول", _txtManagerName));
 
             _txtAddress = NewStyledTextBox();
-            fieldsFlow.Controls.Add(MakeFieldPanel("آدرس کامل", _txtAddress));
+            instFlow.Controls.Add(MakeFieldPanel("آدرس کامل", _txtAddress));
 
             _txtGeneralPhone = NewStyledTextBox();
-            fieldsFlow.Controls.Add(MakeFieldPanel("تلفن", _txtGeneralPhone));
+            instFlow.Controls.Add(MakeFieldPanel("تلفن", _txtGeneralPhone));
 
             _txtMobile = NewStyledTextBox();
-            fieldsFlow.Controls.Add(MakeFieldPanel("موبایل", _txtMobile));
+            instFlow.Controls.Add(MakeFieldPanel("موبایل", _txtMobile));
 
             _txtWhatsApp = NewStyledTextBox();
-            fieldsFlow.Controls.Add(MakeFieldPanel("واتساپ", _txtWhatsApp));
+            instFlow.Controls.Add(MakeFieldPanel("واتساپ", _txtWhatsApp));
 
             _txtEmail = NewStyledTextBox();
-            fieldsFlow.Controls.Add(MakeFieldPanel("ایمیل", _txtEmail));
+            instFlow.Controls.Add(MakeFieldPanel("ایمیل", _txtEmail));
 
             _txtWebsite = NewStyledTextBox();
-            fieldsFlow.Controls.Add(MakeFieldPanel("وب‌سایت", _txtWebsite));
+            instFlow.Controls.Add(MakeFieldPanel("وب‌سایت", _txtWebsite));
 
             // آموزش — شماره شروع پرونده/رسید و مسیر Backup/تصاویر به تب‌های
             // اختصاصی «شماره‌گذاری» و «مسیرها و فایل‌ها» منتقل شدند (کنترل‌ها
@@ -689,7 +719,7 @@ ORDER BY CasID DESC", con))
                 Text = "توضیحات", AutoSize = false, Dock = DockStyle.Top, Height = 22,
                 TextAlign = ContentAlignment.MiddleRight, Font = UiTheme.FontBold(UiTheme.SizeSmall), ForeColor = UiTheme.TextDark
             });
-            fieldsFlow.Controls.Add(descField);
+            instFlow.Controls.Add(descField);
 
             // ─── لوگو: تکست‌باکس + دکمه انتخاب + پیش‌نمایش بزرگ‌شده ────────────
             Panel logoField = new Panel { Width = 300, Height = 130, Margin = new Padding(6, 4, 6, 4) };
@@ -715,57 +745,114 @@ ORDER BY CasID DESC", con))
                 Text = "لوگوی مؤسسه (پیش‌نمایش بزرگ)", AutoSize = false, Dock = DockStyle.Top, Height = 22,
                 TextAlign = ContentAlignment.MiddleRight, Font = UiTheme.FontBold(UiTheme.SizeSmall), ForeColor = UiTheme.TextDark
             });
-            fieldsFlow.Controls.Add(logoField);
+            instFlow.Controls.Add(logoField);
 
             // ─── امضای مسئول و مهر رسمی (برای کارت شناسایی/اسناد چاپی) ────────
             _txtSignaturePath = new TextBox();
             _picSignaturePreview = new PictureBox();
-            fieldsFlow.Controls.Add(MakeImageUploadField(
+            instFlow.Controls.Add(MakeImageUploadField(
                 "امضای مسئول دفتر", _txtSignaturePath, _picSignaturePreview, BtnBrowseSignature_Click));
 
             _txtStampPath = new TextBox();
             _picStampPreview = new PictureBox();
-            fieldsFlow.Controls.Add(MakeImageUploadField(
+            instFlow.Controls.Add(MakeImageUploadField(
                 "مهر رسمی", _txtStampPath, _picStampPreview, BtnBrowseStamp_Click));
 
-            // ─── رنگ نرم‌افزار (فیلد ترکیبی) ────────────────────────────────
-            Panel colorField = new Panel { Width = 260, Height = 78, Margin = new Padding(6, 4, 6, 4) };
-            Panel colorRow = new Panel { Dock = DockStyle.Top, Height = 32 };
-            _pnlColorSwatch = new Panel { Dock = DockStyle.Right, Width = 60, BorderStyle = BorderStyle.FixedSingle, BackColor = _selectedThemeColor };
-            Button btnPickColor = UiTheme.CreateSecondaryButton("انتخاب رنگ", "◐");
+            cardInstitution.Content.Controls.Add(instFlow);
+
+            // ─── کارت ۲: ظاهر و نمایش ────────────────────────────────────────
+            // آموزش — چون FrmSettings.RightToLeftLayout=true است، Dock=Right
+            // به‌صورت هندسی آینه می‌شود و بصراً سمت چپ می‌نشیند (کارتِ کوچک‌تر،
+            // مثل عکس)؛ Padding سمت راستِ rightHost فاصله‌ی بینِ دو کارت را
+            // می‌سازد (Margin روی یک Panelِ ساده — برخلاف FlowLayoutPanel —
+            // اثری ندارد، پس با Padding والد جایگزین شده).
+            Panel rightHost = new Panel { Dock = DockStyle.Right, Width = 396, Padding = new Padding(16, 0, 0, 0) };
+            SettingsCardPanel cardAppearance = new SettingsCardPanel("🎨", "ظاهر و نمایش")
+            {
+                Dock = DockStyle.Fill
+            };
+            FlowLayoutPanel appFlow = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown,
+                WrapContents = false, AutoScroll = true
+            };
+
+            appFlow.Controls.Add(new Label
+            {
+                Text = "رنگ اصلی نرم‌افزار", AutoSize = false, Width = 320, Height = 22,
+                TextAlign = ContentAlignment.MiddleRight, Font = UiTheme.FontBold(UiTheme.SizeSmall),
+                ForeColor = UiTheme.TextDark, Margin = new Padding(0, 8, 0, 4)
+            });
+
+            FlowLayoutPanel swatchRow = new FlowLayoutPanel
+            {
+                FlowDirection = FlowDirection.LeftToRight, AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = true, Margin = new Padding(0, 0, 0, 8)
+            };
+            _themeColorSwatches.Clear();
+            foreach (Color preset in PresetThemeColors)
+            {
+                ColorSwatchButton swatch = new ColorSwatchButton(preset) { Margin = new Padding(3) };
+                swatch.Click += delegate { SelectThemeColor(preset); };
+                _themeColorSwatches.Add(swatch);
+                swatchRow.Controls.Add(swatch);
+            }
+            appFlow.Controls.Add(swatchRow);
+
+            // دکمه‌ی «رنگ دلخواه» + مربعِ رنگِ فعلی: برای رنگی که در ردیف
+            // پیش‌فرض‌ها نیست (دست‌نخورده از قبل، فقط چیدمانش عوض شده).
+            Panel customColorRow = new Panel { Height = 36, Width = 320, Margin = new Padding(0, 0, 0, 16) };
+            _pnlColorSwatch = new Panel { Dock = DockStyle.Right, Width = 36, Height = 30, BorderStyle = BorderStyle.FixedSingle, BackColor = _selectedThemeColor };
+            Button btnPickColor = UiTheme.CreateSecondaryButton("رنگ دلخواه...", "◐");
             btnPickColor.Dock = DockStyle.Fill;
             btnPickColor.Click += BtnPickColor_Click;
-            colorRow.Controls.Add(btnPickColor);
-            colorRow.Controls.Add(_pnlColorSwatch);
-            colorField.Controls.Add(colorRow);
-            colorField.Controls.Add(new Label
-            {
-                Text = "رنگ نرم‌افزار", AutoSize = false, Dock = DockStyle.Top, Height = 22,
-                TextAlign = ContentAlignment.MiddleRight, Font = UiTheme.FontBold(UiTheme.SizeSmall), ForeColor = UiTheme.TextDark
-            });
-            fieldsFlow.Controls.Add(colorField);
+            customColorRow.Controls.Add(btnPickColor);
+            customColorRow.Controls.Add(_pnlColorSwatch);
+            appFlow.Controls.Add(customColorRow);
 
-            // ─── رنگ فونت (متن) نرم‌افزار — به درخواست کاربر ─────────────────
-            Panel fontColorField = new Panel { Width = 260, Height = 78, Margin = new Padding(6, 4, 6, 4) };
-            Panel fontColorRow = new Panel { Dock = DockStyle.Top, Height = 32 };
-            _pnlFontColorSwatch = new Panel { Dock = DockStyle.Right, Width = 60, BorderStyle = BorderStyle.FixedSingle, BackColor = _selectedFontColor };
-            Button btnPickFontColor = UiTheme.CreateSecondaryButton("انتخاب رنگ", "◐");
+            appFlow.Controls.Add(new Label
+            {
+                Text = "رنگ فونت نرم‌افزار", AutoSize = false, Width = 320, Height = 22,
+                TextAlign = ContentAlignment.MiddleRight, Font = UiTheme.FontBold(UiTheme.SizeSmall),
+                ForeColor = UiTheme.TextDark, Margin = new Padding(0, 8, 0, 4)
+            });
+            Panel fontColorRow = new Panel { Height = 36, Width = 320, Margin = new Padding(0, 0, 0, 8) };
+            _pnlFontColorSwatch = new Panel { Dock = DockStyle.Right, Width = 36, Height = 30, BorderStyle = BorderStyle.FixedSingle, BackColor = _selectedFontColor };
+            Button btnPickFontColor = UiTheme.CreateSecondaryButton("انتخاب رنگ...", "◐");
             btnPickFontColor.Dock = DockStyle.Fill;
             btnPickFontColor.Click += BtnPickFontColor_Click;
             fontColorRow.Controls.Add(btnPickFontColor);
             fontColorRow.Controls.Add(_pnlFontColorSwatch);
-            fontColorField.Controls.Add(fontColorRow);
-            fontColorField.Controls.Add(new Label
-            {
-                Text = "رنگ فونت نرم‌افزار", AutoSize = false, Dock = DockStyle.Top, Height = 22,
-                TextAlign = ContentAlignment.MiddleRight, Font = UiTheme.FontBold(UiTheme.SizeSmall), ForeColor = UiTheme.TextDark
-            });
-            fieldsFlow.Controls.Add(fontColorField);
+            appFlow.Controls.Add(fontColorRow);
 
-            tab.Controls.Add(fieldsFlow);
+            cardAppearance.Content.Controls.Add(appFlow);
+            rightHost.Controls.Add(cardAppearance);
+
+            // آموزش — Fill باید قبل از Right اضافه شود (همان الگوی اثبات‌شده‌ی
+            // userPanel/toolButtons در داشبورد) تا کارتِ نهادی بقیه‌ی فضا را
+            // بگیرد و rightHost فضای خودش را از کنار آن جدا کند.
+            cardsHost.Controls.Add(cardInstitution);
+            cardsHost.Controls.Add(rightHost);
+
+            tab.Controls.Add(cardsHost);
             tab.Controls.Add(bottomBar);
 
             LoadGeneralSettings();
+        }
+
+        // انتخاب یکی از رنگ‌های پیش‌فرض: علامت‌گذاری همان دکمه + به‌روزرسانی
+        // مربعِ رنگِ دلخواه (که Save همچنان از آن/از _selectedThemeColor می‌خواند).
+        private void SelectThemeColor(Color color)
+        {
+            _selectedThemeColor = color;
+            if (_pnlColorSwatch != null) _pnlColorSwatch.BackColor = color;
+            RefreshThemeColorSwatchSelection();
+        }
+
+        private void RefreshThemeColorSwatchSelection()
+        {
+            foreach (ColorSwatchButton swatch in _themeColorSwatches)
+                swatch.Selected = swatch.SwatchColor.ToArgb() == _selectedThemeColor.ToArgb();
         }
 
         private TextBox NewStyledTextBox()
@@ -911,6 +998,7 @@ ORDER BY CasID DESC", con))
                 {
                     _selectedThemeColor = cd.Color;
                     _pnlColorSwatch.BackColor = _selectedThemeColor;
+                    RefreshThemeColorSwatchSelection();
                 }
             }
         }
@@ -958,6 +1046,7 @@ ORDER BY CasID DESC", con))
                 catch { _selectedThemeColor = UiTheme.Primary; }
             }
             _pnlColorSwatch.BackColor = _selectedThemeColor;
+            RefreshThemeColorSwatchSelection();
 
             string fontColorHex = SettingsHelper.Get(SettingsHelper.FontColor);
             if (!string.IsNullOrWhiteSpace(fontColorHex))
