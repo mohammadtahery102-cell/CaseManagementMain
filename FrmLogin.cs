@@ -40,9 +40,23 @@ namespace CaseManagement
             // دیتابیس/رویدادی در این فاز تغییر نکرده است.
             Text              = "ورود به سیستم";
             StartPosition     = FormStartPosition.CenterScreen;
-            ClientSize        = new Size(1100, 720);
+            // آموزش — اندازه‌ی طراحی با DPI مقیاس می‌شود، اما هرگز از ناحیه‌ی
+            // کاریِ صفحه بزرگ‌تر نمی‌شود. تست مقیاس نشان داد بدون این محدودیت،
+            // در ۱۵۰٪ و ۲۰۰٪ ارتفاع فرم (۱۰۸۰ و ۱۴۴۰) از ارتفاع صفحه بیشتر
+            // می‌شد و کنترل‌های پایین (دکمه‌ی تغییر رمز و فیلدها) بیرون می‌زدند.
+            Size designSize = ResponsiveLayout.Scale(new Size(1100, 720));
+            Size minSize    = ResponsiveLayout.Scale(new Size(980, 660));
+            try
+            {
+                Rectangle wa = Screen.PrimaryScreen.WorkingArea;
+                designSize = new Size(Math.Min(designSize.Width, wa.Width), Math.Min(designSize.Height, wa.Height));
+                minSize    = new Size(Math.Min(minSize.Width, wa.Width),    Math.Min(minSize.Height, wa.Height));
+            }
+            catch { }
+
+            ClientSize        = designSize;
             FormBorderStyle   = FormBorderStyle.None;
-            MinimumSize       = new Size(980, 660);
+            MinimumSize       = minSize;
             MaximizeBox       = true;
             MinimizeBox       = true;
             RightToLeft       = RightToLeft.Yes;
@@ -59,120 +73,286 @@ namespace CaseManagement
             ModernTitleBar titleBar = new ModernTitleBar(this, "ورود به سیستم", CanvasTop);
             Controls.Add(titleBar);
 
-            // ─── کارت مرکزی ورود ─────────────────────────────────────────
-            // آموزش — در این فاز فقط جای کارت با اندازه‌ی جدیدِ پنجره هماهنگ شد
-            // (سمت راست، مطابق طرح). بازچینشِ کاملِ داخلِ کارت و ساختِ پنلِ
-            // هنریِ سمت چپ کارِ فاز ۲ است، پس این صفحه فعلاً «نیمه‌کاره ولی
-            // کاملاً کارا» به‌نظر می‌رسد.
-            Panel card = new Panel();
-            card.BackColor = UiTheme.CardBack;
-            card.Size = new Size(430, 600);
-            card.Location = new Point(ClientSize.Width - card.Width - 60, titleBar.Height + 40);
-            UiTheme.RoundCorners(card, 18);
-            Controls.Add(card);
-            card.BringToFront();
+            // ═══ چیدمان دو ستونه، کاملاً واکنش‌گرا ═══════════════════════════
+            // آموزش — همه‌ی مختصات مطلقِ قبلی حذف شدند و جایشان Dock/TableLayout
+            // آمد. دلیل: با مختصات ثابت، در مقیاس ۱۲۵٪/۱۵۰٪/۲۰۰٪ کنترل‌ها روی
+            // هم می‌افتند یا از کارت بیرون می‌زنند. حالا هر ناحیه سهمش را از
+            // چیدمان می‌گیرد و اعدادِ باقی‌مانده هم از ResponsiveLayout.Scale
+            // عبور می‌کنند تا با DPI بزرگ شوند.
+            //
+            // بسیار مهم: نام کنترل‌ها، رویدادها و منطق ورود دست‌نخورده‌اند —
+            // _cmbCenter/_txtUsername/_txtPassword/_btnLogin/_btnChangePass/
+            // _btnShowPass/_lblMessage همان اشیای قبلی با همان هندلرها هستند.
+            Panel body = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent };
 
-            // ─── لوگوی نرم‌افزار (بزرگ‌شده به‌درخواست کاربر ~۲ برابر) ───────
-            PictureBox logo = new PictureBox();
-            logo.Image = LogoHelper.GetLogoImage();
-            logo.SizeMode = PictureBoxSizeMode.Zoom;
-            logo.BackColor = UiTheme.Primary;
-            logo.Size = new Size(140, 140);
-            logo.Location = new Point((card.Width - logo.Width) / 2, 20);
-            UiTheme.RoundCorners(logo, 140);
-            card.Controls.Add(logo);
-
-            Label title = new Label();
-            title.Text = "سیستم مدیریت پرونده";
-            title.Font = UiTheme.FontBold(14F);
-            title.ForeColor = UiTheme.TextDark;
-            title.TextAlign = ContentAlignment.MiddleCenter;
-            title.SetBounds(20, 172, card.Width - 40, 28);
-            card.Controls.Add(title);
-
-            Label subtitle = new Label();
-            subtitle.Text = "برای ادامه وارد حساب کاربری خود شوید";
-            subtitle.Font = UiTheme.Font(9.5F);
-            subtitle.ForeColor = UiTheme.TextMuted;
-            subtitle.TextAlign = ContentAlignment.MiddleCenter;
-            subtitle.SetBounds(20, 202, card.Width - 40, 22);
-            card.Controls.Add(subtitle);
-
-            int fieldX = 30;
-            int fieldW = card.Width - 60;
-
-            // ─── مرکز ────────────────────────────────────────────────────
-            Label lblCenter = new Label();
-            lblCenter.Text = "مرکز";
-            lblCenter.Font = UiTheme.FontBold(9.5F);
-            lblCenter.ForeColor = UiTheme.TextDark;
-            lblCenter.SetBounds(fieldX, 238, fieldW, 20);
-            card.Controls.Add(lblCenter);
-
-            _cmbCenter = new ComboBox();
-            _cmbCenter.DropDownStyle = ComboBoxStyle.DropDownList;
-            _cmbCenter.Font = UiTheme.Font(10.5F);
-            _cmbCenter.Bounds = new Rectangle(fieldX, 260, fieldW, 30);
-            card.Controls.Add(_cmbCenter);
-
-            // ─── نام کاربری ──────────────────────────────────────────────
-            Label lblUser = new Label();
-            lblUser.Text = "نام کاربری";
-            lblUser.Font = UiTheme.FontBold(9.5F);
-            lblUser.ForeColor = UiTheme.TextDark;
-            lblUser.SetBounds(fieldX, 306, fieldW, 20);
-            card.Controls.Add(lblUser);
-
-            _txtUsername = new TextBox { Bounds = new Rectangle(fieldX, 328, fieldW, 30) };
-            UiTheme.StyleTextBox(_txtUsername);
-            card.Controls.Add(_txtUsername);
-
-            // ─── رمز عبور ────────────────────────────────────────────────
-            Label lblPass = new Label();
-            lblPass.Text = "رمز عبور";
-            lblPass.Font = UiTheme.FontBold(9.5F);
-            lblPass.ForeColor = UiTheme.TextDark;
-            lblPass.SetBounds(fieldX, 374, fieldW, 20);
-            card.Controls.Add(lblPass);
-
-            _txtPassword = new TextBox
+            // ── ستون راست: کارت ورود (عرضِ ثابتِ مقیاس‌شده) ──
+            int cardHostWidth = ResponsiveLayout.Scale(470);
+            Panel cardHost = new Panel
             {
-                Bounds       = new Rectangle(fieldX, 396, fieldW - 45, 30),
-                PasswordChar = '*'
+                Dock = DockStyle.Right,
+                Width = cardHostWidth,
+                BackColor = Color.Transparent,
+                Padding = ResponsiveLayout.Scale(new Padding(20, 26, 40, 26))
             };
-            UiTheme.StyleTextBox(_txtPassword);
-            card.Controls.Add(_txtPassword);
 
-            _btnShowPass = UiTheme.CreateSecondaryButton("", "⊙");
-            _btnShowPass.Bounds = new Rectangle(fieldX + fieldW - 40, 396, 40, 30);
-            _btnShowPass.Click += (s, e) =>
-                _txtPassword.PasswordChar = _txtPassword.PasswordChar == '*' ? '\0' : '*';
-            card.Controls.Add(_btnShowPass);
+            LoginCard card = new LoginCard { Dock = DockStyle.Fill };
 
-            // ─── دکمه‌های اقدام ──────────────────────────────────────────
-            _btnLogin = UiTheme.CreateButton("ورود به سیستم", "⚿", UiTheme.Primary);
-            _btnLogin.Bounds = new Rectangle(fieldX, 452, fieldW, 42);
-            _btnLogin.Click += BtnLogin_Click;
-            card.Controls.Add(_btnLogin);
+            // محتوای کارت، از بالا به پایین
+            // AutoScroll آخرین خطِ دفاع است: اگر روی نمایشگرِ کوتاه یا مقیاسِ
+            // ۲۰۰٪ ارتفاع کافی نبود، محتوا اسکرول می‌شود به‌جای اینکه از کارت
+            // بیرون بزند (تست مقیاس دقیقاً همین سرریز را پیدا کرد).
+            Panel cardInner = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = Color.Transparent,
+                AutoScroll = true,
+                Padding = ResponsiveLayout.Scale(new Padding(34, 30, 34, 22))
+            };
 
-            _btnChangePass = UiTheme.CreateSecondaryButton("تغییر رمز عبور", "↻");
-            _btnChangePass.Bounds = new Rectangle(fieldX, 502, fieldW, 38);
-            _btnChangePass.Click += BtnChangePass_Click;
-            card.Controls.Add(_btnChangePass);
+            // ─── پاورقی کارت: نسخه و پشتیبانی (خواسته‌ی کاربر) ───
+            // ارتفاع از ۴۶ به ۵۶ افزایش یافت: در رندر واقعی، خطِ «نسخه» زیر
+            // لبه‌ی کارت می‌افتاد و نصفه دیده می‌شد.
+            Panel cardFooter = new Panel
+            {
+                Dock = DockStyle.Bottom,
+                Height = ResponsiveLayout.Scale(56),
+                BackColor = Color.Transparent,
+                Padding = new Padding(0, 0, 0, ResponsiveLayout.Scale(10))
+            };
+            Label lblSupport = new Label
+            {
+                Dock = DockStyle.Bottom, Height = ResponsiveLayout.Scale(20),
+                Text = SupportLine(),
+                Font = UiTheme.Font(8.5F), ForeColor = UiTheme.TextMuted,
+                TextAlign = ContentAlignment.MiddleCenter, AutoEllipsis = true
+            };
+            Label lblVersion = new Label
+            {
+                Dock = DockStyle.Bottom, Height = ResponsiveLayout.Scale(20),
+                Text = "نسخه " + AppVersionText(),
+                Font = UiTheme.FontBold(8.5F), ForeColor = UiTheme.TextMuted,
+                TextAlign = ContentAlignment.MiddleCenter
+            };
+            cardFooter.Controls.Add(lblSupport);
+            cardFooter.Controls.Add(lblVersion);
 
+            // ─── پیام خطا (بالای پاورقی) ───
             _lblMessage = new Label
             {
-                Bounds    = new Rectangle(fieldX, 548, fieldW, 64),
-                Font      = UiTheme.Font(9.5F),
+                Dock = DockStyle.Bottom,
+                Height = ResponsiveLayout.Scale(40),
+                Font = UiTheme.Font(9.5F),
                 ForeColor = UiTheme.Danger,
-                TextAlign = ContentAlignment.TopCenter
+                TextAlign = ContentAlignment.MiddleCenter
             };
+
+            // ─── سربرگ کارت ───
+            Label title = new Label
+            {
+                Dock = DockStyle.Top, Height = ResponsiveLayout.Scale(38),
+                Text = "خوش آمدید",
+                Font = UiTheme.FontBold(17F), ForeColor = UiTheme.TextDark,
+                TextAlign = ContentAlignment.MiddleCenter
+            };
+            // آموزش — رفع باگی که تست مقیاس پیدا کرد: نسخه‌ی اول این خط را با
+            // Padding چپ/راستِ بزرگ وسط‌چین می‌کرد. اگر آن Padding از عرضِ
+            // در دسترس بیشتر شود (کارت باریک یا مقیاس بالا)، عرضِ خط صفر
+            // می‌شد — در هر چهار مقیاس به‌عنوان «کنترل با اندازه‌ی صفر» گزارش
+            // شد. حالا عرضِ ثابت دارد و با Anchor وسط می‌ماند، پس هرگز صفر
+            // نمی‌شود.
+            Panel goldRuleHost = new Panel
+            {
+                Dock = DockStyle.Top, Height = ResponsiveLayout.Scale(12),
+                BackColor = Color.Transparent
+            };
+            Panel goldRule = new Panel
+            {
+                Width = ResponsiveLayout.Scale(56),
+                Height = ResponsiveLayout.Scale(3),
+                BackColor = GoldAccent,
+                Anchor = AnchorStyles.Top
+            };
+            goldRuleHost.Controls.Add(goldRule);
+            goldRuleHost.Resize += delegate
+            {
+                goldRule.Left = Math.Max(0, (goldRuleHost.ClientSize.Width - goldRule.Width) / 2);
+                goldRule.Top = ResponsiveLayout.Scale(4);
+            };
+
+            Label subtitle = new Label
+            {
+                Dock = DockStyle.Top, Height = ResponsiveLayout.Scale(34),
+                Text = "برای ادامه وارد حساب کاربری خود شوید",
+                Font = UiTheme.Font(9.5F), ForeColor = UiTheme.TextMuted,
+                TextAlign = ContentAlignment.MiddleCenter
+            };
+
+            // ─── فیلدها (همان کنترل‌های قبلی، فقط با پوسته‌ی گردگوشه) ───
+            _cmbCenter = new ComboBox();
+            _cmbCenter.DropDownStyle = ComboBoxStyle.DropDownList;
+            FieldBox boxCenter = new FieldBox(new Label(), "مرکز", _cmbCenter) { Dock = DockStyle.Top };
+
+            _txtUsername = new TextBox();
+            FieldBox boxUser = new FieldBox(new Label(), "نام کاربری", _txtUsername) { Dock = DockStyle.Top };
+
+            _txtPassword = new TextBox { PasswordChar = '*' };
+            FieldBox boxPass = new FieldBox(new Label(), "رمز عبور", _txtPassword) { Dock = DockStyle.Top };
+
+            // دکمه‌ی نمایش رمز، داخل همان قابِ فیلدِ رمز (سمت چپِ بصری)
+            // آیکون چشم از فونتِ آیکونیِ ویندوز گرفته می‌شود، نه از کاراکترِ
+            // «⊙» که در فونت فارسیِ برنامه وجود ندارد و به‌صورت مربعِ خالی رسم
+            // می‌شد (همان مشکلی که در نوار تب‌ها و دکمه‌های فرم خانواده هم بود).
+            _btnShowPass = UiTheme.CreateSecondaryButton("", "");
+            // U+E7B3 = آیکونِ «چشم» در فونت Segoe MDL2 Assets. به‌صورت کدِ
+            // یونیکد نوشته شده تا مستقل از رمزگذاریِ فایل، درست باقی بماند.
+            _btnShowPass.Text = "";
+            _btnShowPass.Font = IconFont.Get(10.5F);
+            _btnShowPass.ForeColor = UiTheme.TextMuted;
+            _btnShowPass.Dock = DockStyle.Left;
+            _btnShowPass.Width = ResponsiveLayout.Scale(40);
+            _btnShowPass.FlatAppearance.BorderSize = 0;
+            _btnShowPass.BackColor = Color.White;
+            _btnShowPass.Click += (s, e) =>
+                _txtPassword.PasswordChar = _txtPassword.PasswordChar == '*' ? '\0' : '*';
+            new ToolTip().SetToolTip(_btnShowPass, "نمایش/پنهان‌کردن رمز عبور");
+            AttachInsideField(boxPass, _btnShowPass);
+
+            // ─── دکمه‌های اقدام ───
+            _btnLogin = UiTheme.CreateButton("ورود به سیستم", "⚿", UiTheme.Primary);
+            _btnLogin.Dock = DockStyle.Top;
+            _btnLogin.Height = ResponsiveLayout.Scale(48);
+            _btnLogin.Font = UiTheme.FontBold(11.5F);
+            _btnLogin.Click += BtnLogin_Click;
+            _btnLogin.SizeChanged += delegate { UiTheme.RoundCorners(_btnLogin, ResponsiveLayout.Scale(12)); };
+
+            Panel loginSpacer = new Panel { Dock = DockStyle.Top, Height = ResponsiveLayout.Scale(10), BackColor = Color.Transparent };
+
+            _btnChangePass = UiTheme.CreateSecondaryButton("تغییر رمز عبور", "↻");
+            _btnChangePass.Dock = DockStyle.Top;
+            _btnChangePass.Height = ResponsiveLayout.Scale(42);
+            _btnChangePass.Click += BtnChangePass_Click;
+            _btnChangePass.SizeChanged += delegate { UiTheme.RoundCorners(_btnChangePass, ResponsiveLayout.Scale(12)); };
+
+            Panel changeSpacer = new Panel { Dock = DockStyle.Top, Height = ResponsiveLayout.Scale(8), BackColor = Color.Transparent };
+
+            // ترتیب افزودن معکوسِ نمایش است (هر Dock=Top بالای قبلی می‌نشیند).
+            cardInner.Controls.Add(_btnChangePass);
+            cardInner.Controls.Add(changeSpacer);
+            cardInner.Controls.Add(_btnLogin);
+            cardInner.Controls.Add(loginSpacer);
+            cardInner.Controls.Add(boxPass);
+            cardInner.Controls.Add(boxUser);
+            cardInner.Controls.Add(boxCenter);
+            cardInner.Controls.Add(subtitle);
+            cardInner.Controls.Add(goldRuleHost);
+            cardInner.Controls.Add(title);
+
+            card.Controls.Add(cardInner);
             card.Controls.Add(_lblMessage);
+            card.Controls.Add(cardFooter);
+            cardHost.Controls.Add(card);
+
+            // ── ستون چپ: پنل معرفی سیستم ──
+            LoginHeroPanel hero = new LoginHeroPanel { Dock = DockStyle.Fill };
+
+            body.Controls.Add(hero);
+            body.Controls.Add(cardHost);
+
+            // آموزش — ترتیب افزودن کافی است و BringToFront نباید صدا زده شود:
+            // در چیدمان Dock، کنترل‌ها از «بالاترین ایندکس» به پایین پردازش
+            // می‌شوند، یعنی کنترلی که دیرتر اضافه شده اول سهمش را می‌گیرد.
+            // چون body (Fill) اول و titleBar (Top) بعد اضافه می‌شوند، نوار
+            // عنوان اول ۴۶ پیکسل بالا را برمی‌دارد و بدنه بقیه را پر می‌کند.
+            // در نسخه‌ی قبلی titleBar.BringToFront() آن را به ایندکس ۰ می‌برد،
+            // یعنی «آخر» پردازش می‌شد و چیزی برایش نمی‌ماند — نوار عنوان کاملاً
+            // ناپدید شده بود (در رندر واقعی دیده شد).
+            Controls.Add(body);
+            Controls.Add(titleBar);
 
             AcceptButton = _btnLogin;
 
             // بارگذاری مراکز پس از ساخت UI
             LoadCenters();
+        }
+
+        // دکمه‌ی کوچکِ داخلِ یک فیلد (مثل چشمِ نمایش رمز) را کنارِ ورودی
+        // می‌نشاند بدون اینکه ساختار FieldBox بشکند.
+        private static void AttachInsideField(FieldBox box, Control button)
+        {
+            Control shell = box.Field.Parent;   // پوسته‌ی گردگوشه‌ی FieldBox
+            if (shell == null) return;
+            shell.Controls.Add(button);
+            button.BringToFront();
+        }
+
+        private static string AppVersionText()
+        {
+            try
+            {
+                Version v = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
+                return v.Major + "." + v.Minor + "." + v.Build;
+            }
+            catch { return "1.1.0"; }
+        }
+
+        // اطلاعات پشتیبانی از تنظیمات مؤسسه خوانده می‌شود؛ اگر ثبت نشده باشد
+        // یک متن عمومی نشان داده می‌شود (نه رشته‌ی خالی).
+        private static string SupportLine()
+        {
+            try
+            {
+                string phone = SettingsHelper.Get(SettingsHelper.Phone);
+                string org = SettingsHelper.Get(SettingsHelper.OrgName);
+                if (!string.IsNullOrWhiteSpace(phone))
+                    return "پشتیبانی: " + phone + (string.IsNullOrWhiteSpace(org) ? "" : "  ·  " + org);
+                if (!string.IsNullOrWhiteSpace(org)) return org;
+            }
+            catch { }
+            return "پشتیبانی فنی سامانه گنجینه";
+        }
+
+        // کارت سفیدِ گردگوشه با سایه‌ی نرم — پس‌زمینه‌ی ناحیه‌ی ورود.
+        private class LoginCard : Panel
+        {
+            public LoginCard()
+            {
+                SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint |
+                          ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+                BackColor = Color.Transparent;
+            }
+
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                Graphics g = e.Graphics;
+                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+
+                int radius = ResponsiveLayout.Scale(18);
+                int shadow = ResponsiveLayout.Scale(7);
+
+                // آموزش — WinForms سایه‌ی نرمِ بومی ندارد؛ با چند لایه‌ی نیمه‌شفافِ
+                // تودرتو تقریب زده می‌شود (هرچه بیرونی‌تر، کم‌رنگ‌تر).
+                for (int i = shadow; i > 0; i--)
+                {
+                    var r = new Rectangle(i, i + 1, Width - 1 - i * 2, Height - 2 - i * 2);
+                    if (r.Width <= 0 || r.Height <= 0) continue;
+                    using (var path = StatCard.RoundedRect(r, radius))
+                    using (var pen = new Pen(Color.FromArgb(7, 0, 0, 0), 1f))
+                        g.DrawPath(pen, path);
+                }
+
+                var body = new Rectangle(shadow, shadow, Width - 1 - shadow * 2, Height - 1 - shadow * 2);
+                if (body.Width <= 0 || body.Height <= 0) return;
+
+                using (var path = StatCard.RoundedRect(body, radius))
+                {
+                    using (var b = new SolidBrush(Color.White))
+                        g.FillPath(b, path);
+                    using (var p = new Pen(Color.FromArgb(30, 0, 0, 0), 1f))
+                        g.DrawPath(p, path);
+                }
+
+                base.OnPaint(e);
+            }
         }
 
         // ─── بومِ ناوی با گرادیانِ ملایم (پس‌زمینه‌ی کل پنجره) ────────────────

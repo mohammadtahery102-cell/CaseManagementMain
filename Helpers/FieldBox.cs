@@ -120,7 +120,17 @@ namespace CaseManagement.Helpers
             private void CenterInner()
             {
                 if (_inner == null) return;
-                int w = Math.Max(0, ClientSize.Width - Padding.Horizontal);
+
+                // آموزش — عرضِ هر کنترلِ Dock‌شده‌ی دیگری که داخل همین پوسته
+                // نشسته (مثل دکمه‌ی «نمایش رمز») باید از عرضِ ورودی کم شود،
+                // وگرنه ورودی زیرِ آن دکمه ادامه پیدا می‌کند و متن پشتش پنهان
+                // می‌ماند. (تست مقیاس صفحه‌ی ورود همین سرریز را نشان داد.)
+                int reserved = 0;
+                foreach (Control c in Controls)
+                    if (c != _inner && c.Visible && c.Dock != DockStyle.None)
+                        reserved += c.Width;
+
+                int w = Math.Max(0, ClientSize.Width - Padding.Horizontal - reserved);
                 int h = _inner.PreferredSize.Height;
                 if (h <= 0 || h > ClientSize.Height) h = Math.Min(ClientSize.Height - 6, 22);
                 _inner.SetBounds(Padding.Left, Math.Max(0, (ClientSize.Height - h) / 2), w, h);
