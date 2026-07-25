@@ -195,150 +195,141 @@ namespace CaseManagement
             // ═══════════════════════════════════════════════════════════════════
             // گروه ۱: مشخصات کلی سرپرست
             // ═══════════════════════════════════════════════════════════════════
-            this.grpHead.Text = "مشخصات کلی سرپرست";
-            this.grpHead.Location = new System.Drawing.Point(8, 8);
-            this.grpHead.Size = new System.Drawing.Size(715, 284);
-            this.grpHead.FlatStyle = System.Windows.Forms.FlatStyle.System;
+            // آموزش — بازطراحی: مختصاتِ ثابتِ قبلی (Location/Size برای تک‌تکِ
+            // ۳۰+ فیلد) کاملاً حذف شد. آن الگو در مقیاس‌های ۱۲۵٪ به بالا
+            // می‌شکند چون اعداد ثابت با فونت/DPI بزرگ‌شده هم‌خوان نیستند.
+            // جایگزین: شبکه‌ی FieldBox (برچسبِ بالا + ورودیِ گردگوشه) داخل یک
+            // کارت — همان الگویی که در فرم اعضای خانواده آزموده شد.
+            // نام کنترل‌ها، رویدادها و منطق دست‌نخورده‌اند.
+            var gridHead = MkCaseFieldGrid();
+            AddCaseField(gridHead, this.label6,  "نام سرپرست و تخلص",   this.txtHeadFullName);
+            AddCaseField(gridHead, this.label7,  "نام پدر سرپرست",      this.txtHeadFatherName);
+            AddCaseField(gridHead, this.label8,  "سیادت سرپرست",        this.txtHeadSadat);
+            AddCaseField(gridHead, this.label9,  "مذهب",                this.txtReligion);
+            AddCaseField(gridHead, this.label10, "شماره تذکره سرپرست",  this.txtHeadTazkiraNo);
+            AddCaseField(gridHead, this.label11, "سکونت اصلی سرپرست",   this.txtHeadOriginalResidence);
+            AddCaseField(gridHead, this.label12, "سکونت فعلی سرپرست",   this.txtHeadCurrentResidence);
+            AddCaseField(gridHead, this.label13, "نسبت با سایر اعضا",   this.txtRelationshipToFamily);
+            AddCaseField(gridHead, this.label14, "شماره تماس",          this.txtPhone);
+            AddCaseField(gridHead, this.label15, "شماره تماس اقارب",    this.txtRelativePhone);
+            AddCaseField(gridHead, this.label22, "وضعیت تأهل",          this.txtMaritalStatus);
+            AddCaseField(gridHead, this.label26, "تحصیلات",             this.txtEducationLevel);
+            AddCaseField(gridHead, this.label17, "شغل",                 this.txtJob);
+            AddCaseField(gridHead, this.label18, "مهارت",               this.txtSkill);
 
-            SetLbl(this.label6, "نام سرپرست و تخلص", 550, 28); this.txtHeadFullName.Location = new System.Drawing.Point(342, 26); this.txtHeadFullName.Size = new System.Drawing.Size(200, 26);
-            SetLbl(this.label7, "نام پدر سرپرست", 172, 28); this.txtHeadFatherName.Location = new System.Drawing.Point(15, 26); this.txtHeadFatherName.Size = new System.Drawing.Size(150, 26);
-
-            SetLbl(this.label8, "سیادت سرپرست", 550, 62); this.txtHeadSadat.Location = new System.Drawing.Point(342, 60); this.txtHeadSadat.Size = new System.Drawing.Size(200, 26);
-            SetLbl(this.label9, "مذهب", 172, 62); this.txtReligion.Location = new System.Drawing.Point(15, 60); this.txtReligion.Size = new System.Drawing.Size(150, 26);
-
-            SetLbl(this.label10, "شماره تذکره سرپرست", 550, 96); this.txtHeadTazkiraNo.Location = new System.Drawing.Point(342, 94); this.txtHeadTazkiraNo.Size = new System.Drawing.Size(200, 26);
-            SetLbl(this.label11, "سکونت اصلی سرپرست", 172, 96); this.txtHeadOriginalResidence.Location = new System.Drawing.Point(15, 94); this.txtHeadOriginalResidence.Size = new System.Drawing.Size(150, 26);
-
-            SetLbl(this.label12, "سکونت فعلی سرپرست", 550, 130); this.txtHeadCurrentResidence.Location = new System.Drawing.Point(342, 128); this.txtHeadCurrentResidence.Size = new System.Drawing.Size(200, 26);
-            SetLbl(this.label13, "نسبت با سایر اعضا", 172, 130); this.txtRelationshipToFamily.Location = new System.Drawing.Point(15, 128); this.txtRelationshipToFamily.Size = new System.Drawing.Size(150, 26);
-
-            SetLbl(this.label14, "شماره تماس", 550, 164); this.txtPhone.Location = new System.Drawing.Point(342, 162); this.txtPhone.Size = new System.Drawing.Size(200, 26);
-            SetLbl(this.label15, "شماره تماس اقارب", 172, 164); this.txtRelativePhone.Location = new System.Drawing.Point(15, 162); this.txtRelativePhone.Size = new System.Drawing.Size(150, 26);
-
-            SetLbl(this.label22, "وضعیت تأهل", 550, 198); this.txtMaritalStatus.Location = new System.Drawing.Point(342, 196); this.txtMaritalStatus.Size = new System.Drawing.Size(200, 26);
-            SetLbl(this.label26, "تحصیلات", 172, 198); this.txtEducationLevel.Location = new System.Drawing.Point(15, 196); this.txtEducationLevel.Size = new System.Drawing.Size(150, 26);
-
-            // آموزش — چیدمان متوازن (به درخواست کاربر برای رفع فضای خالی):
-            // «شغل» و «مهارت» (هر دو مرتبط با اشتغال) در یک ردیف کنار هم قرار
-            // گرفتند تا نه گروه سرپرست فیلد تنها داشته باشد و نه گروه جسمی.
-            SetLbl(this.label17, "شغل", 550, 232); this.txtJob.Location = new System.Drawing.Point(342, 230); this.txtJob.Size = new System.Drawing.Size(200, 26);
-            SetLbl(this.label18, "مهارت", 172, 232); this.txtSkill.Location = new System.Drawing.Point(15, 230); this.txtSkill.Size = new System.Drawing.Size(150, 26);
-
-            this.grpHead.Controls.Add(this.label6); this.grpHead.Controls.Add(this.txtHeadFullName);
-            this.grpHead.Controls.Add(this.label7); this.grpHead.Controls.Add(this.txtHeadFatherName);
-            this.grpHead.Controls.Add(this.label8); this.grpHead.Controls.Add(this.txtHeadSadat);
-            this.grpHead.Controls.Add(this.label9); this.grpHead.Controls.Add(this.txtReligion);
-            this.grpHead.Controls.Add(this.label10); this.grpHead.Controls.Add(this.txtHeadTazkiraNo);
-            this.grpHead.Controls.Add(this.label11); this.grpHead.Controls.Add(this.txtHeadOriginalResidence);
-            this.grpHead.Controls.Add(this.label12); this.grpHead.Controls.Add(this.txtHeadCurrentResidence);
-            this.grpHead.Controls.Add(this.label13); this.grpHead.Controls.Add(this.txtRelationshipToFamily);
-            this.grpHead.Controls.Add(this.label14); this.grpHead.Controls.Add(this.txtPhone);
-            this.grpHead.Controls.Add(this.label15); this.grpHead.Controls.Add(this.txtRelativePhone);
-            this.grpHead.Controls.Add(this.label22); this.grpHead.Controls.Add(this.txtMaritalStatus);
-            this.grpHead.Controls.Add(this.label26); this.grpHead.Controls.Add(this.txtEducationLevel);
-            this.grpHead.Controls.Add(this.label17); this.grpHead.Controls.Add(this.txtJob);
-            this.grpHead.Controls.Add(this.label18); this.grpHead.Controls.Add(this.txtSkill);
+            this.grpHead.Text = "";
+            this.grpHead.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            var cardHead = MkCaseCard("مشخصات کلی سرپرست", gridHead, this.grpHead);
 
             // ═══════════════════════════════════════════════════════════════════
             // گروه ۲: مشخصات جسمی — چک‌باکس سالم/معلول + نوع/درجه معلولیت
             // ═══════════════════════════════════════════════════════════════════
-            this.grpPhysical.Text = "مشخصات جسمی";
-            this.grpPhysical.Location = new System.Drawing.Point(8, 300);
-            this.grpPhysical.Size = new System.Drawing.Size(715, 116);
-            this.grpPhysical.FlatStyle = System.Windows.Forms.FlatStyle.System;
-
             // آموزش — به درخواست کاربر: یک چک‌باکس «تیکی» که مشخص می‌کند فرد
             // سالم است یا معلول. با تیک‌زدن «سالم»، فیلدهای نوع/درجه معلولیت
             // غیرفعال و خالی می‌شوند (منطق در FrmCase.cs → UpdateHeadPhysicalState).
             this.chkHeadHealthy = new System.Windows.Forms.CheckBox();
             this.chkHeadHealthy.Text = "سالم است (بدون معلولیت)";
             this.chkHeadHealthy.RightToLeft = System.Windows.Forms.RightToLeft.Yes;
-            this.chkHeadHealthy.Location = new System.Drawing.Point(342, 28);
-            this.chkHeadHealthy.Size = new System.Drawing.Size(200, 24);
+            this.chkHeadHealthy.AutoSize = true;
             this.chkHeadHealthy.Checked = true;
+            this.chkHeadHealthy.Margin = new System.Windows.Forms.Padding(6, 10, 6, 10);
 
-            SetLbl(this.label20, "نوع معلولیت", 550, 66); this.txtDisabilityType.Location = new System.Drawing.Point(342, 64); this.txtDisabilityType.Size = new System.Drawing.Size(200, 26);
-            SetLbl(this.label19, "درجه معلولیت", 172, 66); this.txtDisabilityDegree.Location = new System.Drawing.Point(15, 64); this.txtDisabilityDegree.Size = new System.Drawing.Size(150, 26);
+            var gridPhysical = MkCaseFieldGrid();
+            AddCaseField(gridPhysical, this.label20, "نوع معلولیت",  this.txtDisabilityType);
+            AddCaseField(gridPhysical, this.label19, "درجه معلولیت", this.txtDisabilityDegree);
 
-            this.grpPhysical.Controls.Add(this.chkHeadHealthy);
-            this.grpPhysical.Controls.Add(this.label19); this.grpPhysical.Controls.Add(this.txtDisabilityDegree);
-            this.grpPhysical.Controls.Add(this.label20); this.grpPhysical.Controls.Add(this.txtDisabilityType);
+            // چک‌باکس بالای شبکه‌ی فیلدها، تمام‌عرض.
+            var physicalHost = new System.Windows.Forms.Panel();
+            physicalHost.Dock = System.Windows.Forms.DockStyle.Top;
+            physicalHost.AutoSize = true;
+            physicalHost.AutoSizeMode = System.Windows.Forms.AutoSizeMode.GrowAndShrink;
+            physicalHost.BackColor = System.Drawing.Color.Transparent;
+
+            var chkRow = new System.Windows.Forms.Panel();
+            chkRow.Dock = System.Windows.Forms.DockStyle.Top;
+            chkRow.Height = 38;
+            chkRow.BackColor = System.Drawing.Color.Transparent;
+            chkRow.Padding = new System.Windows.Forms.Padding(18, 8, 18, 0);
+            this.chkHeadHealthy.Dock = System.Windows.Forms.DockStyle.Right;
+            chkRow.Controls.Add(this.chkHeadHealthy);
+
+            physicalHost.Controls.Add(gridPhysical);
+            physicalHost.Controls.Add(chkRow);
+
+            this.grpPhysical.Text = "";
+            this.grpPhysical.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            var cardPhysical = MkCaseCard("مشخصات جسمی", physicalHost, this.grpPhysical);
 
             // ═══════════════════════════════════════════════════════════════════
             // گروه ۳: مشخصات پرونده
             // ═══════════════════════════════════════════════════════════════════
-            this.grpCase.Text = "مشخصات پرونده";
-            this.grpCase.Location = new System.Drawing.Point(8, 426);
-            this.grpCase.Size = new System.Drawing.Size(715, 462);
-            this.grpCase.FlatStyle = System.Windows.Forms.FlatStyle.System;
+            var gridCase = MkCaseFieldGrid();
+            AddCaseField(gridCase, this.lblCode,      "کد اختصاصی",         this.txtCode);
+            AddCaseField(gridCase, this.lblFormNo,    "شماره فرم",          this.txtFormNo);
+            AddCaseField(gridCase, this.lblCaseNo,    "شماره پرونده",       this.txtCaseNo);
+            AddCaseField(gridCase, this.label1,       "زون",                this.txtZone);
+            AddCaseField(gridCase, this.label2,       "ولایت",              this.txtProvince);
+            AddCaseField(gridCase, this.label3,       "ولسوالی",            this.txtDistrict);
+            AddCaseField(gridCase, this.label4,       "نوع درخواست",        this.txtRequestType);
+            AddCaseField(gridCase, this.label5,       "اولویت‌بندی",        this.txtPriorityLevel);
+            AddCaseField(gridCase, this.label21,      "نوع برگه مهاجرت",    this.txtMigrationCardType);
+            AddCaseField(gridCase, this.label16,      "تحت پوشش",           this.txtCoveredByOrg);
+            AddCaseField(gridCase, this.lblCaseDate,  "تاریخ تشکیل پرونده", this.dtpCaseDate);
+            AddCaseField(gridCase, this.label24,      "وضعیت خدمات",        this.txtServiceStatus);
+            AddCaseField(gridCase, this.label25,      "آدرس لوکیشن",        this.txtLocationAddress);
+            AddCaseField(gridCase, this.label23,      "سروی‌کننده‌ها",      this.txtSurveyors);
+            AddCaseField(gridCase, this.label28,      "تاریخ سروی",         this.dtpSurveyDate);
 
-            SetLbl(this.lblCode, "کد اختصاصی", 550, 28); this.txtCode.Location = new System.Drawing.Point(342, 26); this.txtCode.Size = new System.Drawing.Size(200, 26);
-            SetLbl(this.lblFormNo, "شماره فرم", 172, 28); this.txtFormNo.Location = new System.Drawing.Point(15, 26); this.txtFormNo.Size = new System.Drawing.Size(150, 26);
-
-            SetLbl(this.lblCaseNo, "شماره پرونده", 550, 62); this.txtCaseNo.Location = new System.Drawing.Point(342, 60); this.txtCaseNo.Size = new System.Drawing.Size(200, 26);
-            SetLbl(this.label1, "زون", 172, 62); this.txtZone.Location = new System.Drawing.Point(15, 60); this.txtZone.Size = new System.Drawing.Size(150, 26);
-
-            SetLbl(this.label2, "ولایت", 550, 96); this.txtProvince.Location = new System.Drawing.Point(342, 94); this.txtProvince.Size = new System.Drawing.Size(200, 26);
-            SetLbl(this.label3, "ولسوالی", 172, 96); this.txtDistrict.Location = new System.Drawing.Point(15, 94); this.txtDistrict.Size = new System.Drawing.Size(150, 26);
-
-            SetLbl(this.label4, "نوع درخواست", 550, 130); this.txtRequestType.Location = new System.Drawing.Point(342, 128); this.txtRequestType.Size = new System.Drawing.Size(200, 26);
-            SetLbl(this.label5, "اولویت‌بندی", 172, 130); this.txtPriorityLevel.Location = new System.Drawing.Point(15, 128); this.txtPriorityLevel.Size = new System.Drawing.Size(150, 26);
-
-            SetLbl(this.label21, "نوع برگه مهاجرت", 550, 164); this.txtMigrationCardType.Location = new System.Drawing.Point(342, 162); this.txtMigrationCardType.Size = new System.Drawing.Size(200, 26);
-            SetLbl(this.label16, "تحت پوشش", 172, 164); this.txtCoveredByOrg.Location = new System.Drawing.Point(15, 162); this.txtCoveredByOrg.Size = new System.Drawing.Size(150, 26);
-
-            SetLbl(this.lblCaseDate, "تاریخ تشکیل پرونده", 550, 198); this.dtpCaseDate.Location = new System.Drawing.Point(342, 196); this.dtpCaseDate.Size = new System.Drawing.Size(200, 26);
-            SetLbl(this.label24, "وضعیت خدمات", 172, 198); this.txtServiceStatus.Location = new System.Drawing.Point(15, 196); this.txtServiceStatus.Size = new System.Drawing.Size(150, 26);
-
-            SetLbl(this.lblStopReason, "دلیل قطع موقت", 550, 232); this.txtStopReason.Location = new System.Drawing.Point(342, 230); this.txtStopReason.Size = new System.Drawing.Size(200, 26);
-            SetLbl(this.label25, "آدرس لوکیشن", 172, 232); this.txtLocationAddress.Location = new System.Drawing.Point(15, 230); this.txtLocationAddress.Size = new System.Drawing.Size(150, 26);
+            // «دلیل قطع موقت» مثل قبل پنهان است تا وضعیت خدمات «قطع موقت» شود
+            // (منطقش در FrmCase.cs دست‌نخورده مانده و روی همین دو کنترل کار می‌کند).
+            this.caseFieldStopReason = AddCaseField(gridCase, this.lblStopReason, "دلیل قطع موقت", this.txtStopReason);
             this.lblStopReason.Visible = false;
             this.txtStopReason.Visible = false;
+            this.caseFieldStopReason.Visible = false;
 
-            SetLbl(this.label23, "سروی‌کننده‌ها", 550, 266); this.txtSurveyors.Location = new System.Drawing.Point(342, 264); this.txtSurveyors.Size = new System.Drawing.Size(200, 26);
-            SetLbl(this.label28, "تاریخ سروی", 172, 266); this.dtpSurveyDate.Location = new System.Drawing.Point(15, 264); this.dtpSurveyDate.Size = new System.Drawing.Size(150, 26);
-
-            // ─── شرح وضعیت فوری (بزرگ‌شده چند برابر طبق درخواست کاربر) ────────
-            // این لیبل بالای یک تکست‌باکس تمام‌عرض است نه کنار آن، پس برخلاف
-            // بقیه لیبل‌های SetLbl همچنان باید به لبه راست بچسبد (MiddleRight).
-            SetLbl(this.label27, "شرح وضعیت فوری", 15, 306); this.label27.Size = new System.Drawing.Size(680, 22);
-            this.label27.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
-            // آموزش — رفع باگ چپ‌چین بودن: برای یک TextBox چندخطی، صرف
+            // ─── شرح وضعیت فوری: چندخطی و تمام‌عرض، زیر شبکه ─────────────────
+            // آموزش — رفع باگ چپ‌چین بودن: برای TextBox چندخطی صرفِ
             // TextAlign=Right کافی نیست؛ بدون RightToLeft=Yes مکان‌نما و جریان
-            // متن از چپ شروع می‌شود. با هر دو، هم عنوان و هم متن داخل جعبه
-            // کاملاً از راست نوشته می‌شوند.
+            // متن از چپ شروع می‌شود.
             this.txtUrgentSituation.Multiline = true;
             this.txtUrgentSituation.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
             this.txtUrgentSituation.RightToLeft = System.Windows.Forms.RightToLeft.Yes;
             this.txtUrgentSituation.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
-            this.txtUrgentSituation.Location = new System.Drawing.Point(15, 330);
-            this.txtUrgentSituation.Size = new System.Drawing.Size(680, 115);
 
-            this.grpCase.Controls.Add(this.lblCode); this.grpCase.Controls.Add(this.txtCode);
-            this.grpCase.Controls.Add(this.lblFormNo); this.grpCase.Controls.Add(this.txtFormNo);
-            this.grpCase.Controls.Add(this.lblCaseNo); this.grpCase.Controls.Add(this.txtCaseNo);
-            this.grpCase.Controls.Add(this.label1); this.grpCase.Controls.Add(this.txtZone);
-            this.grpCase.Controls.Add(this.label2); this.grpCase.Controls.Add(this.txtProvince);
-            this.grpCase.Controls.Add(this.label3); this.grpCase.Controls.Add(this.txtDistrict);
-            this.grpCase.Controls.Add(this.label4); this.grpCase.Controls.Add(this.txtRequestType);
-            this.grpCase.Controls.Add(this.label5); this.grpCase.Controls.Add(this.txtPriorityLevel);
-            this.grpCase.Controls.Add(this.label21); this.grpCase.Controls.Add(this.txtMigrationCardType);
-            this.grpCase.Controls.Add(this.label16); this.grpCase.Controls.Add(this.txtCoveredByOrg);
-            this.grpCase.Controls.Add(this.lblCaseDate); this.grpCase.Controls.Add(this.dtpCaseDate);
-            this.grpCase.Controls.Add(this.label24); this.grpCase.Controls.Add(this.txtServiceStatus);
-            this.grpCase.Controls.Add(this.lblStopReason); this.grpCase.Controls.Add(this.txtStopReason);
-            this.grpCase.Controls.Add(this.label25); this.grpCase.Controls.Add(this.txtLocationAddress);
-            this.grpCase.Controls.Add(this.label23); this.grpCase.Controls.Add(this.txtSurveyors);
-            this.grpCase.Controls.Add(this.label28); this.grpCase.Controls.Add(this.dtpSurveyDate);
-            this.grpCase.Controls.Add(this.label27); this.grpCase.Controls.Add(this.txtUrgentSituation);
+            var boxUrgent = new CaseManagement.Helpers.FieldBox(
+                this.label27, "شرح وضعیت فوری", this.txtUrgentSituation);
+            boxUrgent.Dock = System.Windows.Forms.DockStyle.Top;
+            boxUrgent.Height = 132;
+            boxUrgent.Margin = new System.Windows.Forms.Padding(18, 4, 18, 12);
 
-            // ═══ پانل قابل‌اسکرول فیلدها (سه گروه پشت‌سرهم) ═══════════════════
+            var urgentHost = new System.Windows.Forms.Panel();
+            urgentHost.Dock = System.Windows.Forms.DockStyle.Top;
+            urgentHost.Height = 140;
+            urgentHost.BackColor = System.Drawing.Color.Transparent;
+            urgentHost.Padding = new System.Windows.Forms.Padding(18, 0, 18, 10);
+            urgentHost.Controls.Add(boxUrgent);
+
+            var caseHost = new System.Windows.Forms.Panel();
+            caseHost.Dock = System.Windows.Forms.DockStyle.Top;
+            caseHost.AutoSize = true;
+            caseHost.AutoSizeMode = System.Windows.Forms.AutoSizeMode.GrowAndShrink;
+            caseHost.BackColor = System.Drawing.Color.Transparent;
+            caseHost.Controls.Add(urgentHost);
+            caseHost.Controls.Add(gridCase);
+
+            this.grpCase.Text = "";
+            this.grpCase.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            var cardCase = MkCaseCard("مشخصات پرونده", caseHost, this.grpCase);
+
+            // ═══ پانل قابل‌اسکرول فیلدها (سه کارت پشت‌سرهم) ═══════════════════
+            // ترتیب افزودن معکوسِ نمایش است (هر Dock=Top بالای قبلی می‌نشیند).
             FieldsScrollPanel fieldsPanel = new FieldsScrollPanel();
             fieldsPanel.Dock = System.Windows.Forms.DockStyle.Fill;
             fieldsPanel.AutoScroll = true;
-            fieldsPanel.Controls.Add(this.grpCase);
-            fieldsPanel.Controls.Add(this.grpPhysical);
-            fieldsPanel.Controls.Add(this.grpHead);
+            fieldsPanel.Padding = new System.Windows.Forms.Padding(10, 10, 10, 10);
+            fieldsPanel.Controls.Add(cardCase);
+            fieldsPanel.Controls.Add(cardPhysical);
+            fieldsPanel.Controls.Add(cardHead);
 
             // آموزش — رفع باگ Tab نامنظم: چون گروه‌ها به این ترتیب (grpCase،
             // grpPhysical، grpHead) اضافه شدند، بدون این سه خط، Tab پیش‌فرض
@@ -588,6 +579,71 @@ namespace CaseManagement
             lbl.Size = new System.Drawing.Size(150, 22);
         }
 
+        // ─── چیدمان کارتیِ فیلدها (بازطراحی) ──────────────────────────────────
+        // شبکه‌ی سه‌ستونه‌ی فیلدها؛ ردیف‌ها AutoSize‌اند تا ارتفاع دقیقاً
+        // به‌اندازه‌ی محتوا باشد و فضای خالیِ نامتعارف نسازد.
+        private static System.Windows.Forms.TableLayoutPanel MkCaseFieldGrid()
+        {
+            var tlp = new System.Windows.Forms.TableLayoutPanel();
+            tlp.Dock = System.Windows.Forms.DockStyle.Top;
+            tlp.AutoSize = true;
+            tlp.AutoSizeMode = System.Windows.Forms.AutoSizeMode.GrowAndShrink;
+            tlp.Padding = new System.Windows.Forms.Padding(14, 8, 14, 10);
+            tlp.ColumnCount = 3;
+            tlp.BackColor = System.Drawing.Color.Transparent;
+            for (int i = 0; i < 3; i++)
+                tlp.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(
+                    System.Windows.Forms.SizeType.Percent, 100F / 3F));
+            return tlp;
+        }
+
+        // افزودن یک فیلد به شبکه. خودِ کنترلِ ورودی همان شیء قبلی می‌ماند، پس
+        // نام، رویدادها و هر کدی که با آن کار می‌کند دست‌نخورده باقی است.
+        private static CaseManagement.Helpers.FieldBox AddCaseField(
+            System.Windows.Forms.TableLayoutPanel grid,
+            System.Windows.Forms.Label captionLabel, string captionText,
+            System.Windows.Forms.Control field)
+        {
+            var box = new CaseManagement.Helpers.FieldBox(captionLabel, captionText, field);
+            box.Dock = System.Windows.Forms.DockStyle.Top;
+            grid.Controls.Add(box);
+            return box;
+        }
+
+        // کارت سفیدِ گردگوشه با سربرگ عنوان. GroupBoxِ اصلی به‌عنوان میزبانِ
+        // محتوا حفظ می‌شود (حذف نمی‌شود) تا هیچ ارجاعی در کد نشکند، فقط
+        // قاب/عنوانِ بومی‌اش خاموش شده و کارت جای آن را گرفته است.
+        private static System.Windows.Forms.Panel MkCaseCard(
+            string title, System.Windows.Forms.Control content, System.Windows.Forms.GroupBox host)
+        {
+            host.Dock = System.Windows.Forms.DockStyle.Top;
+            host.AutoSize = true;
+            host.AutoSizeMode = System.Windows.Forms.AutoSizeMode.GrowAndShrink;
+            host.Padding = new System.Windows.Forms.Padding(0);
+            host.BackColor = System.Drawing.Color.Transparent;
+            host.Controls.Add(content);
+
+            var header = new System.Windows.Forms.Label();
+            header.Dock = System.Windows.Forms.DockStyle.Top;
+            header.Height = 40;
+            header.Text = title;
+            header.Font = CaseManagement.Helpers.UiTheme.FontBold(CaseManagement.Helpers.UiTheme.SizeMedium);
+            header.ForeColor = CaseManagement.Helpers.UiTheme.TextDark;
+            header.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            header.Padding = new System.Windows.Forms.Padding(0, 0, 18, 0);
+            header.BackColor = System.Drawing.Color.Transparent;
+
+            var card = new CaseManagement.Helpers.SectionCard();
+            card.Dock = System.Windows.Forms.DockStyle.Top;
+            card.AutoSize = true;
+            card.AutoSizeMode = System.Windows.Forms.AutoSizeMode.GrowAndShrink;
+            card.Margin = new System.Windows.Forms.Padding(0, 0, 0, 12);
+            card.Padding = new System.Windows.Forms.Padding(2, 2, 2, 10);
+            card.Controls.Add(host);
+            card.Controls.Add(header);
+            return card;
+        }
+
         // دکمه نوار ابزار: متن/اندازه/فونت/فاصله در یک خط — دکمه‌ها فونت
         // بزرگ‌تر و بولد و فاصله یکنواخت دارند تا نوار دکمه‌ها منظم و حرفه‌ای
         // دیده شود (به درخواست کاربر برای دسته‌بندی و نظم).
@@ -678,6 +734,9 @@ namespace CaseManagement
         // بیشینه‌ی عرضش را به عرضِ والد مقید کند (توضیح کامل کنار ساختش).
         internal System.Windows.Forms.FlowLayoutPanel bottomActionsRow;
         internal System.Windows.Forms.TableLayoutPanel rootLayout;
+        // کانتینرِ فیلد «دلیل قطع موقت» — برای پنهان/نمایان‌کردن کلِ فیلد
+        // هماهنگ با منطقِ موجود در FrmCase.cs.
+        private CaseManagement.Helpers.FieldBox caseFieldStopReason;
         private System.Windows.Forms.Button btnPrint;
         private System.Windows.Forms.Label lblServiceStatusFilter;
         private System.Windows.Forms.CheckBox chkHeadHealthy;

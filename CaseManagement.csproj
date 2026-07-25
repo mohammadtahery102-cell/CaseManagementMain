@@ -300,6 +300,7 @@
     <Compile Include="Helpers\FieldBox.cs" />
     <Compile Include="Helpers\ResponsiveLayout.cs" />
     <Compile Include="Helpers\LoginHeroPanel.cs" />
+    <Compile Include="Helpers\SectionCard.cs" />
     <Compile Include="Models\CaseModel.cs" />
     <Compile Include="Models\FamilyModel.cs" />
     <Compile Include="Models\DocumentModel.cs" />
