@@ -157,7 +157,10 @@ namespace CaseManagement
             RightToLeftLayout = true;
             BackColor         = UiTheme.Background;
             Font              = UiTheme.Font(UiTheme.SizeBody);
-            UiTheme.MakeFixedSize(this, 980, 680);
+            // آموزش — پنجره عریض‌تر/بلندتر شد تا (الف) ۱۱ تب در نوار Pill بدون
+            // بریدگی جا شوند و (ب) محتوای کارت‌ها بدون اسکرول دیده شود — هر دو
+            // ایرادی که کاربر روی نسخه‌ی قبلی گرفت.
+            UiTheme.MakeFixedSize(this, 1160, 730);
 
             // آموزش — بازطراحی ظاهری (به درخواست کاربر): TabControl بومیِ ویندوز
             // با یک نوار «دکمه‌های بیضی‌شکل» (PillTabStrip) جایگزین شد. WinForms
@@ -206,38 +209,41 @@ namespace CaseManagement
             PillTabStrip pillTabs = new PillTabStrip();
             List<Panel> pages = new List<Panel>();
 
-            Action<string, string, Panel> addPage = delegate (string icon, string label, Panel page)
+            Action<string, Panel> addPage = delegate (string label, Panel page)
             {
                 page.Dock = DockStyle.Fill;
                 page.Visible = false;
                 contentHost.Controls.Add(page);
                 pages.Add(page);
-                pillTabs.AddTab(icon, label);
+                pillTabs.AddTab(label);
             };
 
-            addPage("🏢", "اطلاعات مؤسسه", tabGeneral);
+            // آموزش — برچسب‌ها عمداً کوتاه‌اند تا هر ۱۱ تب در یک ردیف جا شوند
+            // (با برچسب‌های بلند، نوار به دو ردیف می‌شکست و نامرتب می‌شد) —
+            // همان الگوی عکسِ نمونه که برچسب‌های تک‌کلمه‌ای دارد.
+            addPage("مؤسسه", tabGeneral);
 
             // آموزش — رفع باگ امنیتی چندمرکزی: «مدیریت مراکز» و «Backup/Restore»
             // کل سیستم را تحت تأثیر قرار می‌دهند (همه مراکز)، پس فقط SuperAdmin
             // این دو تب را می‌بیند؛ Admin مرکز (نه SuperAdmin) اصلاً این
             // امکانات را نمی‌بیند، نه فقط دکمه‌هایش غیرفعال باشد.
             if (SecurityContext.IsSuperAdmin())
-                addPage("🏬", "مدیریت مراکز", tabCenters);
+                addPage("مراکز", tabCenters);
 
-            addPage("🔢", "شماره‌گذاری", tabNumbering);
-            addPage("📁", "مسیرها و فایل‌ها", tabPaths);
-            addPage("🔒", "امنیت", tabSecurity);
+            addPage("شماره‌گذاری", tabNumbering);
+            addPage("فایل‌ها", tabPaths);
+            addPage("امنیت", tabSecurity);
 
             if (SecurityContext.IsSuperAdmin())
-                addPage("💾", "Backup و Restore", tabBackup);
+                addPage("پشتیبان‌گیری", tabBackup);
 
-            addPage("🔔", "اعلان‌ها", tabNotify);
-            addPage("📋", "اطلاعات پایه", tabLookup);
-            addPage("🛠️", "نگهداری سیستم", tabMaintenance);
+            addPage("اعلان‌ها", tabNotify);
+            addPage("اطلاعات پایه", tabLookup);
+            addPage("نگهداری", tabMaintenance);
             // حذف پرونده‌ها فقط برای کاربر دارای مجوز حذف (مدیر) نمایش داده می‌شود.
             if (SecurityContext.CanDelete())
-                addPage("🗑️", "حذف پرونده‌ها", tabDeleteCases);
-            addPage("ℹ️", "درباره و لایسنس", tabAbout);
+                addPage("حذف پرونده", tabDeleteCases);
+            addPage("درباره", tabAbout);
 
             pillTabs.SelectedIndexChanged += delegate
             {
@@ -662,100 +668,88 @@ ORDER BY CasID DESC", con))
             {
                 Dock = DockStyle.Fill
             };
+            // آموزش — AutoScroll عمداً خاموش است: خواسته‌ی صریح کاربر این بود که
+            // این صفحه «اسکرول نداشته باشد». برای همین همه‌ی فیلدها با ابعاد
+            // فشرده (MakeCompactField/MakeCompactImageField) ساخته می‌شوند تا
+            // مجموعشان از ارتفاع کارت کمتر بماند.
             FlowLayoutPanel instFlow = new FlowLayoutPanel
             {
                 Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight,
-                WrapContents = true, AutoScroll = true
+                WrapContents = true, AutoScroll = false
             };
 
             _txtOrgName = NewStyledTextBox();
-            instFlow.Controls.Add(MakeFieldPanel("نام مؤسسه", _txtOrgName));
+            instFlow.Controls.Add(MakeCompactField("نام مؤسسه", _txtOrgName));
 
             _txtOrgNameEn = NewStyledTextBox();
-            instFlow.Controls.Add(MakeFieldPanel("نام انگلیسی مؤسسه", _txtOrgNameEn));
+            instFlow.Controls.Add(MakeCompactField("نام انگلیسی مؤسسه", _txtOrgNameEn));
 
             _txtSlogan = NewStyledTextBox();
-            instFlow.Controls.Add(MakeFieldPanel("شعار", _txtSlogan));
+            instFlow.Controls.Add(MakeCompactField("شعار", _txtSlogan));
 
             _txtOrgCode = NewStyledTextBox();
-            instFlow.Controls.Add(MakeFieldPanel("کد مؤسسه", _txtOrgCode));
+            instFlow.Controls.Add(MakeCompactField("کد مؤسسه", _txtOrgCode));
 
             _txtRegNumber = NewStyledTextBox();
-            instFlow.Controls.Add(MakeFieldPanel("شماره ثبت", _txtRegNumber));
+            instFlow.Controls.Add(MakeCompactField("شماره ثبت", _txtRegNumber));
 
             _txtManagerName = NewStyledTextBox();
-            instFlow.Controls.Add(MakeFieldPanel("نام مسئول", _txtManagerName));
+            instFlow.Controls.Add(MakeCompactField("نام مسئول", _txtManagerName));
 
             _txtAddress = NewStyledTextBox();
-            instFlow.Controls.Add(MakeFieldPanel("آدرس کامل", _txtAddress));
+            instFlow.Controls.Add(MakeCompactField("آدرس کامل", _txtAddress));
 
             _txtGeneralPhone = NewStyledTextBox();
-            instFlow.Controls.Add(MakeFieldPanel("تلفن", _txtGeneralPhone));
+            instFlow.Controls.Add(MakeCompactField("تلفن", _txtGeneralPhone));
 
             _txtMobile = NewStyledTextBox();
-            instFlow.Controls.Add(MakeFieldPanel("موبایل", _txtMobile));
+            instFlow.Controls.Add(MakeCompactField("موبایل", _txtMobile));
 
             _txtWhatsApp = NewStyledTextBox();
-            instFlow.Controls.Add(MakeFieldPanel("واتساپ", _txtWhatsApp));
+            instFlow.Controls.Add(MakeCompactField("واتساپ", _txtWhatsApp));
 
             _txtEmail = NewStyledTextBox();
-            instFlow.Controls.Add(MakeFieldPanel("ایمیل", _txtEmail));
+            instFlow.Controls.Add(MakeCompactField("ایمیل", _txtEmail));
 
             _txtWebsite = NewStyledTextBox();
-            instFlow.Controls.Add(MakeFieldPanel("وب‌سایت", _txtWebsite));
+            instFlow.Controls.Add(MakeCompactField("وب‌سایت", _txtWebsite));
 
             // آموزش — شماره شروع پرونده/رسید و مسیر Backup/تصاویر به تب‌های
             // اختصاصی «شماره‌گذاری» و «مسیرها و فایل‌ها» منتقل شدند (کنترل‌ها
             // اینجا حذف شدند، ولی کلید تنظیمات همان قبلی مانده — بدون افت داده).
 
-            // ─── توضیحات (چندخطی، عریض‌تر) ───────────────────────────────────
+            // ─── توضیحات (چندخطی، تمام‌عرضِ کارت) ────────────────────────────
             _txtDescription = new TextBox { Multiline = true, ScrollBars = ScrollBars.Vertical, TextAlign = HorizontalAlignment.Right };
-            Panel descField = new Panel { Width = 430, Height = 90, Margin = new Padding(6, 4, 6, 4) };
+            Panel descField = new Panel
+            {
+                Width = CompactFieldWidth * 2 + 12, Height = 74, Margin = new Padding(3, 2, 3, 6)
+            };
             _txtDescription.Dock = DockStyle.Fill;
+            _txtDescription.Font = UiTheme.Font(UiTheme.SizeSmall);
             UiTheme.StyleTextBox(_txtDescription);
             descField.Controls.Add(_txtDescription);
             descField.Controls.Add(new Label
             {
-                Text = "توضیحات", AutoSize = false, Dock = DockStyle.Top, Height = 22,
-                TextAlign = ContentAlignment.MiddleRight, Font = UiTheme.FontBold(UiTheme.SizeSmall), ForeColor = UiTheme.TextDark
+                Text = "توضیحات", AutoSize = false, Dock = DockStyle.Top, Height = 17,
+                TextAlign = ContentAlignment.MiddleRight,
+                Font = UiTheme.FontBold(UiTheme.SizeSmall - 1F), ForeColor = UiTheme.TextMuted
             });
             instFlow.Controls.Add(descField);
 
-            // ─── لوگو: تکست‌باکس + دکمه انتخاب + پیش‌نمایش بزرگ‌شده ────────────
-            Panel logoField = new Panel { Width = 300, Height = 130, Margin = new Padding(6, 4, 6, 4) };
-            Panel logoRow = new Panel { Dock = DockStyle.Top, Height = 100 };
-            _picLogoPreview = new PictureBox
-            {
-                Dock = DockStyle.Right, Width = 100, BorderStyle = BorderStyle.FixedSingle, SizeMode = PictureBoxSizeMode.Zoom
-            };
-            Panel logoBrowseRow = new Panel { Dock = DockStyle.Fill };
-            Button btnBrowseLogo = UiTheme.CreateSecondaryButton("انتخاب لوگو", "▤");
-            btnBrowseLogo.Dock = DockStyle.Top;
-            btnBrowseLogo.Height = 30;
-            btnBrowseLogo.Click += BtnBrowseLogo_Click;
-            _txtLogoPath = new TextBox { Dock = DockStyle.Top, ReadOnly = true };
-            UiTheme.StyleTextBox(_txtLogoPath);
-            logoBrowseRow.Controls.Add(btnBrowseLogo);
-            logoBrowseRow.Controls.Add(_txtLogoPath);
-            logoRow.Controls.Add(logoBrowseRow);
-            logoRow.Controls.Add(_picLogoPreview);
-            logoField.Controls.Add(logoRow);
-            logoField.Controls.Add(new Label
-            {
-                Text = "لوگوی مؤسسه (پیش‌نمایش بزرگ)", AutoSize = false, Dock = DockStyle.Top, Height = 22,
-                TextAlign = ContentAlignment.MiddleRight, Font = UiTheme.FontBold(UiTheme.SizeSmall), ForeColor = UiTheme.TextDark
-            });
-            instFlow.Controls.Add(logoField);
+            // ─── لوگو / امضای مسئول / مهر رسمی — سه فیلدِ فشرده در یک ردیف ────
+            _txtLogoPath = new TextBox();
+            _picLogoPreview = new PictureBox();
+            instFlow.Controls.Add(MakeCompactImageField(
+                "لوگوی مؤسسه", _txtLogoPath, _picLogoPreview, BtnBrowseLogo_Click));
 
-            // ─── امضای مسئول و مهر رسمی (برای کارت شناسایی/اسناد چاپی) ────────
             _txtSignaturePath = new TextBox();
             _picSignaturePreview = new PictureBox();
-            instFlow.Controls.Add(MakeImageUploadField(
+            instFlow.Controls.Add(MakeCompactImageField(
                 "امضای مسئول دفتر", _txtSignaturePath, _picSignaturePreview, BtnBrowseSignature_Click));
 
             _txtStampPath = new TextBox();
             _picStampPreview = new PictureBox();
-            instFlow.Controls.Add(MakeImageUploadField(
+            instFlow.Controls.Add(MakeCompactImageField(
                 "مهر رسمی", _txtStampPath, _picStampPreview, BtnBrowseStamp_Click));
 
             cardInstitution.Content.Controls.Add(instFlow);
@@ -2619,6 +2613,81 @@ WHERE UserID = @ID", con))
 
         // یک فیلد: برچسب بالا + کنترل پایین، با اندازه یکسان برای همه فیلدهای
         // فرم (الگوی یکسان در کل فرم تنظیمات رعایت می‌شود).
+        // ─── فیلدِ فشرده (بازطراحی ظاهری تب «اطلاعات مؤسسه») ──────────────────
+        // آموزش — چرا یک سازنده‌ی جدا به‌جای تغییر MakeFieldPanel: آن متد را ۱۰
+        // تبِ دیگر هم استفاده می‌کنند؛ کوچک‌کردن سراسری‌اش چیدمانِ آن‌ها را
+        // به‌هم می‌ریخت. این نسخه فقط برای کارت‌های تب اول است: برچسب و ورودیِ
+        // کوتاه‌تر و فونت کوچک‌تر، تا ۱۲ فیلد + توضیحات + سه تصویر بدون هیچ
+        // اسکرولی داخل کارت جا شوند (خواسته‌ی صریح کاربر).
+        private const int CompactFieldWidth = 330;
+        private const int CompactFieldHeight = 46;
+
+        private Panel MakeCompactField(string labelText, Control input)
+        {
+            Panel p = new Panel
+            {
+                Width = CompactFieldWidth, Height = CompactFieldHeight,
+                Margin = new Padding(3, 2, 3, 2)
+            };
+
+            Label lbl = new Label
+            {
+                Text = labelText, AutoSize = false, Dock = DockStyle.Top, Height = 17,
+                TextAlign = ContentAlignment.MiddleRight,
+                Font = UiTheme.FontBold(UiTheme.SizeSmall - 1F), ForeColor = UiTheme.TextMuted
+            };
+
+            input.Dock = DockStyle.Top;
+            input.Height = 25;
+            input.Font = UiTheme.Font(UiTheme.SizeSmall);
+
+            p.Controls.Add(input);
+            p.Controls.Add(lbl);
+            return p;
+        }
+
+        // نسخه‌ی فشرده‌ی فیلد آپلود تصویر (لوگو/امضا/مهر) برای همان کارت.
+        private Panel MakeCompactImageField(string labelText, TextBox textBox, PictureBox preview, EventHandler onBrowse)
+        {
+            Panel p = new Panel { Width = 218, Height = 104, Margin = new Padding(3, 2, 3, 2) };
+
+            Label lbl = new Label
+            {
+                Text = labelText, AutoSize = false, Dock = DockStyle.Top, Height = 17,
+                TextAlign = ContentAlignment.MiddleRight,
+                Font = UiTheme.FontBold(UiTheme.SizeSmall - 1F), ForeColor = UiTheme.TextMuted
+            };
+
+            Panel row = new Panel { Dock = DockStyle.Fill };
+
+            preview.Dock = DockStyle.Right;
+            preview.Width = 78;
+            preview.BorderStyle = BorderStyle.FixedSingle;
+            preview.SizeMode = PictureBoxSizeMode.Zoom;
+
+            Panel browseCol = new Panel { Dock = DockStyle.Fill, Padding = new Padding(0, 0, 6, 0) };
+            Button btnBrowse = UiTheme.CreateSecondaryButton("انتخاب...", "▤");
+            btnBrowse.Dock = DockStyle.Top;
+            btnBrowse.Height = 27;
+            btnBrowse.Font = UiTheme.FontBold(UiTheme.SizeSmall - 1F);
+            btnBrowse.Click += onBrowse;
+
+            textBox.Dock = DockStyle.Top;
+            textBox.ReadOnly = true;
+            textBox.Height = 24;
+            textBox.Font = UiTheme.Font(UiTheme.SizeSmall - 1F);
+            UiTheme.StyleTextBox(textBox);
+
+            browseCol.Controls.Add(btnBrowse);
+            browseCol.Controls.Add(textBox);
+            row.Controls.Add(browseCol);
+            row.Controls.Add(preview);
+
+            p.Controls.Add(row);
+            p.Controls.Add(lbl);
+            return p;
+        }
+
         private Panel MakeFieldPanel(string labelText, Control input)
         {
             Panel p = new Panel();
