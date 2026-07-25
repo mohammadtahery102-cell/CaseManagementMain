@@ -30,6 +30,15 @@
     <UseApplicationTrust>false</UseApplicationTrust>
     <PublishWizardCompleted>true</PublishWizardCompleted>
     <BootstrapperEnabled>true</BootstrapperEnabled>
+    <!-- مانیفستِ Win32 برنامه — اعلام آگاهی از DPI (چارچوب چیدمان واکنش‌گرا).
+         آموزش — چرا Win32Manifest و نه ApplicationManifest: این پروژه تنظیمات
+         انتشار ClickOnce دارد (GenerateManifests=true)، و در چنین پروژه‌ای
+         MSBuild خاصیتِ ApplicationManifest را به‌عنوان «مانیفستِ استقرارِ
+         ClickOnce» تفسیر می‌کند، نه مانیفستِ Win32؛ نتیجه این بود که
+         EmbeddedWin32Manifest خالی می‌ماند و مانیفست اصلاً داخل exe جاسازی
+         نمی‌شد (با لاگ diagnostic تأیید شد). Win32Manifest مستقیماً به
+         کامپایلر پاس داده می‌شود و این ابهام را ندارد. -->
+    <Win32Manifest>app.manifest</Win32Manifest>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <PlatformTarget>AnyCPU</PlatformTarget>
@@ -289,6 +298,7 @@
     <Compile Include="Helpers\WindowChrome.cs" />
     <Compile Include="Helpers\ModernTitleBar.cs" />
     <Compile Include="Helpers\FieldBox.cs" />
+    <Compile Include="Helpers\ResponsiveLayout.cs" />
     <Compile Include="Models\CaseModel.cs" />
     <Compile Include="Models\FamilyModel.cs" />
     <Compile Include="Models\DocumentModel.cs" />
@@ -373,6 +383,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
+    <None Include="app.manifest" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="Forms\" />
