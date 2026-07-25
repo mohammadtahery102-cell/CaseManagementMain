@@ -406,7 +406,10 @@ namespace CaseManagement
             rootLayout.SetColumnSpan(buttonBar, 2);
 
             // ─── Form ─────────────────────────────────────────────────────────
-            this.AutoScaleMode     = System.Windows.Forms.AutoScaleMode.None;
+            // مهاجرت به مقیاسِ DPI (لایه ۲ چارچوب چیدمان واکنش‌گرا). توضیح کامل
+            // اینکه چرا هر دو خط لازم است، در FrmCase.Designer.cs آمده.
+            this.AutoScaleDimensions = new System.Drawing.SizeF(96F, 96F);
+            this.AutoScaleMode       = System.Windows.Forms.AutoScaleMode.Dpi;
             this.Font              = new System.Drawing.Font("Segoe UI", 9.75F);
             this.RightToLeft       = System.Windows.Forms.RightToLeft.Yes;
             this.RightToLeftLayout = true;
