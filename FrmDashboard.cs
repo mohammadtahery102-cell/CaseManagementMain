@@ -55,6 +55,14 @@ namespace CaseManagement
         private string _filterProvince = "";
         private string _filterDistrict = "";
 
+        // ─── بازطراحی ظاهری داشبورد (طبق عکس نمونه کاربر) ────────────────────
+        private TabControl _tabs;
+        private SidebarNav _sidebar;
+        private StatCard _cardTotal, _cardActive, _cardWaiting, _cardStopped, _cardFamily;
+        private Panel _activityHost;
+        private Label _lblDonutCenter;
+        private Chart _dashTrendChart;
+
         public FrmDashboard()
         {
             BuildUi();
@@ -76,10 +84,41 @@ namespace CaseManagement
             // نوار ابزار در یک ردیف کامل جا شود.
             UiTheme.MakeFixedSize(this, 1260, 730);
 
+            // ═══ نوار کناری تیره (طبق عکس نمونه) — جایگزین نوار ابزار افقی ═══
+            // آموزش — همان دکمه‌های نوار ابزار قبلی، با همان رفتار (باز کردن
+            // همان فرم‌ها)، فقط در قالب یک نوار کناریِ گروه‌بندی‌شده. هیچ
+            // قابلیتی حذف نشده.
+            _sidebar = new SidebarNav("گنجینه", "سیستم مدیریت پرونده");
+
+            _sidebar.AddGroup("اصلی");
+            int navDashboard = _sidebar.AddItem(IconFont.Home, "داشبورد", delegate { SelectTabByTitle("داشبورد کل پرونده‌ها"); });
+            _sidebar.AddItem(IconFont.Folder, "پرونده‌ها", delegate { using (var frm = new FrmCase()) frm.ShowDialog(this); RefreshAll(); });
+            _sidebar.AddItem(IconFont.People, "اعضای خانواده", delegate { SelectTabByTitle("اعضای خانواده"); });
+            _sidebar.AddItem(IconFont.Contact, "متقاضیان", delegate { using (var frm = new FrmApplicant()) frm.ShowDialog(this); RefreshAll(); });
+            _sidebar.AddItem(IconFont.Search, "جستجوی پیشرفته", delegate { using (var frm = new FrmAdvancedSearch()) frm.ShowDialog(this); });
+
+            _sidebar.AddGroup("مالی و حسابداری");
+            _sidebar.AddItem(IconFont.Money, "مالی", delegate { using (var frm = new FrmFinance()) frm.ShowDialog(this); RefreshAll(); });
+            _sidebar.AddItem(IconFont.Calculator, "حسابداری ایتام", delegate { using (var frm = new CaseManagement.Accounting.FrmAccounting()) frm.ShowDialog(this); });
+
+            _sidebar.AddGroup("داده و گزارش");
+            _sidebar.AddItem(IconFont.Sync, "همگام‌سازی", delegate { using (var frm = new CaseManagement.Sync.FrmSyncWizard()) frm.ShowDialog(this); RefreshAll(); });
+            _sidebar.AddItem(IconFont.Chart, "گزارش رویدادها", delegate { SelectTabByTitle("گزارش رویدادها"); });
+
+            _sidebar.AddGroup("سیستم");
+            _sidebar.AddItem(IconFont.Shield, "کاربران و دسترسی", OpenUsers);
+            _sidebar.AddItem(IconFont.Settings, "تنظیمات", OpenSettings);
+            _sidebar.AddItem(IconFont.Book, "جزوه آموزشی", OpenTrainingManual);
+            _sidebar.AddItem(IconFont.Phone, "ارتباط با ما", OpenContactUs);
+            _sidebar.AddItem(IconFont.Exit, "خروج از حساب", delegate { LogoutCurrentUser(); });
+
+            _sidebar.SetActive(navDashboard);
+
             Panel toolbar = new Panel();
             toolbar.Dock = DockStyle.Top;
             toolbar.Height = 56;
             toolbar.BackColor = UiTheme.PrimaryDark;
+            toolbar.Visible = false; // جایگزین شده با نوار کناری؛ برای سازگاری نگه داشته شده
 
             FlowLayoutPanel toolButtons = new FlowLayoutPanel();
             toolButtons.Dock = DockStyle.Fill;
@@ -166,113 +205,153 @@ namespace CaseManagement
             toolbar.Controls.Add(userPanel);
             toolbar.Controls.Add(toolButtons);
 
-            // ─── بنر عنوان بزرگ + لوگو (بندهای ۳ و ۹ بازطراحی ظاهری) ──────
-            // آموزش — ارتفاع از ۸۴ به ۱۱۲ افزایش یافت تا خط کوچک «حدیث روز»
-            // هم در همین نوار سربرگ، نزدیک لوگو، جا شود (به درخواست کاربر).
-            Panel titleBanner = new Panel();
-            titleBanner.Dock = DockStyle.Top;
-            titleBanner.Height = 112;
-            titleBanner.BackColor = UiTheme.CardBack;
+            // ═══ سربرگ بالا: خوش‌آمد (راست) + کاربر و ابزارها (چپ) ═══════════
+            Panel header = BuildHeaderBar();
 
-            // آموزش — اثر RightToLeftLayout=true: دستگاه مختصات و ترازها آینه
-            // می‌شوند. برای همین ContentAlignment.MiddleRight به‌صورت بصری «چپ»
-            // رندر می‌شد و عنوان به گوشه چپ می‌افتاد. برای نمایش عنوان و لوگو
-            // در سمت راست بصری، از تراز/لنگر «چپِ منطقی» استفاده می‌کنیم که پس
-            // از آینه‌شدن به راست بصری تبدیل می‌شود.
-            // آموزش — به درخواست کاربر: دکمه «درباره برنامه» از نوار ابزار حذف
-            // شد؛ حالا با کلیک روی همین لوگو باز می‌شود (Cursor=Hand برای نشان
-            // دادن قابل‌کلیک‌بودن).
-            // آموزش — چون فرم دیگر آینه‌ی هندسی ندارد، لوگو و دکمه‌ی تازه‌سازی در
-            // یک پنلِ Dock=Right قرار می‌گیرند تا قطعاً و پایدار در سمت راست بنر
-            // بمانند (بدون وابستگی به مختصات مطلق/آینه).
-            Panel logoArea = new Panel();
-            logoArea.Dock = DockStyle.Right;
-            logoArea.Width = 100;
-            logoArea.BackColor = UiTheme.CardBack;
-
-            PictureBox picBannerLogo = new PictureBox();
-            picBannerLogo.Image = LogoHelper.GetLogoImage();
-            picBannerLogo.SizeMode = PictureBoxSizeMode.Zoom;
-            picBannerLogo.Size = new Size(72, 72);
-            picBannerLogo.Location = new Point(14, 6);
-            picBannerLogo.Cursor = Cursors.Hand;
-            picBannerLogo.Click += delegate { using (var frm = new FrmAbout()) frm.ShowDialog(this); };
-            logoArea.Controls.Add(picBannerLogo);
-
-            // دکمه «تازه‌سازی» گرد، زیر لوگو.
-            Button btnRefreshNearLogo = new Button();
-            btnRefreshNearLogo.Text = "↻";
-            btnRefreshNearLogo.Font = new Font("Segoe UI", 14F, FontStyle.Bold);
-            btnRefreshNearLogo.Size = new Size(34, 34);
-            btnRefreshNearLogo.Location = new Point(33, 78);
-            btnRefreshNearLogo.FlatStyle = FlatStyle.Flat;
-            btnRefreshNearLogo.FlatAppearance.BorderSize = 0;
-            btnRefreshNearLogo.BackColor = UiTheme.Primary;
-            btnRefreshNearLogo.ForeColor = Color.White;
-            btnRefreshNearLogo.Cursor = Cursors.Hand;
-            UiTheme.RoundCorners(btnRefreshNearLogo, 34);
-            var refreshTip = new ToolTip();
-            refreshTip.SetToolTip(btnRefreshNearLogo, "تازه‌سازی");
-            btnRefreshNearLogo.Click += delegate { RefreshAll(); };
-            logoArea.Controls.Add(btnRefreshNearLogo);
-
-            titleBanner.Controls.Add(logoArea);
-
-            // آموزش — رفع «چند کلمه‌ی حدیث گم می‌شود»: علت واقعی این بود که حدیث
-            // در یک ردیفِ باریک (فقط ۲۴px، تک‌خط، فشرده بین عنوان و لوگو) جا داده
-            // شده بود؛ برای جمله‌های بلندتر جا کم می‌آمد و بخشی از متن قطع
-            // می‌شد. به‌درخواست کاربر، حدیث کاملاً از بنر جدا و در یک نوارِ
-            // پهن و وسط‌چین (تمام عرض داشبورد) زیر بنر عنوان قرار گرفت؛ اینجا
-            // فضای کافی برای دوخطی‌شدن و نمایش کامل جمله وجود دارد.
-            Panel bannerTextArea = new Panel();
-            bannerTextArea.Dock = DockStyle.Fill;
-            bannerTextArea.Padding = new Padding(14, 8, 14, 8);
-
-            Label lblBannerTitle = new Label();
-            lblBannerTitle.Text = "داشبورد مدیریتی";
-            lblBannerTitle.Font = UiTheme.FontBold(UiTheme.SizeTitle);
-            lblBannerTitle.ForeColor = UiTheme.PrimaryDark;
-            lblBannerTitle.Dock = DockStyle.Fill;
-            // تراز متن با RightToLeft=Yes ارثی آینه می‌شود؛ MiddleLeft یعنی راستِ بصری.
-            lblBannerTitle.TextAlign = ContentAlignment.MiddleLeft;
-            bannerTextArea.Controls.Add(lblBannerTitle);
-            titleBanner.Controls.Add(bannerTextArea); // Fill — سمت چپِ logoArea قرار می‌گیرد
-
-            // ─── نوار حدیث روز — پهن، تمام‌عرض، وسط‌چین (زیر بنر عنوان) ──────
+            // ─── نوار حدیث روز — پهن، تمام‌عرض، وسط‌چین (زیر سربرگ) ──────────
             Panel hadithBar = BuildHadithBar();
 
-            TabControl tabs = new TabControl();
-            tabs.Dock = DockStyle.Fill;
-            tabs.Font = UiTheme.FontBold(10F);
+            _tabs = new TabControl();
+            _tabs.Dock = DockStyle.Fill;
+            _tabs.Font = UiTheme.FontBold(10F);
             // آموزش — RightToLeftLayout ارث‌بری نمی‌شود: روی فرم true است اما
             // TabControl خودش پیش‌فرض false دارد، پس نوار تب‌ها از چپ شروع
             // می‌شد. با تنظیم مستقیم این دو خاصیت، تب index=0 (داشبورد) به سمت
             // راست منتقل می‌شود و ترتیب تب‌ها راست‌به‌چپ می‌شود.
-            tabs.RightToLeft = RightToLeft.Yes;
-            tabs.RightToLeftLayout = true;
+            _tabs.RightToLeft = RightToLeft.Yes;
+            _tabs.RightToLeftLayout = true;
 
             // ترتیب تب‌ها (RTL): تب index=0 در سمت راست نمایش داده می‌شود.
             // آموزش — به درخواست کاربر: «داشبورد کل پرونده‌ها» دوباره تب اول/
             // پیش‌فرض شد، و تب «تحلیل خانواده» حذف گردید.
-            tabs.TabPages.Add(BuildSummaryTab());            // داشبورد کل پرونده‌ها (پیش‌فرض)
-            tabs.TabPages.Add(BuildFamilyMembersStatsTab()); // اعضای خانواده
-            tabs.TabPages.Add(BuildNotificationsTab());      // اعلان‌ها
-            tabs.TabPages.Add(BuildTrendTab());              // روند زمانی
-            tabs.TabPages.Add(BuildCriticalTab());           // وضعیت‌های بحرانی
-            tabs.TabPages.Add(BuildGeographyTab());          // جغرافیا
-            tabs.TabPages.Add(BuildReminderTab());           // یادآوری سروی
-            tabs.TabPages.Add(BuildQualityTab());            // کیفیت داده
-            tabs.TabPages.Add(BuildAuditTab());              // گزارش رویدادها
+            _tabs.TabPages.Add(BuildSummaryTab());            // داشبورد کل پرونده‌ها (پیش‌فرض)
+            _tabs.TabPages.Add(BuildFamilyMembersStatsTab()); // اعضای خانواده
+            _tabs.TabPages.Add(BuildNotificationsTab());      // اعلان‌ها
+            _tabs.TabPages.Add(BuildTrendTab());              // روند زمانی
+            _tabs.TabPages.Add(BuildCriticalTab());           // وضعیت‌های بحرانی
+            _tabs.TabPages.Add(BuildGeographyTab());          // جغرافیا
+            _tabs.TabPages.Add(BuildReminderTab());           // یادآوری سروی
+            _tabs.TabPages.Add(BuildQualityTab());            // کیفیت داده
+            _tabs.TabPages.Add(BuildAuditTab());              // گزارش رویدادها
 
-            tabs.SelectedIndex = 0; // پیش‌فرض روی «اعضای خانواده»
+            _tabs.SelectedIndex = 0;
 
-            Controls.Add(tabs);
-            Controls.Add(BuildFilterBar());
-            Controls.Add(hadithBar);
-            Controls.Add(titleBanner);
+            // آموزش — ترتیب افزودن مهم است: نوار کناری (Dock=Right) اول اضافه
+            // می‌شود تا عرضش را از سمت راست بگیرد، سپس نوارهای Top، و در آخر
+            // محتوای Fill بقیه‌ی فضا را پر می‌کند.
+            Panel contentHost = new Panel { Dock = DockStyle.Fill, BackColor = UiTheme.Background };
+            contentHost.Controls.Add(_tabs);
+            contentHost.Controls.Add(BuildFilterBar());
+            contentHost.Controls.Add(hadithBar);
+            contentHost.Controls.Add(header);
+
+            Controls.Add(contentHost);
+            Controls.Add(_sidebar);
             Controls.Add(toolbar);
 
             RefreshAll();
+        }
+
+        // ─── سربرگ بالای داشبورد (طبق عکس نمونه) ─────────────────────────────
+        private Panel BuildHeaderBar()
+        {
+            Panel header = new Panel { Dock = DockStyle.Top, Height = 78, BackColor = UiTheme.CardBack, Padding = new Padding(20, 0, 20, 0) };
+
+            // ── سمت چپ: آواتار/نام کاربر + دکمه‌های ابزار ──
+            Panel left = new Panel { Dock = DockStyle.Left, Width = 300, BackColor = Color.Transparent };
+
+            Panel userBox = new Panel { Dock = DockStyle.Left, Width = 150, BackColor = Color.Transparent };
+            Label lblUserName = new Label
+            {
+                Text = SecurityContext.Username, Dock = DockStyle.Top, Height = 22,
+                Font = UiTheme.FontBold(UiTheme.SizeBody), ForeColor = UiTheme.TextDark,
+                TextAlign = ContentAlignment.BottomLeft, Padding = new Padding(0, 16, 0, 0)
+            };
+            Label lblUserRole = new Label
+            {
+                Text = "● " + UiTheme.RoleDisplay(SecurityContext.Role), Dock = DockStyle.Top, Height = 20,
+                Font = UiTheme.Font(UiTheme.SizeSmall - 1F), ForeColor = UiTheme.Success,
+                TextAlign = ContentAlignment.TopLeft
+            };
+            userBox.Controls.Add(lblUserRole);
+            userBox.Controls.Add(lblUserName);
+
+            FlowLayoutPanel tools = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = false, Padding = new Padding(0, 21, 0, 0), BackColor = Color.Transparent
+            };
+            tools.Controls.Add(MakeHeaderIconButton(IconFont.Sync, "تازه‌سازی", delegate { RefreshAll(); }));
+            tools.Controls.Add(MakeHeaderIconButton(IconFont.Bell, "اعلان‌ها", delegate { SelectTabByTitle("اعلان‌ها"); }));
+            tools.Controls.Add(MakeHeaderIconButton(IconFont.Settings, "تنظیمات", delegate { OpenSettings(this, EventArgs.Empty); }));
+
+            left.Controls.Add(tools);
+            left.Controls.Add(userBox);
+
+            // ── سمت راست: پیام خوش‌آمد ──
+            Panel right = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent };
+            Label lblGreeting = new Label
+            {
+                Text = "سلام " + SecurityContext.Username + " 👋", Dock = DockStyle.Top, Height = 30,
+                Font = UiTheme.FontBold(UiTheme.SizeLarge), ForeColor = UiTheme.TextDark,
+                TextAlign = ContentAlignment.BottomRight, Padding = new Padding(0, 14, 0, 0)
+            };
+            Label lblWelcome = new Label
+            {
+                Text = "به سیستم مدیریت پرونده گنجینه خوش آمدید  —  " + SecurityContext.CenterDisplay,
+                Dock = DockStyle.Top, Height = 22,
+                Font = UiTheme.Font(UiTheme.SizeSmall), ForeColor = UiTheme.TextMuted,
+                TextAlign = ContentAlignment.TopRight
+            };
+            right.Controls.Add(lblWelcome);
+            right.Controls.Add(lblGreeting);
+
+            header.Controls.Add(right);
+            header.Controls.Add(left);
+
+            Panel divider = new Panel { Dock = DockStyle.Bottom, Height = 1, BackColor = UiTheme.Border };
+            header.Controls.Add(divider);
+
+            return header;
+        }
+
+        // دکمه‌ی آیکونیِ گردِ سربرگ (آیکون با فونتِ آیکونی، نه متن فارسی).
+        private Control MakeHeaderIconButton(string glyph, string tooltip, EventHandler onClick)
+        {
+            Button b = new Button
+            {
+                Text = glyph,
+                Font = IconFont.Get(12F),
+                Size = new Size(36, 36),
+                Margin = new Padding(4, 0, 4, 0),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = UiTheme.Background,
+                ForeColor = UiTheme.TextDark,
+                Cursor = Cursors.Hand,
+                UseVisualStyleBackColor = false,
+                TabStop = false
+            };
+            b.FlatAppearance.BorderSize = 0;
+            b.FlatAppearance.MouseOverBackColor = UiTheme.HoverTint;
+            UiTheme.RoundCorners(b, 36);
+            b.Click += onClick;
+            new ToolTip().SetToolTip(b, tooltip);
+            return b;
+        }
+
+        // انتخاب تب بر اساس عنوانش — برای آیتم‌های نوار کناری که به‌جای باز کردن
+        // یک فرم، باید یکی از تب‌های همین داشبورد را نشان بدهند.
+        private void SelectTabByTitle(string title)
+        {
+            if (_tabs == null) return;
+            foreach (TabPage page in _tabs.TabPages)
+            {
+                if (page.Text == title)
+                {
+                    _tabs.SelectedTab = page;
+                    return;
+                }
+            }
         }
 
         // نوار حدیث روز: تمام‌عرض داشبورد، وسط‌چین، با ارتفاع کافی برای دوخطی
@@ -429,35 +508,179 @@ namespace CaseManagement
             TabPage page = new TabPage("داشبورد کل پرونده‌ها");
             page.BackColor = UiTheme.Background;
             // آموزش — رفع کرش «Height must be greater than 0px»: اندازه‌ی پیش‌فرضِ
-            // یک TabPage پیش از پیوستن به TabControl حدود ۱۰۰px است. چون نوار
-            // کارت‌ها (پایین‌تر) ۱۳۲px ارتفاع دارد، بدون این خط، ارتفاعِ باقی‌مانده
-            // برای نمودارِ Dock=Fill در همین لحظه (پیش از پیوستن واقعی صفحه)
-            // منفی محاسبه می‌شد؛ برخلاف پنل‌های معمولی، Chart این حالت را نادیده
-            // نمی‌گیرد و بلافاصله استثنا پرتاب می‌کند. این اندازه‌ی موقت (که بعداً
-            // با پیوستن به TabControl به‌درستی بازنویسی می‌شود) از آن جلوگیری می‌کند.
-            page.Size = new Size(1200, 450);
+            // یک TabPage پیش از پیوستن به TabControl حدود ۱۰۰px است؛ چون نوارهای
+            // Dock=Top این صفحه از آن بلندترند، ارتفاعِ باقی‌مانده برای کنترلِ
+            // Dock=Fill منفی محاسبه می‌شد و کنترل Chart (برخلاف پنل‌ها) بلافاصله
+            // استثنا پرتاب می‌کرد. این اندازه‌ی موقت از آن جلوگیری می‌کند.
+            page.Size = new Size(1200, 700);
+            page.Padding = new Padding(14, 12, 14, 12);
 
-            // آموزش — رفع «فضای خالی بزرگ زیر کارت‌ها»: قبلاً از SplitContainer با
-            // SplitterDistance ثابت (۲۵۰) استفاده می‌شد، در حالی که ردیف کارت‌ها فقط
-            // ~۱۲۰px ارتفاع دارد؛ نتیجه یک فاصله‌ی خالیِ بزرگ زیر کارت‌ها و نمودار
-            // دایره‌ای فشرده/بریده در پایین صفحه بود. حالا کارت‌ها در یک نوار
-            // Dock=Top با ارتفاعِ دقیقاً هم‌اندازه‌ی محتوایشان قرار می‌گیرند و نمودار
-            // Dock=Fill تمام فضای باقی‌مانده (که حالا خیلی بزرگ‌تر است) را می‌گیرد.
+            // ═══ ردیف ۱: پنج کارت آماری با نمودار کوچک (طبق عکس نمونه) ═══════
             summaryPanel = new FlowLayoutPanel();
             summaryPanel.Dock = DockStyle.Top;
-            summaryPanel.Height = 132;
+            summaryPanel.Height = 156;
             summaryPanel.BackColor = UiTheme.Background;
-            summaryPanel.Padding = new Padding(12, 12, 12, 4);
+            summaryPanel.Padding = new Padding(0, 0, 0, 10);
             summaryPanel.AutoScroll = false;
-            summaryPanel.WrapContents = true;
+            summaryPanel.WrapContents = false;
+            summaryPanel.FlowDirection = FlowDirection.LeftToRight;
 
-            statusChart = CreateChart("وضعیت پرونده‌ها", SeriesChartType.Pie);
+            _cardTotal   = MakeStatCard("کل پرونده‌ها", "پرونده", IconFont.Folder,   "#A855F7", "#FAF5FF");
+            _cardActive  = MakeStatCard("فعال",          "پرونده", IconFont.Check,    "#22C55E", "#F0FDF4");
+            _cardWaiting = MakeStatCard("در انتظار تأیید","پرونده", IconFont.Clock,   "#F59E0B", "#FFFBEB");
+            _cardStopped = MakeStatCard("قطع شده‌ها",     "پرونده", IconFont.Cancel,   "#EF4444", "#FEF2F2");
+            _cardFamily  = MakeStatCard("کل اعضای خانواده","نفر",   IconFont.People,   "#3B82F6", "#EFF6FF");
 
-            // Fill باید قبل از Top اضافه شود تا کارت‌ها (که آخر اضافه می‌شوند) در
-            // بالای صفحه بمانند و نمودار باقی‌مانده‌ی زیرشان را پر کند.
-            page.Controls.Add(statusChart);
+            summaryPanel.Controls.Add(_cardTotal);
+            summaryPanel.Controls.Add(_cardActive);
+            summaryPanel.Controls.Add(_cardWaiting);
+            summaryPanel.Controls.Add(_cardStopped);
+            summaryPanel.Controls.Add(_cardFamily);
+
+            // ═══ ردیف ۲: نمودار دونات (راست) + آخرین فعالیت‌ها (چپ) ═══════════
+            // آموزش — Size صریح پیش از افزودن فرزندان: کنترل Chart اگر در لحظه‌ی
+            // چیدمان عرض/ارتفاع صفر یا منفی بگیرد، بلافاصله استثنا می‌دهد (برخلاف
+            // پنل‌ها که نادیده می‌گیرند). یک پنلِ تازه‌ساخته عرضِ پیش‌فرضِ کوچکی
+            // دارد؛ وقتی یک فرزندِ Dock=Left با عرض ۴۳۰ اضافه شود، سهمِ فرزندِ
+            // Dock=Fill منفی می‌شود و دقیقاً همان استثنا رخ می‌دهد. با دادن
+            // اندازه‌ی اولیه‌ی معقول این محاسبه‌ی میانی هرگز منفی نمی‌شود (بعداً
+            // با Dock به‌درستی بازنویسی می‌شود).
+            Panel row2 = new Panel { Dock = DockStyle.Fill, BackColor = UiTheme.Background, Size = new Size(1200, 420) };
+
+            DashboardCard cardDonut = new DashboardCard("نمودار وضعیت پرونده‌ها") { Dock = DockStyle.Fill };
+            statusChart = CreateChart("", SeriesChartType.Doughnut);
+            statusChart.Titles.Clear();
+            ConfigureDonut(statusChart);
+
+            // عددِ مرکزِ دونات — روی خودِ نمودار شناور می‌شود.
+            _lblDonutCenter = new Label
+            {
+                Text = "0", AutoSize = false, Size = new Size(140, 46),
+                Font = UiTheme.FontBold(19F), ForeColor = UiTheme.TextDark,
+                TextAlign = ContentAlignment.MiddleCenter, BackColor = Color.Transparent
+            };
+            statusChart.Controls.Add(_lblDonutCenter);
+            statusChart.Resize += delegate { CenterDonutLabel(); };
+
+            cardDonut.Content.Controls.Add(statusChart);
+
+            Panel activityHostWrap = new Panel { Dock = DockStyle.Left, Width = 430, BackColor = UiTheme.Background, Padding = new Padding(0, 0, 12, 0) };
+            DashboardCard cardActivity = new DashboardCard("آخرین فعالیت‌ها") { Dock = DockStyle.Fill };
+            // AutoScroll روشن است تا اگر ارتفاع کارت برای همه‌ی ردیف‌ها کم بود،
+            // ردیف‌ها بریده/گم نشوند (در تست تصویری دیده شد که سه ردیفِ آخر
+            // زیرِ لبه‌ی کارت پنهان می‌شدند).
+            _activityHost = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent, AutoScroll = true };
+            cardActivity.Content.Controls.Add(_activityHost);
+            activityHostWrap.Controls.Add(cardActivity);
+
+            row2.Controls.Add(cardDonut);
+            row2.Controls.Add(activityHostWrap);
+
+            // ═══ ردیف ۳: گزارش سریع (چپ) + نمودار روند (راست) ════════════════
+            Panel row3 = new Panel { Dock = DockStyle.Bottom, BackColor = UiTheme.Background, Padding = new Padding(0, 12, 0, 0), Size = new Size(1200, 250) };
+
+            // آموزش — این نمودار یک نمونه‌ی جداست، نه همان trendChart تبِ «روند
+            // زمانی». اگر همان فیلد استفاده می‌شد، BuildTrendTab بعداً مقدارش را
+            // بازنویسی می‌کرد و نمودارِ داشبورد یتیم و خالی می‌ماند (این دقیقاً
+            // در تست تصویری دیده شد: کارت روند کاملاً سفید بود).
+            DashboardCard cardTrend = new DashboardCard("نمودار روند ثبت پرونده‌ها") { Dock = DockStyle.Fill };
+            _dashTrendChart = CreateChart("", SeriesChartType.Line);
+            _dashTrendChart.Titles.Clear();
+            _dashTrendChart.Dock = DockStyle.Fill;
+            cardTrend.Content.Controls.Add(_dashTrendChart);
+
+            Panel quickWrap = new Panel { Dock = DockStyle.Left, Width = 430, BackColor = UiTheme.Background, Padding = new Padding(0, 0, 12, 0) };
+            DashboardCard cardQuick = new DashboardCard("گزارش سریع") { Dock = DockStyle.Fill };
+            Panel quickHost = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent };
+            quickHost.Controls.Add(new QuickReportRow(IconFont.People, ColorTranslator.FromHtml("#8B5CF6"),
+                "گزارش اعضای خانواده", "آمار کامل اعضای خانواده", delegate { SelectTabByTitle("اعضای خانواده"); }));
+            quickHost.Controls.Add(new QuickReportRow(IconFont.Money, ColorTranslator.FromHtml("#F59E0B"),
+                "گزارش کیفیت داده", "پرونده‌های دارای نقص اطلاعات", delegate { SelectTabByTitle("کیفیت داده"); }));
+            quickHost.Controls.Add(new QuickReportRow(IconFont.Chart, ColorTranslator.FromHtml("#22C55E"),
+                "گزارش وضعیت‌های بحرانی", "پرونده‌های نیازمند رسیدگی فوری", delegate { SelectTabByTitle("وضعیت‌های بحرانی"); }));
+            quickHost.Controls.Add(new QuickReportRow(IconFont.Document, ColorTranslator.FromHtml("#3B82F6"),
+                "گزارش کل پرونده‌ها", "مشاهده و خروجی فهرست پرونده‌ها", delegate { using (var frm = new FrmCase()) frm.ShowDialog(this); RefreshAll(); }));
+            cardQuick.Content.Controls.Add(quickHost);
+            quickWrap.Controls.Add(cardQuick);
+
+            row3.Controls.Add(cardTrend);
+            row3.Controls.Add(quickWrap);
+
+            // Fill قبل از Top/Bottom اضافه می‌شود تا ترتیب چیدمان درست باشد.
+            page.Controls.Add(row2);
+            page.Controls.Add(row3);
             page.Controls.Add(summaryPanel);
             return page;
+        }
+
+        private StatCard MakeStatCard(string title, string unit, string glyph, string accentHex, string tintHex)
+        {
+            return new StatCard(title, unit, glyph,
+                ColorTranslator.FromHtml(accentHex), ColorTranslator.FromHtml(tintHex))
+            {
+                Width = 196, Height = 146, Margin = new Padding(0, 0, 12, 0)
+            };
+        }
+
+        // ظاهر دوناتِ نمودار وضعیت — بدون محور/شبکه، با لجندِ سمت راست.
+        private void ConfigureDonut(Chart chart)
+        {
+            chart.Dock = DockStyle.Fill;
+            chart.ChartAreas[0].BackColor = Color.Transparent;
+            chart.BackColor = Color.Transparent;
+            chart.ChartAreas[0].AxisX.LineWidth = 0;
+            chart.ChartAreas[0].AxisY.LineWidth = 0;
+            chart.ChartAreas[0].AxisX.MajorGrid.Enabled = false;
+            chart.ChartAreas[0].AxisY.MajorGrid.Enabled = false;
+            chart.ChartAreas[0].AxisX.MajorTickMark.Enabled = false;
+            chart.ChartAreas[0].AxisY.MajorTickMark.Enabled = false;
+            chart.ChartAreas[0].AxisX.LabelStyle.Enabled = false;
+            chart.ChartAreas[0].AxisY.LabelStyle.Enabled = false;
+
+            // آموزش — موقعیت ناحیه‌ی رسم و لجند «صریح» تعیین می‌شود (نه Auto):
+            // با حالت خودکار، ChartAreas[0].Position همیشه (۰،۰،۱۰۰،۱۰۰) گزارش
+            // می‌شد در حالی که دونات عملاً فقط بخشِ چپ را می‌گرفت (لجند بقیه را
+            // برمی‌داشت)؛ نتیجه این بود که عددِ مرکزی کنارِ دونات می‌افتاد نه
+            // وسطِ سوراخش (در تست تصویری دیده شد). با مقدارِ صریح، محاسبه‌ی
+            // مرکز در CenterDonutLabel دقیق می‌شود.
+            chart.ChartAreas[0].Position = new ElementPosition(2, 4, 62, 92);
+            chart.ChartAreas[0].InnerPlotPosition = new ElementPosition(0, 0, 100, 100);
+
+            chart.Legends.Clear();
+            Legend legend = new Legend("main")
+            {
+                Docking = Docking.Right,
+                Alignment = StringAlignment.Center,
+                BackColor = Color.Transparent,
+                Font = UiTheme.Font(UiTheme.SizeSmall),
+                ForeColor = UiTheme.TextDark,
+                IsTextAutoFit = false,
+                Position = new ElementPosition(66, 22, 33, 56)
+            };
+            chart.Legends.Add(legend);
+        }
+
+        private void CenterDonutLabel()
+        {
+            if (_lblDonutCenter == null || statusChart == null) return;
+            if (statusChart.Width <= 0 || statusChart.Height <= 0) return;
+
+            try
+            {
+                // آموزش — به‌جای حدس‌زدنِ عرضِ لجند (که در تست تصویری باعث شد عدد
+                // مرکزی کنارِ دونات بیفتد، نه وسطِ آن)، مرکز از روی موقعیتِ واقعیِ
+                // «ناحیه‌ی رسمِ» نمودار حساب می‌شود. Position بر حسب درصدِ ابعادِ
+                // خودِ کنترل است، پس تبدیل به پیکسل ساده و دقیق است.
+                ElementPosition pos = statusChart.ChartAreas[0].Position;
+                float cx = statusChart.Width * (pos.X + pos.Width / 2f) / 100f;
+                float cy = statusChart.Height * (pos.Y + pos.Height / 2f) / 100f;
+
+                _lblDonutCenter.Location = new Point(
+                    (int)Math.Max(0, cx - _lblDonutCenter.Width / 2f),
+                    (int)Math.Max(0, cy - _lblDonutCenter.Height / 2f));
+                _lblDonutCenter.BringToFront();
+            }
+            catch { /* موقعیت‌دهی تزئینی است */ }
         }
 
         private TabPage BuildTrendTab()
@@ -1877,7 +2100,11 @@ ORDER BY RemindAt", con))
 
         private void LoadSummary()
         {
-            summaryPanel.Controls.Clear();
+            // آموزش — اینجا عمداً summaryPanel.Controls.Clear() نداریم: در طراحی
+            // قبلی کارت‌ها هر بار از نو ساخته می‌شدند، ولی حالا همان پنج StatCardِ
+            // ساخته‌شده در BuildSummaryTab فقط مقدارشان به‌روز می‌شود. اگر Clear
+            // بماند، کارت‌ها در اولین RefreshAll پاک می‌شوند و ردیف آمار خالی
+            // می‌ماند (این باگ واقعاً رخ داد و با دامپِ درخت کنترل‌ها پیدا شد).
             int cid = SecurityContext.CenterFilterId;
 
             int total = 0, active = 0, waiting = 0, stopped = 0, stoppedTemp = 0, family = 0;
@@ -1914,11 +2141,23 @@ WHERE (@CID = 0 OR CenterID = @CID)" + CaseFilterSql("") + @"", con))
                 }
             }
 
-            AddSummaryCard("کل پرونده‌ها", total, "▤", UiTheme.Primary);
-            AddSummaryCard("فعال", active, "✔", UiTheme.Success);
-            AddSummaryCard("در انتظار تأیید", waiting, "⏳", UiTheme.Warning);
-            AddSummaryCard("قطع", stopped, "✕", UiTheme.Danger);
-            AddSummaryCard("اعضای خانواده", family, "♥", UiTheme.Primary);
+            // آموزش — کارت‌ها دیگر هر بار از نو ساخته نمی‌شوند (الگوی قبلی:
+            // Controls.Clear + AddSummaryCard)؛ همان پنج کارتِ ساخته‌شده در
+            // BuildSummaryTab فقط مقدارشان به‌روز می‌شود. این هم سریع‌تر است و
+            // هم باعث پرش/سوسوی چشمی هنگام تازه‌سازی نمی‌شود.
+            _cardTotal.SetValue(total);
+            _cardActive.SetValue(active);
+            _cardWaiting.SetValue(waiting);
+            _cardStopped.SetValue(stopped);
+            _cardFamily.SetValue(family);
+
+            LoadStatCardTrends();
+
+            if (_lblDonutCenter != null)
+            {
+                _lblDonutCenter.Text = total.ToString("N0");
+                CenterDonutLabel();
+            }
 
             DataTable chartData = new DataTable();
             chartData.Columns.Add("Title");
@@ -1927,7 +2166,262 @@ WHERE (@CID = 0 OR CenterID = @CID)" + CaseFilterSql("") + @"", con))
             chartData.Rows.Add("در انتظار تأیید", waiting);
             chartData.Rows.Add("قطع", stopped);
             chartData.Rows.Add("قطع موقت", stoppedTemp);
-            FillChart(statusChart, chartData, "Title", "Count", SeriesChartType.Pie);
+            FillChart(statusChart, chartData, "Title", "Count", SeriesChartType.Doughnut);
+
+            // دوناتِ نازک‌تر با سوراخ بزرگ‌تر، تا عددِ مرکزی جا شود (مثل عکس).
+            if (statusChart.Series.Count > 0)
+            {
+                statusChart.Series[0].IsValueShownAsLabel = false;
+                // ضخامت حلقه‌ی دونات یک ویژگیِ سفارشیِ خودِ Series است (نه Chart).
+                statusChart.Series[0]["DoughnutRadius"] = "38";
+                statusChart.Series[0].LegendText = "#VALX  (#PERCENT{P1})";
+            }
+
+            LoadActivityFeed();
+        }
+
+        // ─── داده‌ی نمودارهای کوچکِ داخل کارت‌ها ──────────────────────────────
+        // آموزش — این‌ها داده‌ی واقعی‌اند، نه تزئینِ ساختگی: تعداد پرونده‌های
+        // ثبت‌شده در هر یک از ۶ ماه گذشته، تفکیک‌شده بر اساس وضعیت خدماتِ فعلیِ
+        // همان پرونده‌ها (و برای کارت اعضا، تعداد اعضای ثبت‌شده در همان ماه‌ها).
+        private void LoadStatCardTrends()
+        {
+            int cid = SecurityContext.CenterFilterId;
+
+            var totals   = new List<double>();
+            var actives  = new List<double>();
+            var waitings = new List<double>();
+            var stops    = new List<double>();
+            var families = new List<double>();
+
+            try
+            {
+                // آموزش — چرا «۶ ماهِ موجود در داده» و نه «۶ ماهِ اخیرِ تقویمی»:
+                // در تست با دیتابیس واقعی معلوم شد تاریخ ثبتِ تقریباً همه‌ی
+                // پرونده‌ها قدیمی‌تر از یک سال است، پس فیلترِ تقویمی نمودارها را
+                // تقریباً خالی می‌کرد. حالا آخرین ۶ ماهی که واقعاً داده دارند
+                // انتخاب می‌شود — همیشه یک روندِ معنادارِ واقعی نشان می‌دهد.
+                DataTable byMonth = GetTableCidF(@"
+SELECT * FROM (
+  SELECT strftime('%Y-%m', CaseDate) AS Period,
+         COUNT(1) AS Total,
+         SUM(CASE WHEN ServiceStatus = 'فعال' THEN 1 ELSE 0 END) AS Active,
+         SUM(CASE WHEN ServiceStatus = 'در انتظار تأیید' THEN 1 ELSE 0 END) AS Waiting,
+         SUM(CASE WHEN ServiceStatus IN ('قطع','قطع موقت') THEN 1 ELSE 0 END) AS Stopped
+  FROM TblCase
+  WHERE CaseDate IS NOT NULL AND TRIM(CaseDate) <> ''
+    AND (@CID = 0 OR CenterID = @CID)" + CaseFilterSql("") + @"
+  GROUP BY Period ORDER BY Period DESC LIMIT 6
+) ORDER BY Period", cid);
+
+                foreach (DataRow r in byMonth.Rows)
+                {
+                    totals.Add(Convert.ToDouble(r["Total"]));
+                    actives.Add(r["Active"] == DBNull.Value ? 0 : Convert.ToDouble(r["Active"]));
+                    waitings.Add(r["Waiting"] == DBNull.Value ? 0 : Convert.ToDouble(r["Waiting"]));
+                    stops.Add(r["Stopped"] == DBNull.Value ? 0 : Convert.ToDouble(r["Stopped"]));
+                }
+
+                DataTable famByMonth = GetTableCidF(@"
+SELECT * FROM (
+  SELECT strftime('%Y-%m', c.CaseDate) AS Period, COUNT(1) AS Cnt
+  FROM TblFamily f JOIN TblCase c ON c.CasID = f.CasID
+  WHERE c.CaseDate IS NOT NULL AND TRIM(c.CaseDate) <> ''
+    AND (@CID = 0 OR c.CenterID = @CID)" + CaseFilterSql("c") + @"
+  GROUP BY Period ORDER BY Period DESC LIMIT 6
+) ORDER BY Period", cid);
+
+                foreach (DataRow r in famByMonth.Rows)
+                    families.Add(Convert.ToDouble(r["Cnt"]));
+            }
+            catch { /* نمودار کوچک تزئینی است؛ خطایش نباید داشبورد را متوقف کند */ }
+
+            _cardTotal.SetTrend(totals.ToArray());
+            _cardActive.SetTrend(actives.ToArray());
+            _cardWaiting.SetTrend(waitings.ToArray());
+            _cardStopped.SetTrend(stops.ToArray());
+            _cardFamily.SetTrend(families.ToArray());
+
+            LoadDashboardTrendChart();
+        }
+
+        // نمودار روندِ بزرگِ داشبورد — ۱۲ ماه گذشته، بر پایه‌ی تاریخ ثبت پرونده.
+        private void LoadDashboardTrendChart()
+        {
+            if (_dashTrendChart == null) return;
+
+            try
+            {
+                // آخرین ۱۲ ماهی که واقعاً داده دارند (نه ۱۲ ماهِ تقویمیِ اخیر —
+                // دلیلش را در LoadStatCardTrends توضیح داده‌ام).
+                DataTable t = GetTableCidF(@"
+SELECT * FROM (
+  SELECT strftime('%Y-%m', " + TrendDateExpr("") + @") AS Period, COUNT(1) AS CountValue
+  FROM TblCase
+  WHERE " + TrendDateExpr("") + @" IS NOT NULL
+    AND (@CID = 0 OR CenterID = @CID)" + CaseFilterSql("") + @"
+  GROUP BY Period ORDER BY Period DESC LIMIT 12
+) ORDER BY Period", SecurityContext.CenterFilterId);
+
+                // آموزش — اگر کمتر از دو ماهِ متمایز داده باشد، «نمودار خطی» بی‌معنی
+                // است (یک نقطه‌ی تنها). به‌جای نمایش یک نمودارِ عملاً خالی که
+                // شبیه خرابی به‌نظر می‌رسد، پیام روشن نشان داده می‌شود. این حالت
+                // در دیتابیس واقعی رخ می‌دهد چون همه‌ی پرونده‌ها یک‌جا (با
+                // همگام‌سازی) وارد شده‌اند و تاریخ ثبتِ پراکنده ندارند.
+                if (t.Rows.Count < 2)
+                {
+                    ShowTrendEmptyState(t.Rows.Count);
+                    return;
+                }
+                HideTrendEmptyState();
+
+                _dashTrendChart.Series.Clear();
+                Series s = new Series("تعداد پرونده‌ها")
+                {
+                    ChartType = SeriesChartType.Line,
+                    BorderWidth = 3,
+                    Color = UiTheme.Primary,
+                    MarkerStyle = MarkerStyle.Circle,
+                    MarkerSize = 7,
+                    MarkerColor = UiTheme.Primary
+                };
+
+                foreach (DataRow r in t.Rows)
+                {
+                    // برچسب ماه به شمسی، تا با بقیه‌ی برنامه هم‌خوان باشد.
+                    string period = Convert.ToString(r["Period"]);
+                    string label = period;
+                    DateTime dt;
+                    if (DateTime.TryParse(period + "-01", System.Globalization.CultureInfo.InvariantCulture,
+                            System.Globalization.DateTimeStyles.None, out dt))
+                        label = PersianDateHelper.ToPersianDateString(dt).Substring(0, 7);
+
+                    s.Points.AddXY(label, Convert.ToDouble(r["CountValue"]));
+                }
+
+                _dashTrendChart.Series.Add(s);
+                _dashTrendChart.ChartAreas[0].AxisX.Interval = 1;
+                _dashTrendChart.ChartAreas[0].AxisX.LabelStyle.Font = UiTheme.Font(UiTheme.SizeSmall - 2F);
+                _dashTrendChart.ChartAreas[0].AxisY.LabelStyle.Font = UiTheme.Font(UiTheme.SizeSmall - 2F);
+                _dashTrendChart.ChartAreas[0].BackColor = Color.Transparent;
+                _dashTrendChart.BackColor = Color.Transparent;
+            }
+            catch { /* نمودار روند غیرحیاتی است */ }
+        }
+
+        // ─── مبنای زمانی نمودارهای روند ───────────────────────────────────────
+        // آموزش — تاریخِ کاریِ پرونده (CaseDate) اولویت دارد، ولی اگر ثبت نشده
+        // باشد به تاریخِ ایجادِ رکورد (CreatedAt) برمی‌گردیم. در دیتابیس واقعیِ
+        // این پروژه ۱۶۶۰ پرونده از ۱۶۶۱ اصلاً CaseDate ندارند (همه با
+        // همگام‌سازی وارد شده‌اند)، پس بدون این fallback نمودارها همیشه خالی
+        // می‌ماندند. با این کار، هرچه پرونده‌ی جدید ثبت شود نمودار خودبه‌خود
+        // پر می‌شود.
+        private static string TrendDateExpr(string alias)
+        {
+            string p = string.IsNullOrEmpty(alias) ? "" : alias + ".";
+            return "COALESCE(NULLIF(TRIM(" + p + "CaseDate),''), " + p + "CreatedAt)";
+        }
+
+        private Label _lblTrendEmpty;
+
+        private void ShowTrendEmptyState(int periodCount)
+        {
+            if (_dashTrendChart == null) return;
+            _dashTrendChart.Visible = false;
+
+            if (_lblTrendEmpty == null)
+            {
+                _lblTrendEmpty = new Label
+                {
+                    Dock = DockStyle.Fill,
+                    Font = UiTheme.Font(UiTheme.SizeSmall),
+                    ForeColor = UiTheme.TextMuted,
+                    TextAlign = ContentAlignment.MiddleCenter
+                };
+                if (_dashTrendChart.Parent != null)
+                    _dashTrendChart.Parent.Controls.Add(_lblTrendEmpty);
+            }
+
+            _lblTrendEmpty.Text =
+                periodCount == 0
+                    ? "هنوز داده‌ای برای رسم نمودار روند وجود ندارد."
+                    : "برای رسم نمودار روند حداقل دو ماهِ متفاوت لازم است." + Environment.NewLine +
+                      "همه‌ی پرونده‌های فعلی در یک نوبت ثبت شده‌اند، پس تاریخچه‌ی ماهانه‌ای وجود ندارد." + Environment.NewLine +
+                      "با ثبت پرونده‌های جدید در ماه‌های بعد، این نمودار خودکار پر می‌شود.";
+            _lblTrendEmpty.Visible = true;
+            _lblTrendEmpty.BringToFront();
+        }
+
+        private void HideTrendEmptyState()
+        {
+            if (_lblTrendEmpty != null) _lblTrendEmpty.Visible = false;
+            if (_dashTrendChart != null) _dashTrendChart.Visible = true;
+        }
+
+        // ─── «آخرین فعالیت‌ها» — از همان گزارش رویدادهای واقعیِ سیستم ─────────
+        private void LoadActivityFeed()
+        {
+            if (_activityHost == null) return;
+
+            _activityHost.Controls.Clear();
+            int cid = SecurityContext.CenterFilterId;
+
+            try
+            {
+                DataTable t = GetTableCid(@"
+SELECT CreatedAt, Username, Operation, EntityName, EntityID
+FROM TblAuditLog
+WHERE (@CID = 0 OR CenterID = @CID)
+ORDER BY LogID DESC LIMIT 5", cid);
+
+                if (t.Rows.Count == 0)
+                {
+                    _activityHost.Controls.Add(new Label
+                    {
+                        Text = "هنوز فعالیتی ثبت نشده است.", Dock = DockStyle.Top, Height = 40,
+                        Font = UiTheme.Font(UiTheme.SizeSmall), ForeColor = UiTheme.TextMuted,
+                        TextAlign = ContentAlignment.MiddleRight
+                    });
+                    return;
+                }
+
+                // ردیف‌ها به ترتیب معکوس اضافه می‌شوند چون Dock=Top هر کنترلِ
+                // جدید را بالای قبلی‌ها می‌گذارد؛ این‌طور جدیدترین بالا می‌ماند.
+                for (int i = t.Rows.Count - 1; i >= 0; i--)
+                {
+                    DataRow r = t.Rows[i];
+                    string op = Convert.ToString(r["Operation"]);
+                    string entity = Convert.ToString(r["EntityName"]);
+                    string user = Convert.ToString(r["Username"]);
+
+                    Color accent;
+                    string glyph;
+                    if (op.Contains("افزودن") || op.Contains("ثبت")) { accent = ColorTranslator.FromHtml("#22C55E"); glyph = IconFont.Add; }
+                    else if (op.Contains("حذف")) { accent = ColorTranslator.FromHtml("#EF4444"); glyph = IconFont.Cancel; }
+                    else if (op.Contains("ویرایش")) { accent = ColorTranslator.FromHtml("#F59E0B"); glyph = IconFont.Edit; }
+                    else { accent = ColorTranslator.FromHtml("#3B82F6"); glyph = IconFont.Document; }
+
+                    string when = "";
+                    DateTime dt = PersianDateHelper.ParseStoredDate(r["CreatedAt"], DateTime.MinValue);
+                    if (dt != DateTime.MinValue)
+                        when = PersianDateHelper.ToPersianDateString(dt);
+
+                    _activityHost.Controls.Add(new ActivityRow(
+                        glyph, accent,
+                        op + (string.IsNullOrWhiteSpace(entity) ? "" : "  —  " + entity),
+                        "توسط کاربر " + user + (r["EntityID"] == DBNull.Value ? "" : "  (شناسه " + r["EntityID"] + ")"),
+                        when));
+                }
+            }
+            catch (Exception ex)
+            {
+                _activityHost.Controls.Add(new Label
+                {
+                    Text = "خطا در خواندن فعالیت‌ها: " + ex.Message, Dock = DockStyle.Top, Height = 40,
+                    Font = UiTheme.Font(UiTheme.SizeSmall - 1F), ForeColor = UiTheme.Danger,
+                    TextAlign = ContentAlignment.MiddleRight
+                });
+            }
         }
 
         private void LoadTrend()

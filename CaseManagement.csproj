@@ -282,6 +282,10 @@
     <Compile Include="Helpers\PillTabStrip.cs" />
     <Compile Include="Helpers\SettingsCardPanel.cs" />
     <Compile Include="Helpers\ColorSwatchButton.cs" />
+    <Compile Include="Helpers\Sparkline.cs" />
+    <Compile Include="Helpers\StatCard.cs" />
+    <Compile Include="Helpers\SidebarNav.cs" />
+    <Compile Include="Helpers\DashboardCard.cs" />
     <Compile Include="Models\CaseModel.cs" />
     <Compile Include="Models\FamilyModel.cs" />
     <Compile Include="Models\DocumentModel.cs" />

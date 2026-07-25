@@ -437,17 +437,27 @@ namespace CaseManagement.Helpers
                 input.Height = InputHeight;
         }
 
-        // ─── ثابت‌کردن اندازه فرم: فقط Minimize و Close، بدون Resize/Maximize ─
+        // ─── اندازه‌ی پایه‌ی فرم + امکان بزرگ‌نمایی (Maximize) ────────────────
+        // آموزش — به درخواست کاربر، همه‌ی فرم‌ها باید بتوانند بین «اندازه‌ی
+        // معمولی» و «تمام‌صفحه» جابه‌جا شوند. اما نکته‌ی مهم: بخش بزرگی از
+        // فرم‌های این پروژه کنترل‌هایشان را با مختصات مطلق (SetBounds) چیده‌اند؛
+        // اگر فرم بتواند کوچک‌تر از اندازه‌ی طراحی شود، آن کنترل‌ها بریده/پنهان
+        // می‌شوند. راه‌حل: MinimumSize دقیقاً روی همان اندازه‌ی طراحی قفل می‌شود
+        // تا فرم فقط بتواند بزرگ‌تر شود، هرگز کوچک‌تر. پس بزرگ‌نمایی امن است و
+        // هیچ چیدمانی نمی‌شکند.
+        //
+        // نام متد عمداً تغییر نکرد چون در ده‌ها فرم فراخوانی شده و تغییر نام
+        // فقط شلوغی و ریسک بی‌دلیل می‌سازد.
         public static void MakeFixedSize(Form form, int width, int height)
         {
             form.WindowState = FormWindowState.Normal;
-            form.FormBorderStyle = FormBorderStyle.FixedSingle;
-            form.MaximizeBox = false;
+            form.FormBorderStyle = FormBorderStyle.Sizable;
+            form.MaximizeBox = true;
             form.MinimizeBox = true;
             form.StartPosition = FormStartPosition.CenterScreen;
             form.ClientSize = new Size(width, height);
-            form.MinimumSize = Size.Empty;
-            form.MaximumSize = Size.Empty;
+            form.MinimumSize = form.Size;   // بعد از ClientSize محاسبه می‌شود (اندازه‌ی بیرونی)
+            form.MaximumSize = Size.Empty;  // بدون سقف — تمام‌صفحه آزاد است
             TryApplyIcon(form);
         }
 
