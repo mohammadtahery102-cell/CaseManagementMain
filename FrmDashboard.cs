@@ -409,9 +409,17 @@ namespace CaseManagement
         {
             Panel bar = new Panel { Dock = DockStyle.Top, Height = 46, BackColor = UiTheme.CardBack };
 
+            // آموزش — رفع باگ «نوار فیلتر از چپ شروع می‌شد»: فرم از قبل
+            // RightToLeft=Yes دارد که به این پنل ارث می‌رسد. اگر همزمان
+            // FlowDirection هم RightToLeft گذاشته شود، دو آینه یکدیگر را خنثی
+            // می‌کنند و نتیجه دوباره چپ‌به‌راست می‌شود — دقیقاً همان چیزی که در
+            // اسکرین‌شات دیده شد («فیلتر:» چسبیده به لبه‌ی چپ). LeftToRight
+            // همراه با RightToLeft ارثی، دقیقاً یک‌بار آینه می‌شود و گروه از
+            // سمت راست شروع می‌گردد. (همین الگو در نوار ابزار داشبورد و
+            // جستجوی پیشرفته هم استفاده شده است.)
             FlowLayoutPanel flow = new FlowLayoutPanel
             {
-                Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(12, 7, 12, 6)
+                Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, Padding = new Padding(12, 7, 12, 6)
             };
 
             Label lbl = new Label

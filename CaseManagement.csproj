@@ -288,6 +288,7 @@
     <Compile Include="Helpers\DashboardCard.cs" />
     <Compile Include="Helpers\WindowChrome.cs" />
     <Compile Include="Helpers\ModernTitleBar.cs" />
+    <Compile Include="Helpers\FieldBox.cs" />
     <Compile Include="Models\CaseModel.cs" />
     <Compile Include="Models\FamilyModel.cs" />
     <Compile Include="Models\DocumentModel.cs" />

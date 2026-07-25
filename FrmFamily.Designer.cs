@@ -129,21 +129,30 @@ namespace CaseManagement
             this.lblHeadInfo.Text      = "سرپرست: —";
 
             // ═══════════════════════════════════════════════════════════════════
-            // تب ۱: مشخصات کلی — ۱۰ ردیف، ۱۵۰px لیبل | Fill فیلد
+            // تب ۱: مشخصات کلی — دو ستونه، برچسبِ بالای فیلد (طبق طرح مرجع)
+            // آموزش — هیچ فیلدی حذف/جابه‌جا نشده؛ فقط سبکِ چیدمان از «برچسبِ
+            // کنارِ فیلد» به «برچسبِ بالای فیلد در دو ستون» تغییر کرده تا با
+            // طرح مرجع یکی شود و فضای عمودی کمتری بگیرد.
             // ═══════════════════════════════════════════════════════════════════
-            var tlpGeneral = MkTlp(10, 150);
-            FieldRow(tlpGeneral, 0, SetLbl(this.label1,         "نام"),             this.txtMemberName);
-            FieldRow(tlpGeneral, 1, SetLbl(this.label2,         "نام پدر"),          this.txtMemberFatherName);
-            FieldRow(tlpGeneral, 2, SetLbl(this.label3,         "شماره تذکره"),       this.txtMemberTazkiraNo);
-            FieldRow(tlpGeneral, 3, SetLbl(this.label4,         "تاریخ تولد"),        this.dtpBirthDate);
-            FieldRow(tlpGeneral, 4, SetLbl(this.label8,         "سیادت"),            this.txtMemberSadat);
-            FieldRow(tlpGeneral, 5, SetLbl(this.label7,         "جنسیت"),            this.txtGender);
-            FieldRow(tlpGeneral, 6, SetLbl(this.lblReligion,    "مذهب"),             this.cmbReligion);
-            FieldRow(tlpGeneral, 7, SetLbl(this.lblMaritalStatus,"وضعیت تأهل"),      this.cmbMaritalStatus);
-            FieldRow(tlpGeneral, 8, SetLbl(this.lblServiceStatus,"وضعیت خدمات"),     this.cmbServiceStatus);
-            FieldRow(tlpGeneral, 9, SetLbl(this.lblStopReason,  "دلیل قطع موقت"),   this.txtStopReason);
+            var tlpGeneral = MkFieldGrid(2);
+            AddField(tlpGeneral, this.label1,            "نام",             this.txtMemberName);
+            AddField(tlpGeneral, this.label8,            "سیادت",           this.txtMemberSadat);
+            AddField(tlpGeneral, this.label2,            "نام پدر",          this.txtMemberFatherName);
+            AddField(tlpGeneral, this.lblReligion,       "مذهب",            this.cmbReligion);
+            AddField(tlpGeneral, this.label3,            "شماره تذکره",      this.txtMemberTazkiraNo);
+            AddField(tlpGeneral, this.lblMaritalStatus,  "وضعیت تأهل",      this.cmbMaritalStatus);
+            AddField(tlpGeneral, this.label4,            "تاریخ تولد",       this.dtpBirthDate);
+            AddField(tlpGeneral, this.lblServiceStatus,  "وضعیت خدمات",     this.cmbServiceStatus);
+            AddField(tlpGeneral, this.label7,            "جنسیت",           this.txtGender);
+            this.fieldStopReason = AddField(tlpGeneral, this.lblStopReason, "دلیل قطع موقت", this.txtStopReason);
+
+            // همان رفتار قبلی: تا وقتی وضعیت خدمات «قطع موقت» نشده، پنهان است.
+            // (منطقِ نمایش/پنهان‌سازی در FrmFamily.cs دست‌نخورده مانده و همچنان
+            // روی همین دو کنترل کار می‌کند؛ اینجا فقط کانتینرشان هم پنهان می‌شود
+            // تا جای خالی در شبکه باقی نماند.)
             this.lblStopReason.Visible  = false;
             this.txtStopReason.Visible  = false;
+            this.fieldStopReason.Visible = false;
 
             var tabGeneral = new System.Windows.Forms.TabPage("مشخصات کلی");
             tabGeneral.BackColor = CaseManagement.Helpers.UiTheme.Background;
@@ -358,6 +367,40 @@ namespace CaseManagement
 
         // ─── Helpers ─────────────────────────────────────────────────────────
 
+        // ─── شبکه‌ی فیلدها به سبک طرح مرجع ────────────────────────────────────
+        // چند ستونِ هم‌عرض؛ هر سلول یک FieldBox (برچسبِ بالا + ورودیِ گردگوشه).
+        // ردیف‌ها AutoSize‌اند تا ارتفاع دقیقاً به‌اندازه‌ی محتوا باشد و فضای
+        // خالیِ نامتعارف ایجاد نشود.
+        private static System.Windows.Forms.TableLayoutPanel MkFieldGrid(int columns)
+        {
+            var tlp = new System.Windows.Forms.TableLayoutPanel();
+            tlp.Dock = System.Windows.Forms.DockStyle.Top;
+            tlp.AutoSize = true;
+            tlp.AutoSizeMode = System.Windows.Forms.AutoSizeMode.GrowAndShrink;
+            tlp.Padding = new System.Windows.Forms.Padding(18, 14, 18, 10);
+            tlp.ColumnCount = columns;
+            tlp.BackColor = System.Drawing.Color.Transparent;
+            for (int i = 0; i < columns; i++)
+                tlp.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(
+                    System.Windows.Forms.SizeType.Percent, 100F / columns));
+            return tlp;
+        }
+
+        // افزودن یک فیلد به شبکه. خروجی، کانتینرِ آن فیلد است تا در صورت نیاز
+        // (مثل «دلیل قطع موقت») بتوان کلِ فیلد را پنهان/نمایان کرد.
+        // بسیار مهم: خودِ کنترلِ ورودی همان شیء قبلی می‌ماند، پس نام، رویدادها
+        // و هر کدی که با آن کار می‌کند دست‌نخورده باقی است.
+        private static CaseManagement.Helpers.FieldBox AddField(
+            System.Windows.Forms.TableLayoutPanel grid,
+            System.Windows.Forms.Label captionLabel, string captionText,
+            System.Windows.Forms.Control field)
+        {
+            var box = new CaseManagement.Helpers.FieldBox(captionLabel, captionText, field);
+            box.Dock = System.Windows.Forms.DockStyle.Top;
+            grid.Controls.Add(box);
+            return box;
+        }
+
         // ساخت TableLayoutPanel دو ستونه: col0=لیبل (عرض ثابت) | col1=فیلد (پر)
         private static System.Windows.Forms.TableLayoutPanel MkTlp(int rowCount, int labelColWidth)
         {
@@ -498,5 +541,8 @@ namespace CaseManagement
         private System.Windows.Forms.Label lblEducationCoverage;
         private System.Windows.Forms.Label lblSchoolPrevGrade;
         private System.Windows.Forms.Label lblUniversityPrevGrade;
+        // کانتینرِ فیلد «دلیل قطع موقت» — برای پنهان/نمایان‌کردن کلِ فیلد
+        // (برچسب + ورودی) هماهنگ با منطقِ موجود در FrmFamily.cs.
+        private CaseManagement.Helpers.FieldBox fieldStopReason;
     }
 }
