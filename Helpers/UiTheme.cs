@@ -619,6 +619,14 @@ namespace CaseManagement.Helpers
         {
             public FrmMessage(string message, string title, Color accent, Color accentLight, string glyph, bool isConfirm)
             {
+                // آموزش — بازنویسی چیدمان با Dock به‌جای مختصات مطلق:
+                // نسخه‌ی قبلی همه‌چیز را با SetBounds می‌چید و همزمان
+                // RightToLeftLayout=true داشت؛ یعنی همان مختصات هم آینه می‌شد.
+                // نتیجه این بود که عنوان و متن به‌جای چسبیدن به لبه‌ی راست، وسطِ
+                // پنجره می‌افتادند و متنِ بلند هم بریده می‌شد (در اسکرین‌شات
+                // کاربر دیده شد). حالا آینه‌ی هندسی خاموش است و هر ناحیه با
+                // Dock جای خودش را می‌گیرد: آیکون چپ، متن‌ها راست — پایدار و
+                // مستقل از عرضِ پنجره.
                 Text = title;
                 FormBorderStyle = FormBorderStyle.FixedDialog;
                 StartPosition = FormStartPosition.CenterParent;
@@ -627,16 +635,57 @@ namespace CaseManagement.Helpers
                 ShowIcon = false;
                 ShowInTaskbar = false;
                 RightToLeft = RightToLeft.Yes;
-                RightToLeftLayout = true;
+                RightToLeftLayout = false;
                 BackColor = Color.White;
-                ClientSize = new Size(400, 190);
                 Font = UiTheme.Font(10.5f);
 
+                const int DialogWidth = 430;
+                const int IconArea = 96;
+                const int SidePad = 22;
+
+                // ارتفاع لازم برای متن، پیش از ساختِ کنترل‌ها اندازه‌گیری می‌شود
+                // تا فرم دقیقاً به‌اندازه‌ی محتوا بلند شود (نه بیشتر، نه کمتر).
+                int textWidth = DialogWidth - IconArea - SidePad * 2;
+                Font msgFont = UiTheme.Font(10.5f);
+                int measuredHeight = TextRenderer.MeasureText(
+                    string.IsNullOrEmpty(message) ? " " : message,
+                    msgFont,
+                    new Size(textWidth, int.MaxValue),
+                    TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl | TextFormatFlags.RightToLeft).Height;
+
+                int msgHeight = Math.Max(44, Math.Min(measuredHeight + 10, 420));
+                int bodyHeight = 34 /*عنوان*/ + msgHeight + 24;
+
+                ClientSize = new Size(DialogWidth, 8 /*نوار رنگی*/ + bodyHeight + 62 /*نوار دکمه*/);
+
+                // ── نوار رنگی بالا ──
                 Panel header = new Panel();
                 header.Dock = DockStyle.Top;
                 header.Height = 8;
                 header.BackColor = accent;
-                Controls.Add(header);
+
+                // ── نوار دکمه‌ها (پایین) ──
+                Panel buttonBar = new Panel();
+                buttonBar.Dock = DockStyle.Bottom;
+                buttonBar.Height = 62;
+                buttonBar.Padding = new Padding(SidePad, 12, SidePad, 16);
+
+                FlowLayoutPanel buttons = new FlowLayoutPanel();
+                buttons.Dock = DockStyle.Fill;
+                // LeftToRight همراه با RightToLeft=Yes ارثی، دقیقاً یک‌بار آینه
+                // می‌شود ⇒ دکمه‌ها از سمت راست شروع می‌شوند (الگوی رایج پروژه).
+                buttons.FlowDirection = FlowDirection.LeftToRight;
+                buttons.WrapContents = false;
+                buttonBar.Controls.Add(buttons);
+
+                // ── بدنه: آیکون (چپ) + متن‌ها (راست) ──
+                Panel body = new Panel();
+                body.Dock = DockStyle.Fill;
+                body.Padding = new Padding(SidePad, 18, SidePad, 0);
+
+                Panel iconArea = new Panel();
+                iconArea.Dock = DockStyle.Left;
+                iconArea.Width = IconArea - SidePad;
 
                 Label lblGlyph = new Label();
                 lblGlyph.Text = glyph;
@@ -644,52 +693,52 @@ namespace CaseManagement.Helpers
                 lblGlyph.ForeColor = accent;
                 lblGlyph.BackColor = accentLight;
                 lblGlyph.TextAlign = ContentAlignment.MiddleCenter;
-                lblGlyph.SetBounds(ClientSize.Width - 90, 28, 56, 56);
+                lblGlyph.SetBounds(0, 0, 56, 56);
                 RoundCorners(lblGlyph, 56);
-                Controls.Add(lblGlyph);
+                iconArea.Controls.Add(lblGlyph);
+
+                Panel textArea = new Panel();
+                textArea.Dock = DockStyle.Fill;
 
                 Label lblTitle = new Label();
                 lblTitle.Text = title;
+                lblTitle.Dock = DockStyle.Top;
+                lblTitle.Height = 30;
                 lblTitle.Font = UiTheme.FontBold(12.5f);
                 lblTitle.ForeColor = UiTheme.TextDark;
-                lblTitle.SetBounds(30, 30, ClientSize.Width - 140, 26);
-                lblTitle.TextAlign = ContentAlignment.MiddleRight;
-                Controls.Add(lblTitle);
+                // آموزش — با RightToLeft=Yes، تراز متنِ Label آینه می‌شود:
+                // MiddleRight بصراً «چپ» رندر می‌شود و MiddleLeft بصراً «راست».
+                // برای چسبیدن عنوان به لبه‌ی راستِ پنجره (خواسته‌ی کاربر) باید
+                // MiddleLeft داد. همین تله قبلاً در بنر داشبورد هم دیده شد.
+                lblTitle.TextAlign = ContentAlignment.MiddleLeft;
 
                 Label lblMessage = new Label();
                 lblMessage.Text = message;
-                lblMessage.Font = UiTheme.Font(10.5f);
+                lblMessage.Dock = DockStyle.Fill;
+                lblMessage.Font = msgFont;
                 lblMessage.ForeColor = UiTheme.TextMuted;
-                lblMessage.TextAlign = ContentAlignment.TopRight;
-                Controls.Add(lblMessage);
+                // TopLeft ⇒ بصراً بالا-راست (به‌دلیل آینه‌شدنِ تراز در RightToLeft)
+                lblMessage.TextAlign = ContentAlignment.TopLeft;
 
-                // آموزش — رفع «خطوط روی هم»: قبلاً ارتفاع پیام ثابت (۶۸px) بود و
-                // پیام‌های چندخطی/بلند سرریز و روی هم می‌افتادند. حالا ارتفاعِ لازم
-                // با اندازه‌گیری متنِ wrap‌شده در همان عرض محاسبه و فرم به‌اندازه‌ی
-                // متن بزرگ می‌شود (با حداقل و حداکثر معقول).
-                int msgWidth = ClientSize.Width - 60;
-                int measuredHeight = TextRenderer.MeasureText(
-                    string.IsNullOrEmpty(message) ? " " : message,
-                    lblMessage.Font,
-                    new Size(msgWidth, int.MaxValue),
-                    TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl).Height;
-                int msgHeight = Math.Max(56, Math.Min(measuredHeight + 8, 420));
-                lblMessage.SetBounds(30, 62, msgWidth, msgHeight);
+                textArea.Controls.Add(lblMessage);
+                textArea.Controls.Add(lblTitle);
 
-                int buttonsTop = lblMessage.Bottom + 16;
-                ClientSize = new Size(ClientSize.Width, buttonsTop + 34 + 16);
+                body.Controls.Add(textArea);
+                body.Controls.Add(iconArea);
 
                 if (isConfirm)
                 {
                     Button btnYes = UiTheme.CreateButton("بله", "", accent);
-                    btnYes.SetBounds(ClientSize.Width - 130, buttonsTop, 100, 34);
+                    btnYes.Size = new Size(104, 34);
+                    btnYes.Margin = new Padding(0, 0, 8, 0);
                     btnYes.DialogResult = DialogResult.Yes;
-                    Controls.Add(btnYes);
+                    buttons.Controls.Add(btnYes);
 
                     Button btnNo = UiTheme.CreateSecondaryButton("انصراف", "");
-                    btnNo.SetBounds(ClientSize.Width - 240, buttonsTop, 100, 34);
+                    btnNo.Size = new Size(104, 34);
+                    btnNo.Margin = new Padding(0, 0, 8, 0);
                     btnNo.DialogResult = DialogResult.No;
-                    Controls.Add(btnNo);
+                    buttons.Controls.Add(btnNo);
 
                     AcceptButton = btnYes;
                     CancelButton = btnNo;
@@ -697,13 +746,20 @@ namespace CaseManagement.Helpers
                 else
                 {
                     Button btnOk = UiTheme.CreateButton("متوجه شدم", "", accent);
-                    btnOk.SetBounds(ClientSize.Width - 150, buttonsTop, 120, 34);
+                    btnOk.Size = new Size(124, 34);
+                    btnOk.Margin = new Padding(0, 0, 8, 0);
                     btnOk.DialogResult = DialogResult.OK;
-                    Controls.Add(btnOk);
+                    buttons.Controls.Add(btnOk);
 
                     AcceptButton = btnOk;
                     CancelButton = btnOk;
                 }
+
+                // ترتیب افزودن: Fill آخر اضافه نمی‌شود تا نوارهای Top/Bottom
+                // اول جایشان را بگیرند و بدنه بقیه را پر کند.
+                Controls.Add(body);
+                Controls.Add(buttonBar);
+                Controls.Add(header);
             }
         }
     }
