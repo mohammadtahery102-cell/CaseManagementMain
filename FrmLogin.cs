@@ -54,10 +54,16 @@ namespace CaseManagement
             }
             catch { }
 
+            // آموزش — به درخواست کاربر، صفحه‌ی ورود اندازه‌ی ثابت دارد و
+            // بزرگ/تمام‌صفحه نمی‌شود: این صفحه محتوای ثابتی دارد و بزرگ‌شدنش
+            // فقط فضای خالی می‌سازد (برخلاف فرم‌های کاری که جدول و فهرست
+            // دارند). MinimumSize و MaximumSize روی همان اندازه قفل می‌شوند تا
+            // با کشیدن لبه هم تغییر نکند.
             ClientSize        = designSize;
             FormBorderStyle   = FormBorderStyle.None;
-            MinimumSize       = minSize;
-            MaximizeBox       = true;
+            MinimumSize       = Size;
+            MaximumSize       = Size;
+            MaximizeBox       = false;
             MinimizeBox       = true;
             RightToLeft       = RightToLeft.Yes;
             RightToLeftLayout = false; // چیدمان دستی است؛ آینه‌ی هندسی لازم نیست
@@ -70,7 +76,10 @@ namespace CaseManagement
             HandleCreated += delegate { WindowChrome.ApplyRoundedCorners(this); };
 
             // نوار عنوان سفارشی
-            ModernTitleBar titleBar = new ModernTitleBar(this, "ورود به سیستم", CanvasTop);
+            // showMaximize:false — چون صفحه‌ی ورود اندازه‌ی ثابت دارد، دکمه‌ی
+            // بیشینه‌سازی هم نباید نمایش داده شود (وگرنه دکمه‌ای که کاری
+            // نمی‌کند روی نوار عنوان می‌ماند).
+            ModernTitleBar titleBar = new ModernTitleBar(this, "ورود به سیستم", CanvasTop, showMaximize: false);
             Controls.Add(titleBar);
 
             // ═══ چیدمان دو ستونه، کاملاً واکنش‌گرا ═══════════════════════════

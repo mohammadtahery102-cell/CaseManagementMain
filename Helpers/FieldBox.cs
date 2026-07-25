@@ -91,6 +91,16 @@ namespace CaseManagement.Helpers
                 {
                     cb.FlatStyle = FlatStyle.Flat;
                     cb.BackColor = Color.White;
+
+                    // آموزش — رفع باگ «نام مرکز با نوار آبی روی متن»: در حالت
+                    // DropDownList، ویندوز آیتمِ انتخاب‌شده را با رنگِ هایلایتِ
+                    // سیستم (آبیِ پررنگ) پر می‌کند و متن سفید می‌شود؛ داخل قابِ
+                    // سفیدِ ما این کاملاً ناجور و ناخوانا دیده می‌شد.
+                    // با رسمِ دستیِ آیتم، پس‌زمینه سفید و متن تیره می‌ماند و
+                    // فقط هنگام بازبودن فهرست، آیتمِ زیر ماوس ته‌رنگ می‌گیرد.
+                    cb.DrawMode = DrawMode.OwnerDrawFixed;
+                    cb.ItemHeight = Math.Max(18, cb.ItemHeight);
+                    cb.DrawItem += ComboDrawItem;
                 }
 
                 inner.Font = UiTheme.Font(UiTheme.SizeBody);
@@ -115,6 +125,30 @@ namespace CaseManagement.Helpers
                 MouseLeave += delegate { _hover = false; Invalidate(); };
                 // کلیک روی هرجای قاب، فوکوس را به خودِ ورودی می‌دهد.
                 Click += delegate { try { inner.Focus(); } catch { } };
+            }
+
+            // رسم دستیِ آیتمِ ComboBox — بدون هایلایتِ آبیِ سیستم.
+            private static void ComboDrawItem(object sender, DrawItemEventArgs e)
+            {
+                ComboBox cb = sender as ComboBox;
+                if (cb == null) return;
+
+                // ناحیه‌ی بسته‌ی کمبو (متنِ انتخاب‌شده) هرگز هایلایت نمی‌گیرد؛
+                // فقط آیتم‌های داخلِ فهرستِ بازشده حالت Hover دارند.
+                bool inDropDown = (e.State & DrawItemState.ComboBoxEdit) != DrawItemState.ComboBoxEdit;
+                bool hot = inDropDown && (e.State & DrawItemState.Selected) == DrawItemState.Selected;
+
+                using (Brush back = new SolidBrush(hot ? UiTheme.HoverTint : Color.White))
+                    e.Graphics.FillRectangle(back, e.Bounds);
+
+                if (e.Index >= 0 && e.Index < cb.Items.Count)
+                {
+                    string text = cb.GetItemText(cb.Items[e.Index]);
+                    TextRenderer.DrawText(
+                        e.Graphics, text, cb.Font, e.Bounds, UiTheme.TextDark,
+                        TextFormatFlags.Right | TextFormatFlags.VerticalCenter |
+                        TextFormatFlags.RightToLeft | TextFormatFlags.EndEllipsis);
+                }
             }
 
             private void CenterInner()
