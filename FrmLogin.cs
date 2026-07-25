@@ -207,6 +207,11 @@ namespace CaseManagement
             _txtPassword = new TextBox { PasswordChar = '*' };
             FieldBox boxPass = new FieldBox(new Label(), "رمز عبور", _txtPassword) { Dock = DockStyle.Top };
 
+            // به درخواست کاربر: برچسب و متنِ همه‌ی فیلدهای ورود وسط‌چین باشند.
+            boxCenter.CenterContent();
+            boxUser.CenterContent();
+            boxPass.CenterContent();
+
             // دکمه‌ی نمایش رمز، داخل همان قابِ فیلدِ رمز (سمت چپِ بصری)
             // آیکون چشم از فونتِ آیکونیِ ویندوز گرفته می‌شود، نه از کاراکترِ
             // «⊙» که در فونت فارسیِ برنامه وجود ندارد و به‌صورت مربعِ خالی رسم
@@ -280,8 +285,41 @@ namespace CaseManagement
 
             AcceptButton = _btnLogin;
 
+            // ─── ترتیب حرکت با Tab ───────────────────────────────────────────
+            // آموزش — در WinForms ترتیب Tab «سلسله‌مراتبی» است: اول بین
+            // کانتینرها بر اساس TabIndex آن‌ها، بعد داخل هر کانتینر بین
+            // فرزندانش. چون هر فیلد داخل یک FieldBox (کانتینر) نشسته، تنظیم
+            // TabIndex فقط روی خودِ ورودی‌ها کافی نیست — TabIndex کانتینرها هم
+            // باید به همان ترتیب باشد، وگرنه فوکوس بین کارت‌ها می‌پرد.
+            // آموزش — تمام فرزندانِ کارت باید TabIndex صریح بگیرند، نه فقط
+            // فیلدها. در تستِ واقعی معلوم شد اگر پنل‌های تزئینی (عنوان، خط
+            // طلایی، زیرنویس، فاصله‌ها) روی مقدارِ پیش‌فرضِ صفر بمانند، با
+            // فیلدِ «مرکز» (که آن هم صفر بود) تداخل می‌کنند و WinForms برای
+            // رفعِ تساوی به ترتیبِ داخلیِ z برمی‌گردد — نتیجه این بود که
+            // «مرکز» به‌جای اول، بعد از دکمه‌ها فوکوس می‌گرفت.
+            title.TabIndex        = 0;
+            goldRuleHost.TabIndex = 1;
+            subtitle.TabIndex     = 2;
+            boxCenter.TabIndex    = 3; _cmbCenter.TabIndex   = 0;
+            boxUser.TabIndex      = 4; _txtUsername.TabIndex = 0;
+            boxPass.TabIndex      = 5; _txtPassword.TabIndex = 0;
+            loginSpacer.TabIndex  = 6;
+            _btnLogin.TabIndex    = 7;
+            changeSpacer.TabIndex = 8;
+            _btnChangePass.TabIndex = 9;
+
+            // دکمه‌ی نمایش رمز از چرخه‌ی Tab خارج است تا بین «رمز» و «ورود»
+            // یک توقفِ اضافه ایجاد نکند (با ماوس کار می‌کند).
+            _btnShowPass.TabStop = false;
+
             // بارگذاری مراکز پس از ساخت UI
             LoadCenters();
+
+            // فوکوس اولیه روی نام کاربری (مرکز معمولاً از قبل انتخاب است).
+            Shown += delegate
+            {
+                try { _txtUsername.Focus(); } catch { }
+            };
         }
 
         // دکمه‌ی کوچکِ داخلِ یک فیلد (مثل چشمِ نمایش رمز) را کنارِ ورودی

@@ -61,6 +61,16 @@ namespace CaseManagement.Helpers
             set { _shell.HasError = value; }
         }
 
+        // ─── وسط‌چین‌کردن برچسب و متنِ ورودی ─────────────────────────────────
+        // برای فرم‌هایی مثل صفحه‌ی ورود که فیلدها در یک ستونِ باریکِ وسط‌چین
+        // قرار دارند و راست‌چینی در آن‌ها نامتوازن دیده می‌شود.
+        public void CenterContent()
+        {
+            Caption.TextAlign = ContentAlignment.MiddleCenter;
+            Caption.Padding = new Padding(0, 0, 0, 3);
+            _shell.CenterText = true;
+        }
+
         // پوسته‌ی گردگوشه‌ی دورِ ورودی.
         private class InputShell : Panel
         {
@@ -100,7 +110,7 @@ namespace CaseManagement.Helpers
                     // فقط هنگام بازبودن فهرست، آیتمِ زیر ماوس ته‌رنگ می‌گیرد.
                     cb.DrawMode = DrawMode.OwnerDrawFixed;
                     cb.ItemHeight = Math.Max(18, cb.ItemHeight);
-                    cb.DrawItem += ComboDrawItem;
+                    cb.DrawItem += ComboDrawItem;   // متد نمونه‌ای، تا CenterText را ببیند
                 }
 
                 inner.Font = UiTheme.Font(UiTheme.SizeBody);
@@ -127,8 +137,22 @@ namespace CaseManagement.Helpers
                 Click += delegate { try { inner.Focus(); } catch { } };
             }
 
+            // وقتی true باشد، متنِ ورودی وسط‌چین می‌شود (نه راست‌چین).
+            private bool _centerText;
+            public bool CenterText
+            {
+                get { return _centerText; }
+                set
+                {
+                    _centerText = value;
+                    TextBox tb = _inner as TextBox;
+                    if (tb != null) tb.TextAlign = value ? HorizontalAlignment.Center : HorizontalAlignment.Right;
+                    Invalidate();
+                }
+            }
+
             // رسم دستیِ آیتمِ ComboBox — بدون هایلایتِ آبیِ سیستم.
-            private static void ComboDrawItem(object sender, DrawItemEventArgs e)
+            private void ComboDrawItem(object sender, DrawItemEventArgs e)
             {
                 ComboBox cb = sender as ComboBox;
                 if (cb == null) return;
@@ -144,9 +168,12 @@ namespace CaseManagement.Helpers
                 if (e.Index >= 0 && e.Index < cb.Items.Count)
                 {
                     string text = cb.GetItemText(cb.Items[e.Index]);
+                    TextFormatFlags align = _centerText
+                        ? TextFormatFlags.HorizontalCenter
+                        : TextFormatFlags.Right;
                     TextRenderer.DrawText(
                         e.Graphics, text, cb.Font, e.Bounds, UiTheme.TextDark,
-                        TextFormatFlags.Right | TextFormatFlags.VerticalCenter |
+                        align | TextFormatFlags.VerticalCenter |
                         TextFormatFlags.RightToLeft | TextFormatFlags.EndEllipsis);
                 }
             }

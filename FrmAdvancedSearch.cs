@@ -149,17 +149,17 @@ namespace CaseManagement
             buttonRow.Controls.Add(btnSearch);
 
             Button btnExport = UiTheme.CreateSecondaryButton("خروجی Excel", "⇑");
-            btnExport.Size = new Size(110, 32); btnExport.Margin = new Padding(3);
+            btnExport.Size = new Size(140, 32); btnExport.Margin = new Padding(3);
             btnExport.Click += delegate { ExportGridToExcel(dgvHeadResults, "جستجوی_سرپرست"); };
             buttonRow.Controls.Add(btnExport);
 
             Button btnWordH = UiTheme.CreateSecondaryButton("خروجی Word", "➤");
-            btnWordH.Size = new Size(110, 32); btnWordH.Margin = new Padding(3);
+            btnWordH.Size = new Size(140, 32); btnWordH.Margin = new Padding(3);
             btnWordH.Click += delegate { ExportGridToWord(dgvHeadResults, "گزارش_سرپرستان", "گزارش سرپرستان", HeadFilterSubtitle()); };
             buttonRow.Controls.Add(btnWordH);
 
             Button btnPdfH = UiTheme.CreateSecondaryButton("خروجی PDF", "➤");
-            btnPdfH.Size = new Size(100, 32); btnPdfH.Margin = new Padding(3);
+            btnPdfH.Size = new Size(140, 32); btnPdfH.Margin = new Padding(3);
             btnPdfH.Click += delegate { ExportGridToPdf(dgvHeadResults, "گزارش_سرپرستان", "گزارش سرپرستان", HeadFilterSubtitle()); };
             buttonRow.Controls.Add(btnPdfH);
 
@@ -192,7 +192,10 @@ namespace CaseManagement
         // نمی‌کند؛ پس فیلد اول را در دورترین ستونِ راست می‌گذاریم و به چپ می‌رویم.
         private TableLayoutPanel BuildFilterGrid(List<KeyValuePair<string, Control>> fields, int columns)
         {
-            const int RowHeight = 46;
+            // ارتفاع ردیف باید دقیقاً به‌اندازه‌ی FieldBox باشد، وگرنه فیلدها
+            // بریده می‌شوند (مقدار قبلی ۴۶ برای برچسب+ورودیِ ساده بود؛ ورودیِ
+            // گردگوشه‌ی جدید بلندتر است).
+            int RowHeight = Helpers.FieldBox.TotalHeight;
             int rows = (int)Math.Ceiling(fields.Count / (double)columns);
 
             var tbl = new TableLayoutPanel();
@@ -222,34 +225,24 @@ namespace CaseManagement
         // کمِ ۳px از سلولِ جدول (بدون فضای خالی اضافه).
         private Panel MakeCompactFieldPanel(string labelText, Control input)
         {
-            Panel p = new Panel();
-            p.Dock = DockStyle.Fill;
-            p.Margin = new Padding(3, 2, 3, 2);
+            // آموزش — بازطراحی: به‌جای برچسبِ ساده + ورودیِ مربعی، همان
+            // FieldBox بقیه‌ی فرم‌ها استفاده می‌شود (ورودیِ گردگوشه با حالت
+            // Focus/Hover) تا ظاهر کل برنامه یکدست شود.
+            var box = new Helpers.FieldBox(new Label(), labelText, input);
+            box.Dock = DockStyle.Fill;
+            box.Margin = new Padding(3, 2, 3, 2);
 
-            Label lbl = new Label();
-            lbl.Text = labelText;
-            lbl.AutoSize = false;
-            lbl.Dock = DockStyle.Top;
-            lbl.Height = 17;
-            lbl.TextAlign = ContentAlignment.MiddleRight;
-            lbl.Font = UiTheme.FontBold(8.5F);
-            lbl.ForeColor = UiTheme.TextDark;
+            // آموزش — رفع باگی که کاربر دید («عنوان‌ها سمت چپ فیلد افتاده‌اند»):
+            // این فرم RightToLeftLayout=false دارد ولی TabControl داخلش
+            // RightToLeftLayout=true است. یعنی محتوای داخل تب‌ها دقیقاً یک‌بار
+            // آینه می‌شود و ترازِ MiddleRight بصراً «چپ» رندر می‌شود.
+            // (در فرم اعضای خانواده این مشکل نبود چون هم فرم و هم تب هر دو
+            // آینه‌اند و دو آینه یکدیگر را خنثی می‌کنند.)
+            // پس اینجا برای رسیدن به «راستِ بصری» باید MiddleLeft داد.
+            box.Caption.TextAlign = ContentAlignment.MiddleLeft;
+            box.Caption.Font = UiTheme.FontBold(8.5F);
 
-            input.Dock = DockStyle.Top;
-            input.Font = UiTheme.Font(9F);
-
-            TextBox tb = input as TextBox;
-            if (tb != null) { tb.Height = 24; UiTheme.StyleTextBox(tb); }
-
-            ComboBox cb = input as ComboBox;
-            if (cb != null) cb.Height = 24;
-
-            Helpers.PersianDatePicker dp = input as Helpers.PersianDatePicker;
-            if (dp != null) dp.Height = 24;
-
-            p.Controls.Add(input);
-            p.Controls.Add(lbl);
-            return p;
+            return box;
         }
 
         // آموزش — رده‌بندی تحصیلات سرپرست به سه گروه، چون مقادیر خام
@@ -415,17 +408,17 @@ WHERE 1 = 1");
             buttonRow.Controls.Add(btnSearch);
 
             Button btnExport = UiTheme.CreateSecondaryButton("خروجی Excel", "⇑");
-            btnExport.Size = new Size(110, 32); btnExport.Margin = new Padding(3);
+            btnExport.Size = new Size(140, 32); btnExport.Margin = new Padding(3);
             btnExport.Click += delegate { ExportGridToExcel(dgvMemberResults, "جستجوی_اعضاء_خانواده"); };
             buttonRow.Controls.Add(btnExport);
 
             Button btnWordM = UiTheme.CreateSecondaryButton("خروجی Word", "➤");
-            btnWordM.Size = new Size(110, 32); btnWordM.Margin = new Padding(3);
+            btnWordM.Size = new Size(140, 32); btnWordM.Margin = new Padding(3);
             btnWordM.Click += delegate { ExportGridToWord(dgvMemberResults, "گزارش_اعضای_خانواده", "گزارش اعضای خانواده", MemberFilterSubtitle()); };
             buttonRow.Controls.Add(btnWordM);
 
             Button btnPdfM = UiTheme.CreateSecondaryButton("خروجی PDF", "➤");
-            btnPdfM.Size = new Size(100, 32); btnPdfM.Margin = new Padding(3);
+            btnPdfM.Size = new Size(140, 32); btnPdfM.Margin = new Padding(3);
             btnPdfM.Click += delegate { ExportGridToPdf(dgvMemberResults, "گزارش_اعضای_خانواده", "گزارش اعضای خانواده", MemberFilterSubtitle()); };
             buttonRow.Controls.Add(btnPdfM);
 

@@ -155,6 +155,9 @@ namespace CaseManagement.Helpers
             {
                 SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint |
                           ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+                // نشان برنامه تزئینی است و نباید در چرخه‌ی Tab توقف بسازد
+                // (در تستِ ترتیبِ Tab دیده شد که بین دکمه‌ها فوکوس می‌گرفت).
+                TabStop = false;
                 try { _logo = LogoHelper.GetLogoImage(); } catch { _logo = null; }
             }
 
