@@ -65,6 +65,8 @@ namespace CaseManagement
 
         public FrmDashboard()
         {
+            // بافر مضاعف: رفعِ استانداردِ لرزش و کندیِ ترسیم در فرم‌های پرکنترل.
+            DoubleBuffered = true;
             BuildUi();
             StartReminderTimer();
         }

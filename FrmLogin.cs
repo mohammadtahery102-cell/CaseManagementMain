@@ -204,7 +204,14 @@ namespace CaseManagement
             _txtUsername = new TextBox();
             FieldBox boxUser = new FieldBox(new Label(), "نام کاربری", _txtUsername) { Dock = DockStyle.Top };
 
-            _txtPassword = new TextBox { PasswordChar = '*' };
+            // آموزش — رفع دو ایراد که کاربر دید:
+            // ۱) ستاره‌ی «*» زشت و ناخوانا بود. UseSystemPasswordChar همان
+            //    نقطه‌ی توپرِ استاندارد ویندوز (●) را می‌گذارد.
+            // ۲) متن هنگام تایپ کج می‌رفت: رمز عبور متنِ فارسی نیست و با
+            //    RightToLeft=Yes، مکان‌نما و کاراکترها برعکس جابه‌جا می‌شدند.
+            //    با RightToLeft=No همراه با TextAlign=Center، ماسک دقیقاً از
+            //    وسط و پایدار رشد می‌کند.
+            _txtPassword = new TextBox { UseSystemPasswordChar = true };
             FieldBox boxPass = new FieldBox(new Label(), "رمز عبور", _txtPassword) { Dock = DockStyle.Top };
 
             // به درخواست کاربر: برچسب و متنِ همه‌ی فیلدهای ورود وسط‌چین باشند.
@@ -227,7 +234,9 @@ namespace CaseManagement
             _btnShowPass.FlatAppearance.BorderSize = 0;
             _btnShowPass.BackColor = Color.White;
             _btnShowPass.Click += (s, e) =>
-                _txtPassword.PasswordChar = _txtPassword.PasswordChar == '*' ? '\0' : '*';
+                // با UseSystemPasswordChar، خاموش/روشن‌کردنِ همان خاصیت، رمز را
+                // نمایان یا پنهان می‌کند (رفتار قبلی دقیقاً حفظ شده است).
+                _txtPassword.UseSystemPasswordChar = !_txtPassword.UseSystemPasswordChar;
             new ToolTip().SetToolTip(_btnShowPass, "نمایش/پنهان‌کردن رمز عبور");
             AttachInsideField(boxPass, _btnShowPass);
 
@@ -368,9 +377,43 @@ namespace CaseManagement
                 BackColor = Color.Transparent;
             }
 
+            // حافظه‌ی نهان — مثل پنل هنری، قابِ کارت هم ثابت است و نباید در هر
+            // رسم از نو ساخته شود (چند لایه مسیرِ گردگوشه + سایه).
+            private Bitmap _cache;
+            private Size _cacheSize;
+
+            protected override void OnResize(EventArgs e)
+            {
+                base.OnResize(e);
+                if (_cache != null) { _cache.Dispose(); _cache = null; }
+                Invalidate();
+            }
+
+            protected override void Dispose(bool disposing)
+            {
+                if (disposing && _cache != null) { _cache.Dispose(); _cache = null; }
+                base.Dispose(disposing);
+            }
+
             protected override void OnPaint(PaintEventArgs e)
             {
-                Graphics g = e.Graphics;
+                if (Width <= 0 || Height <= 0) return;
+
+                if (_cache == null || _cacheSize != Size)
+                {
+                    if (_cache != null) _cache.Dispose();
+                    _cache = new Bitmap(Width, Height);
+                    using (Graphics cg = Graphics.FromImage(_cache))
+                        RenderFrame(cg);
+                    _cacheSize = Size;
+                }
+
+                e.Graphics.DrawImageUnscaled(_cache, 0, 0);
+                base.OnPaint(e);
+            }
+
+            private void RenderFrame(Graphics g)
+            {
                 g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
 
                 int radius = ResponsiveLayout.Scale(18);
@@ -397,8 +440,6 @@ namespace CaseManagement
                     using (var p = new Pen(Color.FromArgb(30, 0, 0, 0), 1f))
                         g.DrawPath(p, path);
                 }
-
-                base.OnPaint(e);
             }
         }
 

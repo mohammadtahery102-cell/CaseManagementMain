@@ -94,7 +94,15 @@ namespace CaseManagement.Helpers
                 {
                     tb.BorderStyle = BorderStyle.None;
                     tb.BackColor = Color.White;
-                    tb.TextAlign = HorizontalAlignment.Right;
+
+                    // آموزش — رفع باگی که کاربر در فرم پرونده دید: «متن از چپ
+                    // شروع می‌شود». علت همان آینه‌شدن است، این‌بار داخل خودِ
+                    // TextBox: وقتی RightToLeft=Yes باشد، HorizontalAlignment
+                    // هم آینه می‌شود و Right بصراً «چپ» رندر می‌کند. برای
+                    // شروعِ متن از راست (رفتار درستِ فارسی) باید Left داد.
+                    // فیلدهای رمز استثنا هستند (پایین‌تر RightToLeft=No
+                    // می‌گیرند)، پس آن‌ها همان Center واقعی را نگه می‌دارند.
+                    tb.TextAlign = HorizontalAlignment.Left;
                 }
                 ComboBox cb = inner as ComboBox;
                 if (cb != null)
@@ -114,7 +122,12 @@ namespace CaseManagement.Helpers
                 }
 
                 inner.Font = UiTheme.Font(UiTheme.SizeBody);
-                inner.RightToLeft = RightToLeft.Yes;
+
+                // آموزش — فیلدهای رمز عبور استثنا هستند: محتوایشان متنِ فارسی
+                // نیست و با RightToLeft=Yes، مکان‌نما و کاراکترهای ماسک هنگام
+                // تایپ جابه‌جا و «کج» دیده می‌شوند (کاربر همین را گزارش کرد).
+                bool isPassword = tb != null && (tb.UseSystemPasswordChar || tb.PasswordChar != '\0');
+                inner.RightToLeft = isPassword ? RightToLeft.No : RightToLeft.Yes;
 
                 // ورودی‌های تک‌خطی به‌صورت عمودی وسط‌چین می‌نشینند؛ چندخطی‌ها پر می‌کنند.
                 bool multiline = tb != null && tb.Multiline;
@@ -146,7 +159,10 @@ namespace CaseManagement.Helpers
                 {
                     _centerText = value;
                     TextBox tb = _inner as TextBox;
-                    if (tb != null) tb.TextAlign = value ? HorizontalAlignment.Center : HorizontalAlignment.Right;
+                    // حالت غیرِ وسط‌چین باید Left باشد، نه Right: زیر
+                    // RightToLeft=Yes آینه می‌شود و Left بصراً «راست» می‌دهد
+                    // (توضیح کامل در سازنده‌ی InputShell).
+                    if (tb != null) tb.TextAlign = value ? HorizontalAlignment.Center : HorizontalAlignment.Left;
                     Invalidate();
                 }
             }
@@ -168,9 +184,12 @@ namespace CaseManagement.Helpers
                 if (e.Index >= 0 && e.Index < cb.Items.Count)
                 {
                     string text = cb.GetItemText(cb.Items[e.Index]);
+                    // آموزش — با پرچمِ RightToLeft، ترازِ افقی هم آینه می‌شود؛
+                    // پس برای «راستِ بصری» باید Left داده شود (هم‌راستا با
+                    // همان قاعده‌ای که برای TextBox توضیح داده شد).
                     TextFormatFlags align = _centerText
                         ? TextFormatFlags.HorizontalCenter
-                        : TextFormatFlags.Right;
+                        : TextFormatFlags.Left;
                     TextRenderer.DrawText(
                         e.Graphics, text, cb.Font, e.Bounds, UiTheme.TextDark,
                         align | TextFormatFlags.VerticalCenter |

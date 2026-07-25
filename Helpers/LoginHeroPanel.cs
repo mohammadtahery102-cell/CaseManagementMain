@@ -52,15 +52,58 @@ namespace CaseManagement.Helpers
             try { _logo = LogoHelper.GetLogoImage(); } catch { _logo = null; }
         }
 
+        // ─── حافظه‌ی نهانِ تصویر ──────────────────────────────────────────────
+        // آموزش — چرا لازم است: محتوای این پنل ثابت است ولی رسمش سنگین
+        // (گرادیانِ سه‌مرحله‌ای + دو PathGradientBrush + منحنی‌های بزیه +
+        // حدود ۲۵۰ نقطه). اگر در هر Paint از نو حساب شود، هر بار که ویندوز
+        // پنجره را باطل کند (جابه‌جایی، فوکوس، تایپ) همه‌ی این کار تکرار
+        // می‌شود. اندازه‌گیریِ واقعی نشان داد هر رسمِ کاملِ صفحه‌ی ورود
+        // ۹۱ میلی‌ثانیه طول می‌کشد — یعنی محسوس و کُند.
+        // با نگه‌داشتنِ نتیجه در یک Bitmap، رسم‌های بعدی فقط یک کپیِ ساده‌اند
+        // و تصویر تنها وقتی از نو ساخته می‌شود که اندازه‌ی پنل عوض شود.
+        private Bitmap _cache;
+        private Size _cacheSize;
+
+        protected override void OnResize(EventArgs e)
+        {
+            base.OnResize(e);
+            InvalidateCache();
+            Invalidate();
+        }
+
+        private void InvalidateCache()
+        {
+            if (_cache != null) { _cache.Dispose(); _cache = null; }
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing) InvalidateCache();
+            base.Dispose(disposing);
+        }
+
         protected override void OnPaint(PaintEventArgs e)
         {
-            Graphics g = e.Graphics;
+            int w = Width, h = Height;
+            if (w <= 0 || h <= 0) return;
+
+            if (_cache == null || _cacheSize != new Size(w, h))
+            {
+                InvalidateCache();
+                _cache = new Bitmap(w, h);
+                using (Graphics cg = Graphics.FromImage(_cache))
+                    RenderTo(cg, w, h);
+                _cacheSize = new Size(w, h);
+            }
+
+            e.Graphics.DrawImageUnscaled(_cache, 0, 0);
+        }
+
+        private void RenderTo(Graphics g, int w, int h)
+        {
             g.SmoothingMode = SmoothingMode.AntiAlias;
             g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
             g.InterpolationMode = InterpolationMode.HighQualityBicubic;
-
-            int w = Width, h = Height;
-            if (w <= 0 || h <= 0) return;
 
             PaintBackground(g, w, h);
             PaintDecor(g, w, h);
