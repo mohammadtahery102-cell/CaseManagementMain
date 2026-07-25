@@ -314,6 +314,15 @@ WHERE CenterID IS NULL AND Role <> 'SuperAdmin';");
                 EnsureColumn(con, "TblFamily", "SeminaryLevel",       "TEXT NULL"); // دروس حوزوی: سطح ۱/۲/۳
                 EnsureColumn(con, "TblFamily", "EducationCoverage",   "TEXT NULL"); // تحت پوشش آموزشی: بله/خیر
 
+                // ─── تاریخ تولد سرپرست ───────────────────────────────────────────
+                // آموزش — این ستون تا امروز اصلاً وجود نداشت، در حالی که فایلِ
+                // ورودیِ همگام‌سازی ستون «تاریخ تولد» را برای سرپرست هم می‌دهد؛
+                // نتیجه این بود که تاریخ تولدِ سرپرست هرگز ذخیره نمی‌شد. مثل
+                // بقیه‌ی مهاجرت‌ها افزایشی و بی‌خطر است (ستونِ nullable، بدون
+                // دست‌زدن به داده‌ی موجود). قالب ذخیره میلادیِ ISO است — همان
+                // قراردادی که TblFamily.BirthDate از آن پیروی می‌کند.
+                EnsureColumn(con, "TblCase", "HeadBirthDate", "TEXT NULL");
+
                 // ─── GlobalID برای merge هوشمند Backup ──────────────────────────
                 EnsureColumn(con, "TblCase", "GlobalID", "TEXT NULL");
                 ExecuteNonQuery(con, "CREATE UNIQUE INDEX IF NOT EXISTS IX_TblCase_GlobalID ON TblCase(GlobalID) WHERE GlobalID IS NOT NULL;");

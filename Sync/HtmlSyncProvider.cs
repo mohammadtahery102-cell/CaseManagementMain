@@ -49,6 +49,12 @@ namespace CaseManagement.Sync
             { "HeadFullName",         new[] { "نام", "نام سرپرست", "نام و تخلص", "نام کامل" } },
             { "HeadFatherName",       new[] { "نام پدر", "ولد" } },
             { "HeadTazkiraNo",        new[] { "ش تذکره", "شماره تذکره", "تذکره" } },
+            // آموزش — فایل سرپرستان ستون «تاریخ تولد» دارد ولی تا امروز به هیچ
+            // ستونی نگاشت نشده بود، پس تاریخ تولد سرپرست هرگز وارد نمی‌شد
+            // (با اجرای واقعیِ Provider روی فایل واقعی تأیید شد: ۴۳۵ سرپرست،
+            // صفر تاریخ تولد). ستون HeadBirthDate در DatabaseInitializer
+            // به‌صورت افزایشی به TblCase اضافه می‌شود.
+            { "HeadBirthDate",        new[] { "تاریخ تولد" } },
             { "HeadSadat",            new[] { "سیادت" } },
             { "Phone",                new[] { "تلفن همراه", "شماره تماس", "تلفن", "موبایل" } },
             { "HeadCurrentResidence", new[] { "آدرس" } },
@@ -91,7 +97,7 @@ namespace CaseManagement.Sync
         // ستون‌های دیتابیس که مقدارشان تاریخ است و باید به فرمت «سال/ماه/روز»
         // نرمال شوند (تشخیص خودکار: عددِ ۴رقمی = سال).
         private static readonly HashSet<string> DateColumns =
-            new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "BirthDate" };
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "BirthDate", "HeadBirthDate" };
 
         // CHECK constraint واقعی TblCase.ServiceStatus — مقدار خارج از این فهرست
         // هرگز نوشته نمی‌شود (تا کل تراکنش به‌خاطر یک مقدار نامعتبر Rollback نشود).
@@ -337,11 +343,24 @@ namespace CaseManagement.Sync
                 foreach (string candidate in kv.Value)
                 {
                     string val = FindByHeader(row, candidate, occurrence);
-                    if (val != null)
+                    if (val == null) continue;
+
+                    val = val.Trim();
+
+                    // آموزش — رفع باگ «تاریخ تولد سرپرست وارد نمی‌شد»: این متد
+                    // (برخلاف BuildMember) تبدیلِ تاریخِ شمسی→میلادی را انجام
+                    // نمی‌داد. تا وقتی نگاشتِ سرپرست هیچ ستون تاریخی نداشت این
+                    // بی‌اثر بود، ولی حالا که «تاریخ تولد سرپرست» اضافه شده،
+                    // بدون این تبدیل مقدارِ شمسیِ خام در ستونِ میلادی می‌نشست و
+                    // محاسبه‌ی سن و نمایش را خراب می‌کرد.
+                    if (DateColumns.Contains(kv.Key))
                     {
-                        target[kv.Key] = val.Trim();
-                        break;
+                        val = ConvertPersianDateToStored(val);
+                        if (string.IsNullOrWhiteSpace(val)) break; // تاریخ نامعتبر → اصلاً ننویس
                     }
+
+                    target[kv.Key] = val;
+                    break;
                 }
             }
         }

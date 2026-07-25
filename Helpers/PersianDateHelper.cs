@@ -15,6 +15,67 @@ namespace CaseManagement.Helpers
             return string.Format("{0:D4}/{1:D2}/{2:D2}", _pc.GetYear(dt), _pc.GetMonth(dt), _pc.GetDayOfMonth(dt));
         }
 
+        // ─── سنِ دقیق بر پایه‌ی تقویم شمسی ──────────────────────────────────
+        // آموزش — چرا شمسی و نه «تقسیم بر ۳۶۵٫۲۵»: کوئری‌های موجود سن را با
+        // julianday تقریبی حساب می‌کنند که نزدیک تولد یک سال خطا می‌دهد. اینجا
+        // سالِ کامل با تقویم شمسی (همان تقویمی که کاربر می‌بیند) شمرده می‌شود و
+        // ماه‌های باقی‌مانده تا تولد بعدی هم گزارش می‌شود — دقیقاً چیزی که
+        // کاربر خواست («۲۲ ساله، ۲ ماه مانده که ۲۳ ساله شود»).
+        //
+        // ورودی: تاریخ تولدِ میلادی (همان چیزی که در دیتابیس ذخیره شده).
+        // خروجی: متن آماده‌ی نمایش؛ برای تاریخ نامعتبر رشته‌ی خالی.
+        public static string DescribeAge(DateTime birth, DateTime? asOf = null)
+        {
+            DateTime now = (asOf ?? DateTime.Today).Date;
+            birth = birth.Date;
+            if (birth == DateTime.MinValue || birth > now) return "";
+
+            try
+            {
+                int by = _pc.GetYear(birth), bm = _pc.GetMonth(birth), bd = _pc.GetDayOfMonth(birth);
+                int ny = _pc.GetYear(now),   nm = _pc.GetMonth(now),   nd = _pc.GetDayOfMonth(now);
+
+                int years = ny - by;
+                if (nm < bm || (nm == bm && nd < bd)) years--;   // امسال هنوز تولد نشده
+                if (years < 0) return "";
+
+                // ماه‌های سپری‌شده از آخرین تولد
+                int monthsSince = nm - bm;
+                if (nd < bd) monthsSince--;
+                if (monthsSince < 0) monthsSince += 12;
+
+                int monthsLeft = (12 - monthsSince) % 12;
+
+                string text = ToPersianDigits(years) + " ساله";
+                if (monthsLeft > 0)
+                    text += "  ·  " + ToPersianDigits(monthsLeft) + " ماه تا " + ToPersianDigits(years + 1) + " سالگی";
+                else
+                    text += "  ·  همین ماه " + ToPersianDigits(years + 1) + " ساله می‌شود";
+
+                return text;
+            }
+            catch
+            {
+                return "";
+            }
+        }
+
+        // نسخه‌ی راحت برای مقادیرِ خامِ دیتابیس (رشته/DBNull).
+        public static string DescribeAgeFromStored(object storedValue)
+        {
+            DateTime dt = ParseStoredDate(storedValue, DateTime.MinValue);
+            return dt == DateTime.MinValue ? "" : DescribeAge(dt);
+        }
+
+        private static string ToPersianDigits(int value)
+        {
+            string s = value.ToString(CultureInfo.InvariantCulture);
+            var sb = new System.Text.StringBuilder(s.Length);
+            foreach (char c in s)
+                sb.Append(c >= '0' && c <= '9' ? (char)('۰' + (c - '0')) : c);
+            return sb.ToString();
+        }
+
         public static DateTime ParsePersianDate(string persianDate)
         {
             if (string.IsNullOrWhiteSpace(persianDate))
