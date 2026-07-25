@@ -49,6 +49,49 @@ namespace CaseManagement.Helpers
 
         public const int DesignDpi = 96;
 
+        // ═════════════════════════════════════════════════════════════════════
+        // تشخیص «آینه‌شدن» و ترازِ راستِ بصری
+        //
+        // آموزش — پرتکرارترین باگ ظاهری این پروژه: در WinForms، خاصیت
+        // RightToLeftLayout روی Form و TabControl کلِ دستگاهِ مختصات را برای
+        // فرزندانش آینه می‌کند. اثرش این است که ContentAlignment هم آینه
+        // می‌شود؛ یعنی MiddleRight بصراً «چپ» رندر می‌شود.
+        //
+        // چون بعضی فرم‌ها آینه‌اند، بعضی نه، و بعضی یک TabControlِ آینه داخلِ
+        // فرمِ غیرآینه دارند (دو آینه یکدیگر را خنثی می‌کنند)، نمی‌شود یک
+        // مقدارِ ثابت نوشت. این متدها وضعیت واقعیِ زنجیره‌ی والدها را می‌شمارند
+        // و ترازی برمی‌گردانند که «واقعاً» راست دیده شود.
+        // ═════════════════════════════════════════════════════════════════════
+
+        // تعداد فردِ آینه در زنجیره‌ی والدها ⇒ مختصات آینه است.
+        public static bool IsMirrored(Control control)
+        {
+            int flips = 0;
+            for (Control c = control; c != null; c = c.Parent)
+            {
+                Form f = c as Form;
+                if (f != null) { if (f.RightToLeftLayout) flips++; continue; }
+
+                TabControl tc = c as TabControl;
+                if (tc != null && tc.RightToLeftLayout) flips++;
+            }
+            return (flips % 2) == 1;
+        }
+
+        // ترازی که روی این کنترل «راستِ بصری» می‌دهد (بخش عمودی حفظ می‌شود).
+        public static ContentAlignment VisualRight(Control control, ContentAlignment current)
+        {
+            bool mirrored = IsMirrored(control);
+
+            bool top = current == ContentAlignment.TopLeft || current == ContentAlignment.TopCenter || current == ContentAlignment.TopRight;
+            bool bottom = current == ContentAlignment.BottomLeft || current == ContentAlignment.BottomCenter || current == ContentAlignment.BottomRight;
+
+            if (mirrored)
+                return top ? ContentAlignment.TopLeft : bottom ? ContentAlignment.BottomLeft : ContentAlignment.MiddleLeft;
+
+            return top ? ContentAlignment.TopRight : bottom ? ContentAlignment.BottomRight : ContentAlignment.MiddleRight;
+        }
+
         // ─── مقیاس DPI ───────────────────────────────────────────────────────
         private static float _cachedScale;
         private static readonly object _scaleLock = new object();

@@ -40,6 +40,7 @@ namespace CaseManagement
         // ─── تب ۲: جستجوی اعضاء خانواده ──────────────────────────────────────
         private TextBox txtMName, txtMFatherName, txtMTazkira, txtMSkill, txtMDistrict;
         private ComboBox cmbMProvince, cmbMGender, cmbMEducationTier, cmbMMarital, cmbMReligion, cmbMPhysical, cmbMDisabilityType, cmbMStatus;
+        private ComboBox cmbMGrade;   // فیلتر صنف (درخواست کاربر)
         private DataGridView dgvMemberResults;
 
         public FrmAdvancedSearch()
@@ -232,14 +233,9 @@ namespace CaseManagement
             box.Dock = DockStyle.Fill;
             box.Margin = new Padding(3, 2, 3, 2);
 
-            // آموزش — رفع باگی که کاربر دید («عنوان‌ها سمت چپ فیلد افتاده‌اند»):
-            // این فرم RightToLeftLayout=false دارد ولی TabControl داخلش
-            // RightToLeftLayout=true است. یعنی محتوای داخل تب‌ها دقیقاً یک‌بار
-            // آینه می‌شود و ترازِ MiddleRight بصراً «چپ» رندر می‌شود.
-            // (در فرم اعضای خانواده این مشکل نبود چون هم فرم و هم تب هر دو
-            // آینه‌اند و دو آینه یکدیگر را خنثی می‌کنند.)
-            // پس اینجا برای رسیدن به «راستِ بصری» باید MiddleLeft داد.
-            box.Caption.TextAlign = ContentAlignment.MiddleLeft;
+            // تراز برچسب دیگر اینجا دستی تنظیم نمی‌شود: خودِ FieldBox پس از
+            // اتصال به فرم، وضعیتِ آینه‌بودنِ زنجیره‌ی والدها را می‌سنجد و
+            // «راستِ بصری» را اعمال می‌کند (ResponsiveLayout.VisualRight).
             box.Caption.Font = UiTheme.FontBold(8.5F);
 
             return box;
@@ -377,6 +373,13 @@ WHERE 1 = 1");
             cmbMDisabilityType = MakeCombo("همه", new[] { "جسمی", "ذهنی", "بینایی", "شنوایی", "گفتاری", "حسی" });
             cmbMStatus = MakeCombo("همه", new[] { "فعال", "در انتظار تأیید", "قطع موقت", "قطع" });
 
+            // آموزش — فیلتر «صنف» (درخواست کاربر): مقادیر همان ۱ تا ۱۲ هستند
+            // که فرم اعضای خانواده هم برای GradeLevel استفاده می‌کند، تا
+            // جستجو دقیقاً با داده‌ی ثبت‌شده هم‌خوان باشد.
+            var grades = new List<string>();
+            for (int g = 1; g <= 12; g++) grades.Add(g.ToString());
+            cmbMGrade = MakeCombo("همه", grades.ToArray());
+
             var fields = new List<KeyValuePair<string, Control>>
             {
                 new KeyValuePair<string, Control>("نام عضو", txtMName),
@@ -386,6 +389,7 @@ WHERE 1 = 1");
                 new KeyValuePair<string, Control>("ولایت", cmbMProvince),
                 new KeyValuePair<string, Control>("ولسوالی", txtMDistrict),
                 new KeyValuePair<string, Control>("تحصیلات", cmbMEducationTier),
+                new KeyValuePair<string, Control>("صنف", cmbMGrade),
                 new KeyValuePair<string, Control>("وضعیت تأهل", cmbMMarital),
                 new KeyValuePair<string, Control>("مذهب", cmbMReligion),
                 new KeyValuePair<string, Control>("وضعیت جسمی", cmbMPhysical),
@@ -444,7 +448,8 @@ WHERE 1 = 1");
             StringBuilder sql = new StringBuilder(@"
 SELECT f.FamID, c.Code AS [کد پرونده], c.HeadFullName AS [نام سرپرست],
        f.MemberName, f.MemberFatherName, f.MemberTazkiraNo, f.Gender,
-       c.Province, c.District, f.MemberEducation, f.MaritalStatus, f.Religion,
+       c.Province, c.District, f.MemberEducation, f.GradeLevel AS [صنف],
+       f.MaritalStatus, f.Religion,
        f.PhysicalStatus, f.HasDisability, f.Skill, f.ServiceStatus
 FROM TblFamily f
 JOIN TblCase c ON c.CasID = f.CasID
@@ -468,6 +473,10 @@ WHERE 1 = 1");
                 AddExactFilter(sql, cmd, "f.PhysicalStatus", "@Physical", cmbMPhysical.Text);
                 AddExactFilter(sql, cmd, "f.HasDisability", "@DisabType", cmbMDisabilityType.Text);
                 AddExactFilter(sql, cmd, "f.ServiceStatus", "@Status", cmbMStatus.Text);
+                // فیلتر صنف (درخواست کاربر) — دقیقاً مثل بقیه‌ی فیلترهای
+                // «تطابق کامل»؛ مقدار «همه» توسط AddExactFilter نادیده گرفته
+                // می‌شود، پس رفتار پیش‌فرض هیچ تغییری نمی‌کند.
+                AddExactFilter(sql, cmd, "f.GradeLevel", "@Grade", cmbMGrade.Text);
 
                 // آموزش — فیلتر تحصیلات اعضا مستقیماً روی مقادیر واقعی MemberEducation
                 // است (بر خلاف سرپرست) چون این‌جا دسته «دانشگاه»/«مکتب» عیناً وجود دارد.

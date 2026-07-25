@@ -52,6 +52,24 @@ namespace CaseManagement.Helpers
 
             Controls.Add(_shell);
             Controls.Add(captionLabel);
+
+            // آموزش — تراز برچسب نمی‌تواند همین‌جا نهایی شود: وضعیت «آینه‌بودن»
+            // به زنجیره‌ی والدها بستگی دارد و در لحظه‌ی ساخت، این کنترل هنوز
+            // به فرم وصل نشده. پس تصحیح به بعد از اتصال موکول می‌شود.
+            // این کار همان باگی را حل می‌کند که عنوان فیلدها (مثل «کد اختصاصی»)
+            // را به سمت چپِ فیلد می‌انداخت — و برای همه‌ی فرم‌ها یکجا حل می‌شود،
+            // چون هر فرمی که از FieldBox استفاده کند خودکار درست می‌شود.
+            ParentChanged += delegate { AlignCaptionToVisualRight(); };
+            HandleCreated += delegate { AlignCaptionToVisualRight(); };
+        }
+
+        // اگر فیلد وسط‌چین شده باشد (مثل صفحه‌ی ورود) دست نمی‌خورد.
+        private bool _captionCentered;
+
+        private void AlignCaptionToVisualRight()
+        {
+            if (_captionCentered || Caption == null) return;
+            Caption.TextAlign = ResponsiveLayout.VisualRight(Caption, Caption.TextAlign);
         }
 
         // حالت خطا (Validation) — قاب قرمز می‌شود.
@@ -66,6 +84,7 @@ namespace CaseManagement.Helpers
         // قرار دارند و راست‌چینی در آن‌ها نامتوازن دیده می‌شود.
         public void CenterContent()
         {
+            _captionCentered = true;   // تصحیحِ خودکارِ تراز را غیرفعال می‌کند
             Caption.TextAlign = ContentAlignment.MiddleCenter;
             Caption.Padding = new Padding(0, 0, 0, 3);
             _shell.CenterText = true;
