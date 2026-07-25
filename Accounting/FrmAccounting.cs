@@ -151,6 +151,67 @@ namespace CaseManagement.Accounting
             return p;
         }
 
+        // ─── شبکه‌ی فیلدهای حسابداری (بازطراحی طبق طرح مرجع) ─────────────────
+        // ستون‌های هم‌عرض با FieldBox — همان کنترلِ فیلدی که بقیه‌ی فرم‌های
+        // برنامه استفاده می‌کنند، تا ظاهر یکدست شود و تراز عنوان‌ها هم خودکار
+        // درست بماند (ResponsiveLayout.VisualRight).
+        private static TableLayoutPanel MkAccFieldGrid(int columns)
+        {
+            var tlp = new TableLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                Padding = new Padding(14, 6, 14, 10),
+                ColumnCount = columns,
+                BackColor = Color.Transparent
+            };
+            for (int i = 0; i < columns; i++)
+                tlp.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F / columns));
+            return tlp;
+        }
+
+        private static Helpers.FieldBox AddAccField(TableLayoutPanel grid, string caption, Control input)
+        {
+            var box = new Helpers.FieldBox(new Label(), caption, input) { Dock = DockStyle.Top };
+            grid.Controls.Add(box);
+            return box;
+        }
+
+        // برچسبِ عددِ داخلِ کارت‌های خلاصه
+        private static Label MakeSummaryValue()
+        {
+            return new Label
+            {
+                Text = "0", Dock = DockStyle.Fill, AutoSize = false,
+                Font = UiTheme.FontBold(13F), ForeColor = UiTheme.TextDark,
+                TextAlign = ContentAlignment.MiddleCenter, AutoEllipsis = true
+            };
+        }
+
+        // کارتِ خلاصه: عنوانِ کوچک بالا + مقدارِ درشت پایین، با ته‌رنگِ معنایی.
+        private static Panel MakeSummaryTile(string caption, Label valueLabel, Color accent, Color tint)
+        {
+            var tile = new Helpers.SectionCard
+            {
+                Width = 172, Height = 76,
+                Margin = new Padding(6, 0, 6, 0),
+                Padding = new Padding(8, 6, 8, 6),
+                BackColor = tint
+            };
+
+            var cap = new Label
+            {
+                Text = caption, Dock = DockStyle.Top, Height = 20,
+                Font = UiTheme.FontBold(UiTheme.SizeSmall - 1F), ForeColor = accent,
+                TextAlign = ContentAlignment.MiddleCenter, BackColor = Color.Transparent
+            };
+
+            tile.Controls.Add(valueLabel);
+            tile.Controls.Add(cap);
+            return tile;
+        }
+
         private ComboBox NewCombo(bool dropDownList = true)
         {
             return new ComboBox { DropDownStyle = dropDownList ? ComboBoxStyle.DropDownList : ComboBoxStyle.DropDown, Font = UiTheme.Font(UiTheme.SizeBody) };
@@ -201,13 +262,17 @@ namespace CaseManagement.Accounting
         private MaskedTextBox _txnDate;
         private DataGridView _gridTxn;
         private Label _lblFundBalance;
+        // کارت‌های خلاصه‌ی بالای فهرست تراکنش‌ها (طرح مرجع). فقط نمایشی‌اند و
+        // از همان داده‌ی گریدِ بارگذاری‌شده جمع می‌زنند — هیچ کوئری اضافه‌ای.
+        private Label _lblTotalPaid;
+        private Label _lblTotalReceived;
 
         private TabPage BuildTransactionsTab()
         {
             var page = new TabPage("دریافت / پرداخت") { BackColor = UiTheme.Background };
 
             // فرم ورودی (بالا)
-            var form = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 160, FlowDirection = FlowDirection.RightToLeft, WrapContents = true, BackColor = UiTheme.CardBack, Padding = new Padding(10, 8, 10, 4), AutoScroll = true };
+            var form = new Panel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, BackColor = Color.Transparent };
 
             _txnDirection = NewCombo(); _txnDirection.Items.AddRange(new object[] { "دریافت", "پرداخت" }); _txnDirection.SelectedIndex = 0;
             _txnDirection.SelectedIndexChanged += delegate { ReloadTxnCategories(); };
@@ -220,18 +285,25 @@ namespace CaseManagement.Accounting
             _txnPeriod = NewCombo(); _txnParty = NewCombo(); _txnFund = NewCombo(); _txnCategory = NewCombo();
             _txnAmount = NewAmountBox(); _txnQty = new TextBox(); _txnDollar = NewAmountBox(2); _txnRate = NewAmountBox(2); _txnDesc = new TextBox();
 
-            form.Controls.Add(Field("نوع", _txnDirection, 120));
-            form.Controls.Add(Field("شماره سند", _txnDocNo, 120));
-            form.Controls.Add(DateField("تاریخ", _txnDate));
-            form.Controls.Add(Field("دوره مالی", _txnPeriod, 180));
-            form.Controls.Add(Field("طرف حساب", _txnParty, 180));
-            form.Controls.Add(Field("صندوق", _txnFund, 160));
-            form.Controls.Add(Field("دسته‌بندی", _txnCategory, 180));
-            form.Controls.Add(Field("مبلغ (افغانی)", _txnAmount, 140));
-            form.Controls.Add(Field("تعداد/مقدار", _txnQty, 120));
-            form.Controls.Add(Field("مبلغ دلاری", _txnDollar, 110));
-            form.Controls.Add(Field("نرخ دلار", _txnRate, 100));
-            form.Controls.Add(Field("توضیح", _txnDesc, 260));
+            // آموزش — بازطراحی طبق طرح مرجع: به‌جای FlowLayoutPanel با عرض‌های
+            // دستیِ متفاوت (که در عرض‌های مختلف نامرتب می‌شکست)، یک شبکه‌ی
+            // منظم با همان FieldBox بقیه‌ی فرم‌ها. هیچ فیلدی حذف یا جابه‌جا
+            // نشده؛ فقط چیدمان و ظاهرشان یکدست شد.
+            var infoGrid = MkAccFieldGrid(4);
+            AddAccField(infoGrid, "نوع",           _txnDirection);
+            AddAccField(infoGrid, "شماره سند",     _txnDocNo);
+            AddAccField(infoGrid, "تاریخ",         _txnDate);
+            AddAccField(infoGrid, "دوره مالی",     _txnPeriod);
+            AddAccField(infoGrid, "طرف حساب",      _txnParty);
+            AddAccField(infoGrid, "صندوق",         _txnFund);
+            AddAccField(infoGrid, "دسته‌بندی",     _txnCategory);
+            AddAccField(infoGrid, "مبلغ (افغانی)", _txnAmount);
+            AddAccField(infoGrid, "تعداد/مقدار",   _txnQty);
+            AddAccField(infoGrid, "مبلغ دلاری",    _txnDollar);
+            AddAccField(infoGrid, "نرخ دلار",      _txnRate);
+            AddAccField(infoGrid, "توضیح",         _txnDesc);
+
+            form.Controls.Add(infoGrid);
 
             // محاسبه خودکار: مبلغ افغانی = دلاری × نرخ (اگر هر دو وارد شوند)
             EventHandler calc = delegate
@@ -241,28 +313,105 @@ namespace CaseManagement.Accounting
             _txnDollar.ValueChanged += calc;
             _txnRate.ValueChanged += calc;
 
-            // نوار دکمه‌ها
-            var btnBar = new Panel { Dock = DockStyle.Top, Height = 48, BackColor = UiTheme.CardBack };
-            var btnSave = UiTheme.CreateButton("ثبت تراکنش", "✔", UiTheme.Success); btnSave.SetBounds(14, 7, 150, 34);
+            // ─── نوار دکمه‌ها (راست) + کارت‌های خلاصه (چپ) ────────────────────
+            // آموزش — دکمه‌ها از مختصات مطلق (SetBounds) به FlowLayoutPanel
+            // منتقل شدند تا در هر عرضی مرتب بمانند و در مقیاس‌های بالا روی هم
+            // نیفتند. همان چهار دکمه با همان رویدادها.
+            var btnFlow = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = true, BackColor = Color.Transparent,
+                Padding = new Padding(12, 8, 12, 8)
+            };
+
+            var btnSave = UiTheme.CreateButton("ثبت تراکنش", "✔", UiTheme.Success);
+            btnSave.Size = new Size(150, 38); btnSave.Margin = new Padding(4, 0, 4, 0);
             btnSave.Click += delegate { SaveTransaction(); };
-            var btnNew = UiTheme.CreateSecondaryButton("فرم جدید", "＋"); btnNew.SetBounds(172, 7, 120, 34);
+
+            var btnNew = UiTheme.CreateSecondaryButton("فرم جدید", "＋");
+            btnNew.Size = new Size(130, 38); btnNew.Margin = new Padding(4, 0, 4, 0);
             btnNew.Click += delegate { ResetTxnForm(); };
-            var btnVoucher = UiTheme.CreateButton("نمایش/چاپ فاکتور", "🧾", UiTheme.Primary); btnVoucher.SetBounds(300, 7, 160, 34);
+
+            var btnVoucher = UiTheme.CreateButton("نمایش / چاپ فاکتور", "🧾", UiTheme.Primary);
+            btnVoucher.Size = new Size(180, 38); btnVoucher.Margin = new Padding(4, 0, 4, 0);
             btnVoucher.Click += delegate { PrintSelectedVoucher(); };
-            var btnDelete = UiTheme.CreateButton("حذف انتخاب‌شده", "✕", UiTheme.Danger); btnDelete.SetBounds(468, 7, 150, 34);
+
+            var btnDelete = UiTheme.CreateButton("حذف انتخاب‌شده", "✕", UiTheme.Danger);
+            btnDelete.Size = new Size(160, 38); btnDelete.Margin = new Padding(4, 0, 4, 0);
             btnDelete.Click += delegate { DeleteSelectedTxn(); };
-            _lblFundBalance = new Label { Text = "", AutoSize = false, Font = UiTheme.FontBold(11F), ForeColor = UiTheme.PrimaryDark, TextAlign = ContentAlignment.MiddleRight };
-            _lblFundBalance.SetBounds(636, 7, 600, 34);
-            btnBar.Controls.Add(btnSave); btnBar.Controls.Add(btnNew); btnBar.Controls.Add(btnVoucher); btnBar.Controls.Add(btnDelete); btnBar.Controls.Add(_lblFundBalance);
+
+            foreach (Button b in new[] { btnSave, btnNew, btnVoucher, btnDelete })
+            {
+                Button bb = b;
+                bb.SizeChanged += delegate { UiTheme.RoundCorners(bb, 10); };
+                UiTheme.RoundCorners(bb, 10);
+                btnFlow.Controls.Add(bb);
+            }
+
+            // سه کارتِ خلاصه — مانده کل / جمع پرداخت / جمع دریافت (طبق طرح مرجع).
+            // _lblFundBalance حذف نشده: همان کنترل قبلی است و همان متن را
+            // می‌گیرد، فقط داخل کارتِ «مانده کل» نشسته.
+            _lblFundBalance = new Label
+            {
+                Text = "", Dock = DockStyle.Fill, AutoSize = false,
+                Font = UiTheme.FontBold(13F), ForeColor = UiTheme.PrimaryDark,
+                TextAlign = ContentAlignment.MiddleCenter, AutoEllipsis = true
+            };
+
+            var summary = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Left, Width = 560, FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = false, BackColor = Color.Transparent,
+                Padding = new Padding(8, 6, 8, 6)
+            };
+            summary.Controls.Add(MakeSummaryTile("مانده کل", _lblFundBalance,
+                ColorTranslator.FromHtml("#2563EB"), ColorTranslator.FromHtml("#EFF6FF")));
+            _lblTotalPaid = MakeSummaryValue();
+            summary.Controls.Add(MakeSummaryTile("جمع پرداخت", _lblTotalPaid,
+                ColorTranslator.FromHtml("#EF4444"), ColorTranslator.FromHtml("#FEF2F2")));
+            _lblTotalReceived = MakeSummaryValue();
+            summary.Controls.Add(MakeSummaryTile("جمع دریافت", _lblTotalReceived,
+                ColorTranslator.FromHtml("#22C55E"), ColorTranslator.FromHtml("#F0FDF4")));
+
+            var btnBar = new Panel { Dock = DockStyle.Top, Height = 96, BackColor = Color.Transparent };
+            btnBar.Controls.Add(btnFlow);
+            btnBar.Controls.Add(summary);
 
             _gridTxn = NewGrid();
             _gridTxn.CellDoubleClick += delegate (object s, DataGridViewCellEventArgs e) { if (e.RowIndex >= 0) PrintSelectedVoucher(); };
-            var gridWrap = new Panel { Dock = DockStyle.Fill, Padding = new Padding(8) };
-            gridWrap.Controls.Add(_gridTxn);
+
+            var gridCard = new Helpers.SectionCard { Dock = DockStyle.Fill, Padding = new Padding(10, 8, 10, 10) };
+            var gridHeader = new Label
+            {
+                Dock = DockStyle.Top, Height = 36, Text = "لیست تراکنش‌ها",
+                Font = UiTheme.FontBold(UiTheme.SizeMedium), ForeColor = UiTheme.TextDark,
+                TextAlign = ContentAlignment.MiddleRight, Padding = new Padding(0, 0, 8, 0),
+                BackColor = Color.Transparent
+            };
+            gridCard.Controls.Add(_gridTxn);
+            gridCard.Controls.Add(gridHeader);
+
+            var gridWrap = new Panel { Dock = DockStyle.Fill, Padding = new Padding(10, 4, 10, 10), BackColor = Color.Transparent };
+            gridWrap.Controls.Add(gridCard);
+
+            // کارتِ «اطلاعات اصلی» — دربرگیرنده‌ی شبکه‌ی فیلدها
+            var infoCard = new Helpers.SectionCard { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Padding = new Padding(2, 2, 2, 10) };
+            var infoHeader = new Label
+            {
+                Dock = DockStyle.Top, Height = 38, Text = "اطلاعات اصلی",
+                Font = UiTheme.FontBold(UiTheme.SizeMedium), ForeColor = UiTheme.TextDark,
+                TextAlign = ContentAlignment.MiddleRight, Padding = new Padding(0, 0, 16, 0),
+                BackColor = Color.Transparent
+            };
+            infoCard.Controls.Add(form);
+            infoCard.Controls.Add(infoHeader);
+
+            var infoWrap = new Panel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Padding = new Padding(10, 10, 10, 0), BackColor = Color.Transparent };
+            infoWrap.Controls.Add(infoCard);
 
             page.Controls.Add(gridWrap);
             page.Controls.Add(btnBar);
-            page.Controls.Add(form);
+            page.Controls.Add(infoWrap);
 
             LoadTxnCombos();
             ReloadTxnCategories();
@@ -417,6 +566,39 @@ namespace CaseManagement.Accounting
             _gridTxn.DataSource = _repo.GetTransactions(null, null);
             if (_gridTxn.Columns.Contains("TxnID")) _gridTxn.Columns["TxnID"].Visible = false;
             FormatAmountColumn(_gridTxn, "مبلغ");
+            UpdateTxnSummary();
+        }
+
+        // ─── کارت‌های خلاصه (طرح مرجع) ───────────────────────────────────────
+        // آموزش — عمداً هیچ کوئری تازه‌ای زده نمی‌شود: همان جدولی که همین الان
+        // در گرید نشسته جمع زده می‌شود. پس نه بار اضافه‌ای روی دیتابیس می‌آید
+        // و نه امکان دارد عددِ کارت با فهرستِ زیرش ناهم‌خوان شود.
+        private void UpdateTxnSummary()
+        {
+            if (_lblTotalPaid == null || _lblTotalReceived == null) return;
+
+            decimal received = 0m, paid = 0m;
+            DataTable t = _gridTxn.DataSource as DataTable;
+
+            if (t != null && t.Columns.Contains("مبلغ") && t.Columns.Contains("نوع"))
+            {
+                foreach (DataRow r in t.Rows)
+                {
+                    decimal amount;
+                    if (r["مبلغ"] == DBNull.Value ||
+                        !decimal.TryParse(Convert.ToString(r["مبلغ"]),
+                            System.Globalization.NumberStyles.Any,
+                            System.Globalization.CultureInfo.InvariantCulture, out amount))
+                        continue;
+
+                    string kind = Convert.ToString(r["نوع"]);
+                    if (kind == "دریافت") received += amount;
+                    else if (kind == "پرداخت") paid += amount;
+                }
+            }
+
+            _lblTotalReceived.Text = received.ToString("N0");
+            _lblTotalPaid.Text = paid.ToString("N0");
         }
 
         // ═══════════════════════════════════════════════════════════════════
