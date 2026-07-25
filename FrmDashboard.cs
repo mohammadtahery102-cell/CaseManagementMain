@@ -260,18 +260,28 @@ namespace CaseManagement
             // ── سمت چپ: آواتار/نام کاربر + دکمه‌های ابزار ──
             Panel left = new Panel { Dock = DockStyle.Left, Width = 300, BackColor = Color.Transparent };
 
-            Panel userBox = new Panel { Dock = DockStyle.Left, Width = 150, BackColor = Color.Transparent };
-            Label lblUserName = new Label
+            // آموزش — رفع باگ «متن‌ها روی هم می‌افتند»: در نسخه‌ی قبلی برای
+            // پایین‌آوردن متن از Padding داخلِ خودِ Label استفاده شده بود
+            // (مثلاً Height=22 با Padding-Top=16 ⇒ فقط ۶px فضای واقعی برای
+            // متن). فونت از آن فضا بلندتر بود و سرریز می‌کرد روی Labelِ بعدی.
+            // حالا فاصله‌گذاری با Padding خودِ پنلِ نگه‌دارنده انجام می‌شود و هر
+            // Label ارتفاعِ کاملِ متنش را دارد.
+            Panel userBox = new Panel
             {
-                Text = SecurityContext.Username, Dock = DockStyle.Top, Height = 22,
-                Font = UiTheme.FontBold(UiTheme.SizeBody), ForeColor = UiTheme.TextDark,
-                TextAlign = ContentAlignment.BottomLeft, Padding = new Padding(0, 16, 0, 0)
+                Dock = DockStyle.Left, Width = 160, BackColor = Color.Transparent,
+                Padding = new Padding(0, 18, 0, 12)
             };
             Label lblUserRole = new Label
             {
-                Text = "● " + UiTheme.RoleDisplay(SecurityContext.Role), Dock = DockStyle.Top, Height = 20,
-                Font = UiTheme.Font(UiTheme.SizeSmall - 1F), ForeColor = UiTheme.Success,
-                TextAlign = ContentAlignment.TopLeft
+                Text = "● " + UiTheme.RoleDisplay(SecurityContext.Role), Dock = DockStyle.Top, Height = 18,
+                Font = UiTheme.Font(UiTheme.SizeSmall - 2F), ForeColor = UiTheme.Success,
+                TextAlign = ContentAlignment.MiddleLeft
+            };
+            Label lblUserName = new Label
+            {
+                Text = SecurityContext.Username, Dock = DockStyle.Top, Height = 22,
+                Font = UiTheme.FontBold(UiTheme.SizeSmall), ForeColor = UiTheme.TextDark,
+                TextAlign = ContentAlignment.MiddleLeft
             };
             userBox.Controls.Add(lblUserRole);
             userBox.Controls.Add(lblUserName);
@@ -289,19 +299,26 @@ namespace CaseManagement
             left.Controls.Add(userBox);
 
             // ── سمت راست: پیام خوش‌آمد ──
-            Panel right = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent };
-            Label lblGreeting = new Label
+            // فاصله‌ی عمودی از Padding پنل می‌آید (نه Padding داخل Label) و
+            // اندازه‌ی فونت‌ها یک پله کوچک‌تر شد — به‌درخواست کاربر: «فونت
+            // کوچک‌تر ولی منظم، نه خط روی خط».
+            Panel right = new Panel
             {
-                Text = "سلام " + SecurityContext.Username + " 👋", Dock = DockStyle.Top, Height = 30,
-                Font = UiTheme.FontBold(UiTheme.SizeLarge), ForeColor = UiTheme.TextDark,
-                TextAlign = ContentAlignment.BottomRight, Padding = new Padding(0, 14, 0, 0)
+                Dock = DockStyle.Fill, BackColor = Color.Transparent,
+                Padding = new Padding(0, 16, 0, 12)
             };
             Label lblWelcome = new Label
             {
                 Text = "به سیستم مدیریت پرونده گنجینه خوش آمدید  —  " + SecurityContext.CenterDisplay,
-                Dock = DockStyle.Top, Height = 22,
-                Font = UiTheme.Font(UiTheme.SizeSmall), ForeColor = UiTheme.TextMuted,
-                TextAlign = ContentAlignment.TopRight
+                Dock = DockStyle.Top, Height = 20,
+                Font = UiTheme.Font(UiTheme.SizeSmall - 1F), ForeColor = UiTheme.TextMuted,
+                TextAlign = ContentAlignment.MiddleRight, AutoEllipsis = true
+            };
+            Label lblGreeting = new Label
+            {
+                Text = "سلام " + SecurityContext.Username, Dock = DockStyle.Top, Height = 24,
+                Font = UiTheme.FontBold(UiTheme.SizeMedium), ForeColor = UiTheme.TextDark,
+                TextAlign = ContentAlignment.MiddleRight, AutoEllipsis = true
             };
             right.Controls.Add(lblWelcome);
             right.Controls.Add(lblGreeting);
@@ -2171,10 +2188,22 @@ WHERE (@CID = 0 OR CenterID = @CID)" + CaseFilterSql("") + @"", con))
             // دوناتِ نازک‌تر با سوراخ بزرگ‌تر، تا عددِ مرکزی جا شود (مثل عکس).
             if (statusChart.Series.Count > 0)
             {
-                statusChart.Series[0].IsValueShownAsLabel = false;
-                // ضخامت حلقه‌ی دونات یک ویژگیِ سفارشیِ خودِ Series است (نه Chart).
-                statusChart.Series[0]["DoughnutRadius"] = "38";
-                statusChart.Series[0].LegendText = "#VALX  (#PERCENT{P1})";
+                Series ds = statusChart.Series[0];
+                ds.IsValueShownAsLabel = false;
+
+                // آموزش — رفع باگ «برچسب‌ها روی عدد وسط دونات می‌افتند»: در
+                // نمودارهای Pie/Doughnut صرفِ IsValueShownAsLabel=false کافی
+                // نیست؛ موتور نمودار همچنان برچسبِ نقطه را داخل قطعه‌ها رسم
+                // می‌کند. کلیدِ درستِ خاموش‌کردنشان همین ویژگیِ سفارشی است.
+                // (در تست تصویری دیده شد که «فعال/قطع/در انتظار تأیید» روی
+                // عددِ ۴۰۳ چاپ می‌شدند و هر دو ناخوانا می‌شدند.)
+                ds["PieLabelStyle"] = "Disabled";
+                ds.Label = "";
+
+                // سوراخِ بزرگ‌ترِ دونات (حلقه‌ی نازک‌تر) تا عددِ مرکزی راحت جا شود.
+                ds["DoughnutRadius"] = "62";
+
+                ds.LegendText = "#VALX  (#PERCENT{P1})";
             }
 
             LoadActivityFeed();
