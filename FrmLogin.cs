@@ -26,27 +26,51 @@ namespace CaseManagement
             BuildUi();
         }
 
+        // ─── پالت رنگ صفحه‌ی ورود (طبق طرح تصویریِ تأییدشده) ────────────────
+        internal static readonly Color CanvasTop    = ColorTranslator.FromHtml("#0F1B33");
+        internal static readonly Color CanvasBottom = ColorTranslator.FromHtml("#16294D");
+        internal static readonly Color RoyalBlue    = ColorTranslator.FromHtml("#1D4ED8");
+        internal static readonly Color GoldAccent   = ColorTranslator.FromHtml("#C89B3C");
+
         private void BuildUi()
         {
+            // ═══ فاز ۱ — پنجره ═══════════════════════════════════════════════
+            // قابِ ویندوز حذف شد و نوار عنوانِ سفارشی جایگزین آن شد؛ اندازه طبق
+            // تصمیم تأییدشده ۱۱۰۰×۷۲۰ (افقی، مناسب دسکتاپ). هیچ منطق ورود/
+            // دیتابیس/رویدادی در این فاز تغییر نکرده است.
             Text              = "ورود به سیستم";
             StartPosition     = FormStartPosition.CenterScreen;
-            ClientSize        = new Size(460, 700);
-            FormBorderStyle   = FormBorderStyle.FixedDialog;
-            MaximizeBox       = false;
+            ClientSize        = new Size(1100, 720);
+            FormBorderStyle   = FormBorderStyle.None;
+            MinimumSize       = new Size(980, 660);
+            MaximizeBox       = true;
             MinimizeBox       = true;
             RightToLeft       = RightToLeft.Yes;
-            RightToLeftLayout = true;
-            BackColor         = UiTheme.Background;
+            RightToLeftLayout = false; // چیدمان دستی است؛ آینه‌ی هندسی لازم نیست
+            BackColor         = CanvasTop;
             Font              = UiTheme.Font(10.5f);
+            DoubleBuffered    = true;
             try { Icon = LogoHelper.GetAppIcon(); } catch { }
 
+            // گوشه‌های گردِ بومیِ ویندوز ۱۱ (روی ویندوز ۱۰ بی‌اثر و بی‌ضرر).
+            HandleCreated += delegate { WindowChrome.ApplyRoundedCorners(this); };
+
+            // نوار عنوان سفارشی
+            ModernTitleBar titleBar = new ModernTitleBar(this, "ورود به سیستم", CanvasTop);
+            Controls.Add(titleBar);
+
             // ─── کارت مرکزی ورود ─────────────────────────────────────────
+            // آموزش — در این فاز فقط جای کارت با اندازه‌ی جدیدِ پنجره هماهنگ شد
+            // (سمت راست، مطابق طرح). بازچینشِ کاملِ داخلِ کارت و ساختِ پنلِ
+            // هنریِ سمت چپ کارِ فاز ۲ است، پس این صفحه فعلاً «نیمه‌کاره ولی
+            // کاملاً کارا» به‌نظر می‌رسد.
             Panel card = new Panel();
             card.BackColor = UiTheme.CardBack;
-            card.Size = new Size(370, 626);
-            card.Location = new Point((ClientSize.Width - card.Width) / 2, 32);
+            card.Size = new Size(430, 600);
+            card.Location = new Point(ClientSize.Width - card.Width - 60, titleBar.Height + 40);
             UiTheme.RoundCorners(card, 18);
             Controls.Add(card);
+            card.BringToFront();
 
             // ─── لوگوی نرم‌افزار (بزرگ‌شده به‌درخواست کاربر ~۲ برابر) ───────
             PictureBox logo = new PictureBox();
@@ -149,6 +173,25 @@ namespace CaseManagement
 
             // بارگذاری مراکز پس از ساخت UI
             LoadCenters();
+        }
+
+        // ─── بومِ ناوی با گرادیانِ ملایم (پس‌زمینه‌ی کل پنجره) ────────────────
+        // آموزش — گرادیان روی خودِ فرم رسم می‌شود، نه با یک PictureBox: هم
+        // سبک‌تر است و هم هنگام تغییر اندازه‌ی پنجره خودکار کشیده می‌شود.
+        protected override void OnPaintBackground(PaintEventArgs e)
+        {
+            if (ClientSize.Width <= 0 || ClientSize.Height <= 0) { base.OnPaintBackground(e); return; }
+
+            using (var brush = new System.Drawing.Drawing2D.LinearGradientBrush(
+                       new Rectangle(0, 0, ClientSize.Width, ClientSize.Height),
+                       CanvasTop, CanvasBottom, System.Drawing.Drawing2D.LinearGradientMode.Vertical))
+                e.Graphics.FillRectangle(brush, 0, 0, ClientSize.Width, ClientSize.Height);
+        }
+
+        protected override void OnResize(EventArgs e)
+        {
+            base.OnResize(e);
+            Invalidate(); // گرادیان باید با اندازه‌ی جدید دوباره کشیده شود
         }
 
         // ─── بارگذاری مراکز از دیتابیس ──────────────────────────────────────
