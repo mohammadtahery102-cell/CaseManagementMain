@@ -273,17 +273,19 @@ namespace CaseManagement
                 Dock = DockStyle.Left, Width = 160, BackColor = Color.Transparent,
                 Padding = new Padding(0, 18, 0, 12)
             };
+            // ترازها به‌دلیل آینه‌شدن در RightToLeft معکوس نوشته می‌شوند:
+            // MiddleRight ⇒ بصراً چپ (این بلوک عمداً سمت چپِ سربرگ است).
             Label lblUserRole = new Label
             {
                 Text = "● " + UiTheme.RoleDisplay(SecurityContext.Role), Dock = DockStyle.Top, Height = 18,
                 Font = UiTheme.Font(UiTheme.SizeSmall - 2F), ForeColor = UiTheme.Success,
-                TextAlign = ContentAlignment.MiddleLeft
+                TextAlign = ContentAlignment.MiddleRight
             };
             Label lblUserName = new Label
             {
                 Text = SecurityContext.Username, Dock = DockStyle.Top, Height = 22,
                 Font = UiTheme.FontBold(UiTheme.SizeSmall), ForeColor = UiTheme.TextDark,
-                TextAlign = ContentAlignment.MiddleLeft
+                TextAlign = ContentAlignment.MiddleRight
             };
             userBox.Controls.Add(lblUserRole);
             userBox.Controls.Add(lblUserName);
@@ -309,18 +311,23 @@ namespace CaseManagement
                 Dock = DockStyle.Fill, BackColor = Color.Transparent,
                 Padding = new Padding(0, 16, 0, 12)
             };
+            // آموزش — رفع باگ «متن خوش‌آمد وسط صفحه می‌ماند و به نوار کناری
+            // نمی‌چسبد»: فرم RightToLeft=Yes دارد و در این حالت ترازِ متنِ
+            // Label آینه می‌شود — یعنی MiddleRight بصراً «چپ» رندر می‌شود.
+            // برای چسباندن متن به لبه‌ی راست (کنار نوار آبی) باید MiddleLeft
+            // داد. همین تله قبلاً در پنجره‌های پیام و بنر داشبورد هم دیده شد.
             Label lblWelcome = new Label
             {
-                Text = "به سیستم مدیریت پرونده گنجینه خوش آمدید  —  " + SecurityContext.CenterDisplay,
-                Dock = DockStyle.Top, Height = 20,
-                Font = UiTheme.Font(UiTheme.SizeSmall - 1F), ForeColor = UiTheme.TextMuted,
-                TextAlign = ContentAlignment.MiddleRight, AutoEllipsis = true
+                Text = "به سیستم مدیریت پرونده گنجینه خوش آمدید  ·  " + SecurityContext.CenterDisplay,
+                Dock = DockStyle.Top, Height = 22,
+                Font = UiTheme.Font(UiTheme.SizeSmall), ForeColor = UiTheme.TextMuted,
+                TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true
             };
             Label lblGreeting = new Label
             {
-                Text = "سلام " + SecurityContext.Username, Dock = DockStyle.Top, Height = 24,
-                Font = UiTheme.FontBold(UiTheme.SizeMedium), ForeColor = UiTheme.TextDark,
-                TextAlign = ContentAlignment.MiddleRight, AutoEllipsis = true
+                Text = "سلام " + SecurityContext.Username, Dock = DockStyle.Top, Height = 28,
+                Font = UiTheme.FontBold(UiTheme.SizeLarge), ForeColor = UiTheme.TextDark,
+                TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true
             };
             right.Controls.Add(lblWelcome);
             right.Controls.Add(lblGreeting);

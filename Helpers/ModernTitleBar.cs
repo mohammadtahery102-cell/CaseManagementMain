@@ -27,19 +27,20 @@ namespace CaseManagement.Helpers
             _owner = owner;
 
             Dock = DockStyle.Top;
-            Height = 46;
+            // ارتفاع بیشتر تا عنوانِ درشت‌تر جا شود (درخواست کاربر).
+            Height = 54;
             BackColor = backColor;
-            RightToLeft = RightToLeft.No; // دکمه‌های پنجره همیشه در سمت راست (استاندارد ویندوز)
+            RightToLeft = RightToLeft.No;
 
-            // ── دکمه‌های پنجره (راست) ──
-            _btnClose = new WindowButton(WindowButtonKind.Close, backColor) { Dock = DockStyle.Right, Width = 46 };
+            // ── دکمه‌های پنجره — سمت چپ (به درخواست کاربر جابه‌جا شدند) ──
+            _btnClose = new WindowButton(WindowButtonKind.Close, backColor) { Dock = DockStyle.Left, Width = 46 };
             _btnClose.Click += delegate
             {
                 _owner.DialogResult = DialogResult.Cancel;
                 _owner.Close();
             };
 
-            _btnMax = new WindowButton(WindowButtonKind.Maximize, backColor) { Dock = DockStyle.Right, Width = 46, Visible = showMaximize };
+            _btnMax = new WindowButton(WindowButtonKind.Maximize, backColor) { Dock = DockStyle.Left, Width = 46, Visible = showMaximize };
             _btnMax.Click += delegate
             {
                 _owner.WindowState = _owner.WindowState == FormWindowState.Maximized
@@ -47,34 +48,34 @@ namespace CaseManagement.Helpers
                     : FormWindowState.Maximized;
             };
 
-            _btnMin = new WindowButton(WindowButtonKind.Minimize, backColor) { Dock = DockStyle.Right, Width = 46 };
+            _btnMin = new WindowButton(WindowButtonKind.Minimize, backColor) { Dock = DockStyle.Left, Width = 46 };
             _btnMin.Click += delegate { _owner.WindowState = FormWindowState.Minimized; };
 
-            // ── نشان برنامه (چپ) ──
-            AppBadge badge = new AppBadge { Dock = DockStyle.Left, Width = 56 };
+            // ── نشان برنامه — سمت راست، کنارِ عنوان ──
+            AppBadge badge = new AppBadge { Dock = DockStyle.Right, Width = 56 };
 
-            // ── عنوان: کنارِ دکمه‌های پنجره، راست‌چین ──
+            // ── عنوان: سمت راست، درشت و خوانا (درخواست کاربر) ──
             Label lblTitle = new Label
             {
                 Text = title,
                 Dock = DockStyle.Fill,
                 BackColor = Color.Transparent,
                 ForeColor = Color.White,
-                Font = UiTheme.FontBold(UiTheme.SizeSmall),
+                Font = UiTheme.FontBold(UiTheme.SizeMedium),
                 TextAlign = ContentAlignment.MiddleRight,
-                Padding = new Padding(0, 0, 12, 0)
+                Padding = new Padding(0, 0, 6, 0),
+                AutoEllipsis = true
             };
 
-            // آموزش — ترتیب افزودن دکمه‌های پنجره مهم است: در چیدمانِ Dock=Right،
-            // کنترلی که «دیرتر» اضافه شود بیرونی‌تر (راست‌تر) می‌نشیند. برای
-            // رسیدن به ترتیب استاندارد ویندوز (کوچک‌کردن، بیشینه، بستن — با
-            // بستن در راست‌ترین نقطه) باید دقیقاً به همین ترتیب اضافه شوند.
-            // (در تست تصویری، ترتیبِ قبلی برعکس ظاهر شد و «بستن» چپ‌ترین بود.)
+            // آموزش — ترتیب افزودن مهم است: در چیدمان Dock، کنترلی که «دیرتر»
+            // اضافه شود بیرونی‌تر می‌نشیند. حالا که دکمه‌ها سمت چپ‌اند، برای
+            // رسیدن به ترتیبِ بصریِ «بستن، بیشینه، کوچک‌کردن» از لبه‌ی چپ به
+            // داخل، باید «بستن» آخر اضافه شود.
             Controls.Add(lblTitle);
+            Controls.Add(badge);
             Controls.Add(_btnMin);
             Controls.Add(_btnMax);
             Controls.Add(_btnClose);
-            Controls.Add(badge);
 
             // کشیدن پنجره از نوار عنوان و از خودِ متن عنوان/نشان.
             WindowChrome.EnableDragMove(this, owner);

@@ -79,7 +79,7 @@ namespace CaseManagement
             // showMaximize:false — چون صفحه‌ی ورود اندازه‌ی ثابت دارد، دکمه‌ی
             // بیشینه‌سازی هم نباید نمایش داده شود (وگرنه دکمه‌ای که کاری
             // نمی‌کند روی نوار عنوان می‌ماند).
-            ModernTitleBar titleBar = new ModernTitleBar(this, "ورود به سیستم", CanvasTop, showMaximize: false);
+            ModernTitleBar titleBar = new ModernTitleBar(this, "سیستم مدیریت پرونده گنجینه", CanvasTop, showMaximize: false);
             Controls.Add(titleBar);
 
             // ═══ چیدمان دو ستونه، کاملاً واکنش‌گرا ═══════════════════════════
