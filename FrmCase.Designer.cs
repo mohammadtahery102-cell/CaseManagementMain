@@ -539,7 +539,15 @@ namespace CaseManagement
             //
             // FrmCase
             //
-            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.None;
+            // ─── مهاجرت به مقیاسِ DPI (لایه ۲ چارچوب چیدمان واکنش‌گرا) ────────
+            // آموزش — دو خط، و ترتیبشان مهم است:
+            //   AutoScaleDimensions مبنای طراحی را اعلام می‌کند (۹۶dpi = مقیاس
+            //   ۱۰۰٪). بدون آن، مقدارش (۰،۰) می‌ماند و WinForms هیچ نسبتی برای
+            //   مقیاس‌کردن ندارد، پس AutoScaleMode.Dpi عملاً بی‌اثر می‌شود.
+            //   AutoScaleMode.Dpi می‌گوید مبنای مقیاس «نمایشگر» است، نه فونت.
+            //   (چرایی انتخاب Dpi به‌جای Font در سربرگ ResponsiveLayout.cs)
+            this.AutoScaleDimensions = new System.Drawing.SizeF(96F, 96F);
+            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Dpi;
             this.Font = new System.Drawing.Font("Segoe UI", 9.75F);
             // آموزش — ارتفاع فرم افزایش یافت (۷۲۰→۱۰۴۰) تا سه گروه (سرپرست/
             // جسمی/پرونده) بدون فشردگی و با فاصله حرفه‌ای جا شوند.
