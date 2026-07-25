@@ -1903,11 +1903,15 @@ WHERE CasID = @CasID", con))
         {
             string safeCode = CleanFileName(caseCode);
 
+            // آموزش — به درخواست کاربر: نام فایل خروجی فقط «شماره اختصاصی»
+            // پرونده باشد و هیچ پسوند/برچسب اضافه‌ای (مثل «_FullCase») نداشته
+            // باشد. پسوندِ نوع فایل (.docx/.pdf) خودش توسط SaveFileToCaseFolder
+            // از فایل مبدأ حفظ می‌شود، پس فقط همین برچسب حذف می‌شود.
             string savedPath = FileHelper.SaveFileToCaseFolder(
                 sourceFilePath,
                 caseCode,
                 FileHelper.SectionDocs,
-                safeCode + "_FullCase",
+                safeCode,
                 "");
 
             if (string.IsNullOrWhiteSpace(savedPath) || !File.Exists(savedPath))
