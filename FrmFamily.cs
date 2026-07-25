@@ -63,11 +63,18 @@ namespace CaseManagement
         {
             UiTheme.ApplySweep(this);
 
-            UiTheme.SetButtonIcon(btnNew, "+");
-            UiTheme.SetButtonIcon(btnSave, "✔");
-            UiTheme.SetButtonIcon(btnEdit, "✎");
-            UiTheme.SetButtonIcon(btnDelete, "✕");
+            // آموزش — چهار دکمه‌ی اصلی متن و آیکون و رنگشان را از خودِ Designer
+            // می‌گیرند (PaintBtn). فراخوانی SetButtonIcon برایشان باعث می‌شد
+            // آیکون دوباره جلوی متن اضافه شود — و چون فونت فارسیِ برنامه گلیفِ
+            // «✎» را ندارد، روی دکمه‌ی ویرایش یک مربعِ خالی «▯» ظاهر می‌شد
+            // (در تست تصویری دیده شد). فقط دکمه‌ی انتخاب عکس آیکون می‌گیرد.
             UiTheme.SetButtonIcon(btnBrowseMemberPhoto, "▤");
+
+            // آموزش — ApplySweep روی همه‌ی Labelها ForeColor تیره می‌گذارد؛
+            // نوار سرپرست زمینه‌ی سرمه‌ای تیره دارد، پس متنش عملاً ناخوانا
+            // می‌شد (در تست تصویری تیره روی تیره دیده شد). رنگ سفیدش بعد از
+            // Sweep دوباره اعمال می‌شود.
+            lblHeadInfo.ForeColor = Color.White;
 
             btnDelete.BackColor = UiTheme.Danger;
             btnDelete.FlatAppearance.MouseOverBackColor = ControlPaint.Light(UiTheme.Danger, 0.18f);
@@ -171,10 +178,14 @@ namespace CaseManagement
                     {
                         if (dr.Read())
                         {
+                            // آموزش — جداکننده‌ی صریح («·») به‌جای چند فاصله‌ی
+                            // پشت‌سرهم: در رندر راست‌به‌چپ، فاصله‌های متوالی
+                            // جمع می‌شوند و بخش‌های متن به‌هم می‌چسبند و
+                            // درهم دیده می‌شوند (در تست تصویری همین رخ داد).
                             lblHeadInfo.Text =
                                 "کد سرپرست: " + CurrentCaseCode +
-                                "     نام سرپرست: " + DbString(dr["HeadFullName"]) +
-                                "     نام پدر سرپرست: " + DbString(dr["HeadFatherName"]);
+                                "   ·   نام سرپرست: " + DbString(dr["HeadFullName"]) +
+                                "   ·   نام پدر: " + DbString(dr["HeadFatherName"]);
                         }
                     }
                 }
@@ -591,6 +602,12 @@ namespace CaseManagement
                     ImageLayout = DataGridViewImageCellLayout.Zoom,
                     Resizable = DataGridViewTriState.False
                 };
+                // آموزش — رفع «آیکون ✕ قرمز در ستون عکس»: وقتی عضوی عکس ندارد
+                // مقدار سلول null می‌ماند و DataGridView به‌صورت پیش‌فرض یک
+                // آیکونِ «تصویر خراب» می‌کشد (در تست تصویری برای همه‌ی اعضای
+                // بدون عکس دیده شد). با NullValue=null سلول به‌سادگی خالی
+                // می‌ماند که هم درست‌تر است و هم تمیزتر.
+                photoColumn.DefaultCellStyle.NullValue = null;
                 dgvFamily.Columns.Add(photoColumn);
             }
 
@@ -606,6 +623,54 @@ namespace CaseManagement
             dgvFamily.RowTemplate.Height = 44;
 
             LoadMemberThumbnails();
+            UpdateMembersHeader();
+            StyleFamilyGrid();
+        }
+
+        // ─── شمارنده‌ی اعضا در سربرگ کارت لیست (فقط نمایشی) ──────────────────
+        // آموزش — این متد هیچ داده‌ای نمی‌خواند و هیچ کوئری‌ای نمی‌زند؛ فقط
+        // تعداد ردیف‌های همان گریدِ از قبل بارگذاری‌شده را نشان می‌دهد، پس
+        // کاملاً افزایشی است و روی منطق موجود اثری ندارد.
+        private void UpdateMembersHeader()
+        {
+            if (lblMembersHeader == null) return;
+            int count = 0;
+            foreach (DataGridViewRow row in dgvFamily.Rows)
+                if (!row.IsNewRow) count++;
+            lblMembersHeader.Text = "اعضای خانواده  (" + count + ")";
+        }
+
+        // ─── ظاهر گرید طبق طرح مرجع (فقط استایل، بدون تغییر داده/ستون) ───────
+        private void StyleFamilyGrid()
+        {
+            dgvFamily.BorderStyle = BorderStyle.None;
+            dgvFamily.BackgroundColor = UiTheme.CardBack;
+            dgvFamily.GridColor = UiTheme.Border;
+            dgvFamily.EnableHeadersVisualStyles = false;
+            dgvFamily.RowHeadersVisible = false;
+            dgvFamily.AllowUserToResizeRows = false;
+            dgvFamily.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
+            dgvFamily.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+            dgvFamily.MultiSelect = false;
+
+            dgvFamily.ColumnHeadersDefaultCellStyle.BackColor = UiTheme.CardBack;
+            dgvFamily.ColumnHeadersDefaultCellStyle.ForeColor = UiTheme.TextMuted;
+            dgvFamily.ColumnHeadersDefaultCellStyle.Font = UiTheme.FontBold(UiTheme.SizeSmall - 1F);
+            dgvFamily.ColumnHeadersDefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
+            dgvFamily.ColumnHeadersDefaultCellStyle.Padding = new Padding(6, 0, 6, 0);
+            dgvFamily.ColumnHeadersHeight = 38;
+            dgvFamily.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.Single;
+
+            dgvFamily.DefaultCellStyle.Font = UiTheme.Font(UiTheme.SizeSmall);
+            dgvFamily.DefaultCellStyle.ForeColor = UiTheme.TextDark;
+            dgvFamily.DefaultCellStyle.BackColor = UiTheme.CardBack;
+            dgvFamily.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
+            dgvFamily.DefaultCellStyle.Padding = new Padding(6, 0, 6, 0);
+            // ردیف انتخاب‌شده: آبیِ کم‌رنگ با متن تیره (مثل طرح مرجع) به‌جای
+            // آبیِ پررنگِ پیش‌فرض ویندوز که متن را ناخوانا می‌کند.
+            dgvFamily.DefaultCellStyle.SelectionBackColor = UiTheme.HoverTint;
+            dgvFamily.DefaultCellStyle.SelectionForeColor = UiTheme.TextDark;
+            dgvFamily.AlternatingRowsDefaultCellStyle.BackColor = UiTheme.CardBack;
         }
 
         private void HideFamilyGridColumn(string columnName)

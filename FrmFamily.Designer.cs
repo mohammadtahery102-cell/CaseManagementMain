@@ -124,8 +124,13 @@ namespace CaseManagement
             this.lblHeadInfo.Dock      = System.Windows.Forms.DockStyle.Fill;
             this.lblHeadInfo.BackColor = CaseManagement.Helpers.UiTheme.PrimaryDark;
             this.lblHeadInfo.ForeColor = System.Drawing.Color.White;
-            this.lblHeadInfo.Font      = new System.Drawing.Font("Segoe UI", 10F, System.Drawing.FontStyle.Bold);
-            this.lblHeadInfo.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
+            // فونت کوچک‌تر و راست‌چین با فاصله‌ی داخلی: در تست تصویری، متنِ
+            // بلندِ سرپرست (کد + نام + نام پدر) با فونت ۱۰ وسط‌چین، فشرده و
+            // روی‌هم دیده می‌شد.
+            this.lblHeadInfo.Font      = CaseManagement.Helpers.UiTheme.FontBold(CaseManagement.Helpers.UiTheme.SizeSmall);
+            this.lblHeadInfo.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            this.lblHeadInfo.Padding   = new System.Windows.Forms.Padding(0, 0, 16, 0);
+            this.lblHeadInfo.AutoEllipsis = true;
             this.lblHeadInfo.Text      = "سرپرست: —";
 
             // ═══════════════════════════════════════════════════════════════════
@@ -155,72 +160,68 @@ namespace CaseManagement
             this.fieldStopReason.Visible = false;
 
             var tabGeneral = new System.Windows.Forms.TabPage("مشخصات کلی");
-            tabGeneral.BackColor = CaseManagement.Helpers.UiTheme.Background;
+            tabGeneral.BackColor = CaseManagement.Helpers.UiTheme.CardBack;
             tabGeneral.Padding   = System.Windows.Forms.Padding.Empty;
             tabGeneral.Controls.Add(tlpGeneral);
 
             // ═══════════════════════════════════════════════════════════════════
             // تب ۲: مشخصات جسمی — ۴ ردیف استاندارد + عنوان + textarea پر
             // ═══════════════════════════════════════════════════════════════════
-            var tlpPhysical = MkTlp(4, 150);
-            tlpPhysical.RowCount = 6;
-            tlpPhysical.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 26F));
-            tlpPhysical.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
+            var tlpPhysical = MkFieldGrid(2);
+            AddField(tlpPhysical, this.label6,  "وضعیت جسمی",   this.txtPhysicalStatus);
+            AddField(tlpPhysical, this.label5,  "نوع معلولیت",   this.txtHasDisability);
+            AddField(tlpPhysical, this.label12, "درجه معلولیت",  this.txtMemberDisabilityDegree);
+            AddField(tlpPhysical, this.label17, "مهارت",         this.txtSkill);
 
-            FieldRow(tlpPhysical, 0, SetLbl(this.label6,  "وضعیت جسمی"),    this.txtPhysicalStatus);
-            FieldRow(tlpPhysical, 1, SetLbl(this.label5,  "نوع معلولیت"),    this.txtHasDisability);
-            FieldRow(tlpPhysical, 2, SetLbl(this.label12, "درجه معلولیت"),   this.txtMemberDisabilityDegree);
-            FieldRow(tlpPhysical, 3, SetLbl(this.label17, "مهارت"),          this.txtSkill);
-
-            // ردیف ۴: عنوان تمام‌عرض
-            SetLbl(this.lblDisabilityDetails, "توضیحات بیشتر (شرح تفصیلی معلولیت)");
-            this.lblDisabilityDetails.Dock    = System.Windows.Forms.DockStyle.Fill;
-            this.lblDisabilityDetails.Padding = new System.Windows.Forms.Padding(4, 6, 4, 0);
-            tlpPhysical.Controls.Add(this.lblDisabilityDetails, 0, 4);
-            tlpPhysical.SetColumnSpan(this.lblDisabilityDetails, 2);
-
-            // ردیف ۵: textarea پر
-            this.txtDisabilityDetails.Name       = "txtDisabilityDetails";
-            this.txtDisabilityDetails.Multiline  = true;
-            this.txtDisabilityDetails.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
+            // «شرح تفصیلی معلولیت» — چندخطی و تمام‌عرض، زیر شبکه‌ی فیلدها.
+            this.txtDisabilityDetails.Name        = "txtDisabilityDetails";
+            this.txtDisabilityDetails.Multiline   = true;
+            this.txtDisabilityDetails.ScrollBars  = System.Windows.Forms.ScrollBars.Vertical;
             this.txtDisabilityDetails.RightToLeft = System.Windows.Forms.RightToLeft.Yes;
-            this.txtDisabilityDetails.TextAlign  = System.Windows.Forms.HorizontalAlignment.Right;
-            this.txtDisabilityDetails.Dock       = System.Windows.Forms.DockStyle.Fill;
-            this.txtDisabilityDetails.Margin     = new System.Windows.Forms.Padding(4, 2, 4, 8);
-            tlpPhysical.Controls.Add(this.txtDisabilityDetails, 0, 5);
-            tlpPhysical.SetColumnSpan(this.txtDisabilityDetails, 2);
+            this.txtDisabilityDetails.TextAlign   = System.Windows.Forms.HorizontalAlignment.Right;
+
+            var boxDisabilityDetails = new CaseManagement.Helpers.FieldBox(
+                this.lblDisabilityDetails, "توضیحات بیشتر (شرح تفصیلی معلولیت)", this.txtDisabilityDetails);
+            boxDisabilityDetails.Dock   = System.Windows.Forms.DockStyle.Fill;
+            boxDisabilityDetails.Height = 150;
+
+            var physicalHost = new System.Windows.Forms.Panel();
+            physicalHost.Dock    = System.Windows.Forms.DockStyle.Fill;
+            physicalHost.Padding = new System.Windows.Forms.Padding(18, 4, 18, 14);
+            physicalHost.BackColor = System.Drawing.Color.Transparent;
+            physicalHost.Controls.Add(boxDisabilityDetails);
 
             var tabPhysical = new System.Windows.Forms.TabPage("مشخصات جسمی");
-            tabPhysical.BackColor = CaseManagement.Helpers.UiTheme.Background;
+            tabPhysical.BackColor = CaseManagement.Helpers.UiTheme.CardBack;
             tabPhysical.Padding   = System.Windows.Forms.Padding.Empty;
+            tabPhysical.Controls.Add(physicalHost);
             tabPhysical.Controls.Add(tlpPhysical);
 
             // ═══════════════════════════════════════════════════════════════════
             // تب ۳: مشخصات تحصیلی — ۱۵ ردیف، AutoScroll، Dock=Top+AutoSize
             // ═══════════════════════════════════════════════════════════════════
-            var tlpEdu = MkTlp(15, 160);
-            tlpEdu.Dock         = System.Windows.Forms.DockStyle.Top;
-            tlpEdu.AutoSize     = true;
-            tlpEdu.AutoSizeMode = System.Windows.Forms.AutoSizeMode.GrowAndShrink;
+            // سه ستونه چون این تب ۱۵ فیلد دارد؛ با دو ستون ارتفاعش زیاد می‌شد و
+            // اسکرول لازم می‌آمد. هیچ فیلدی حذف نشده — فقط فشرده‌تر چیده شده.
+            var tlpEdu = MkFieldGrid(3);
 
-            FieldRow(tlpEdu,  0, SetLbl(this.label11,           "تحصیلات"),                 this.txtMemberEducation);
-            FieldRow(tlpEdu,  1, SetLbl(this.label10,           "نام مکتب"),                  this.txtSchoolName);
-            FieldRow(tlpEdu,  2, SetLbl(this.label9,            "صنف"),                      this.txtGradeLevel);
-            FieldRow(tlpEdu,  3, SetLbl(this.lblSchoolType,     "نوع مکتب"),                  this.cmbSchoolType);
-            FieldRow(tlpEdu,  4, SetLbl(this.lblSchoolPrevGrade,"معدل سال قبل (مکتب)"),      this.txtSchoolPrevGrade);
-            FieldRow(tlpEdu,  5, SetLbl(this.lblEducationCoverage,"تحت پوشش آموزشی"),        this.cmbEducationCoverage);
-            FieldRow(tlpEdu,  6, SetLbl(this.label24,           "نام دانشگاه"),              this.txtUniversityName);
-            FieldRow(tlpEdu,  7, SetLbl(this.label22,           "رشته دانشگاه"),             this.txtMajor);
-            FieldRow(tlpEdu,  8, SetLbl(this.label23,           "سمستر/درجه دانشگاه"),      this.txtStudyYear);
-            FieldRow(tlpEdu,  9, SetLbl(this.lblUniversityType, "نوع دانشگاه"),              this.cmbUniversityType);
-            FieldRow(tlpEdu, 10, SetLbl(this.lblUniversityPrevGrade,"معدل سال قبل (دانشگاه)"), this.txtUniversityPrevGrade);
-            FieldRow(tlpEdu, 11, SetLbl(this.label21,           "حوزه علمیه"),               this.txtStudyField);
-            FieldRow(tlpEdu, 12, SetLbl(this.lblSeminaryLevel,  "دروس حوزوی (سطح)"),        this.cmbSeminaryLevel);
-            FieldRow(tlpEdu, 13, SetLbl(this.label18,           "دلیل ترک تحصیل"),           this.txtLeaveReason);
-            FieldRow(tlpEdu, 14, SetLbl(this.label19,           "توضیحات کلی"),              this.txtDetails);
+            AddField(tlpEdu, this.label11,                "تحصیلات",                this.txtMemberEducation);
+            AddField(tlpEdu, this.label10,                "نام مکتب",                this.txtSchoolName);
+            AddField(tlpEdu, this.label9,                 "صنف",                     this.txtGradeLevel);
+            AddField(tlpEdu, this.lblSchoolType,          "نوع مکتب",                this.cmbSchoolType);
+            AddField(tlpEdu, this.lblSchoolPrevGrade,     "معدل سال قبل (مکتب)",     this.txtSchoolPrevGrade);
+            AddField(tlpEdu, this.lblEducationCoverage,   "تحت پوشش آموزشی",         this.cmbEducationCoverage);
+            AddField(tlpEdu, this.label24,                "نام دانشگاه",             this.txtUniversityName);
+            AddField(tlpEdu, this.label22,                "رشته دانشگاه",            this.txtMajor);
+            AddField(tlpEdu, this.label23,                "سمستر/درجه دانشگاه",     this.txtStudyYear);
+            AddField(tlpEdu, this.lblUniversityType,      "نوع دانشگاه",             this.cmbUniversityType);
+            AddField(tlpEdu, this.lblUniversityPrevGrade, "معدل سال قبل (دانشگاه)",  this.txtUniversityPrevGrade);
+            AddField(tlpEdu, this.label21,                "حوزه علمیه",              this.txtStudyField);
+            AddField(tlpEdu, this.lblSeminaryLevel,       "دروس حوزوی (سطح)",       this.cmbSeminaryLevel);
+            AddField(tlpEdu, this.label18,                "دلیل ترک تحصیل",          this.txtLeaveReason);
+            AddField(tlpEdu, this.label19,                "توضیحات کلی",             this.txtDetails);
 
             var tabEdu = new System.Windows.Forms.TabPage("مشخصات تحصیلی");
-            tabEdu.BackColor  = CaseManagement.Helpers.UiTheme.Background;
+            tabEdu.BackColor  = CaseManagement.Helpers.UiTheme.CardBack;
             tabEdu.AutoScroll = true;
             tabEdu.Padding    = System.Windows.Forms.Padding.Empty;
             tabEdu.Controls.Add(tlpEdu);
@@ -277,8 +278,13 @@ namespace CaseManagement
             var photoPanel = new System.Windows.Forms.Panel();
             photoPanel.Name    = "photoPanel";
             photoPanel.Dock    = System.Windows.Forms.DockStyle.Top;
-            photoPanel.Height  = 210;
-            photoPanel.Padding = new System.Windows.Forms.Padding(6, 6, 6, 0);
+            // ارتفاع از ۲۱۰ به ۱۵۰ کم شد: در تست تصویری این ناحیه (وقتی عضو
+            // عکس ندارد) یک کادرِ خالیِ بزرگ بود و فضای لیست را می‌گرفت. حالا
+            // فشرده‌تر است و جای بیشتری به فهرست اعضا می‌دهد. خودِ کنترلِ عکس و
+            // دکمه‌ی انتخاب دست‌نخورده باقی مانده‌اند.
+            photoPanel.Height  = 150;
+            photoPanel.BackColor = CaseManagement.Helpers.UiTheme.CardBack;
+            photoPanel.Padding = new System.Windows.Forms.Padding(10, 6, 10, 6);
             photoPanel.Controls.Add(this.picMemberPhoto);
             photoPanel.Controls.Add(this.btnBrowseMemberPhoto);
 
@@ -293,35 +299,90 @@ namespace CaseManagement
             var gridPanel = new System.Windows.Forms.Panel();
             gridPanel.Name    = "gridPanel";
             gridPanel.Dock    = System.Windows.Forms.DockStyle.Fill;
-            gridPanel.Padding = new System.Windows.Forms.Padding(6, 4, 6, 6);
+            gridPanel.Padding = new System.Windows.Forms.Padding(10, 4, 10, 10);
+            gridPanel.BackColor = CaseManagement.Helpers.UiTheme.CardBack;
             gridPanel.Controls.Add(this.dgvFamily);
+
+            // ─── سربرگ کارت لیست: عنوان + شمارنده (طبق طرح مرجع) ─────────────
+            // آموزش — شمارنده یک Label تازه است و هیچ کنترل موجودی را جایگزین
+            // نمی‌کند؛ مقدارش را کدِ فرم بعد از هر بار بارگذاری لیست به‌روز
+            // می‌کند (UpdateMemberCount در FrmFamily.cs).
+            this.lblMembersHeader = new System.Windows.Forms.Label();
+            this.lblMembersHeader.Name      = "lblMembersHeader";
+            this.lblMembersHeader.Dock      = System.Windows.Forms.DockStyle.Fill;
+            this.lblMembersHeader.Text      = "اعضای خانواده";
+            this.lblMembersHeader.Font      = CaseManagement.Helpers.UiTheme.FontBold(CaseManagement.Helpers.UiTheme.SizeMedium);
+            this.lblMembersHeader.ForeColor = CaseManagement.Helpers.UiTheme.TextDark;
+            this.lblMembersHeader.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            this.lblMembersHeader.BackColor = System.Drawing.Color.Transparent;
+
+            var listHeader = new System.Windows.Forms.Panel();
+            listHeader.Name      = "listHeader";
+            listHeader.Dock      = System.Windows.Forms.DockStyle.Top;
+            listHeader.Height    = 46;
+            listHeader.BackColor = CaseManagement.Helpers.UiTheme.CardBack;
+            listHeader.Padding   = new System.Windows.Forms.Padding(14, 6, 14, 0);
+            listHeader.Controls.Add(this.lblMembersHeader);
 
             var rightPanel = new System.Windows.Forms.Panel();
             rightPanel.Name = "rightPanel";
             rightPanel.Dock = System.Windows.Forms.DockStyle.Fill;
+            rightPanel.BackColor = CaseManagement.Helpers.UiTheme.CardBack;
+            rightPanel.Padding = new System.Windows.Forms.Padding(0, 0, 6, 0);
             rightPanel.Controls.Add(gridPanel);
             rightPanel.Controls.Add(photoPanel);
+            rightPanel.Controls.Add(listHeader);
 
             // ═══════════════════════════════════════════════════════════════════
             // نوار دکمه‌ها (پایین)
             // ═══════════════════════════════════════════════════════════════════
-            SetBtn(this.btnNew,    "btnNew",    "جدید",       this.btnNew_Click);
-            SetBtn(this.btnSave,   "btnSave",   "ذخیره",      this.btnSave_Click);
-            SetBtn(this.btnEdit,   "btnEdit",   "ویرایش",     this.btnEdit_Click);
-            SetBtn(this.btnDelete, "btnDelete", "حذف",        this.btnDelete_Click);
-            SetBtn(this.btnPrint,  "btnPrint",  "چاپ فهرست",  this.btnPrint_Click);
+            // آموزش — رنگ‌بندی طبق طرح مرجع: هر اقدام رنگ معنایی خودش را دارد
+            // تا در نگاه اول قابل تشخیص باشد. نام کنترل‌ها و رویدادها دقیقاً
+            // همان قبلی است؛ فقط ظاهر عوض شده.
+            // آموزش — فقط از نشانه‌هایی استفاده می‌شود که فونتِ فارسیِ برنامه
+            // واقعاً دارد. در تست تصویری، ایموجی‌های 🗑 و 🖨 و ✎ به‌صورت مربعِ
+            // خالی «▯» رندر شدند (همان مشکلی که در نوار تب‌های تنظیمات هم
+            // دیدیم)، پس برای این سه دکمه فقط متن می‌ماند.
+            SetBtn(this.btnNew,    "btnNew",    "＋   جدید",   this.btnNew_Click);
+            SetBtn(this.btnSave,   "btnSave",   "✔   ذخیره",  this.btnSave_Click);
+            SetBtn(this.btnEdit,   "btnEdit",   "ویرایش",      this.btnEdit_Click);
+            SetBtn(this.btnDelete, "btnDelete", "✕   حذف",     this.btnDelete_Click);
+            SetBtn(this.btnPrint,  "btnPrint",  "چاپ فهرست",   this.btnPrint_Click);
 
-            var buttonBar = new System.Windows.Forms.FlowLayoutPanel();
-            buttonBar.Name          = "buttonBar";
-            buttonBar.Dock          = System.Windows.Forms.DockStyle.Fill;
-            buttonBar.FlowDirection = System.Windows.Forms.FlowDirection.LeftToRight;
-            buttonBar.WrapContents  = false;
-            buttonBar.Padding       = new System.Windows.Forms.Padding(8, 0, 8, 0);
-            buttonBar.Controls.Add(this.btnNew);
-            buttonBar.Controls.Add(this.btnSave);
-            buttonBar.Controls.Add(this.btnEdit);
-            buttonBar.Controls.Add(this.btnDelete);
-            buttonBar.Controls.Add(this.btnPrint);
+            PaintBtn(this.btnNew,    CaseManagement.Helpers.UiTheme.Primary, true);
+            PaintBtn(this.btnSave,   CaseManagement.Helpers.UiTheme.Success, true);
+            PaintBtn(this.btnEdit,   CaseManagement.Helpers.UiTheme.PrimaryLight, true);
+            PaintBtn(this.btnDelete, CaseManagement.Helpers.UiTheme.Danger, true);
+            PaintBtn(this.btnPrint,  System.Drawing.Color.White, false);
+
+            // اقدام‌های اصلی سمت راست (شروعِ خواندن در RTL)، «چاپ فهرست» سمت چپ.
+            var mainActions = new System.Windows.Forms.FlowLayoutPanel();
+            mainActions.Name          = "mainActions";
+            mainActions.Dock          = System.Windows.Forms.DockStyle.Fill;
+            mainActions.FlowDirection = System.Windows.Forms.FlowDirection.LeftToRight;
+            mainActions.WrapContents  = false;
+            mainActions.BackColor     = System.Drawing.Color.Transparent;
+            mainActions.Controls.Add(this.btnNew);
+            mainActions.Controls.Add(this.btnSave);
+            mainActions.Controls.Add(this.btnEdit);
+            mainActions.Controls.Add(this.btnDelete);
+
+            var secondaryActions = new System.Windows.Forms.FlowLayoutPanel();
+            secondaryActions.Name          = "secondaryActions";
+            secondaryActions.Dock          = System.Windows.Forms.DockStyle.Left;
+            secondaryActions.Width         = 170;
+            secondaryActions.FlowDirection = System.Windows.Forms.FlowDirection.LeftToRight;
+            secondaryActions.WrapContents  = false;
+            secondaryActions.BackColor     = System.Drawing.Color.Transparent;
+            secondaryActions.Controls.Add(this.btnPrint);
+
+            var buttonBar = new System.Windows.Forms.Panel();
+            buttonBar.Name      = "buttonBar";
+            buttonBar.Dock      = System.Windows.Forms.DockStyle.Fill;
+            buttonBar.BackColor = CaseManagement.Helpers.UiTheme.CardBack;
+            buttonBar.Padding   = new System.Windows.Forms.Padding(14, 8, 14, 8);
+            buttonBar.Controls.Add(mainActions);
+            buttonBar.Controls.Add(secondaryActions);
 
             // ═══════════════════════════════════════════════════════════════════
             // چیدمان ریشه: ۲ ستون (۵۸% | ۴۲%)، ۳ ردیف (header | content | buttons)
@@ -333,9 +394,9 @@ namespace CaseManagement
             rootLayout.RowCount    = 3;
             rootLayout.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent,  58F));
             rootLayout.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent,  42F));
-            rootLayout.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute,  34F));
+            rootLayout.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute,  40F));
             rootLayout.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent,  100F));
-            rootLayout.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute,  56F));
+            rootLayout.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute,  60F));
 
             rootLayout.Controls.Add(this.lblHeadInfo, 0, 0);
             rootLayout.SetColumnSpan(this.lblHeadInfo, 2);
@@ -460,9 +521,42 @@ namespace CaseManagement
         {
             btn.Name    = name;
             btn.Text    = text;
-            btn.Size    = new System.Drawing.Size(120, 40);
-            btn.Margin  = new System.Windows.Forms.Padding(4, 8, 4, 8);
+            btn.Size    = new System.Drawing.Size(132, 42);
+            btn.Margin  = new System.Windows.Forms.Padding(5, 0, 5, 0);
             btn.Click  += clickHandler;
+        }
+
+        // ظاهر دکمه طبق طرح مرجع: گردگوشه، بدون حاشیه‌ی سه‌بعدی، با حالت
+        // Hover و Pressed. filled=false یعنی دکمه‌ی ثانویه (سفید با قاب).
+        private static void PaintBtn(System.Windows.Forms.Button btn, System.Drawing.Color color, bool filled)
+        {
+            btn.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            btn.Font      = CaseManagement.Helpers.UiTheme.FontBold(CaseManagement.Helpers.UiTheme.SizeSmall);
+            btn.Cursor    = System.Windows.Forms.Cursors.Hand;
+            btn.UseVisualStyleBackColor = false;
+            btn.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
+
+            if (filled)
+            {
+                btn.BackColor = color;
+                btn.ForeColor = System.Drawing.Color.White;
+                btn.FlatAppearance.BorderSize = 0;
+                btn.FlatAppearance.MouseOverBackColor = System.Windows.Forms.ControlPaint.Light(color, 0.15f);
+                btn.FlatAppearance.MouseDownBackColor = System.Windows.Forms.ControlPaint.Dark(color, 0.08f);
+            }
+            else
+            {
+                btn.BackColor = System.Drawing.Color.White;
+                btn.ForeColor = CaseManagement.Helpers.UiTheme.TextDark;
+                btn.FlatAppearance.BorderSize  = 1;
+                btn.FlatAppearance.BorderColor = CaseManagement.Helpers.UiTheme.Border;
+                btn.FlatAppearance.MouseOverBackColor = CaseManagement.Helpers.UiTheme.HoverTint;
+                btn.FlatAppearance.MouseDownBackColor = CaseManagement.Helpers.UiTheme.Border;
+            }
+
+            // گوشه‌ی گرد بعد از تثبیت اندازه اعمال می‌شود.
+            btn.SizeChanged += delegate { CaseManagement.Helpers.UiTheme.RoundCorners(btn, 10); };
+            CaseManagement.Helpers.UiTheme.RoundCorners(btn, 10);
         }
 
         #endregion
@@ -544,5 +638,8 @@ namespace CaseManagement
         // کانتینرِ فیلد «دلیل قطع موقت» — برای پنهان/نمایان‌کردن کلِ فیلد
         // (برچسب + ورودی) هماهنگ با منطقِ موجود در FrmFamily.cs.
         private CaseManagement.Helpers.FieldBox fieldStopReason;
+        // سربرگ کارت لیست اعضا (عنوان + شمارنده). کنترل تازه است و جایگزین
+        // چیزی نشده؛ فقط شمارِ اعضا را نمایش می‌دهد.
+        internal System.Windows.Forms.Label lblMembersHeader;
     }
 }
