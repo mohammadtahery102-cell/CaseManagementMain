@@ -99,15 +99,29 @@ namespace CaseManagement.Accounting
             return g;
         }
 
+        // آموزش — ارتقای یکجای همه‌ی تب‌ها: این متد در ۶۰ جای این فرم صدا زده
+        // می‌شود، پس با تغییرِ خودش، هر ۱۲ تب حسابداری بدون دست‌زدن به ساختار
+        // هیچ‌کدام، ظاهرِ یکدستِ بقیه‌ی برنامه را می‌گیرند (ورودیِ گردگوشه با
+        // حالت Focus/Hover و عنوانِ خودکار راست‌چین).
+        //
+        // امضای متد و پارامتر width عمداً حفظ شده تا هیچ‌یک از ۶۰ فراخوانی
+        // نیاز به تغییر نداشته باشد و هیچ فیلدی از قلم نیفتد. width حالا
+        // «عرضِ کمینه»ی فیلد است.
         private Panel Field(string label, Control input, int width)
         {
-            var p = new Panel { Width = width, Height = 58, Margin = new Padding(6, 4, 6, 4) };
-            var l = new Label { Text = label, AutoSize = false, Dock = DockStyle.Top, Height = 22, TextAlign = ContentAlignment.MiddleRight, Font = UiTheme.FontBold(UiTheme.SizeSmall), ForeColor = UiTheme.TextDark };
-            input.Dock = DockStyle.Top;
-            if (input is TextBox tb) { tb.Height = 28; UiTheme.StyleTextBox(tb); }
-            if (input is NumericUpDown nud) { nud.Height = 28; nud.TextAlign = HorizontalAlignment.Right; }
-            p.Controls.Add(input); p.Controls.Add(l);
-            return p;
+            var box = new Helpers.FieldBox(new Label(), label, input);
+            box.Width = width;
+            box.Margin = new Padding(6, 4, 6, 4);
+
+            // NumericUpDown حاشیه‌ی بومی دارد که داخل قاب گردگوشه ناجور است.
+            NumericUpDown nud = input as NumericUpDown;
+            if (nud != null)
+            {
+                nud.BorderStyle = BorderStyle.None;
+                nud.TextAlign = HorizontalAlignment.Right;
+            }
+
+            return box;
         }
 
         // مبلغ با جداکننده هزارگان (مثل الگوی موجود در FrmFinance) — مثلاً
@@ -141,13 +155,36 @@ namespace CaseManagement.Accounting
             return mtb;
         }
 
+        // مثل Field، ولی راهنمای فرمت تاریخ زیر فیلد حفظ شده (حذف نشده).
         private Panel DateField(string label, MaskedTextBox box, int width = 190)
         {
-            var p = new Panel { Width = width, Height = 74, Margin = new Padding(6, 4, 6, 4) };
-            var l = new Label { Text = label, AutoSize = false, Dock = DockStyle.Top, Height = 22, TextAlign = ContentAlignment.MiddleRight, Font = UiTheme.FontBold(UiTheme.SizeSmall), ForeColor = UiTheme.TextDark };
-            var hint = new Label { Text = "فرمت: سال/ماه/روز — مثال 1404/05/12", AutoSize = false, Dock = DockStyle.Top, Height = 16, Font = UiTheme.Font(7.5F), ForeColor = Color.Gray, TextAlign = ContentAlignment.MiddleRight };
-            box.Dock = DockStyle.Top; box.Height = 28;
-            p.Controls.Add(hint); p.Controls.Add(box); p.Controls.Add(l);
+            box.BorderStyle = BorderStyle.None;
+
+            var field = new Helpers.FieldBox(new Label(), label, box);
+            field.Dock = DockStyle.Top;
+
+            var hint = new Label
+            {
+                Text = "فرمت: سال/ماه/روز — مثال 1404/05/12",
+                AutoSize = false, Dock = DockStyle.Top, Height = 16,
+                Font = UiTheme.Font(7.5F), ForeColor = Color.Gray,
+                BackColor = Color.Transparent
+            };
+            // تراز راهنما هم مثل عنوان، خودکار «راستِ بصری» می‌شود.
+            hint.HandleCreated += delegate
+            {
+                hint.TextAlign = Helpers.ResponsiveLayout.VisualRight(hint, ContentAlignment.MiddleRight);
+            };
+
+            var p = new Panel
+            {
+                Width = width,
+                Height = Helpers.FieldBox.TotalHeight + 16,
+                Margin = new Padding(6, 4, 6, 4),
+                BackColor = Color.Transparent
+            };
+            p.Controls.Add(hint);
+            p.Controls.Add(field);
             return p;
         }
 
@@ -613,7 +650,7 @@ namespace CaseManagement.Accounting
         private TabPage BuildPeriodsTab()
         {
             var page = new TabPage("دوره مالی") { BackColor = UiTheme.Background };
-            var form = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 100, FlowDirection = FlowDirection.RightToLeft, WrapContents = true, BackColor = UiTheme.CardBack, Padding = new Padding(10, 6, 10, 2), AutoScroll = true };
+            var form = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 200, FlowDirection = FlowDirection.RightToLeft, WrapContents = true, BackColor = UiTheme.CardBack, Padding = new Padding(10, 6, 10, 2), AutoScroll = true };
 
             _pYear = new TextBox { Text = "1404" };
             _pMonthFrom = new NumericUpDown { Minimum = 1, Maximum = 12, Value = 1 };
@@ -736,7 +773,7 @@ namespace CaseManagement.Accounting
         private TabPage BuildFundsTab()
         {
             var page = new TabPage("صندوق") { BackColor = UiTheme.Background };
-            var form = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 74, FlowDirection = FlowDirection.RightToLeft, WrapContents = true, BackColor = UiTheme.CardBack, Padding = new Padding(10, 6, 10, 2) };
+            var form = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 92, FlowDirection = FlowDirection.RightToLeft, WrapContents = true, BackColor = UiTheme.CardBack, Padding = new Padding(10, 6, 10, 2), AutoScroll = true };
             _fName = new TextBox(); _fOpening = NewAmountBox(0, true);
             _fType = NewCombo(); _fType.Items.AddRange(new object[] { "نقدی", "بانک", "کردیت", "مرکزی" });
             form.Controls.Add(Field("نام صندوق", _fName, 220));
@@ -799,7 +836,7 @@ namespace CaseManagement.Accounting
         private TabPage BuildPartiesTab()
         {
             var page = new TabPage("طرف حساب") { BackColor = UiTheme.Background };
-            var form = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 74, FlowDirection = FlowDirection.RightToLeft, WrapContents = true, BackColor = UiTheme.CardBack, Padding = new Padding(10, 6, 10, 2) };
+            var form = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 92, FlowDirection = FlowDirection.RightToLeft, WrapContents = true, BackColor = UiTheme.CardBack, Padding = new Padding(10, 6, 10, 2), AutoScroll = true };
             _paName = new TextBox(); _paPhone = new TextBox(); _paNote = new TextBox();
             _paType = NewCombo(); _paType.Items.AddRange(new object[] { "خیر", "دفتر مرکزی", "ولایت", "ولسوالی", "مرکز", "کارمند", "فروشنده", "شخص" });
             form.Controls.Add(Field("نام طرف حساب", _paName, 220));
@@ -855,7 +892,7 @@ namespace CaseManagement.Accounting
             var txtName = new TextBox();
             int editingId = 0;
 
-            var form = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 74, FlowDirection = FlowDirection.RightToLeft, WrapContents = true, BackColor = UiTheme.CardBack, Padding = new Padding(10, 6, 10, 2) };
+            var form = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 92, FlowDirection = FlowDirection.RightToLeft, WrapContents = true, BackColor = UiTheme.CardBack, Padding = new Padding(10, 6, 10, 2), AutoScroll = true };
             form.Controls.Add(Field(income ? "عنوان دسته درآمد" : "عنوان دسته هزینه", txtName, 260));
 
             Action reload = delegate
@@ -905,7 +942,7 @@ namespace CaseManagement.Accounting
         private TabPage BuildStipendTab()
         {
             var page = new TabPage("شهریه ایتام") { BackColor = UiTheme.Background };
-            var form = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 120, FlowDirection = FlowDirection.RightToLeft, WrapContents = true, BackColor = UiTheme.CardBack, Padding = new Padding(10, 6, 10, 2), AutoScroll = true };
+            var form = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 190, FlowDirection = FlowDirection.RightToLeft, WrapContents = true, BackColor = UiTheme.CardBack, Padding = new Padding(10, 6, 10, 2), AutoScroll = true };
 
             _stPeriod = NewCombo(); _stProvince = new TextBox(); _stDistrict = new TextBox(); _stCenter = new TextBox();
             _stSadat = NewCombo(); _stSadat.Items.AddRange(new object[] { "عام", "سادات", "اهل سنت", "غیرحاضران" });
@@ -1065,7 +1102,7 @@ namespace CaseManagement.Accounting
         private TabPage BuildSalaryTab()
         {
             var page = new TabPage("حقوق کارکنان") { BackColor = UiTheme.Background };
-            var form = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 78, FlowDirection = FlowDirection.RightToLeft, WrapContents = true, BackColor = UiTheme.CardBack, Padding = new Padding(10, 6, 10, 2) };
+            var form = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 96, FlowDirection = FlowDirection.RightToLeft, WrapContents = true, BackColor = UiTheme.CardBack, Padding = new Padding(10, 6, 10, 2), AutoScroll = true };
 
             _saPeriod = NewCombo(); _saName = new TextBox(); _saPosition = new TextBox(); _saAmount = NewAmountBox(); _saNote = new TextBox();
             _saFund = NewCombo();
@@ -1172,7 +1209,7 @@ namespace CaseManagement.Accounting
         private TabPage BuildExpenseItemsTab()
         {
             var page = new TabPage("هزینه‌های جاری") { BackColor = UiTheme.Background };
-            var form = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 110, FlowDirection = FlowDirection.RightToLeft, WrapContents = true, BackColor = UiTheme.CardBack, Padding = new Padding(10, 6, 10, 2), AutoScroll = true };
+            var form = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 180, FlowDirection = FlowDirection.RightToLeft, WrapContents = true, BackColor = UiTheme.CardBack, Padding = new Padding(10, 6, 10, 2), AutoScroll = true };
 
             _exPeriod = NewCombo(); _exCategory = NewCombo(); _exDesc = new TextBox(); _exQty = new TextBox(); _exPrice = NewAmountBox(); _exDocNo = new TextBox();
             _exDate = NewDateBox(); _exFund = NewCombo();
@@ -1296,7 +1333,7 @@ namespace CaseManagement.Accounting
         private TabPage BuildReportsTab()
         {
             var page = new TabPage("گزارش‌ها") { BackColor = UiTheme.Background };
-            var filterPanel = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 68, FlowDirection = FlowDirection.RightToLeft, WrapContents = true, BackColor = UiTheme.CardBack, Padding = new Padding(10, 6, 10, 2) };
+            var filterPanel = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 92, FlowDirection = FlowDirection.RightToLeft, WrapContents = true, BackColor = UiTheme.CardBack, Padding = new Padding(10, 6, 10, 2), AutoScroll = true };
             _repPeriod = NewCombo(); _repFund = NewCombo(); _repParty = NewCombo();
             filterPanel.Controls.Add(Field("دوره مالی گزارش", _repPeriod, 200));
             filterPanel.Controls.Add(Field("صندوق (برای دفتر صندوق)", _repFund, 200));
