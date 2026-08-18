@@ -265,18 +265,14 @@ namespace CaseManagement.Sync
             return sb.ToString();
         }
 
-        // نرمال‌سازی مقادیر متغیر «وضعیت خدمات» به ۴ مقدار مجاز CHECK constraint
-        // (هم‌راستا با FrmCase.NormalizeServiceStatus).
+        // نرمال‌سازی مقادیر متغیر «وضعیت خدمات» به مقادیر مجاز CHECK constraint.
+        // نگاشت‌ها در Helpers.CaseDomain متمرکز شده‌اند تا فرم، ایمپورت اکسل و
+        // سینک هرگز از هم جدا نیفتند (قبلاً سه نسخهٔ جداگانه بود).
         private static string NormalizeServiceStatus(string value)
         {
             value = (value ?? "").Trim();
-            if (value == "در حالت قطع") return "قطع";
-            if (value == "درانتظار" || value == "در انتظار" ||
-                value == "انتظار تاييد" || value == "انتظار تایید" ||
-                value == "در انتظار تاييد")
-                return "در انتظار تأیید";
-            if (value == "") return "فعال";
-            return value;
+            if (value == "") return CaseManagement.Helpers.CaseDomain.StatusActive;
+            return CaseManagement.Helpers.CaseDomain.NormalizeServiceStatus(value);
         }
 
         // کلید هویت عضو داخل خانواده.

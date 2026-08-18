@@ -48,9 +48,18 @@ namespace CaseManagement
         private string savedHeadPhotoPath = "";
         private string savedFamilyPhotoPath = "";
 
-        // منبع واحد: به‌جای آرایه‌ی هاردکد، از TblLookup (دسته ServiceStatus)
-        // خوانده می‌شود — دقیقاً همان ۴ مقداری که پیش‌تر هاردکد بودند.
-        private string[] serviceStatuses => Helpers.LookupHelper.GetValues("ServiceStatus").ToArray();
+        // منبع واحد: از TblLookup (دسته ServiceStatus) خوانده می‌شود.
+        // اگر دیتابیس هنوز آماده نباشد LookupHelper فهرست خالی برمی‌گرداند؛
+        // در آن حالت به فهرست مرجعِ CaseDomain برمی‌گردیم، وگرنه کمبو خالی
+        // می‌ماند و IsAllowedServiceStatus هر مقداری را رد می‌کند (ذخیره قفل می‌شود).
+        private string[] serviceStatuses
+        {
+            get
+            {
+                string[] fromDb = Helpers.LookupHelper.GetValues(Helpers.CaseDomain.CatServiceStatus).ToArray();
+                return fromDb.Length > 0 ? fromDb : Helpers.CaseDomain.ServiceStatuses;
+            }
+        }
 
         private const long MinFamilyPhotoFileSizeBytes = 50L * 1024;
         private const long MaxFamilyPhotoFileSizeBytes = 1L * 1024 * 1024;
@@ -463,20 +472,16 @@ namespace CaseManagement
                 comboBox.SelectedIndex = 0;
         }
 
+        // نگاشتِ مقادیرِ قدیمی حالا در Helpers.CaseDomain متمرکز است تا فرم،
+        // ایمپورتِ اکسل و سینک همگی یک تعریف داشته باشند.
         private string NormalizeServiceStatus(string value)
         {
             value = (value ?? "").Trim();
 
-            if (value == "در حالت قطع")
-                return "قطع";
-
-            if (value == "درانتظار" || value == "در انتظار")
-                return "در انتظار تأیید";
-
             if (value == "")
-                return "فعال";
+                return Helpers.CaseDomain.StatusActive;
 
-            return value;
+            return Helpers.CaseDomain.NormalizeServiceStatus(value);
         }
 
         // مقدار فیلترِ «وضعیت خدمات» گرید — رشته‌ی خالی یعنی «همه». هم گرید و هم
@@ -517,10 +522,10 @@ namespace CaseManagement
                     SET ServiceStatus =
                         CASE
                             WHEN ServiceStatus = 'در حالت قطع' THEN 'قطع'
-                            WHEN ServiceStatus IN ('درانتظار', 'در انتظار') THEN 'در انتظار تأیید'
+                            WHEN ServiceStatus IN ('درانتظار', 'در انتظار', 'در انتظار تأیید') THEN 'در انتظار تایید'
                             ELSE ServiceStatus
                         END
-                    WHERE ServiceStatus IN ('در حالت قطع', 'درانتظار', 'در انتظار')", con))
+                    WHERE ServiceStatus IN ('در حالت قطع', 'درانتظار', 'در انتظار', 'در انتظار تأیید')", con))
                 {
                     con.Open();
                     cmd.ExecuteNonQuery();

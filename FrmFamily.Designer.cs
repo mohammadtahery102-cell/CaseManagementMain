@@ -123,7 +123,9 @@ namespace CaseManagement
                 "سمستر اول", "سمستر دوم", "سمستر سوم", "سمستر چهارم",
                 "سمستر پنجم", "سمستر ششم", "سمستر هفتم", "سمستر هشتم",
                 "لیسانس", "ماستری", "دکترا");
-            DdlCombo(this.cmbServiceStatus, "فعال", "در انتظار تأیید", "قطع موقت", "قطع");
+            // فهرست وضعیت خدمات از منبعِ واحد (CaseDomain) — قبلاً اینجا هاردکد
+            // بود و با فهرستِ FrmCase هماهنگ نمی‌ماند.
+            DdlCombo(this.cmbServiceStatus, CaseManagement.Helpers.CaseDomain.ServiceStatuses);
             this.cmbServiceStatus.SelectedIndexChanged += new System.EventHandler(this.cmbServiceStatus_SelectedIndexChanged);
             this.txtSuspensionReason.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             DdlCombo(this.txtHasDisability, "", "جسمی", "ذهنی", "بینایی", "شنوایی", "گفتاری", "حسی");

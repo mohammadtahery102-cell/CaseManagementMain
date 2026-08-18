@@ -128,11 +128,17 @@ namespace CaseManagement
             ((System.ComponentModel.ISupportInitialize)(this.picFamilyPhoto)).BeginInit();
             this.SuspendLayout();
 
-            // ═══ کمبوهای وضعیت (آیتم‌ها حفظ می‌شوند) ═══════════════════════════
+            // ═══ کمبوهای وضعیت ════════════════════════════════════════════════
+            // آیتم‌ها دیگر اینجا هاردکد نیستند: در زمانِ اجرا
+            // ConfigureServiceStatusControls از TblLookup پرشان می‌کند. این
+            // مقادیرِ اولیه فقط برای حالتی است که دیتابیس هنوز آماده نیست، و
+            // از CaseDomain (منبع واحد) خوانده می‌شوند تا هرگز از قید دیتابیس
+            // و بقیهٔ فرم‌ها عقب نمانند.
             this.txtServiceStatus.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
-            this.txtServiceStatus.Items.AddRange(new object[] { "فعال", "در انتظار تأیید", "قطع موقت", "قطع" });
+            this.txtServiceStatus.Items.AddRange(CaseManagement.Helpers.CaseDomain.ServiceStatuses);
             this.cmbServiceStatusFilter.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
-            this.cmbServiceStatusFilter.Items.AddRange(new object[] { "همه", "فعال", "در انتظار تأیید", "قطع موقت", "قطع" });
+            this.cmbServiceStatusFilter.Items.Add("همه");
+            this.cmbServiceStatusFilter.Items.AddRange(CaseManagement.Helpers.CaseDomain.ServiceStatuses);
             this.cmbServiceStatusFilter.SelectedIndexChanged += new System.EventHandler(this.cmbServiceStatusFilter_SelectedIndexChanged);
 
             this.txtPhotoPath.Visible = false;
@@ -172,9 +178,13 @@ namespace CaseManagement
 
             this.txtDistrict.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
 
-            // ─── نوع درخواست (کشویی جدید طبق درخواست کاربر) ─────────────────
+            // ─── نوع پرونده ──────────────────────────────────────────────────
+            // فهرست در زمان اجرا از TblLookup پر می‌شود (LoadLookupCombos)؛
+            // این مقدارِ اولیه از CaseDomain می‌آید تا با فهرستِ استاندارد یکی
+            // بماند. قبلاً «یتیم»/«کهولت سن» اینجا هاردکد بودند و با نقشِ عضو
+            // («یتیم» در MemberRole) اشتباه گرفته می‌شدند.
             this.txtRequestType.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
-            this.txtRequestType.Items.AddRange(new object[] { "یتیم", "معلول", "مهاجر", "بدسرپرست", "کهولت سن", "بی‌سرپرست" });
+            this.txtRequestType.Items.AddRange(CaseManagement.Helpers.CaseDomain.CaseTypes);
 
             // ─── سیادت سرپرست (کشویی جدید) ───────────────────────────────────
             this.txtHeadSadat.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;

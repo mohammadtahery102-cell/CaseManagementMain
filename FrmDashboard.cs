@@ -531,10 +531,8 @@ namespace CaseManagement
                 DropDownStyle = ComboBoxStyle.DropDownList, Width = 150, Height = 30,
                 Font = UiTheme.Font(UiTheme.SizeBody), Margin = new Padding(4, 3, 4, 2)
             };
-            _cmbFilterServiceStatus.Items.AddRange(new object[]
-            {
-                "همه وضعیت‌ها", "فعال", "در انتظار تأیید", "قطع موقت", "قطع"
-            });
+            _cmbFilterServiceStatus.Items.Add("همه وضعیت‌ها");
+            _cmbFilterServiceStatus.Items.AddRange(CaseDomain.ServiceStatuses);
             _cmbFilterServiceStatus.SelectedIndex = 0;
             var statusTip = new ToolTip();
             statusTip.SetToolTip(_cmbFilterServiceStatus,
@@ -689,7 +687,7 @@ namespace CaseManagement
             // تازه می‌دهد (نفر/افغانی).
             _cardTotal   = MakeStatCard("کل پرونده‌ها", "", IconFont.Folder,   "#A855F7", "#FAF5FF");
             _cardActive  = MakeStatCard("فعال",          "", IconFont.Check,    "#22C55E", "#F0FDF4");
-            _cardWaiting = MakeStatCard("در انتظار تأیید","", IconFont.Clock,   "#F59E0B", "#FFFBEB");
+            _cardWaiting = MakeStatCard("در انتظار تایید","", IconFont.Clock,   "#F59E0B", "#FFFBEB");
             _cardStopped = MakeStatCard("قطع شده‌ها",     "", IconFont.Cancel,   "#EF4444", "#FEF2F2");
             // آموزش — پر کردنِ خانه‌ی خالیِ شبکه (۱۲ خانه، قبلاً فقط ۱۱ کارت):
             // مقدارِ «قطع موقت» از قبل در همان کوئریِ خلاصه محاسبه می‌شد
@@ -1206,7 +1204,8 @@ WHERE c.ServiceStatus = 'فعال'
             cmbFamilyServiceStatus = new ComboBox();
             cmbFamilyServiceStatus.Font = UiTheme.Font(9.5F);
             cmbFamilyServiceStatus.DropDownStyle = ComboBoxStyle.DropDownList;
-            cmbFamilyServiceStatus.Items.AddRange(new object[] { "همه", "فعال", "در انتظار تأیید", "قطع موقت", "قطع" });
+            cmbFamilyServiceStatus.Items.Add("همه");
+            cmbFamilyServiceStatus.Items.AddRange(CaseDomain.ServiceStatuses);
             cmbFamilyServiceStatus.SelectedIndex = 0;
             cmbFamilyServiceStatus.SetBounds(660, 12, 115, 28);
             cmbFamilyServiceStatus.SelectedIndexChanged += delegate
@@ -2356,7 +2355,7 @@ SELECT
       JOIN TblCase c ON c.CasID = a.CasID
       WHERE (@CID=0 OR c.CenterID=@CID)" + CaseFilterSqlNoStatus("c") + @")                          AS FinanceTotal,
     SUM(CASE WHEN ServiceStatus = 'فعال' THEN 1 ELSE 0 END)       AS Active,
-    SUM(CASE WHEN ServiceStatus = 'در انتظار تأیید' THEN 1 ELSE 0 END)  AS Waiting,
+    SUM(CASE WHEN ServiceStatus = 'در انتظار تایید' THEN 1 ELSE 0 END)  AS Waiting,
     SUM(CASE WHEN ServiceStatus = 'قطع' THEN 1 ELSE 0 END)        AS Stopped,
     SUM(CASE WHEN ServiceStatus = 'قطع موقت' THEN 1 ELSE 0 END)   AS StoppedTemp
 FROM TblCase
@@ -2411,7 +2410,7 @@ WHERE (@CID = 0 OR CenterID = @CID)" + CaseFilterSqlNoStatus("") + @"", con))
             chartData.Columns.Add("Title");
             chartData.Columns.Add("Count", typeof(int));
             chartData.Rows.Add("فعال", active);
-            chartData.Rows.Add("در انتظار تأیید", waiting);
+            chartData.Rows.Add("در انتظار تایید", waiting);
             chartData.Rows.Add("قطع", stopped);
             chartData.Rows.Add("قطع موقت", stoppedTemp);
             FillChart(statusChart, chartData, "Title", "Count", SeriesChartType.Doughnut);
@@ -2466,7 +2465,7 @@ SELECT * FROM (
   SELECT strftime('%Y-%m', CaseDate) AS Period,
          COUNT(1) AS Total,
          SUM(CASE WHEN ServiceStatus = 'فعال' THEN 1 ELSE 0 END) AS Active,
-         SUM(CASE WHEN ServiceStatus = 'در انتظار تأیید' THEN 1 ELSE 0 END) AS Waiting,
+         SUM(CASE WHEN ServiceStatus = 'در انتظار تایید' THEN 1 ELSE 0 END) AS Waiting,
          SUM(CASE WHEN ServiceStatus IN ('قطع','قطع موقت') THEN 1 ELSE 0 END) AS Stopped
   FROM TblCase
   WHERE CaseDate IS NOT NULL AND TRIM(CaseDate) <> ''

@@ -12,8 +12,9 @@ namespace CaseManagement.Helpers
         public string District { get; set; } = "";
         public string ServiceStatus { get; set; } = "";
 
-        // نوع خانواده = ستون RequestType در TblCase (یتیم/معلول/مهاجر/بدسرپرست/
-        // کهولت سن/بی‌سرپرست) — نزدیک‌ترین معادلِ موجود در دیتابیس به «نوع خانواده».
+        // نوع خانواده = ستون RequestType در TblCase. فهرست مقادیر در
+        // Helpers.CaseDomain.CaseTypes است (ایتام/بدسرپرست/معلول/مهاجر/
+        // کهن‌سال/بی‌سرپرست/سایر) و از TblLookup پر می‌شود.
         public string FamilyType { get; set; } = "";
 
         public DateTime? RegistrationDateFrom { get; set; }

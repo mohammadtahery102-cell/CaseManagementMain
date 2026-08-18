@@ -59,8 +59,7 @@ CREATE TABLE IF NOT EXISTS TblCase (
     UpdatedAt             TEXT NULL,
     CONSTRAINT UQ_TblCase_Code   UNIQUE (Code),
     CONSTRAINT UQ_TblCase_FormNo UNIQUE (FormNo),
-    CONSTRAINT CK_TblCase_ServiceStatus
-        CHECK (ServiceStatus IN ('قطع', 'قطع موقت', 'در انتظار تأیید', 'فعال'))
+    " + CaseDomain.ServiceStatusCheckSql + @"
 );");
 
                 ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblCase_CaseDate ON TblCase(CaseDate);");
@@ -541,8 +540,11 @@ DELETE FROM TblLookup WHERE Category = 'ServiceStatus' AND Value = 'در انت�
                 // آموزش — «سایر» به درخواستِ کاربر افزوده شد (Additive صرف: هیچ
                 //     مقدارِ قبلی از این آرایه حذف نشد، پس ReconcileLookupCategory
                 //     چیزی از دیتابیس پاک نمی‌کند، فقط «سایر» را اضافه می‌کند).
-                ReconcileLookupCategory(con, "RequestType",
-                    new[] { "یتیم", "معلول", "مهاجر", "بدسرپرست", "کهولت سن", "بی‌سرپرست", "سایر" });
+                // Phase 1 (بازبینی) — فهرست از CaseDomain می‌آید. دو مقدار تغییرِ
+                // نام دادند («یتیم»→«ایتام»، «کهولت سن»→«کهن‌سال»)؛ رکوردهای
+                // موجودِ TblCase.RequestType پایین‌تر در StandardizeCaseDomains
+                // مهاجرت داده می‌شوند تا فیلترها/گزارش‌ها خالی برنگردند.
+                ReconcileLookupCategory(con, CaseDomain.CatCaseType, CaseDomain.CaseTypes);
                 ReconcileLookupCategory(con, "PriorityLevel",
                     new[] { "اول", "دوم", "سوم" });
                 ReconcileLookupCategory(con, "MaritalStatus",
@@ -583,16 +585,11 @@ DELETE FROM TblLookup WHERE Category = 'ServiceStatus' AND Value = 'در انت�
                 // ═══════════════════════════════════════════════════════════════
 
                 // ─── دلایل استاندارد تعلیق (Suspension Reason) ────────────────
-                EnsureDefaultLookupSet(con, "SuspensionReason", new[]
-                {
-                    "تقلب",                    // Fraud
-                    "انتقال محل سکونت",        // Relocated
-                    "رسیدن به سن قانونی",      // Above Legal Age
-                    "بهبود وضعیت اقتصادی",     // Improved Economic Condition
-                    "فوت‌شده",                  // Deceased
-                    "یتیم نبودن",               // Not an Orphan
-                    "سایر"                      // Other
-                });
+                // Phase 1 (بازبینی) — EnsureDefaultLookupSet فقط دستهٔ خالی را پر
+                // می‌کرد، پس روی نصب‌های موجود عبارت‌های قدیمی باقی می‌ماندند.
+                // ReconcileLookupCategory فهرست را دقیقاً با CaseDomain هم‌تراز
+                // می‌کند؛ مقادیرِ ذخیره‌شده در StandardizeCaseDomains مهاجرت می‌شوند.
+                ReconcileLookupCategory(con, CaseDomain.CatSuspensionReason, CaseDomain.SuspensionReasons);
 
                 // ─── فیلدهای ساختاریافتهٔ تعلیق روی TblCase ────────────────────
                 // StopReason موجود دست‌نخورده می‌ماند (به‌عنوان یادداشتِ اختیاری)؛
@@ -627,6 +624,13 @@ DELETE FROM TblLookup WHERE Category = 'ServiceStatus' AND Value = 'در انت�
                 // «همان پیش‌فرضِ مؤسسه».
                 EnsureColumn(con, "TblCase", "CardPhone", "TEXT NULL");
                 EnsureColumn(con, "TblCase", "CardAddress", "TEXT NULL");
+
+                // ═══════════════════════════════════════════════════════════════
+                // Phase 1 (بازبینی) — هم‌ترازسازی نهاییِ دسته‌های پایه با CaseDomain.
+                // عمداً اینجا (بعد از آخرین EnsureColumn روی TblCase) صدا زده
+                // می‌شود چون بازسازیِ جدول باید همهٔ ستون‌های افزوده‌شده را ببیند.
+                // ═══════════════════════════════════════════════════════════════
+                StandardizeCaseDomains(con);
 
                 // ─── مدیریت قالب کارت («CARD TEMPLATE MANAGEMENT») ────────────────
                 // آموزش — به‌درخواست کاربر، با محدودیتِ معماریِ صریحاً بررسی و
@@ -686,8 +690,7 @@ INSERT INTO TblCardTemplate (Name, FieldsJson, IsDefault) VALUES (@Name, @Fields
                 // نصب‌های موجود پاک نمی‌کرد. رکوردهای TblFamily که همین مقدار
                 // را داشتند، پایین‌تر (بعد از ساختِ TblFamilyRoleHistory) با
                 // مهاجرتِ ایمن به «سایر» منتقل و در تاریخچه ثبت می‌شوند.
-                ReconcileLookupCategory(con, "MemberRole",
-                    new[] { "یتیم", "پدر", "مادر", "فرزند", "سایر" });
+                ReconcileLookupCategory(con, CaseDomain.CatMemberRole, CaseDomain.MemberRoles);
 
                 // ─── نسبت خانوادگی (Relation) — جدا از MemberRole ────────────────
                 // آموزش — به‌درخواست کاربر: Relation نسبتِ خویشاوندیِ خام و
@@ -1128,11 +1131,15 @@ WHERE GlobalID IS NULL;", tableName));
         {
             var defaults = new[]
             {
-                // ServiceStatus — باید با CHECK constraint هماهنگ باشد
-                new[] { "ServiceStatus",   "فعال",            "0" },
-                new[] { "ServiceStatus",   "در انتظار تأیید", "1" },
-                new[] { "ServiceStatus",   "قطع موقت",        "2" },
-                new[] { "ServiceStatus",   "قطع",             "3" },
+                // ServiceStatus — باید با CHECK constraint هماهنگ باشد.
+                // فهرست مرجع در CaseDomain.ServiceStatuses است؛ این‌ها فقط
+                // مقدارِ اولیه‌اند و در StandardizeCaseDomains نهایی می‌شوند.
+                new[] { "ServiceStatus",   "متقاضی",          "0" },
+                new[] { "ServiceStatus",   "در حال بررسی",    "1" },
+                new[] { "ServiceStatus",   "در انتظار تایید", "2" },
+                new[] { "ServiceStatus",   "فعال",            "3" },
+                new[] { "ServiceStatus",   "قطع",             "4" },
+                new[] { "ServiceStatus",   "قطع موقت",        "5" },
                 // RequestType
                 new[] { "RequestType",     "ولایتی",          "0" },
                 new[] { "RequestType",     "مهاجر",           "1" },
@@ -1258,6 +1265,243 @@ WHERE GlobalID IS NULL;", tableName));
                     }
                 }
                 tr.Commit();
+            }
+        }
+
+        // ═════════════════════════════════════════════════════════════════════
+        // Phase 1 — هم‌ترازسازی دسته‌های پایه با CaseDomain.
+        //
+        // سه کار انجام می‌دهد (همه idempotent):
+        //   ۱) CHECK constraint جدول TblCase را به ۶ وضعیتِ استاندارد گسترش
+        //      می‌دهد («متقاضی» و «در حال بررسی» اضافه، «تأیید» → «تایید»).
+        //   ۲) مقادیرِ قدیمیِ ذخیره‌شده در رکوردها را به مقادیرِ استاندارد
+        //      مهاجرت می‌دهد (وضعیت خدمات، نوع پرونده، دلیل تعلیق).
+        //   ۳) فهرست TblLookup دستهٔ ServiceStatus را دقیقاً هم‌تراز می‌کند.
+        //
+        // ترتیب مهم است: اول CHECK باید گسترش یابد، بعد UPDATE مقادیر — وگرنه
+        // نوشتنِ 'در انتظار تایید' روی قیدِ قدیمی شکست می‌خورد.
+        // ═════════════════════════════════════════════════════════════════════
+        private static void StandardizeCaseDomains(SQLiteConnection con)
+        {
+            if (!TableExists(con, "TblCase")) return;
+
+            // ─── گام ۱: بازسازی TblCase با CHECK جدید (فقط در صورت نیاز) ─────
+            RebuildCaseServiceStatusCheck(con);
+
+            // ─── گام ۲: مهاجرت مقادیرِ ذخیره‌شده ─────────────────────────────
+            // وضعیت خدمات — روی TblCase و TblFamily (دومی CHECK ندارد).
+            foreach (var pair in CaseDomain.LegacyServiceStatusMap)
+            {
+                UpdateValue(con, "TblCase",   "ServiceStatus", pair.Key, pair.Value);
+                UpdateValue(con, "TblFamily", "ServiceStatus", pair.Key, pair.Value);
+            }
+
+            // نوع پرونده.
+            foreach (var pair in CaseDomain.LegacyCaseTypeMap)
+                UpdateValue(con, "TblCase", "RequestType", pair.Key, pair.Value);
+
+            // دلیل تعلیق — روی هر دو جدول.
+            foreach (var pair in CaseDomain.LegacySuspensionReasonMap)
+            {
+                UpdateValue(con, "TblCase",   "SuspensionReason", pair.Key, pair.Value);
+                UpdateValue(con, "TblFamily", "SuspensionReason", pair.Key, pair.Value);
+            }
+
+            // تاریخچه هم باید خوانا بماند، وگرنه تایم‌لاین مقدارِ منسوخ نشان می‌دهد.
+            foreach (var pair in CaseDomain.LegacyServiceStatusMap)
+            {
+                UpdateValue(con, "TblCaseStatusHistory",   "OldStatus", pair.Key, pair.Value);
+                UpdateValue(con, "TblCaseStatusHistory",   "NewStatus", pair.Key, pair.Value);
+                UpdateValue(con, "TblFamilyStatusHistory", "OldStatus", pair.Key, pair.Value);
+                UpdateValue(con, "TblFamilyStatusHistory", "NewStatus", pair.Key, pair.Value);
+            }
+
+            // ─── گام ۳: هم‌ترازسازی فهرست کشویی ─────────────────────────────
+            ReconcileLookupCategory(con, CaseDomain.CatServiceStatus, CaseDomain.ServiceStatuses);
+        }
+
+        // UPDATE امن: اگر جدول یا ستون وجود نداشته باشد، بی‌صدا رد می‌شود
+        // (دیتابیس‌های قدیمی بعضی از این جداول/ستون‌ها را ندارند).
+        private static void UpdateValue(SQLiteConnection con, string table, string column,
+                                        string oldValue, string newValue)
+        {
+            if (!TableExists(con, table) || !ColumnExists(con, table, column)) return;
+
+            using (var cmd = new SQLiteCommand(
+                "UPDATE " + table + " SET " + column + " = @New WHERE " + column + " = @Old", con))
+            {
+                cmd.Parameters.AddWithValue("@New", newValue);
+                cmd.Parameters.AddWithValue("@Old", oldValue);
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        // بازسازی TblCase فقط برای عوض‌کردن CHECK constraint.
+        //
+        // برخلاف MigrateServiceStatusRebuild قدیمی، اینجا ستون‌ها هاردکد نیستند:
+        // فهرست ستون‌ها از PRAGMA table_info خوانده می‌شود. دلیلش این است که از
+        // زمانِ نوشتنِ آن تابع، ده‌ها ستون با EnsureColumn اضافه شده (CardNotice1..5،
+        // SuspensionReason، HeadBirthDate، CenterID، ...) و هر فهرستِ ثابتی
+        // آن‌ها را بی‌صدا دور می‌ریخت.
+        //
+        // همچنین از الگویِ «جدولِ جدید بساز، قدیمی را حذف کن، جدید را rename کن»
+        // استفاده می‌شود (نه rename کردنِ جدولِ قدیمی) — دقیقاً همان باگی که
+        // بالاتر با RepairBrokenChildForeignKey ترمیم می‌شد: rename کردنِ
+        // TblCase باعث می‌شد SQLite متنِ FOREIGN KEY جداول فرزند را بازنویسی کند.
+        // ─────────────────────────────────────────────────────────────────────
+        private static void RebuildCaseServiceStatusCheck(SQLiteConnection con)
+        {
+            string createSql = GetTableSql(con, "TblCase");
+            if (string.IsNullOrEmpty(createSql)) return;
+
+            // idempotent: اگر قید از قبل شاملِ هر ۶ مقدار است، کاری لازم نیست.
+            bool needsRebuild = false;
+            foreach (string s in CaseDomain.ServiceStatuses)
+                if (createSql.IndexOf("'" + s + "'", StringComparison.Ordinal) < 0)
+                { needsRebuild = true; break; }
+
+            if (!needsRebuild) return;
+
+            // ستون‌های واقعیِ فعلی — همین‌ها عیناً به جدول جدید منتقل می‌شوند.
+            var columns = GetColumnNames(con, "TblCase");
+            if (columns.Count == 0) return;
+
+            // قیدِ قدیمی را با قیدِ جدید جایگزین کن و نام جدول را عوض کن.
+            string newTableSql = ReplaceServiceStatusCheck(createSql);
+            if (newTableSql == null) return;   // ساختار غیرمنتظره — دست نمی‌زنیم
+            newTableSql = ReplaceFirst(newTableSql, "TblCase", "TblCase_new");
+
+            string colList = string.Join(", ", columns.ToArray());
+
+            // نگاشتِ مقادیرِ قدیمی در همان INSERT انجام می‌شود، وگرنه ردیف‌های
+            // قدیمی قیدِ جدید را نقض می‌کنند و کل مهاجرت شکست می‌خورد.
+            string statusExpr = "ServiceStatus";
+            foreach (var pair in CaseDomain.LegacyServiceStatusMap)
+                statusExpr = "CASE WHEN ServiceStatus = '" + pair.Key + "' THEN '" + pair.Value +
+                             "' ELSE " + statusExpr + " END";
+
+            var selectCols = new List<string>();
+            foreach (string c in columns)
+                selectCols.Add(string.Equals(c, "ServiceStatus", StringComparison.OrdinalIgnoreCase)
+                    ? statusExpr : c);
+
+            // ایندکس‌ها با DROP TABLE از بین می‌روند؛ متنشان را نگه می‌داریم.
+            var indexSql = GetIndexSql(con, "TblCase");
+
+            bool fkWasOn = GetPragmaBool(con, "foreign_keys");
+            if (fkWasOn) ExecuteNonQuery(con, "PRAGMA foreign_keys = OFF;");
+            try
+            {
+                using (var tr = con.BeginTransaction())
+                {
+                    try
+                    {
+                        ExecuteNonQuery(con, tr, newTableSql + ";");
+                        ExecuteNonQuery(con, tr,
+                            "INSERT INTO TblCase_new (" + colList + ") SELECT " +
+                            string.Join(", ", selectCols.ToArray()) + " FROM TblCase;");
+                        ExecuteNonQuery(con, tr, "DROP TABLE TblCase;");
+                        ExecuteNonQuery(con, tr, "ALTER TABLE TblCase_new RENAME TO TblCase;");
+
+                        foreach (string sql in indexSql)
+                            ExecuteNonQuery(con, tr, sql + ";");
+
+                        tr.Commit();
+                    }
+                    catch
+                    {
+                        try { tr.Rollback(); } catch { }
+                        throw;
+                    }
+                }
+            }
+            finally
+            {
+                if (fkWasOn) ExecuteNonQuery(con, "PRAGMA foreign_keys = ON;");
+            }
+        }
+
+        // قیدِ CK_TblCase_ServiceStatus را در متنِ CREATE TABLE پیدا و جایگزین
+        // می‌کند. اگر پیدا نشد null برمی‌گرداند تا تماس‌گیرنده دست نگه دارد.
+        private static string ReplaceServiceStatusCheck(string createSql)
+        {
+            int start = createSql.IndexOf("CONSTRAINT CK_TblCase_ServiceStatus", StringComparison.Ordinal);
+            if (start < 0) return null;
+
+            // از ابتدای قید تا پرانتزِ بستهٔ متناظرِ CHECK(...) را برمی‌داریم.
+            int checkPos = createSql.IndexOf("CHECK", start, StringComparison.Ordinal);
+            if (checkPos < 0) return null;
+
+            int open = createSql.IndexOf('(', checkPos);
+            if (open < 0) return null;
+
+            int depth = 0, end = -1;
+            for (int i = open; i < createSql.Length; i++)
+            {
+                if (createSql[i] == '(') depth++;
+                else if (createSql[i] == ')')
+                {
+                    depth--;
+                    if (depth == 0) { end = i; break; }
+                }
+            }
+            if (end < 0) return null;
+
+            return createSql.Substring(0, start)
+                 + CaseDomain.ServiceStatusCheckSql
+                 + createSql.Substring(end + 1);
+        }
+
+        private static string ReplaceFirst(string text, string search, string replace)
+        {
+            int pos = text.IndexOf(search, StringComparison.Ordinal);
+            return pos < 0 ? text : text.Substring(0, pos) + replace + text.Substring(pos + search.Length);
+        }
+
+        private static string GetTableSql(SQLiteConnection con, string table)
+        {
+            using (var cmd = new SQLiteCommand(
+                "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = @N", con))
+            {
+                cmd.Parameters.AddWithValue("@N", table);
+                object o = cmd.ExecuteScalar();
+                return o == null || o == DBNull.Value ? null : Convert.ToString(o);
+            }
+        }
+
+        private static List<string> GetColumnNames(SQLiteConnection con, string table)
+        {
+            var list = new List<string>();
+            using (var cmd = new SQLiteCommand("PRAGMA table_info(" + table + ")", con))
+            using (var dr = cmd.ExecuteReader())
+                while (dr.Read())
+                    list.Add(Convert.ToString(dr["name"]));
+            return list;
+        }
+
+        // فقط ایندکس‌های ساختهٔ کاربر (sql = NULL یعنی ایندکسِ خودکارِ UNIQUE
+        // که با خودِ جدول دوباره ساخته می‌شود).
+        private static List<string> GetIndexSql(SQLiteConnection con, string table)
+        {
+            var list = new List<string>();
+            using (var cmd = new SQLiteCommand(
+                "SELECT sql FROM sqlite_master WHERE type = 'index' AND tbl_name = @N AND sql IS NOT NULL", con))
+            {
+                cmd.Parameters.AddWithValue("@N", table);
+                using (var dr = cmd.ExecuteReader())
+                    while (dr.Read())
+                        list.Add(Convert.ToString(dr[0]));
+            }
+            return list;
+        }
+
+        private static bool GetPragmaBool(SQLiteConnection con, string pragma)
+        {
+            using (var cmd = new SQLiteCommand("PRAGMA " + pragma + ";", con))
+            {
+                object o = cmd.ExecuteScalar();
+                return o != null && o != DBNull.Value && Convert.ToInt32(o) != 0;
             }
         }
 

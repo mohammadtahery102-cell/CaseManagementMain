@@ -79,10 +79,8 @@ namespace CaseManagement
             // «همه وضعیت‌ها» = رفتار قبلی.
             cmbServiceStatus = new ComboBox();
             cmbServiceStatus.DropDownStyle = ComboBoxStyle.DropDownList;
-            cmbServiceStatus.Items.AddRange(new object[]
-            {
-                "همه وضعیت‌ها", "فعال", "در انتظار تأیید", "قطع موقت", "قطع"
-            });
+            cmbServiceStatus.Items.Add("همه وضعیت‌ها");
+            cmbServiceStatus.Items.AddRange(Helpers.CaseDomain.ServiceStatuses);
             cmbServiceStatus.SelectedIndex = 0;
             searchFlow.Controls.Add(MakeFieldPanel("وضعیت خدمات", cmbServiceStatus));
 

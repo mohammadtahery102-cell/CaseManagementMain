@@ -236,17 +236,14 @@ SELECT last_insert_rowid();", con))
             return DateTime.Today;
         }
 
+        // نگاشت‌ها در CaseDomain متمرکز شده‌اند (منبع واحد با فرم و سینک).
         private string NormalizeStatus(string value)
         {
             value = (value ?? "").Trim();
 
-            if (value == "درانتظار" || value == "در انتظار")
-                return "در انتظار تأیید";
-
-            if (value == "در حالت قطع")
-                return "قطع";
-
-            return string.IsNullOrWhiteSpace(value) ? "فعال" : value;
+            return string.IsNullOrWhiteSpace(value)
+                ? CaseDomain.StatusActive
+                : CaseDomain.NormalizeServiceStatus(value);
         }
 
         private void AddInt(SQLiteCommand cmd, string name, int value)

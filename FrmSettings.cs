@@ -1893,12 +1893,37 @@ ORDER BY SortOrder, Value", con))
             }
         }
 
+        // ─────────────────────────────────────────────────────────────────────
+        // نگهبانِ دستهٔ «ServiceStatus».
+        //
+        // برخلاف بقیهٔ دسته‌ها که متنِ آزادند، وضعیت خدمات در دیتابیس یک CHECK
+        // constraint دارد. بدون این بررسی، مدیر می‌توانست مقدارِ دلخواه اضافه
+        // کند، آن مقدار در کشویی فرم پرونده ظاهر می‌شد، و هنگام ذخیره کاربر
+        // فقط یک خطای نامفهومِ SQLite («CHECK constraint failed») می‌دید.
+        // ─────────────────────────────────────────────────────────────────────
+        private bool IsLookupValueAllowed(string category, string value)
+        {
+            if (!string.Equals(category, CaseDomain.CatServiceStatus, StringComparison.Ordinal))
+                return true;
+
+            foreach (string allowed in CaseDomain.ServiceStatuses)
+                if (string.Equals(allowed, value, StringComparison.Ordinal))
+                    return true;
+
+            UiTheme.ShowWarning(this,
+                "«وضعیت خدمات» فهرست ثابتِ سامانه است و قابل افزودن/تغییر نیست.\r\n\r\n" +
+                "مقادیر مجاز: " + string.Join("، ", CaseDomain.ServiceStatuses));
+            return false;
+        }
+
         private void BtnLookupAdd_Click(object sender, EventArgs e)
         {
             string cat = _cmbCategory?.Text;
             string val = _txtLookupValue.Text.Trim();
             if (string.IsNullOrWhiteSpace(cat) || string.IsNullOrWhiteSpace(val))
             { UiTheme.ShowWarning(this, "دسته‌بندی و مقدار را وارد کنید."); return; }
+
+            if (!IsLookupValueAllowed(cat, val)) return;
 
             try
             {
@@ -1928,6 +1953,8 @@ ORDER BY SortOrder, Value", con))
             string val = _txtLookupValue.Text.Trim();
             if (string.IsNullOrWhiteSpace(val))
             { UiTheme.ShowWarning(this, "مقدار را وارد کنید."); return; }
+
+            if (!IsLookupValueAllowed(_cmbCategory?.Text, val)) return;
 
             try
             {
