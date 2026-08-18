@@ -46,6 +46,13 @@ namespace CaseManagement
             this.label4 = new System.Windows.Forms.Label();
             this.btnOpenDoc = new System.Windows.Forms.Button();
             this.picPreview = new System.Windows.Forms.PictureBox();
+            this.txtDocCategory = new System.Windows.Forms.TextBox();
+            this.txtDocTags = new System.Windows.Forms.TextBox();
+            this.label5 = new System.Windows.Forms.Label();
+            this.label6 = new System.Windows.Forms.Label();
+            this.txtSearch = new System.Windows.Forms.TextBox();
+            this.txtDocNo = new System.Windows.Forms.TextBox();
+            this.label7 = new System.Windows.Forms.Label();
             ((System.ComponentModel.ISupportInitialize)(this.dgvDocs)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.picPreview)).BeginInit();
             this.SuspendLayout();
@@ -112,6 +119,38 @@ namespace CaseManagement
             this.txtDocDescription.Size = new System.Drawing.Size(330, 150);
             this.txtDocDescription.TabIndex = 4;
 
+            this.label5.Text = "دسته‌بندی سند";
+            this.label5.AutoSize = false;
+            this.label5.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            this.label5.Location = new System.Drawing.Point(210, 335);
+            this.label5.Size = new System.Drawing.Size(135, 22);
+            this.txtDocCategory.Name = "txtDocCategory";
+            this.txtDocCategory.Location = new System.Drawing.Point(15, 333);
+            this.txtDocCategory.Size = new System.Drawing.Size(185, 26);
+            this.txtDocCategory.TabIndex = 16;
+
+            this.label6.Text = "برچسب‌ها (با ، جدا کنید)";
+            this.label6.AutoSize = false;
+            this.label6.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            this.label6.Location = new System.Drawing.Point(210, 375);
+            this.label6.Size = new System.Drawing.Size(135, 22);
+            this.txtDocTags.Name = "txtDocTags";
+            this.txtDocTags.Location = new System.Drawing.Point(15, 373);
+            this.txtDocTags.Size = new System.Drawing.Size(185, 26);
+            this.txtDocTags.TabIndex = 17;
+
+            this.label7.Text = "شماره سند (خودکار)";
+            this.label7.AutoSize = false;
+            this.label7.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            this.label7.Location = new System.Drawing.Point(210, 415);
+            this.label7.Size = new System.Drawing.Size(135, 22);
+            this.txtDocNo.Name = "txtDocNo";
+            this.txtDocNo.Location = new System.Drawing.Point(15, 413);
+            this.txtDocNo.Size = new System.Drawing.Size(185, 26);
+            this.txtDocNo.TabIndex = 18;
+            this.txtDocNo.ReadOnly = true;
+            this.txtDocNo.TabStop = false;
+
             // دکمه‌های انتخاب/باز کردن فایل کنار هم (مختصات مطلق)
             this.btnBrowseDocFile.Name = "btnBrowseDocFile";
             this.btnBrowseDocFile.Text = "انتخاب فایل سند";
@@ -140,6 +179,12 @@ namespace CaseManagement
             formPanel.Controls.Add(this.txtDocDescription);
             formPanel.Controls.Add(this.btnBrowseDocFile);
             formPanel.Controls.Add(this.btnOpenDoc);
+            formPanel.Controls.Add(this.label5);
+            formPanel.Controls.Add(this.txtDocCategory);
+            formPanel.Controls.Add(this.label6);
+            formPanel.Controls.Add(this.txtDocTags);
+            formPanel.Controls.Add(this.label7);
+            formPanel.Controls.Add(this.txtDocNo);
 
             //
             // picPreview — پیش‌نمایش بزرگ تصویر سند
@@ -176,10 +221,28 @@ namespace CaseManagement
             this.dgvDocs.CellClick += new System.Windows.Forms.DataGridViewCellEventHandler(this.dgvDocs_CellClick);
             this.dgvDocs.CellContentClick += new System.Windows.Forms.DataGridViewCellEventHandler(this.dgvDocs_CellContentClick);
 
+            System.Windows.Forms.Label lblSearch = new System.Windows.Forms.Label();
+            lblSearch.Text = "جستجو";
+            lblSearch.Dock = System.Windows.Forms.DockStyle.Right;
+            lblSearch.Width = 55;
+            lblSearch.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+
+            this.txtSearch.Name = "txtSearch";
+            this.txtSearch.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.txtSearch.TextChanged += new System.EventHandler(this.txtSearch_TextChanged);
+
+            System.Windows.Forms.Panel searchPanel = new System.Windows.Forms.Panel();
+            searchPanel.Dock = System.Windows.Forms.DockStyle.Top;
+            searchPanel.Height = 32;
+            searchPanel.Padding = new System.Windows.Forms.Padding(0, 0, 0, 6);
+            searchPanel.Controls.Add(this.txtSearch);
+            searchPanel.Controls.Add(lblSearch);
+
             System.Windows.Forms.Panel gridPanel = new System.Windows.Forms.Panel();
             gridPanel.Dock = System.Windows.Forms.DockStyle.Fill;
             gridPanel.Padding = new System.Windows.Forms.Padding(6);
             gridPanel.Controls.Add(this.dgvDocs);
+            gridPanel.Controls.Add(searchPanel);
 
             // نوار دکمه‌های اقدام (پایین)
             System.Windows.Forms.FlowLayoutPanel buttonBar = new System.Windows.Forms.FlowLayoutPanel();
@@ -235,10 +298,14 @@ namespace CaseManagement
             this.RightToLeft = System.Windows.Forms.RightToLeft.Yes;
             this.RightToLeftLayout = true;
             this.ClientSize = new System.Drawing.Size(1240, 560);
-            this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedSingle;
-            this.MaximizeBox = false;
-            this.MinimizeBox = true;
-            this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
+
+            // آموزش — فاز A4 (تب اسناد پرونده داخل FrmCase): بلوکِ قفلِ اندازهٔ
+            // پنجره (FormBorderStyle/MinimumSize/MaximumSize/...) که این‌جا
+            // بود، به FrmDocs_Load منتقل شد و پشتِ شرطِ IsEmbedded گذاشته شد —
+            // دقیقاً همان اصلاحی که برای FrmFamily در فاز ۱ انجام شد. علتش:
+            // وقتی این فرم TopLevel=false و Dock=Fill داخل یک تب جاسازی شود،
+            // MinimumSize/MaximumSize قفل‌شده (روی اندازهٔ طراحی) مانع از این
+            // می‌شود که اندازه‌اش را با تب هماهنگ کند.
 
             // ریشه چیدمان: TableLayoutPanel که فضا را صریح تقسیم می‌کند تا
             // مستقل از ترتیب Dock، همیشه فرم/پیش‌نمایش/گرید/دکمه‌ها سرجای خود باشند.
@@ -288,5 +355,12 @@ namespace CaseManagement
         private System.Windows.Forms.Button btnOpenDoc;
         private System.Windows.Forms.PictureBox picPreview;
         private System.Windows.Forms.Button btnPrint;
+        private System.Windows.Forms.TextBox txtDocCategory;
+        private System.Windows.Forms.TextBox txtDocTags;
+        private System.Windows.Forms.Label label5;
+        private System.Windows.Forms.Label label6;
+        private System.Windows.Forms.TextBox txtSearch;
+        private System.Windows.Forms.TextBox txtDocNo;
+        private System.Windows.Forms.Label label7;
     }
 }

@@ -41,6 +41,16 @@ namespace CaseManagement.Helpers
         public const string LogsPath    = "LogsPath";
         public const string TempPath    = "TempPath";
 
+        // فایل جزوه آموزشی. خالی = همان جزوه‌ی همراهِ نصب
+        // (Manual\TrainingManual.pdf). با مقداردهی، نسخه‌ی ویرایش‌شده‌ی خودِ
+        // مؤسسه جایگزین می‌شود (PDF یا Word).
+        public const string ManualPath  = "ManualPath";
+
+        // ستون‌های انتخاب‌شده‌ی گریدِ لیست پرونده‌ها (CSV از کلیدهای
+        // CaseGridColumns). خالی = پیش‌فرض. «کد اختصاصی» همیشه ثابت است و
+        // اینجا ذخیره نمی‌شود.
+        public const string CaseGridColumns = "CaseGridColumns";
+
         // ─── تب ظاهر نرم‌افزار ─────────────────────────────────────────────────
         public const string SecondaryColor = "SecondaryColor";
         public const string HeaderColor    = "HeaderColor";
@@ -52,6 +62,10 @@ namespace CaseManagement.Helpers
         public const string FontFamily     = "FontFamily";
         public const string FontSize       = "FontSize";
         public const string FontColor      = "FontColor";
+
+        // تعداد ردیفِ کارت‌های آماریِ تب «داشبورد کل پرونده‌ها» (۲ تا ۴).
+        // خالی/نامعتبر = ۲ (همان رفتار قبلی، بدون تغییر برای نصب‌های موجود).
+        public const string DashboardSummaryRows = "DashboardSummaryRows";
 
         // ─── تب چاپ و گزارش ────────────────────────────────────────────────────
         public const string DefaultPrinter = "DefaultPrinter";
@@ -87,6 +101,29 @@ namespace CaseManagement.Helpers
         public const string Notify_NoDocs            = "Notify_NoDocs";
         public const string Notify_IncompleteFamily  = "Notify_IncompleteFamily";
         public const string Notify_IncompleteFinance = "Notify_IncompleteFinance";
+
+        // ─── تب کارت شناسایی سرپرست ──────────────────────────────────────────
+        // آموزش — این متن‌ها پیش‌تر داخل CardService.BuildCardData ثابت (hard-code)
+        // بودند و مؤسسه نمی‌توانست تغییرشان دهد. حالا هرکدام یک کلید تنظیمات
+        // دارند و CardService با «مقدار پیش‌فرض = همان متن قبلی» می‌خواندشان؛
+        // پس تا وقتی کاربر چیزی وارد نکرده، کارت دقیقاً مثل قبل چاپ می‌شود.
+        // مشخصاتِ خودِ سرپرست (نام، پدر، تذکره، کد، تعداد ایتام، بارکد) عمداً
+        // اینجا نیست — آن‌ها داده‌ی پرونده‌اند و باید از دیتابیس بیایند.
+        public const string Card_OrgName        = "Card_OrgName";        // خالی = نام مؤسسه از تب «مؤسسه»
+        public const string Card_MicrotextLabel = "Card_MicrotextLabel"; // پیشوند نوار تزئینی دور کارت
+        public const string Card_Notice1        = "Card_Notice1";
+        public const string Card_Notice2        = "Card_Notice2";
+        public const string Card_Notice3        = "Card_Notice3";
+        public const string Card_Notice4        = "Card_Notice4";
+        public const string Card_Notice5        = "Card_Notice5";
+        public const string Card_SignatureLabel = "Card_SignatureLabel";
+        public const string Card_LegalLine      = "Card_LegalLine";
+        public const string Card_IssuedBy       = "Card_IssuedBy";       // خالی = نام کاربر جاری
+        public const string Card_Position       = "Card_Position";       // خالی = نقش کاربر جاری
+        public const string Card_Address        = "Card_Address";        // خالی = آدرس مؤسسه
+        public const string Card_Phone          = "Card_Phone";          // خالی = تلفن مؤسسه
+        public const string Card_Website        = "Card_Website";        // خالی = وب‌سایت مؤسسه
+        public const string Card_Email          = "Card_Email";          // خالی = ایمیل مؤسسه
 
         // ─── تب درباره نرم‌افزار ───────────────────────────────────────────────
         public const string DeveloperName = "DeveloperName";

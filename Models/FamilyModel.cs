@@ -9,6 +9,7 @@ namespace CaseManagement.Models
         public int CasID { get; set; }
         public string MemberName { get; set; }
         public string MemberFatherName { get; set; }
+        public string MemberIdCardType { get; set; }
         public string MemberTazkiraNo { get; set; }
         public DateTime? BirthDate { get; set; }
         public string MemberSadat { get; set; }
@@ -28,5 +29,9 @@ namespace CaseManagement.Models
         public string MemberPhotoPath { get; set; }
         public string Skill { get; set; }
         public string LeaveReason { get; set; }
+
+        // نقش این عضو در خانواده (یتیم/پدر/مادر/فرزند/سرپرست/سایر) — Lookup
+        // دسته «MemberRole». خالی = هنوز بازبینی نشده.
+        public string MemberRole { get; set; }
     }
 }

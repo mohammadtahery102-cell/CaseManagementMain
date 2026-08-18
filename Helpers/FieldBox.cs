@@ -61,6 +61,14 @@ namespace CaseManagement.Helpers
             // چون هر فرمی که از FieldBox استفاده کند خودکار درست می‌شود.
             ParentChanged += delegate { AlignCaptionToVisualRight(); };
             HandleCreated += delegate { AlignCaptionToVisualRight(); };
+
+            // آموزش — رفع گزارشِ کاربر («بعضی عنوان‌ها هنوز چپ‌اند»): اگر فرم
+            // RightToLeftLayout را *بعد از* ساختِ فیلدها تنظیم کند، یا فیلد از
+            // طریق TabPageای اضافه شود که هنوز به فرم وصل نیست، زنجیره‌ی
+            // والدها در لحظه‌ی HandleCreated ناقص است و «آینه‌بودن» اشتباه
+            // محاسبه می‌شود. VisibleChanged آخرین لحظه‌ای است که زنجیره قطعاً
+            // کامل شده؛ همان محاسبه یک بار دیگر با اطلاعات درست تکرار می‌شود.
+            VisibleChanged += delegate { AlignCaptionToVisualRight(); };
         }
 
         // اگر فیلد وسط‌چین شده باشد (مثل صفحه‌ی ورود) دست نمی‌خورد.
@@ -77,6 +85,31 @@ namespace CaseManagement.Helpers
         {
             get { return _shell.HasError; }
             set { _shell.HasError = value; }
+        }
+
+        // ─── حالتِ «فقط نمایش» (قفل) ─────────────────────────────────────────
+        // آموزش — برای فرم پرونده که به‌صورت پیش‌فرض فقط نمایش است و با دکمه‌ی
+        // «ویرایش» باز می‌شود. عمداً از Enabled=false استفاده *نمی‌شود*: آن
+        // کار متنِ فیلد را هم غیرقابلِ انتخاب/کپی می‌کند، در حالی که کاربر
+        // باید بتواند مثلاً شماره‌ی تذکره را از فرمِ قفل کپی کند.
+        // پس به‌جایش:
+        //   • TextBox  → ReadOnly (متن قابل انتخاب/کپی می‌ماند)
+        //   • ComboBox و بقیه → Enabled=false (ReadOnly ندارند)
+        //   • خودِ پوسته → ReadOnlyLook تا همان خاکستریِ حالتِ غیرفعال را
+        //     بکشد و فیلدِ قفل با فیلدِ باز اشتباه گرفته نشود.
+        public void SetReadOnly(bool readOnly)
+        {
+            _shell.ReadOnlyLook = readOnly;
+
+            TextBox tb = Field as TextBox;
+            if (tb != null)
+            {
+                tb.ReadOnly = readOnly;
+                tb.BackColor = readOnly ? UiTheme.Background : Color.White;
+                return;
+            }
+
+            Field.Enabled = !readOnly;
         }
 
         // ─── وسط‌چین‌کردن برچسب و متنِ ورودی ─────────────────────────────────
@@ -97,6 +130,16 @@ namespace CaseManagement.Helpers
             private bool _focused;
             private bool _hover;
             private bool _hasError;
+            private bool _readOnlyLook;
+
+            // وقتی true باشد، پوسته همان خاکستریِ حالتِ غیرفعال را می‌کشد حتی
+            // اگر کنترل هنوز Enabled باشد (تا TextBoxِ ReadOnly که باید متنش
+            // قابل انتخاب بماند، باز هم «قفل» دیده شود).
+            public bool ReadOnlyLook
+            {
+                get { return _readOnlyLook; }
+                set { _readOnlyLook = value; Invalidate(); }
+            }
 
             public InputShell(Control inner)
             {
@@ -118,7 +161,15 @@ namespace CaseManagement.Helpers
                     // شروع می‌شود». علت همان آینه‌شدن است، این‌بار داخل خودِ
                     // TextBox: وقتی RightToLeft=Yes باشد، HorizontalAlignment
                     // هم آینه می‌شود و Right بصراً «چپ» رندر می‌کند. برای
-                    // شروعِ متن از راست (رفتار درستِ فارسی) باید Left داد.
+                    // شروعِ متن از راست (رفتار درستِ فارسی) باید Left داد —
+                    // اما فقط وقتی دقیقاً یک آینه (خودِ فرم) بالادست باشد. اگر
+                    // کنترل داخلِ یک TabControlِ واقعاً آینه‌شده هم باشد (مثل
+                    // fieldsPanel در FrmCase یا tabsMain در FrmFamily)، دو
+                    // آینه یکدیگر را خنثی می‌کنند و باید Right داده شود؛ وگرنه
+                    // متنِ کمبو/تکست‌باکس (و آیتم‌های فهرستِ بازشده) به‌جای
+                    // راست، چپ‌چین دیده می‌شوند. تصمیمِ نهایی به بعد از اتصال
+                    // به فرم موکول می‌شود (AlignFieldToVisualRight)، چون
+                    // «آینه‌بودن» به زنجیره‌ی والدها بستگی دارد.
                     // فیلدهای رمز استثنا هستند (پایین‌تر RightToLeft=No
                     // می‌گیرند)، پس آن‌ها همان Center واقعی را نگه می‌دارند.
                     tb.TextAlign = HorizontalAlignment.Left;
@@ -167,6 +218,19 @@ namespace CaseManagement.Helpers
                 MouseLeave += delegate { _hover = false; Invalidate(); };
                 // کلیک روی هرجای قاب، فوکوس را به خودِ ورودی می‌دهد.
                 Click += delegate { try { inner.Focus(); } catch { } };
+
+                // آموزش — مثل AlignCaptionToVisualRight در FieldBox: «آینه‌بودن»
+                // فقط بعد از اتصال به زنجیره‌ی والدهای واقعی معلوم می‌شود، پس
+                // تصمیمِ Left/Right برای متنِ فیلد هم به همین رویدادها موکول
+                // می‌شود (نه اینجا در سازنده).
+                if (!isPassword)
+                {
+                    ParentChanged += delegate { AlignFieldToVisualRight(); };
+                    HandleCreated += delegate { AlignFieldToVisualRight(); };
+                    // به همان دلیلِ برچسب‌ها: آخرین محاسبه وقتی انجام می‌شود که
+                    // زنجیره‌ی والدها قطعاً کامل است.
+                    VisibleChanged += delegate { AlignFieldToVisualRight(); };
+                }
             }
 
             // وقتی true باشد، متنِ ورودی وسط‌چین می‌شود (نه راست‌چین).
@@ -177,13 +241,31 @@ namespace CaseManagement.Helpers
                 set
                 {
                     _centerText = value;
-                    TextBox tb = _inner as TextBox;
-                    // حالت غیرِ وسط‌چین باید Left باشد، نه Right: زیر
-                    // RightToLeft=Yes آینه می‌شود و Left بصراً «راست» می‌دهد
-                    // (توضیح کامل در سازنده‌ی InputShell).
-                    if (tb != null) tb.TextAlign = value ? HorizontalAlignment.Center : HorizontalAlignment.Left;
-                    Invalidate();
+                    AlignFieldToVisualRight();
                 }
+            }
+
+            // آموزش — تصمیمِ نهاییِ تراز: اگر تعدادِ آینه‌های واقعیِ بالادست
+            // (فرم + هر TabControlِ واقعاً آینه‌شده، طبق ResponsiveLayout.IsMirrored)
+            // فرد باشد یک آینه در کار است و باید Left داد تا بصراً راست دیده
+            // شود؛ اگر زوج باشد (مثلاً هم فرم و هم یک TabControل داخلی آینه
+            // باشند)، آینه‌ها خنثی می‌شوند و باید مستقیماً Right داد. همان
+            // قاعده برای متنِ ComboDrawItem هم به کار می‌رود.
+            private void AlignFieldToVisualRight()
+            {
+                TextBox tb = _inner as TextBox;
+                if (tb == null) return;
+
+                if (_centerText) { tb.TextAlign = HorizontalAlignment.Center; Invalidate(); return; }
+
+                // ⚠ ترازِ خودِ ورودی هم مثل برچسب دو عاملِ برگرداننده دارد:
+                // آینه‌شدنِ چیدمان، و خاصیتِ RightToLeft خودِ TextBox (که در
+                // سازنده روی Yes تنظیم می‌شود). ترکیبشان در ResponsiveLayout
+                // .IsFlipped حساب می‌شود — پیش از این فقط اولی دیده می‌شد و
+                // متنِ فیلد در فرم پرونده از چپ شروع می‌شد.
+                bool flipped = ResponsiveLayout.IsFlipped(tb);
+                tb.TextAlign = flipped ? HorizontalAlignment.Left : HorizontalAlignment.Right;
+                Invalidate();
             }
 
             // رسم دستیِ آیتمِ ComboBox — بدون هایلایتِ آبیِ سیستم.
@@ -204,11 +286,23 @@ namespace CaseManagement.Helpers
                 {
                     string text = cb.GetItemText(cb.Items[e.Index]);
                     // آموزش — با پرچمِ RightToLeft، ترازِ افقی هم آینه می‌شود؛
-                    // پس برای «راستِ بصری» باید Left داده شود (هم‌راستا با
-                    // همان قاعده‌ای که برای TextBox توضیح داده شد).
+                    // پس برای «راستِ بصری» باید Left داده شود — اما فقط اگر
+                    // دقیقاً یک آینه‌ی واقعی بالادست باشد (توضیح کامل در
+                    // AlignFieldToVisualRight). داخل TabControlِ واقعاً
+                    // آینه‌شده (دو آینه = خنثی)، باید Right داده شود؛ وگرنه
+                    // آیتم‌های فهرستِ بازشده (مثل «شمال/جنوب/شرق/غرب/مرکز»)
+                    // چپ‌چین دیده می‌شوند.
+                    // ⚠ اینجا عمداً IsMirrored است، نه IsFlipped — برخلافِ
+                    // برچسب و TextBox. آزمونِ تصویری نشان داد که
+                    // TextRenderer.DrawText با پرچمِ RightToLeft، معنیِ
+                    // Left/Right را *برنمی‌گرداند* (برخلافِ خاصیتِ TextAlign
+                    // روی خودِ کنترل). پس فقط آینه‌شدنِ چیدمان اهمیت دارد؛
+                    // اگر اینجا هم IsFlipped می‌گذاشتیم، متنِ کمبو («فعال»)
+                    // به سمتِ چپ می‌پرید.
+                    bool mirrored = ResponsiveLayout.IsMirrored(cb);
                     TextFormatFlags align = _centerText
                         ? TextFormatFlags.HorizontalCenter
-                        : TextFormatFlags.Left;
+                        : (mirrored ? TextFormatFlags.Left : TextFormatFlags.Right);
                     TextRenderer.DrawText(
                         e.Graphics, text, cb.Font, e.Bounds, UiTheme.TextDark,
                         align | TextFormatFlags.VerticalCenter |
@@ -249,7 +343,8 @@ namespace CaseManagement.Helpers
                 Rectangle rect = new Rectangle(0, 0, Width - 1, Height - 1);
                 using (GraphicsPath path = StatCard.RoundedRect(rect, 10))
                 {
-                    using (Brush fill = new SolidBrush(Enabled ? Color.White : UiTheme.Background))
+                    using (Brush fill = new SolidBrush(
+                        (Enabled && !_readOnlyLook) ? Color.White : UiTheme.Background))
                         g.FillPath(fill, path);
 
                     Color border =

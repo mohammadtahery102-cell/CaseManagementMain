@@ -22,12 +22,22 @@ namespace CaseManagement
             this.btnEdit                = new System.Windows.Forms.Button();
             this.btnSave                = new System.Windows.Forms.Button();
             this.btnPrint               = new System.Windows.Forms.Button();
+            this.btnFamilyCard          = new System.Windows.Forms.Button();
             this.dgvFamily              = new System.Windows.Forms.DataGridView();
             this.txtMemberName          = new System.Windows.Forms.TextBox();
             this.txtMemberFatherName    = new System.Windows.Forms.TextBox();
             this.txtMemberTazkiraNo     = new System.Windows.Forms.TextBox();
+            // بخش ۳ — نوع تذکره عضو (الکترونیکی/کاغذی)
+            this.cmbMemberIdCardType    = new System.Windows.Forms.ComboBox();
+            this.lblMemberIdCardType    = new System.Windows.Forms.Label();
             this.txtMemberSadat         = new System.Windows.Forms.ComboBox();
             this.txtGender              = new System.Windows.Forms.ComboBox();
+            // بخش ۱۲ — نقش عضو (یتیم/پدر/مادر/فرزند/سرپرست/سایر)
+            this.cmbMemberRole          = new System.Windows.Forms.ComboBox();
+            this.lblMemberRole          = new System.Windows.Forms.Label();
+            // بخش ۱۲ — نسبت خانوادگی (خام، جدا از نقش رسمی)
+            this.cmbRelation            = new System.Windows.Forms.ComboBox();
+            this.lblRelation            = new System.Windows.Forms.Label();
             this.txtPhysicalStatus      = new System.Windows.Forms.ComboBox();
             this.txtHasDisability       = new System.Windows.Forms.ComboBox();
             this.txtMemberDisabilityDegree = new System.Windows.Forms.ComboBox();
@@ -45,6 +55,7 @@ namespace CaseManagement
             this.txtDisabilityDetails   = new System.Windows.Forms.TextBox();
             this.txtMemberPhotoPath     = new System.Windows.Forms.TextBox();
             this.txtStopReason          = new System.Windows.Forms.TextBox();
+            this.txtSuspensionReason    = new System.Windows.Forms.ComboBox();
             this.txtSchoolPrevGrade     = new System.Windows.Forms.TextBox();
             this.txtUniversityPrevGrade = new System.Windows.Forms.TextBox();
             this.cmbReligion            = new System.Windows.Forms.ComboBox();
@@ -57,7 +68,7 @@ namespace CaseManagement
             this.picMemberPhoto         = new System.Windows.Forms.PictureBox();
             this.btnBrowseMemberPhoto   = new System.Windows.Forms.Button();
             this.dtpBirthDate           = new CaseManagement.Helpers.PersianDatePicker();
-            this.tabsMain               = new System.Windows.Forms.TabControl();
+            this.tabsMain               = new RtlTabControl();
             this.lblHeadInfo            = new System.Windows.Forms.Label();
             this.label1  = new System.Windows.Forms.Label();
             this.label2  = new System.Windows.Forms.Label();
@@ -84,6 +95,7 @@ namespace CaseManagement
             this.lblMaritalStatus       = new System.Windows.Forms.Label();
             this.lblServiceStatus       = new System.Windows.Forms.Label();
             this.lblStopReason          = new System.Windows.Forms.Label();
+            this.lblSuspensionReason    = new System.Windows.Forms.Label();
             this.lblDisabilityDetails   = new System.Windows.Forms.Label();
             this.lblSchoolType          = new System.Windows.Forms.Label();
             this.lblUniversityType      = new System.Windows.Forms.Label();
@@ -113,11 +125,17 @@ namespace CaseManagement
                 "لیسانس", "ماستری", "دکترا");
             DdlCombo(this.cmbServiceStatus, "فعال", "در انتظار تأیید", "قطع موقت", "قطع");
             this.cmbServiceStatus.SelectedIndexChanged += new System.EventHandler(this.cmbServiceStatus_SelectedIndexChanged);
+            this.txtSuspensionReason.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             DdlCombo(this.txtHasDisability, "", "جسمی", "ذهنی", "بینایی", "شنوایی", "گفتاری", "حسی");
             DdlCombo(this.cmbSchoolType, "", "خصوصی", "دولتی");
             DdlCombo(this.cmbUniversityType, "", "خصوصی", "دولتی");
             DdlCombo(this.cmbSeminaryLevel, "", "سطح ۱", "سطح ۲", "سطح ۳");
             DdlCombo(this.cmbEducationCoverage, "", "بله", "خیر");
+
+            // ─── نوع تذکره عضو (بخش ۳) ────────────────────────────────────────
+            // همان منبع مقادیر که FrmCase استفاده می‌کند، تا اعتبارسنجی و آمار
+            // در هر دو فرم دقیقاً یکی بماند.
+            CaseManagement.Helpers.IdCardHelper.FillCombo(this.cmbMemberIdCardType);
 
             // ─── نوار اطلاعات سرپرست ─────────────────────────────────────────
             this.lblHeadInfo.Name      = "lblHeadInfo";
@@ -144,17 +162,24 @@ namespace CaseManagement
             AddField(tlpGeneral, this.label8,            "سیادت",           this.txtMemberSadat);
             AddField(tlpGeneral, this.label2,            "نام پدر",          this.txtMemberFatherName);
             AddField(tlpGeneral, this.lblReligion,       "مذهب",            this.cmbReligion);
+            AddField(tlpGeneral, this.lblMemberIdCardType, "نوع تذکره",     this.cmbMemberIdCardType);
             AddField(tlpGeneral, this.label3,            "شماره تذکره",      this.txtMemberTazkiraNo);
             AddField(tlpGeneral, this.lblMaritalStatus,  "وضعیت تأهل",      this.cmbMaritalStatus);
             AddField(tlpGeneral, this.label4,            "تاریخ تولد",       this.dtpBirthDate);
             AddField(tlpGeneral, this.lblServiceStatus,  "وضعیت خدمات",     this.cmbServiceStatus);
             AddField(tlpGeneral, this.label7,            "جنسیت",           this.txtGender);
-            this.fieldStopReason = AddField(tlpGeneral, this.lblStopReason, "دلیل قطع موقت", this.txtStopReason);
+            AddField(tlpGeneral, this.lblRelation,       "نسبت خانوادگی",   this.cmbRelation);
+            AddField(tlpGeneral, this.lblMemberRole,     "نقش عضو",         this.cmbMemberRole);
 
-            // همان رفتار قبلی: تا وقتی وضعیت خدمات «قطع موقت» نشده، پنهان است.
-            // (منطقِ نمایش/پنهان‌سازی در FrmFamily.cs دست‌نخورده مانده و همچنان
-            // روی همین دو کنترل کار می‌کند؛ اینجا فقط کانتینرشان هم پنهان می‌شود
-            // تا جای خالی در شبکه باقی نماند.)
+            // «دلیل تعلیق» (الزامی) + «یادداشت تعلیق» (اختیاری، همان کنترل قدیمی
+            // StopReason) — هر دو تا وضعیت خدمات «قطع»/«قطع موقت» نشده پنهان‌اند.
+            // (منطقِ نمایش/اجبار در FrmFamily.cs → UpdateStopReasonVisibility/ValidateForm.)
+            this.fieldSuspensionReason = AddField(tlpGeneral, this.lblSuspensionReason, "دلیل تعلیق", this.txtSuspensionReason);
+            this.lblSuspensionReason.Visible = false;
+            this.txtSuspensionReason.Visible = false;
+            this.fieldSuspensionReason.Visible = false;
+
+            this.fieldStopReason = AddField(tlpGeneral, this.lblStopReason, "یادداشت تعلیق (اختیاری)", this.txtStopReason);
             this.lblStopReason.Visible  = false;
             this.txtStopReason.Visible  = false;
             this.fieldStopReason.Visible = false;
@@ -171,7 +196,10 @@ namespace CaseManagement
             AddField(tlpPhysical, this.label6,  "وضعیت جسمی",   this.txtPhysicalStatus);
             AddField(tlpPhysical, this.label5,  "نوع معلولیت",   this.txtHasDisability);
             AddField(tlpPhysical, this.label12, "درجه معلولیت",  this.txtMemberDisabilityDegree);
-            AddField(tlpPhysical, this.label17, "مهارت",         this.txtSkill);
+            // آموزش — «مهارت» از این تب خارج شد: ربطی به وضعیت جسمی/معلولیت
+            // ندارد و به تب «مشخصات تحصیلی» منتقل شده (پایین‌تر، کنارِ تحصیلات
+            // و دلیل ترک تحصیل). خودِ کنترل، ستون دیتابیس و منطق ذخیره/اعتبارسنجی
+            // در FrmFamily.cs دست‌نخورده است — فقط جای نمایشش عوض شده.
 
             // «شرح تفصیلی معلولیت» — چندخطی و تمام‌عرض، زیر شبکه‌ی فیلدها.
             this.txtDisabilityDetails.Name        = "txtDisabilityDetails";
@@ -218,6 +246,7 @@ namespace CaseManagement
             AddField(tlpEdu, this.label21,                "حوزه علمیه",              this.txtStudyField);
             AddField(tlpEdu, this.lblSeminaryLevel,       "دروس حوزوی (سطح)",       this.cmbSeminaryLevel);
             AddField(tlpEdu, this.label18,                "دلیل ترک تحصیل",          this.txtLeaveReason);
+            AddField(tlpEdu, this.label17,                "مهارت",                   this.txtSkill);
             AddField(tlpEdu, this.label19,                "توضیحات کلی",             this.txtDetails);
 
             var tabEdu = new System.Windows.Forms.TabPage("مشخصات تحصیلی");
@@ -348,12 +377,14 @@ namespace CaseManagement
             SetBtn(this.btnEdit,   "btnEdit",   "ویرایش",      this.btnEdit_Click);
             SetBtn(this.btnDelete, "btnDelete", "✕   حذف",     this.btnDelete_Click);
             SetBtn(this.btnPrint,  "btnPrint",  "چاپ فهرست",   this.btnPrint_Click);
+            SetBtn(this.btnFamilyCard, "btnFamilyCard", "چاپ کارت خانواده", this.btnFamilyCard_Click);
 
             PaintBtn(this.btnNew,    CaseManagement.Helpers.UiTheme.Primary, true);
             PaintBtn(this.btnSave,   CaseManagement.Helpers.UiTheme.Success, true);
             PaintBtn(this.btnEdit,   CaseManagement.Helpers.UiTheme.PrimaryLight, true);
             PaintBtn(this.btnDelete, CaseManagement.Helpers.UiTheme.Danger, true);
             PaintBtn(this.btnPrint,  System.Drawing.Color.White, false);
+            PaintBtn(this.btnFamilyCard, System.Drawing.Color.White, false);
 
             // اقدام‌های اصلی سمت راست (شروعِ خواندن در RTL)، «چاپ فهرست» سمت چپ.
             var mainActions = new System.Windows.Forms.FlowLayoutPanel();
@@ -370,11 +401,12 @@ namespace CaseManagement
             var secondaryActions = new System.Windows.Forms.FlowLayoutPanel();
             secondaryActions.Name          = "secondaryActions";
             secondaryActions.Dock          = System.Windows.Forms.DockStyle.Left;
-            secondaryActions.Width         = 170;
+            secondaryActions.Width         = 340;
             secondaryActions.FlowDirection = System.Windows.Forms.FlowDirection.LeftToRight;
             secondaryActions.WrapContents  = false;
             secondaryActions.BackColor     = System.Drawing.Color.Transparent;
             secondaryActions.Controls.Add(this.btnPrint);
+            secondaryActions.Controls.Add(this.btnFamilyCard);
 
             var buttonBar = new System.Windows.Forms.Panel();
             buttonBar.Name      = "buttonBar";
@@ -435,6 +467,31 @@ namespace CaseManagement
         }
 
         // ─── Helpers ─────────────────────────────────────────────────────────
+
+        // ─── رفعِ باگِ «چپ‌چین بودن تب‌ها» ───────────────────────────────────
+        // آموزش — TabControl.RightToLeftLayout یک باگِ شناخته‌شده در WinForms
+        // دارد: مقدار را می‌پذیرد ولی exstyle بومیِ WS_EX_LAYOUTRTL را واقعاً
+        // به هندلِ پنجره اعمال نمی‌کند؛ در نتیجه نوارِ سربرگ‌ها همچنان از چپ
+        // شروع می‌شود، نه راست. همین باگ باعث می‌شد ResponsiveLayout.IsMirrored
+        // (که برای «آینه‌ی دوباره‌ی فرم» حساب می‌کند) اشتباهاً فکر کند این تب
+        // واقعاً آینه شده، و برچسبِ فیلدهای داخلِ هر تب (مثل «نوع معلولیت») را
+        // با تراز غلط (چپ به‌جای راست) بچیند. راه‌حل، دقیقاً همان الگویی است
+        // که برای باگِ مشابهِ اسکرول‌بار در FrmCase.Designer.cs استفاده شد:
+        // اعمالِ دستیِ exstyle در CreateParams.
+        private class RtlTabControl : System.Windows.Forms.TabControl
+        {
+            protected override System.Windows.Forms.CreateParams CreateParams
+            {
+                get
+                {
+                    const int WS_EX_LAYOUTRTL = 0x00400000;
+                    System.Windows.Forms.CreateParams cp = base.CreateParams;
+                    if (RightToLeftLayout)
+                        cp.ExStyle |= WS_EX_LAYOUTRTL;
+                    return cp;
+                }
+            }
+        }
 
         // ─── شبکه‌ی فیلدها به سبک طرح مرجع ────────────────────────────────────
         // چند ستونِ هم‌عرض؛ هر سلول یک FieldBox (برچسبِ بالا + ورودیِ گردگوشه).
@@ -574,6 +631,7 @@ namespace CaseManagement
         private System.Windows.Forms.Button btnEdit;
         private System.Windows.Forms.Button btnSave;
         private System.Windows.Forms.Button btnPrint;
+        private System.Windows.Forms.Button btnFamilyCard;
         private System.Windows.Forms.DataGridView dgvFamily;
         private System.Windows.Forms.TextBox txtMemberName;
         private System.Windows.Forms.Label label1;
@@ -581,6 +639,9 @@ namespace CaseManagement
         private System.Windows.Forms.TextBox txtMemberFatherName;
         private System.Windows.Forms.Label label3;
         private System.Windows.Forms.TextBox txtMemberTazkiraNo;
+        // بخش ۳ — نوع تذکره عضو
+        private System.Windows.Forms.ComboBox cmbMemberIdCardType;
+        private System.Windows.Forms.Label lblMemberIdCardType;
         private System.Windows.Forms.Label label4;
         private System.Windows.Forms.Label label5;
         private System.Windows.Forms.ComboBox txtHasDisability;
@@ -588,6 +649,10 @@ namespace CaseManagement
         private System.Windows.Forms.ComboBox txtPhysicalStatus;
         private System.Windows.Forms.Label label7;
         private System.Windows.Forms.ComboBox txtGender;
+        private System.Windows.Forms.Label lblMemberRole;
+        private System.Windows.Forms.ComboBox cmbMemberRole;
+        private System.Windows.Forms.Label lblRelation;
+        private System.Windows.Forms.ComboBox cmbRelation;
         private System.Windows.Forms.Label label8;
         private System.Windows.Forms.ComboBox txtMemberSadat;
         private System.Windows.Forms.Label label9;
@@ -627,6 +692,9 @@ namespace CaseManagement
         private System.Windows.Forms.Label lblServiceStatus;
         private System.Windows.Forms.TextBox txtStopReason;
         private System.Windows.Forms.Label lblStopReason;
+        private System.Windows.Forms.ComboBox txtSuspensionReason;
+        private System.Windows.Forms.Label lblSuspensionReason;
+        private CaseManagement.Helpers.FieldBox fieldSuspensionReason;
         private System.Windows.Forms.Label lblHeadInfo;
         private System.Windows.Forms.Label lblDisabilityDetails;
         private System.Windows.Forms.TextBox txtDisabilityDetails;

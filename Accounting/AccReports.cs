@@ -257,6 +257,43 @@ namespace CaseManagement.Accounting
         private static string N(double v) { return v.ToString("N0"); }
 
         // ═══════════════════════════════════════════════════════════════════
+        // تطبیق (Reconciliation) — روی خودِ برگه‌ی گزارش
+        // ═══════════════════════════════════════════════════════════════════
+        // آموزش: هر گزارش مالی باید بتواند خودش را اثبات کند. این متد معادله‌ی
+        // پایه‌ی حسابداری را روی همان اعدادی که در گزارش چاپ شده‌اند بازبررسی
+        // می‌کند:
+        //
+        //      مانده ابتدای دوره + درآمد − هزینه = مانده پایان دوره
+        //
+        // اگر برقرار باشد، یک سطر «✔ تطبیق» چاپ می‌شود؛ اگر نه، مقدار اختلاف
+        // با علامت هشدار چاپ می‌شود تا هیچ گزارشی بدون آن‌که مغایرتش دیده شود
+        // از دست حسابدار خارج نشود. مقایسه با Money.AreEqual انجام می‌شود، نه
+        // با == ، چون مبالغ از نوع double هستند و اختلاف ناچیزِ ممیز شناور
+        // نباید به‌عنوان «مغایرت» گزارش شود.
+        private void AddReconciliationRows(ReportModel model, double opening, double income, double expense, double closing)
+        {
+            double expected = opening + income - expense;
+            double diff = closing - expected;
+
+            model.SummaryRows.Add(new KeyValuePair<string, string>(
+                "تطبیق معادله حسابداری",
+                Money.AreEqual(diff, 0)
+                    ? "✔ تأیید شد   (مانده ابتدا + درآمد − هزینه = مانده پایان)"
+                    : "⚠ مغایرت به مبلغ " + N(diff) + " افغانی — این گزارش نیاز به بررسی دارد"));
+        }
+
+        // تطبیق یک عدد گزارش‌شده با عدد مرجعِ دفتر (منبع معتبر = پایگاه داده).
+        private void AddLedgerTieOut(ReportModel model, string label, double reported, double ledger)
+        {
+            model.SummaryRows.Add(new KeyValuePair<string, string>(
+                label,
+                Money.AreEqual(reported, ledger)
+                    ? "✔ با دفتر مطابقت دارد (" + N(ledger) + ")"
+                    : "⚠ گزارش " + N(reported) + " ≠ دفتر " + N(ledger) +
+                      "  (اختلاف " + N(reported - ledger) + ")"));
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
         // فاکتور/سند تک‌رویداد (سند دریافت یا سند پرداخت) — برای هر تراکنش
         // ═══════════════════════════════════════════════════════════════════
         public void PrintVoucher(IWin32Window owner, int txnId)
@@ -622,6 +659,16 @@ namespace CaseManagement.Accounting
             model.SummaryRows.Add(new KeyValuePair<string, string>("مجموع پرداختی و مصارف", N(totalPayment)));
             model.SummaryRows.Add(new KeyValuePair<string, string>("باقی مانده برج فعلی", N(closing)));
 
+            // ─── تطبیق: این گزارش باید خودش را اثبات کند ────────────────────
+            // آموزش: عددهای بالا در همین کلاس از جمع‌های جداگانه ساخته شده‌اند.
+            // این دو سطر بررسی می‌کنند که (الف) معادله‌ی حسابداری برقرار است و
+            // (ب) «باقی مانده برج فعلی» دقیقاً همان چیزی است که دفتر (متد
+            // GetPeriodClosing در پایگاه داده) می‌گوید — یعنی گزارش از داده‌ی
+            // معتبر ساخته شده و در مسیر محاسبه چیزی جا نیفتاده است.
+            AddReconciliationRows(model, opening, income, totalPayment, closing);
+            if (periodId.HasValue)
+                AddLedgerTieOut(model, "تطبیق با دفتر (مانده پایان دوره)", closing, _repo.GetPeriodClosing(periodId.Value));
+
             model.ColumnHeaders = new[] { "عنوان", "مرکز", "مبلغ (افغانی)" };
             model.ColumnWeights = new float[] { 2, 1.5f, 1.5f };
             AddIfNonZero(model, "شهریه ایتام", stipend);
@@ -709,6 +756,9 @@ namespace CaseManagement.Accounting
             }
             model.BoldRows.Add(model.Rows.Count);
             model.Rows.Add(new[] { "", "جمع کل", "", grandFamily.ToString("N0"), grandOrphan.ToString("N0"), "", N(grandTotal) });
+
+            // جمعِ چاپ‌شده باید دقیقاً با جمعِ مستقیمِ دفتر یکی باشد.
+            AddLedgerTieOut(model, "تطبیق جمع شهریه با دفتر", grandTotal, _repo.SumStipend(periodId, null));
             return model;
         }
 
@@ -753,6 +803,8 @@ namespace CaseManagement.Accounting
             }
             model.BoldRows.Add(model.Rows.Count);
             model.Rows.Add(new[] { "", "", "", "", "", "جمع", N(total) });
+
+            AddLedgerTieOut(model, "تطبیق جمع هزینه‌ها با دفتر", total, _repo.SumExpenseItems(periodId));
             return model;
         }
 
@@ -792,6 +844,8 @@ namespace CaseManagement.Accounting
             }
             model.BoldRows.Add(model.Rows.Count);
             model.Rows.Add(new[] { "", "جمع کل", N(total) });
+
+            AddLedgerTieOut(model, "تطبیق جمع حقوق با دفتر", total, _repo.SumSalary(periodId));
             return model;
         }
 
@@ -817,8 +871,27 @@ namespace CaseManagement.Accounting
             model.ColumnHeaders = new[] { "دوره", "مانده قبل", "دریافت بودجه", "پرداخت", "مانده پایان" };
             model.ColumnWeights = new float[] { 1.4f, 1.2f, 1.2f, 1.2f, 1.2f };
 
+            // آموزش — رفع سه اشکال در ردیف «جمع» این گزارش:
+            //
+            // ۱) قبلاً نوشته شده بود «sumClose = closing» (انتساب، نه جمع). چون
+            //    دوره‌ها با ترتیب Year DESC خوانده می‌شوند، آخرین دوره‌ای که
+            //    حلقه می‌دید *قدیمی‌ترین* دوره بود؛ یعنی ستون «مانده پایان» در
+            //    ردیف جمع، مانده‌ی قدیمی‌ترین دوره را نشان می‌داد نه جدیدترین.
+            //
+            // ۲) جمعِ ستون «مانده قبل» از نظر حسابداری بی‌معناست: مانده‌ی ابتدای
+            //    هر دوره همان مانده‌ی پایان دوره‌ی قبل است، پس جمع‌کردن آن‌ها
+            //    یک عدد را چندین بار می‌شمارد. عدد درست، مانده‌ی ابتدای
+            //    *قدیمی‌ترین* دوره است.
+            //
+            // ۳) به‌همین ترتیب «مانده پایان» درست، مانده‌ی پایانِ *جدیدترین*
+            //    دوره است.
+            //
+            // فقط ستون‌های «دریافت بودجه» و «پرداخت» واقعاً جمع‌شدنی‌اند.
             DataTable periods = _repo.GetPeriodsForCombo();
-            double sumOpen = 0, sumIn = 0, sumOut = 0, sumClose = 0;
+            double sumIn = 0, sumOut = 0;
+            double newestClosing = 0, oldestOpening = 0;
+            bool first = true;
+
             foreach (DataRow r in periods.Rows)
             {
                 int pid = Convert.ToInt32(r["PeriodID"]);
@@ -833,11 +906,19 @@ namespace CaseManagement.Accounting
                 double totalOut = stipend + salary + expense + payTxn;
                 double closing = opening + budgetIn - totalOut;
 
-                sumOpen += opening; sumIn += budgetIn; sumOut += totalOut; sumClose = closing;
+                sumIn += budgetIn;
+                sumOut += totalOut;
+
+                if (first) { newestClosing = closing; first = false; }   // اولین ردیف = جدیدترین دوره
+                oldestOpening = opening;                                  // آخرین ردیف = قدیمی‌ترین دوره
+
                 model.Rows.Add(new[] { r["Display"].ToString(), N(opening), N(budgetIn), N(totalOut), N(closing) });
             }
+
             model.BoldRows.Add(model.Rows.Count);
-            model.Rows.Add(new[] { "جمع", N(sumOpen), N(sumIn), N(sumOut), N(sumClose) });
+            model.Rows.Add(new[] { "جمع", N(oldestOpening), N(sumIn), N(sumOut), N(newestClosing) });
+
+            AddReconciliationRows(model, oldestOpening, sumIn, sumOut, newestClosing);
             return model;
         }
 
@@ -896,21 +977,26 @@ namespace CaseManagement.Accounting
             // فقط وقتی اعمال می‌شود که کاربر دوره‌ی خاصی انتخاب کرده باشد؛ چون
             // این سه رکورد بدون فیلتر گزارش هم روی مانده‌ی نهایی اثر دارند (تا
             // مانده‌ی «فعلی» همیشه با GetFundBalance درست بماند).
-            DataTable stipends = _repo.GetStipendsByFund(fundId);
+            // آموزش — رفع باگ فیلتر ناهمگون: این سه فراخوانی قبلاً periodId را
+            // پاس نمی‌دادند، در حالی که تراکنش‌های بالا *با* فیلتر دوره نمایش
+            // داده می‌شدند. نتیجه: با انتخاب یک دوره، دفتر صندوق تراکنش‌های آن
+            // دوره را با شهریه/حقوق/هزینه‌ی همه‌ی دوره‌ها مخلوط نشان می‌داد و
+            // ستون مانده بی‌معنا می‌شد. حالا هر چهار منبع یک فیلتر دارند.
+            DataTable stipends = _repo.GetStipendsByFund(fundId, periodId);
             foreach (DataRow r in stipends.Rows)
             {
                 double amt = Convert.ToDouble(r["TotalPaid"]);
                 balance -= amt;
                 model.Rows.Add(new[] { "", "", "شهریه ایتام — " + r["SadatType"] + " (" + r["FamilySize"] + " نفره)", "", amt.ToString("N0"), N(balance) });
             }
-            DataTable salaries = _repo.GetSalariesByFund(fundId);
+            DataTable salaries = _repo.GetSalariesByFund(fundId, periodId);
             foreach (DataRow r in salaries.Rows)
             {
                 double amt = Convert.ToDouble(r["Amount"]);
                 balance -= amt;
                 model.Rows.Add(new[] { "", "", "حقوق — " + r["EmployeeName"], "", amt.ToString("N0"), N(balance) });
             }
-            DataTable expenses = _repo.GetExpenseItemsByFund(fundId);
+            DataTable expenses = _repo.GetExpenseItemsByFund(fundId, periodId);
             foreach (DataRow r in expenses.Rows)
             {
                 double amt = Convert.ToDouble(r["Price"]);
@@ -920,7 +1006,17 @@ namespace CaseManagement.Accounting
             }
 
             model.BoldRows.Add(model.Rows.Count);
-            model.Rows.Add(new[] { "", "", "مانده فعلی صندوق", "", "", N(balance) });
+            model.Rows.Add(new[] { "", "",
+                periodId.HasValue ? "مانده صندوق در پایان این دوره" : "مانده فعلی صندوق",
+                "", "", N(balance) });
+
+            // تطبیق با دفتر: وقتی گزارش بدون فیلتر دوره گرفته می‌شود، مانده‌ی
+            // نهایی باید دقیقاً برابر GetFundBalance باشد — همان عددی که در
+            // تب تراکنش‌ها به کاربر نشان داده می‌شود. اگر نبود، یعنی جایی
+            // رکوردی از قلم افتاده و باید بررسی شود.
+            if (!periodId.HasValue)
+                AddLedgerTieOut(model, "تطبیق با دفتر (مانده صندوق)", balance, _repo.GetFundBalance(fundId));
+
             return model;
         }
 
@@ -997,11 +1093,19 @@ namespace CaseManagement.Accounting
             model.ColumnHeaders = new[] { "نوع", "تاریخ", "شماره سند", "شرح", "دریافت", "پرداخت" };
             model.ColumnWeights = new float[] { 0.9f, 1f, 0.9f, 2.2f, 1f, 1f };
 
+            // آموزش — این گزارش قبلاً هیچ ردیف جمعی نداشت: تمام ریز رویدادها
+            // چاپ می‌شدند اما هیچ‌جا جمع دریافت/پرداخت نوشته نمی‌شد، پس کاربر
+            // نمی‌توانست بررسی کند که ریزها با مانده‌ی بالای گزارش می‌خوانند یا
+            // نه. حالا جمع‌ها از روی *همان ردیف‌هایی* که چاپ شده‌اند محاسبه و
+            // در پایان با دفتر تطبیق داده می‌شوند.
+            double totalIn = 0, totalOut = 0;
+
             DataTable txns = _repo.GetTransactionsRaw(periodId, null, null);
             foreach (DataRow r in txns.Rows)
             {
                 double amount = Convert.ToDouble(r["Amount"]);
                 bool isIncome = r["Direction"].ToString() == "دریافت";
+                if (isIncome) totalIn += amount; else totalOut += amount;
                 string desc = (r["PartyName"] != DBNull.Value ? r["PartyName"].ToString() + " — " : "") +
                               (r["Description"] != DBNull.Value ? r["Description"].ToString() : "");
                 model.Rows.Add(new[] { "تراکنش", r["TxnDate"].ToString(), r["DocNo"].ToString(), desc,
@@ -1012,6 +1116,7 @@ namespace CaseManagement.Accounting
             foreach (DataRow r in stipends.Rows)
             {
                 double amt = Convert.ToDouble(r["جمع پرداختی"]);
+                totalOut += amt;
                 model.Rows.Add(new[] { "شهریه", "", "", r["نوع"] + " / " + r["چند نفره"] + " نفره", "", amt.ToString("N0") });
             }
 
@@ -1019,6 +1124,7 @@ namespace CaseManagement.Accounting
             foreach (DataRow r in salaries.Rows)
             {
                 double amt = Convert.ToDouble(r["مبلغ"]);
+                totalOut += amt;
                 model.Rows.Add(new[] { "حقوق", "", "", r["نام"] + " / " + r["سمت"], "", amt.ToString("N0") });
             }
 
@@ -1026,8 +1132,17 @@ namespace CaseManagement.Accounting
             foreach (DataRow r in expenses.Rows)
             {
                 double amt = Convert.ToDouble(r["قیمت"]);
+                totalOut += amt;
                 model.Rows.Add(new[] { "هزینه", r["تاریخ"].ToString(), r["شماره سند"].ToString(), r["شرح"].ToString(), "", amt.ToString("N0") });
             }
+
+            model.BoldRows.Add(model.Rows.Count);
+            model.Rows.Add(new[] { "", "", "", "جمع کل", N(totalIn), N(totalOut) });
+
+            double opening = _repo.GetPeriodOpening(periodId);
+            AddReconciliationRows(model, opening, totalIn, totalOut, opening + totalIn - totalOut);
+            AddLedgerTieOut(model, "تطبیق با دفتر (مانده پایان دوره)",
+                opening + totalIn - totalOut, _repo.GetPeriodClosing(periodId));
 
             return model;
         }

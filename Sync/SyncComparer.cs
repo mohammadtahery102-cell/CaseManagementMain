@@ -92,7 +92,12 @@ namespace CaseManagement.Sync
                 return;
             }
 
-            if (!seen.Add(rec.PublicCode))
+            // آموزش — رفعِ رد شدنِ کاذب: مقایسه/کلیدها با کدِ نرمال‌شده انجام
+            // می‌شود (رقمِ فارسی/عربی → لاتین، بدونِ فاصله)؛ rec.PublicCode خامِ
+            // اصلی برای نمایش در پیام‌ها/رکوردِ تازه دست‌نخورده می‌ماند.
+            string normalizedPublicCode = SyncCodeNormalizer.Normalize(rec.PublicCode);
+
+            if (!seen.Add(normalizedPublicCode))
             {
                 rec.Action = SyncAction.Duplicate;
                 rec.ErrorMessage = "کد عمومی در فایل تکراری است.";
@@ -100,10 +105,10 @@ namespace CaseManagement.Sync
             }
 
             ExistingRow row;
-            if (!existing.TryGetValue(rec.PublicCode, out row))
+            if (!existing.TryGetValue(normalizedPublicCode, out row))
             {
                 rec.Action = SyncAction.New;
-                newCodes.Add(rec.PublicCode);
+                newCodes.Add(normalizedPublicCode);
                 return;
             }
 
@@ -123,14 +128,21 @@ namespace CaseManagement.Sync
                 return;
             }
 
+            string normalizedPublicCode = SyncCodeNormalizer.Normalize(rec.PublicCode);
             int casId;
-            bool familyExists = codeToCasId.TryGetValue(rec.PublicCode, out casId);
-            bool familyIsNew = newCodes.Contains(rec.PublicCode);
+            bool familyExists = codeToCasId.TryGetValue(normalizedPublicCode, out casId);
+            bool familyIsNew = newCodes.Contains(normalizedPublicCode);
 
             if (!familyExists && !familyIsNew)
             {
                 rec.Action = SyncAction.Error;
-                rec.ErrorMessage = "خانواده‌ای با این کد عمومی وجود ندارد (نه در دیتابیس، نه در فایل سرپرستان).";
+                // آموزش — تشخیص برای کاربر: کدِ جست‌وجوشده (پس از نرمال‌سازی) هم
+                // نشان داده می‌شود تا معلوم شود مشکل واقعاً «کد اشتباه» است یا
+                // رقمِ فارسی/فاصله‌ی اضافه (که دیگر نباید رد شود، ولی اگر باز هم
+                // رد شد، این پیام دقیقاً همان چیزی را نشان می‌دهد که جست‌وجو شده).
+                rec.ErrorMessage = normalizedPublicCode == rec.PublicCode.Trim()
+                    ? "خانواده‌ای با این کد عمومی وجود ندارد (نه در دیتابیس، نه در فایل سرپرستان)."
+                    : "خانواده‌ای با این کد عمومی وجود ندارد (نه در دیتابیس، نه در فایل سرپرستان). کدِ جست‌وجوشده: «" + normalizedPublicCode + "»";
                 return;
             }
 
@@ -222,7 +234,10 @@ namespace CaseManagement.Sync
                 {
                     while (dr.Read())
                     {
-                        string key = dr[keyColumn] == DBNull.Value ? "" : dr[keyColumn].ToString().Trim();
+                        // آموزش — رفعِ رد شدنِ کاذب: نرمال‌سازی (ارقامِ فارسی/عربی →
+                        // لاتین، حذفِ فاصله‌ها) به‌جای فقط Trim، تا کدی که در HTML
+                        // با فاصله یا رقمِ فارسی نوشته شده هم با دیتابیس مطابقت کند.
+                        string key = dr[keyColumn] == DBNull.Value ? "" : SyncCodeNormalizer.Normalize(dr[keyColumn].ToString());
                         if (key.Length == 0) continue;
                         if (map.ContainsKey(key)) continue; // اولین برنده (قطعی)
 

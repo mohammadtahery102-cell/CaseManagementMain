@@ -56,6 +56,41 @@ namespace CaseManagement.Helpers
             return value.ToString();
         }
 
+        // آموزش — امن‌سازی مقدار جستجو برای DataView.RowFilter (نه SQL).
+        // در نحو RowFilter، کاراکترهای [ ] % * معنای ویژه دارند؛ بدون این
+        // escape، تایپ کردن یک «[» ساده در جعبه جستجو باعث پرتاب استثنای
+        // «Error in Like operator» و بسته شدن عملیات می‌شد. ترتیب مهم است:
+        // ابتدا «[» تا خودِ escapeهای بعدی دوباره escape نشوند.
+        public static string EscapeDataViewLike(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+                return "";
+
+            var sb = new System.Text.StringBuilder(value.Length + 8);
+            foreach (char c in value)
+            {
+                switch (c)
+                {
+                    // هر کاراکتر ویژه داخل کروشه قرار می‌گیرد تا «عادی» شود.
+                    case '[':
+                    case ']':
+                    case '%':
+                    case '*':
+                        sb.Append('[').Append(c).Append(']');
+                        break;
+                    // آپاستروف با تکرار، رشته‌ی فیلتر را نمی‌شکند.
+                    case '\'':
+                        sb.Append("''");
+                        break;
+                    default:
+                        sb.Append(c);
+                        break;
+                }
+            }
+
+            return sb.ToString();
+        }
+
         public static void AddInt(SQLiteCommand cmd, string name, int value)
         {
             cmd.Parameters.AddWithValue(name, value);

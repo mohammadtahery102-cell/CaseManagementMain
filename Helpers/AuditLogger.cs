@@ -67,7 +67,11 @@ VALUES
         }
 
         // ─── ثبت تغییر وضعیت پرونده ─────────────────────────────────────────
-        public static void RecordStatusChange(int caseId, string oldStatus, string newStatus)
+        // reason/notes اختیاری‌اند (فقط برای تغییرِ به‌سمتِ تعلیق/قطع موقت پر
+        // می‌شوند)؛ changeType پیش‌فرض "ServiceStatus" است تا رفتار فراخوان‌های
+        // قبلی (بدون این پارامتر) دقیقاً همان بماند.
+        public static void RecordStatusChange(int caseId, string oldStatus, string newStatus,
+            string reason = null, string notes = null, string changeType = "ServiceStatus")
         {
             if (string.Equals(
                 (oldStatus ?? "").Trim(),
@@ -80,14 +84,18 @@ VALUES
                 using (SQLiteConnection con = new DatabaseHelper().GetConnection())
                 using (SQLiteCommand cmd = new SQLiteCommand(@"
 INSERT INTO TblCaseStatusHistory
-    (CasID, OldStatus, NewStatus, ChangedBy)
+    (CasID, OldStatus, NewStatus, ChangeType, Reason, Notes, ChangedBy, UserID)
 VALUES
-    (@CasID, @OldStatus, @NewStatus, @ChangedBy)", con))
+    (@CasID, @OldStatus, @NewStatus, @ChangeType, @Reason, @Notes, @ChangedBy, @UserID)", con))
                 {
                     cmd.Parameters.AddWithValue("@CasID",     caseId);
                     AddText(cmd, "@OldStatus",  oldStatus);
                     AddText(cmd, "@NewStatus",  newStatus);
+                    AddText(cmd, "@ChangeType", changeType);
+                    AddText(cmd, "@Reason",     reason);
+                    AddText(cmd, "@Notes",      notes);
                     AddText(cmd, "@ChangedBy",  SecurityContext.Username);
+                    AddNullableInt(cmd, "@UserID", SecurityContext.UserId);
 
                     con.Open();
                     cmd.ExecuteNonQuery();
@@ -97,6 +105,89 @@ VALUES
             {
                 string msg = $"[AuditLogger.RecordStatusChange] {DateTime.Now:yyyy-MM-dd HH:mm:ss} " +
                              $"CaseID={caseId} {oldStatus}→{newStatus} | {ex.Message}";
+                Debug.WriteLine(msg);
+                TryWriteErrorLog(msg);
+            }
+        }
+
+        // ─── ثبت تغییر وضعیت عضو خانواده (معادل سطح عضو) ────────────────────
+        public static void RecordFamilyStatusChange(int famId, string oldStatus, string newStatus,
+            string reason = null, string notes = null, string changeType = "ServiceStatus")
+        {
+            if (string.Equals(
+                (oldStatus ?? "").Trim(),
+                (newStatus ?? "").Trim(),
+                StringComparison.OrdinalIgnoreCase))
+                return;
+
+            try
+            {
+                using (SQLiteConnection con = new DatabaseHelper().GetConnection())
+                using (SQLiteCommand cmd = new SQLiteCommand(@"
+INSERT INTO TblFamilyStatusHistory
+    (FamID, OldValue, NewValue, ChangeType, Reason, Notes, ChangedBy, UserID)
+VALUES
+    (@FamID, @OldValue, @NewValue, @ChangeType, @Reason, @Notes, @ChangedBy, @UserID)", con))
+                {
+                    cmd.Parameters.AddWithValue("@FamID",     famId);
+                    AddText(cmd, "@OldValue",   oldStatus);
+                    AddText(cmd, "@NewValue",   newStatus);
+                    AddText(cmd, "@ChangeType", changeType);
+                    AddText(cmd, "@Reason",     reason);
+                    AddText(cmd, "@Notes",      notes);
+                    AddText(cmd, "@ChangedBy",  SecurityContext.Username);
+                    AddNullableInt(cmd, "@UserID", SecurityContext.UserId);
+
+                    con.Open();
+                    cmd.ExecuteNonQuery();
+                }
+            }
+            catch (Exception ex)
+            {
+                string msg = $"[AuditLogger.RecordFamilyStatusChange] {DateTime.Now:yyyy-MM-dd HH:mm:ss} " +
+                             $"FamID={famId} {oldStatus}→{newStatus} | {ex.Message}";
+                Debug.WriteLine(msg);
+                TryWriteErrorLog(msg);
+            }
+        }
+
+        // ─── ثبت تغییر نقش عضو خانواده (MemberRole) — جدول اختصاصی ─────────
+        // آموزش — بازبینیِ طراحی به‌درخواست کاربر: MemberRole و ServiceStatus
+        // دو رویدادِ کسب‌وکاریِ متفاوت‌اند؛ این متد به‌جای TblFamilyStatusHistory
+        // (که مخصوصِ وضعیت خدمات است) در جدولِ مجزای TblFamilyRoleHistory ثبت
+        // می‌کند تا دو تاریخچه هرگز قاطی نشوند.
+        public static void RecordFamilyRoleChange(int famId, string oldRole, string newRole, string notes = null)
+        {
+            if (string.Equals(
+                (oldRole ?? "").Trim(),
+                (newRole ?? "").Trim(),
+                StringComparison.OrdinalIgnoreCase))
+                return;
+
+            try
+            {
+                using (SQLiteConnection con = new DatabaseHelper().GetConnection())
+                using (SQLiteCommand cmd = new SQLiteCommand(@"
+INSERT INTO TblFamilyRoleHistory
+    (FamilyMemberID, OldRole, NewRole, ChangedByUserID, ChangedByUsername, Notes)
+VALUES
+    (@FamilyMemberID, @OldRole, @NewRole, @ChangedByUserID, @ChangedByUsername, @Notes)", con))
+                {
+                    cmd.Parameters.AddWithValue("@FamilyMemberID", famId);
+                    AddText(cmd, "@OldRole", oldRole);
+                    AddText(cmd, "@NewRole", newRole);
+                    AddNullableInt(cmd, "@ChangedByUserID", SecurityContext.UserId);
+                    AddText(cmd, "@ChangedByUsername", SecurityContext.Username);
+                    AddText(cmd, "@Notes", notes);
+
+                    con.Open();
+                    cmd.ExecuteNonQuery();
+                }
+            }
+            catch (Exception ex)
+            {
+                string msg = $"[AuditLogger.RecordFamilyRoleChange] {DateTime.Now:yyyy-MM-dd HH:mm:ss} " +
+                             $"FamID={famId} {oldRole}→{newRole} | {ex.Message}";
                 Debug.WriteLine(msg);
                 TryWriteErrorLog(msg);
             }

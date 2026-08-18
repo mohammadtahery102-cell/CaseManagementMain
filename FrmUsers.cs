@@ -119,6 +119,12 @@ namespace CaseManagement
             btnDelete.Click += BtnDelete_Click;
             buttonFlow.Controls.Add(btnDelete);
 
+            // میان‌بُرها همین‌جا بسته می‌شوند چون این دکمه‌ها متغیرِ محلی‌اند.
+            Helpers.FormShortcuts.For(this)
+                .New(btnAdd)
+                .Delete(btnDelete)
+                .Bind(Keys.Control | Keys.T, "فعال / غیرفعال", btnToggle);
+
             topPanel.Controls.Add(buttonFlow);
             topPanel.Controls.Add(fieldsFlow);
 

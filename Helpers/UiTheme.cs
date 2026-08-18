@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Text;
@@ -212,10 +212,96 @@ namespace CaseManagement.Helpers
         }
 
         // ─── دکمه اصلی (رنگی، پر) ───────────────────────────────────────────
+        // ─── راهنمای لحظه‌ای دکمه‌ها (Tooltip) ───────────────────────────────
+        // آموزش — چرا یک نمونه‌ی مشترک ToolTip و نه یکی برای هر دکمه:
+        // اگر دو کامپوننت ToolTip جدا برای یک کنترل متن داشته باشند، رفتار
+        // نمایششان در WinForms غیرقابل‌پیش‌بینی می‌شود. با یک نمونه‌ی مشترک،
+        // فراخوانیِ بعدیِ SetTip روی همان دکمه صرفاً متن قبلی را جایگزین
+        // می‌کند — پس فرم‌ها می‌توانند راهنمای دقیق‌ترِ خودشان را بگذارند.
+        private static readonly ToolTip ButtonTips = new ToolTip
+        {
+            InitialDelay = 450,
+            ReshowDelay  = 200,
+            AutoPopDelay = 8000,
+            ShowAlways   = true
+        };
+
+        // راهنمای لحظه‌ای یک کنترل را تنظیم می‌کند (یا با متن خالی برمی‌دارد).
+        public static void SetTip(Control control, string tip)
+        {
+            if (control == null) return;
+            ButtonTips.SetToolTip(control, tip ?? "");
+        }
+
+        // متنِ راهنما بر اساس عنوانِ دکمه. عنوان‌های پرتکرار جدولِ اختصاصی
+        // دارند؛ برای بقیه، از پیشوندِ عنوان یک توضیح عمومی ساخته می‌شود.
+        // اگر هیچ‌کدام نخورد رشته‌ی خالی برمی‌گردد و دکمه بدون راهنما می‌ماند
+        // (بهتر از راهنمایی که فقط عنوان را تکرار کند).
+        private static readonly System.Collections.Generic.Dictionary<string, string> ButtonTipTexts =
+            new System.Collections.Generic.Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            { "ذخیره",            "ثبت تغییرهای واردشده در دیتابیس." },
+            { "جدید",             "پاک‌کردن فرم برای ثبت یک رکورد تازه." },
+            { "فرم جدید",         "پاک‌کردن فرم برای ثبت یک رکورد تازه." },
+            { "ویرایش",           "ویرایش رکورد انتخاب‌شده." },
+            { "حذف",              "حذف رکورد انتخاب‌شده. این کار برگشت‌پذیر نیست." },
+            { "جستجو",            "اجرای جستجو با فیلترهای واردشده." },
+            { "بستن",             "بستن این پنجره." },
+            { "انصراف",           "بستن بدون ذخیره‌ی تغییرها." },
+            { "بازنشانی",         "خالی‌کردن فیلترها و بازگشت به حالت اولیه." },
+            { "تازه‌سازی",        "خواندن دوباره‌ی اطلاعات از دیتابیس." },
+            { "بازخوانی",         "خواندن دوباره‌ی اطلاعات از دیتابیس." },
+            { "چاپ",              "ارسال به چاپگر." },
+            { "خروجی Excel",      "ذخیره‌ی نتایج در یک فایل اکسل." },
+            { "خروجی اکسل",       "ذخیره‌ی نتایج در یک فایل اکسل." },
+            { "خروجی Word",       "ذخیره‌ی نتایج در یک فایل Word." },
+            { "خروجی PDF",        "ذخیره‌ی نتایج در یک فایل PDF." },
+            { "انتخاب",           "انتخاب مورد مشخص‌شده." },
+            { "انتخاب...",        "باز کردن پنجره‌ی انتخاب." },
+            { "لغو انتخاب",       "برداشتن همه‌ی انتخاب‌ها." },
+            { "فعال/غیرفعال",     "تغییر وضعیت فعال یا غیرفعال بودن مورد انتخاب‌شده." },
+            { "فعال / غیرفعال",   "تغییر وضعیت فعال یا غیرفعال بودن مورد انتخاب‌شده." },
+            { "کپی",              "کپی در حافظه‌ی سیستم (Clipboard)." },
+            { "قبلی",             "بازگشت به مرحله‌ی قبل." },
+            { "بعدی",             "رفتن به مرحله‌ی بعد." },
+            { "کارت شناسایی",     "ساخت و نمایش کارت شناسایی این سرپرست." },
+            { "مشاهده پرونده",    "باز کردن پرونده‌ی مربوط به ردیف انتخاب‌شده." },
+        };
+
+        private static string TipForButton(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return "";
+
+            string caption = text.Trim();
+            string exact;
+            if (ButtonTipTexts.TryGetValue(caption, out exact)) return exact;
+
+            // دنباله‌ی بلندِ عنوان‌های اختصاصی («ذخیره تنظیمات امنیت»، «چاپ رسید
+            // شهریه»، «خروجی جمعی …») با همین چند قاعده پوشش داده می‌شود.
+            if (caption.StartsWith("ذخیره", StringComparison.Ordinal))
+                return "ثبت و ذخیره‌ی «" + caption.Substring("ذخیره".Length).Trim() + "».";
+            if (caption.StartsWith("چاپ", StringComparison.Ordinal))
+                return "ارسال «" + caption.Substring("چاپ".Length).Trim() + "» به چاپگر.";
+            if (caption.StartsWith("خروجی", StringComparison.Ordinal))
+                return "ساخت فایل خروجی: " + caption.Substring("خروجی".Length).Trim() + ".";
+            if (caption.StartsWith("حذف", StringComparison.Ordinal))
+                return "حذف «" + caption.Substring("حذف".Length).Trim() + "». این کار برگشت‌پذیر نیست.";
+            if (caption.StartsWith("راهنما", StringComparison.Ordinal))
+                return "نمایش راهنمای این بخش.";
+
+            return "";
+        }
+
         public static Button CreateButton(string text, string icon, Color backColor)
         {
             Button b = new Button();
             b.Text = string.IsNullOrEmpty(icon) ? text : (icon + "   " + text);
+
+            // راهنمای لحظه‌ای: فقط وقتی متنِ مفیدی برای این عنوان داریم. فرم‌ها
+            // می‌توانند بعداً با UiTheme.SetTip متنِ دقیق‌ترِ خودشان را بگذارند.
+            string tip = TipForButton(text);
+            if (tip.Length > 0) ButtonTips.SetToolTip(b, tip);
+
             b.BackColor = backColor;
             b.ForeColor = Color.White;
             b.FlatStyle = FlatStyle.Flat;
@@ -348,11 +434,15 @@ namespace CaseManagement.Helpers
             { "StudyField", "حوزه علمیه" }, { "OfficialStatus", "وضعیت رسمی تحصیلی" }, { "LeaveReason", "دلیل ترک تحصیل" },
             { "HasDisability", "نوع معلولیت" }, { "MemberDisabilityDegree", "درجه معلولیت" }, { "MemberSadat", "سیادت" },
             { "PhysicalStatus", "وضعیت جسمی" }, { "DisabilityDegree", "درجه معلولیت" }, { "DisabilityType", "نوع معلولیت" },
-            { "MigrationCardType", "نوع برگه مهاجرت" }, { "CoveredByOrg", "تحت پوشش" }, { "PriorityLevel", "اولویت‌بندی" },
+            { "MigrationCardType", "نوع برگه مهاجرت" }, { "CoveredByOrg", "تحت پوشش دیگر مؤسسات" }, { "PriorityLevel", "اولویت‌بندی اقتصادی" },
+            { "CoveredByOrgNames", "اسامی مؤسسات تحت پوشش" },
             { "HeadFatherName", "نام پدر سرپرست" }, { "HeadSadat", "سیادت سرپرست" }, { "HeadTazkiraNo", "شماره تذکره سرپرست" },
             { "HeadOriginalResidence", "سکونت اصلی" }, { "HeadCurrentResidence", "سکونت فعلی" },
             { "RelationshipToFamily", "نسبت با اعضا" }, { "RelativePhone", "شماره تماس اقارب" }, { "Job", "شغل" },
-            { "EducationLevel", "تحصیلات" }, { "Surveyors", "سروی‌کننده‌ها" }, { "LocationAddress", "آدرس لوکیشن" }
+            { "EducationLevel", "تحصیلات" }, { "Surveyors", "سروی‌کننده‌ها" }, { "LocationAddress", "آدرس لوکیشن" },
+            // بخش ۳ و ۵ — نوع تذکره و یادداشت وضعیت جسمی
+            { "HeadIdCardType", "نوع تذکره سرپرست" }, { "MemberIdCardType", "نوع تذکره" },
+            { "PhysicalStatusNotes", "یادداشت وضعیت جسمی" }
         };
 
         // ─── نمایش شمسی ستون‌های تاریخ در گرید (بدون تغییر مقدار واقعی) ──────
@@ -452,12 +542,29 @@ namespace CaseManagement.Helpers
         {
             form.WindowState = FormWindowState.Normal;
             form.FormBorderStyle = FormBorderStyle.Sizable;
-            form.MaximizeBox = true;
+
+            // آموزش — خواسته‌ی کاربر: پنجره‌ها در «یک حالتِ ثابت» بمانند و
+            // اندازه‌شان با دکمه‌ی بیشینه/بازگردانی عوض نشود؛ ولی کوچک‌کردن
+            // (Minimize) باید مثل هر برنامه‌ی ویندوزی در دسترس باشد.
+            //   • MaximizeBox = false  → دکمه‌ی تغییرِ حالت برداشته می‌شود
+            //   • MinimizeBox = true   → کوچک‌کردن سرِجایش می‌ماند
+            // پنجره‌های کاری از طریق MakeMainWindow همچنان تمام‌صفحه باز
+            // می‌شوند؛ فقط دیگر قابلِ جابه‌جا شدن بین دو حالت نیستند.
+            form.MaximizeBox = false;
             form.MinimizeBox = true;
+
             form.StartPosition = FormStartPosition.CenterScreen;
             form.ClientSize = new Size(width, height);
-            form.MinimumSize = form.Size;   // بعد از ClientSize محاسبه می‌شود (اندازه‌ی بیرونی)
-            form.MaximumSize = Size.Empty;  // بدون سقف — تمام‌صفحه آزاد است
+
+            // آموزش — خواسته‌ی کاربر: پنجره‌ها نه تمام‌صفحه باز شوند و نه با
+            // کشیدنِ لبه بزرگ/کوچک شوند؛ همیشه یک اندازه‌ی متوسطِ ثابت.
+            // FixedSingle لبه‌ی غیرقابل‌کشیدن می‌دهد و برابر کردن
+            // MinimumSize/MaximumSize تضمین می‌کند هیچ کدی هم اندازه را عوض
+            // نکند. اگر اندازه‌ی طراحی از خودِ صفحه بزرگ‌تر باشد به ناحیه‌ی
+            // کاری محدود می‌شود، وگرنه دکمه‌های پایینِ فرم بیرون از صفحه
+            // می‌مانند.
+            form.FormBorderStyle = FormBorderStyle.FixedSingle;
+            LockToFixedSize(form);
             TryApplyIcon(form);
         }
 
@@ -474,18 +581,34 @@ namespace CaseManagement.Helpers
         //      پایینش دór دسترس نخواهند بود.
         public static void MakeMainWindow(Form form, int width, int height)
         {
+            // آموزش — تا نسخه‌ی قبل این متد فرم را تمام‌صفحه باز می‌کرد و کاربر
+            // گزارش داد که دکمه‌ها در آن حالت پیدا نیستند. حالا همان اندازه‌ی
+            // ثابتِ متوسطِ MakeFixedSize استفاده می‌شود؛ متد و همه‌ی فراخوانی‌هایش
+            // سرِجای خود ماندند تا هیچ فرمی تغییر نکند.
             MakeFixedSize(form, width, height);
+        }
+
+        // اندازه‌ی پنجره را قفل می‌کند و در صورت لزوم به ناحیه‌ی کاریِ صفحه
+        // محدود می‌سازد. از دو متد بالا فراخوانی می‌شود.
+        private static void LockToFixedSize(Form form)
+        {
+            Size target = form.Size;
 
             try
             {
                 Rectangle workingArea = Screen.PrimaryScreen.WorkingArea;
-                int minW = Math.Min(form.MinimumSize.Width, workingArea.Width);
-                int minH = Math.Min(form.MinimumSize.Height, workingArea.Height);
-                form.MinimumSize = new Size(minW, minH);
+                target = new Size(
+                    Math.Min(target.Width, workingArea.Width),
+                    Math.Min(target.Height, workingArea.Height));
             }
-            catch { /* اگر اطلاعات صفحه در دسترس نبود، همان MinimumSize قبلی می‌ماند */ }
+            catch { /* اگر اطلاعات صفحه در دسترس نبود، همان اندازه‌ی طراحی می‌ماند */ }
 
-            form.WindowState = FormWindowState.Maximized;
+            // ترتیب مهم است: اول سقف را برمی‌داریم، اندازه را می‌گذاریم، بعد قفل.
+            form.MaximumSize = Size.Empty;
+            form.MinimumSize = Size.Empty;
+            form.Size = target;
+            form.MinimumSize = target;
+            form.MaximumSize = target;
         }
 
         // آیکون فرم = لوگوی نرم‌افزار (بند ۹ بازطراحی ظاهری)
@@ -566,7 +689,8 @@ namespace CaseManagement.Helpers
         {
             if (string.IsNullOrEmpty(icon))
                 return;
-
+            if (button == null)
+                return;
             if (!button.Text.StartsWith(icon))
                 button.Text = icon + "  " + button.Text;
         }
@@ -586,6 +710,63 @@ namespace CaseManagement.Helpers
         public static void ShowSuccess(IWin32Window owner, string message)
         {
             ShowMessage(owner, message, "موفق", Success, SuccessLight, "✓");
+        }
+
+        // ─── بخش ۶: جایگزین کاملاً فارسیِ MessageBox.Show ────────────────────
+        // آموزش — چرا این متد لازم شد: دکمه‌های OK/Cancel/Yes/No را خودِ ویندوز
+        // می‌سازد و از زبانِ ویندوز می‌آید، نه از تنظیمات برنامه. این متد همان
+        // امضای معنایی MessageBox را می‌پذیرد (متن، عنوان، دکمه‌ها، آیکون) و
+        // همان DialogResult را برمی‌گرداند، ولی با دیالوگ فارسیِ خودِ پروژه —
+        // پس هیچ کد فراخواننده‌ای نیاز به تغییر ندارد.
+        //
+        // نگاشت دکمه‌ها به دو حالتِ موجودِ FrmMessage:
+        //   YesNo / OKCancel / YesNoCancel  → حالت تأیید (بله / انصراف)
+        //   بقیه (OK, RetryCancel, ...)     → حالت اطلاع‌رسانی (متوجه شدم)
+        public static DialogResult ShowLocalizedDialog(
+            IWin32Window owner, string message, string title,
+            MessageBoxButtons buttons, MessageBoxIcon icon)
+        {
+            Color accent; Color accentLight; string glyph; string defaultTitle;
+
+            switch (icon)
+            {
+                case MessageBoxIcon.Error:
+                    accent = Danger;  accentLight = DangerLight;  glyph = "✕"; defaultTitle = "خطا";   break;
+                case MessageBoxIcon.Warning:
+                    accent = Warning; accentLight = WarningLight; glyph = "!"; defaultTitle = "هشدار"; break;
+                case MessageBoxIcon.Question:
+                    accent = Primary; accentLight = HoverTint;    glyph = "؟"; defaultTitle = "تأیید"; break;
+                default:
+                    accent = Primary; accentLight = HoverTint;    glyph = "i"; defaultTitle = "پیام";  break;
+            }
+
+            bool isConfirm =
+                buttons == MessageBoxButtons.YesNo ||
+                buttons == MessageBoxButtons.OKCancel ||
+                buttons == MessageBoxButtons.YesNoCancel;
+
+            if (isConfirm && icon == MessageBoxIcon.None)
+            {
+                accent = Primary; accentLight = HoverTint; glyph = "؟"; defaultTitle = "تأیید";
+            }
+
+            string shownTitle = string.IsNullOrWhiteSpace(title) ? defaultTitle : title;
+
+            using (FrmMessage frm = new FrmMessage(message, shownTitle, accent, accentLight, glyph, isConfirm))
+            {
+                DialogResult result = frm.ShowDialog(owner);
+
+                if (!isConfirm)
+                    return DialogResult.OK;
+
+                // فراخوانندگانی که OKCancel داده‌اند، OK/Cancel انتظار دارند؛
+                // آن‌هایی که YesNo داده‌اند، Yes/No. یک نگاشت ساده هر دو را
+                // دقیقاً مثل MessageBox راضی می‌کند.
+                if (buttons == MessageBoxButtons.OKCancel)
+                    return result == DialogResult.Yes ? DialogResult.OK : DialogResult.Cancel;
+
+                return result == DialogResult.Yes ? DialogResult.Yes : DialogResult.No;
+            }
         }
 
         public static void ShowError(IWin32Window owner, string message)
@@ -627,6 +808,13 @@ namespace CaseManagement.Helpers
                 // کاربر دیده شد). حالا آینه‌ی هندسی خاموش است و هر ناحیه با
                 // Dock جای خودش را می‌گیرد: آیکون چپ، متن‌ها راست — پایدار و
                 // مستقل از عرضِ پنجره.
+                // بخش ۶ — عنوان و برچسب دکمه‌ها از فرهنگ لغت برنامه می‌گذرند:
+                // در فارسی (پیش‌فرض) عیناً همین متن‌ها می‌مانند و رفتار تغییری
+                // نمی‌کند؛ فقط اگر کاربر از «تنظیمات» زبان را عوض کند، همراه
+                // بقیه‌ی برنامه ترجمه می‌شوند.
+                title = Lang.T(title);
+                message = Lang.T(message);
+
                 Text = title;
                 FormBorderStyle = FormBorderStyle.FixedDialog;
                 StartPosition = FormStartPosition.CenterParent;
@@ -634,7 +822,7 @@ namespace CaseManagement.Helpers
                 MaximizeBox = false;
                 ShowIcon = false;
                 ShowInTaskbar = false;
-                RightToLeft = RightToLeft.Yes;
+                RightToLeft = Lang.IsRightToLeft ? RightToLeft.Yes : RightToLeft.No;
                 RightToLeftLayout = false;
                 BackColor = Color.White;
                 Font = UiTheme.Font(10.5f);
@@ -728,13 +916,13 @@ namespace CaseManagement.Helpers
 
                 if (isConfirm)
                 {
-                    Button btnYes = UiTheme.CreateButton("بله", "", accent);
+                    Button btnYes = UiTheme.CreateButton(Lang.T("بله"), "", accent);
                     btnYes.Size = new Size(104, 34);
                     btnYes.Margin = new Padding(0, 0, 8, 0);
                     btnYes.DialogResult = DialogResult.Yes;
                     buttons.Controls.Add(btnYes);
 
-                    Button btnNo = UiTheme.CreateSecondaryButton("انصراف", "");
+                    Button btnNo = UiTheme.CreateSecondaryButton(Lang.T("انصراف"), "");
                     btnNo.Size = new Size(104, 34);
                     btnNo.Margin = new Padding(0, 0, 8, 0);
                     btnNo.DialogResult = DialogResult.No;
@@ -745,7 +933,7 @@ namespace CaseManagement.Helpers
                 }
                 else
                 {
-                    Button btnOk = UiTheme.CreateButton("متوجه شدم", "", accent);
+                    Button btnOk = UiTheme.CreateButton(Lang.T("متوجه شدم"), "", accent);
                     btnOk.Size = new Size(124, 34);
                     btnOk.Margin = new Padding(0, 0, 8, 0);
                     btnOk.DialogResult = DialogResult.OK;

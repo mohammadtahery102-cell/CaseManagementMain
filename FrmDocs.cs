@@ -24,11 +24,19 @@ namespace CaseManagement
         private const int OriginalFileNameLength = 255;
         private const int DocFilePathLength = 500;
         private const int RelatedCaseRefLength = 100;
+        private const int DocCategoryLength = 100;
+        private const int DocTagsLength = 300;
 
         private readonly DatabaseHelper db = new DatabaseHelper();
+        private DataTable allDocsTable;
 
         public int CurrentCaseId { get; set; } = 0;
         public string CurrentCaseCode { get; set; } = "";
+
+        // آموزش — فاز A4: همان الگوی FrmFamily.IsEmbedded — وقتی این فرم
+        // به‌جای پنجرهٔ مستقل داخل تب «اسناد پرونده»ی FrmCase میزبانی می‌شود،
+        // FrmCase این پرچم را قبل از Show() روی true می‌گذارد.
+        public bool IsEmbedded { get; set; } = false;
 
         private int currentDocId = 0;
         private string storedDocFilePath = "";
@@ -39,6 +47,14 @@ namespace CaseManagement
         {
             InitializeComponent();
             ApplyCustomTheme();
+
+            Helpers.FormShortcuts.For(this)
+                .Save(btnSave)
+                .New(btnNew)
+                .Edit(btnEdit)
+                .Delete(btnDelete)
+                .Print(btnPrint)
+                .Bind(Keys.Control | Keys.O, "بازکردن سند", btnOpenDoc);
         }
 
         // ─── اعمال ظاهر یکسان روی فرمی که با طراح (Designer) ساخته شده ──────
@@ -64,6 +80,42 @@ namespace CaseManagement
 
         private void FrmDocs_Load(object sender, EventArgs e)
         {
+            // آموزش — فاز A4: وقتی embedded است (TopLevel=false داخل تب
+            // FrmCase)، قفل‌کردن اندازهٔ پنجره با Dock=Fill داخل تب تداخل
+            // می‌کند. در حالت مستقل/مودال رفتار قبلی کاملاً دست‌نخورده می‌ماند
+            // (همان بلوکی که قبلاً در FrmDocs.Designer.cs بود، بدون تغییر مقدار).
+            if (!IsEmbedded)
+            {
+                this.FormBorderStyle = FormBorderStyle.FixedSingle;
+                this.MaximizeBox = false;
+                this.MinimizeBox = true;
+                this.WindowState = FormWindowState.Normal;
+                this.MinimumSize = this.Size;
+                this.MaximumSize = this.Size;
+                this.StartPosition = FormStartPosition.CenterScreen;
+            }
+            else
+            {
+                // آموزش — همان دلیلِ FrmFamily: داخلِ فضای کاریِ پرونده،
+                // «جدید/ذخیره/ویرایش/حذف»ِ سند با همان دکمه‌های *پرونده*
+                // اشتباه گرفته می‌شد. عرض هم کمی زیاد می‌شود چون متن بلندتر
+                // شده و در ۱۱۰ پیکسل بریده می‌شد.
+                btnNew.Text    = "سند جدید";
+                btnSave.Text   = "ذخیره سند";
+                btnEdit.Text   = "ویرایش سند";
+                btnDelete.Text = "حذف سند";
+
+                foreach (Button docBtn in new[] { btnNew, btnSave, btnEdit, btnDelete })
+                    docBtn.Size = new Size(132, 38);
+
+                // آیکون‌ها بعد از تغییرِ متن دوباره اعمال می‌شوند (SetButtonIcon
+                // خودش تکراری اضافه نمی‌کند).
+                UiTheme.SetButtonIcon(btnNew, "+");
+                UiTheme.SetButtonIcon(btnSave, "✔");
+                UiTheme.SetButtonIcon(btnEdit, "✎");
+                UiTheme.SetButtonIcon(btnDelete, "✕");
+            }
+
             Text = "اسناد" +
                    (string.IsNullOrEmpty(CurrentCaseCode) ? "" : "  —  پرونده: " + CurrentCaseCode) +
                    "  [" + SecurityContext.CenterDisplay + "]";
@@ -71,6 +123,22 @@ namespace CaseManagement
             txtDocFilePath.ReadOnly = true;
 
             ConfigureGrid();
+            LoadDocs();
+            ClearForm();
+        }
+
+        // آموزش — فاز A4: مشابه FrmFamily.RefreshForCase — وقتی FrmDocs
+        // embedded داخل تب FrmCase است و کاربر پروندهٔ دیگری را انتخاب می‌کند،
+        // FrmCase به‌جای ساختِ نمونهٔ تازه، همین متد را روی نمونهٔ موجود صدا می‌زند.
+        public void RefreshForCase(int caseId, string caseCode)
+        {
+            CurrentCaseId = caseId;
+            CurrentCaseCode = caseCode;
+
+            Text = "اسناد" +
+                   (string.IsNullOrEmpty(CurrentCaseCode) ? "" : "  —  پرونده: " + CurrentCaseCode) +
+                   "  [" + SecurityContext.CenterDisplay + "]";
+
             LoadDocs();
             ClearForm();
         }
@@ -103,6 +171,9 @@ namespace CaseManagement
             txtDocFilePath.Text = "";
             txtRelatedCaseRef.Text = "";
             txtDocDescription.Text = "";
+            txtDocCategory.Text = "";
+            txtDocTags.Text = "";
+            txtDocNo.Text = CurrentCaseId > 0 ? GetNextDocNo() : "";
 
             UpdatePreview("");
 
@@ -173,6 +244,20 @@ namespace CaseManagement
                 return false;
             }
 
+            if (txtDocCategory.Text.Trim().Length > DocCategoryLength)
+            {
+                Msg.Show("دسته‌بندی سند نباید بیشتر از 100 کاراکتر باشد");
+                txtDocCategory.Focus();
+                return false;
+            }
+
+            if (txtDocTags.Text.Trim().Length > DocTagsLength)
+            {
+                Msg.Show("برچسب‌ها نباید بیشتر از 300 کاراکتر باشد");
+                txtDocTags.Focus();
+                return false;
+            }
+
             if (isNewRecord && string.IsNullOrWhiteSpace(pendingSourceFilePath))
             {
                 Msg.Show("فایل سند را انتخاب کنید");
@@ -202,11 +287,11 @@ namespace CaseManagement
             {
                 using (var con = db.GetConnection())
                 using (var cmd = new SQLiteCommand(@"
-                    SELECT d.DocID, d.DocType, d.OriginalFileName, d.RelatedCaseRef,
+                    SELECT d.DocID, d.DocNo, d.DocType, d.DocCategory, d.DocTags, d.OriginalFileName, d.RelatedCaseRef,
                            c.Code, c.HeadFullName
                     FROM TblDocs d
                     JOIN TblCase c ON c.CasID = d.CasID
-                    WHERE d.CasID = @CasID
+                    WHERE d.CasID = @CasID AND d.IsArchived = 0
                     ORDER BY d.DocID DESC", con))
                 {
                     AddInt(cmd, "@CasID", CurrentCaseId);
@@ -214,13 +299,14 @@ namespace CaseManagement
                     con.Open();
                     using (var reader = cmd.ExecuteReader())
                     {
-                        DataTable dt = new DataTable();
-                        dt.Load(reader);
-                        dgvDocs.DataSource = dt;
+                        allDocsTable = new DataTable();
+                        allDocsTable.Load(reader);
+                        dgvDocs.DataSource = allDocsTable;
                     }
                 }
 
                 ApplyGridHeaders();
+                ApplySearchFilter();
             }
             catch (Exception ex)
             {
@@ -237,8 +323,17 @@ namespace CaseManagement
             if (dgvDocs.Columns.Count == 0)
                 return;
 
+            if (dgvDocs.Columns.Contains("DocNo"))
+                dgvDocs.Columns["DocNo"].HeaderText = "شماره سند";
+
             if (dgvDocs.Columns.Contains("DocType"))
                 dgvDocs.Columns["DocType"].HeaderText = "نوع سند";
+
+            if (dgvDocs.Columns.Contains("DocCategory"))
+                dgvDocs.Columns["DocCategory"].HeaderText = "دسته‌بندی";
+
+            if (dgvDocs.Columns.Contains("DocTags"))
+                dgvDocs.Columns["DocTags"].HeaderText = "برچسب‌ها";
 
             if (dgvDocs.Columns.Contains("Code"))
                 dgvDocs.Columns["Code"].HeaderText = "کد اختصاصی پرونده";
@@ -255,14 +350,49 @@ namespace CaseManagement
             if (dgvDocs.Columns.Contains("RelatedCaseRef"))
                 dgvDocs.Columns["RelatedCaseRef"].Visible = false;
 
+            if (dgvDocs.Columns.Contains("DocNo"))
+                dgvDocs.Columns["DocNo"].DisplayIndex = 0;
             if (dgvDocs.Columns.Contains("DocType"))
-                dgvDocs.Columns["DocType"].DisplayIndex = 0;
+                dgvDocs.Columns["DocType"].DisplayIndex = 1;
+            if (dgvDocs.Columns.Contains("DocCategory"))
+                dgvDocs.Columns["DocCategory"].DisplayIndex = 2;
             if (dgvDocs.Columns.Contains("Code"))
-                dgvDocs.Columns["Code"].DisplayIndex = 1;
+                dgvDocs.Columns["Code"].DisplayIndex = 3;
             if (dgvDocs.Columns.Contains("HeadFullName"))
-                dgvDocs.Columns["HeadFullName"].DisplayIndex = 2;
+                dgvDocs.Columns["HeadFullName"].DisplayIndex = 4;
+            if (dgvDocs.Columns.Contains("DocTags"))
+                dgvDocs.Columns["DocTags"].DisplayIndex = 5;
 
             dgvDocs.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+        }
+
+        private void txtSearch_TextChanged(object sender, EventArgs e)
+        {
+            ApplySearchFilter();
+        }
+
+        // فیلتر سریع سمت کلاینت روی نوع/دسته‌بندی/برچسب/نام فایل/مرجع مرتبط —
+        // بدون کوئری اضافه به دیتابیس در هر کلیدزنی.
+        private void ApplySearchFilter()
+        {
+            if (allDocsTable == null)
+                return;
+
+            string term = EscapeDataViewLike(txtSearch.Text.Trim());
+
+            if (string.IsNullOrEmpty(term))
+            {
+                allDocsTable.DefaultView.RowFilter = "";
+                return;
+            }
+
+            allDocsTable.DefaultView.RowFilter =
+                "DocType LIKE '%" + term + "%'" +
+                " OR DocCategory LIKE '%" + term + "%'" +
+                " OR DocTags LIKE '%" + term + "%'" +
+                " OR OriginalFileName LIKE '%" + term + "%'" +
+                " OR RelatedCaseRef LIKE '%" + term + "%'" +
+                " OR DocNo LIKE '%" + term + "%'";
         }
 
         private void btnBrowseDocFile_Click(object sender, EventArgs e)
@@ -308,6 +438,19 @@ namespace CaseManagement
                 return;
             }
 
+            // آموزش — رفع باگ حادّ (از بین رفتن فایل سند): وقتی سندی از گرید
+            // انتخاب شده بود (currentDocId > 0) و کاربر به‌جای «ویرایش» دکمه
+            // «ذخیره» را می‌زد، فایلِ همان سندِ انتخاب‌شده به‌عنوان «فایل قبلی»
+            // به FileHelper پاس می‌شد؛ نتیجه این بود که فایل سندِ قدیمی یا
+            // بازنویسی می‌شد یا حذف می‌شد، در حالی‌که ردیف قدیمی در دیتابیس
+            // هنوز به همان مسیر اشاره داشت (سند قبلی عملاً از بین می‌رفت).
+            // مثل FrmFamily، ثبتِ جدید فقط روی فرمِ خالی مجاز است.
+            if (currentDocId > 0)
+            {
+                Msg.Show("برای ثبت سند جدید ابتدا دکمه جدید را بزنید؛ برای رکورد انتخاب‌شده از دکمه ویرایش استفاده کنید");
+                return;
+            }
+
             if (!ValidateForm(true))
                 return;
 
@@ -316,7 +459,17 @@ namespace CaseManagement
 
             try
             {
-                savedPath = SavePendingFileToCaseFolder();
+                if (string.IsNullOrWhiteSpace(txtDocNo.Text) || IsDocNoExists(txtDocNo.Text.Trim()))
+                {
+                    txtDocNo.Text = GetNextDocNo();
+                    if (IsDocNoExists(txtDocNo.Text.Trim()))
+                    {
+                        Msg.Show("شماره سند تکراری است. دوباره دکمه ذخیره را بزنید");
+                        return;
+                    }
+                }
+
+                savedPath = SavePendingFileToCaseFolder("");
                 if (string.IsNullOrWhiteSpace(savedPath))
                 {
                     Msg.Show("فایل سند ذخیره نشد: " + FileHelper.LastError);
@@ -329,11 +482,13 @@ namespace CaseManagement
                 using (var cmd = new SQLiteCommand(@"
                     INSERT INTO TblDocs
                     (
-                        CasID, DocType, OriginalFileName, DocFilePath, RelatedCaseRef, DocDescription, GlobalID
+                        CasID, DocType, OriginalFileName, DocFilePath, RelatedCaseRef, DocDescription,
+                        DocCategory, DocTags, DocNo, GlobalID
                     )
                     VALUES
                     (
                         @CasID, @DocType, @OriginalFileName, @DocFilePath, @RelatedCaseRef, @DocDescription,
+                        @DocCategory, @DocTags, @DocNo,
                         lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-' ||
                         lower(hex(randomblob(2))) || '-' || lower(hex(randomblob(2))) || '-' || lower(hex(randomblob(6)))
                     )", con))
@@ -344,13 +499,22 @@ namespace CaseManagement
                     AddNVarChar(cmd, "@DocFilePath", savedPath, DocFilePathLength);
                     AddNVarChar(cmd, "@RelatedCaseRef", txtRelatedCaseRef.Text.Trim(), RelatedCaseRefLength);
                     AddNVarCharMax(cmd, "@DocDescription", txtDocDescription.Text.Trim());
+                    AddNVarChar(cmd, "@DocCategory", txtDocCategory.Text.Trim(), DocCategoryLength);
+                    AddNVarChar(cmd, "@DocTags", txtDocTags.Text.Trim(), DocTagsLength);
+                    AddNVarChar(cmd, "@DocNo", txtDocNo.Text.Trim(), 50);
                     con.Open();
                     cmd.ExecuteNonQuery();
-                    var idObj = new SQLiteCommand("SELECT last_insert_rowid()", con).ExecuteScalar();
-                    currentDocId = Convert.ToInt32((long)idObj);
+                    // آموزش — رفع نشت resource: این SQLiteCommand قبلاً بدون
+                    // Dispose ساخته می‌شد (همان اشکالی که در FrmCase رفع شده).
+                    using (var idCmd = new SQLiteCommand("SELECT last_insert_rowid()", con))
+                        currentDocId = Convert.ToInt32((long)idCmd.ExecuteScalar());
                 }
 
                 AuditLogger.Log("ثبت", "TblDocs", currentDocId, "", BuildDocAuditText(savedPath, pendingOriginalFileName));
+
+                // صفِ همگام‌سازی — همان الگوی فرم پرونده.
+                CaseManagement.Sync.SyncOutboxService.Capture("TblDocs", currentDocId,
+                    CaseManagement.Sync.OfflineSyncInitializer.OperationCreate);
 
                 Msg.Show("سند ذخیره شد");
                 LoadDocs();
@@ -409,7 +573,7 @@ namespace CaseManagement
                     }
                     else
                     {
-                        newlyCopiedPath = SavePendingFileToCaseFolder();
+                        newlyCopiedPath = SavePendingFileToCaseFolder(oldPath);
                         if (string.IsNullOrWhiteSpace(newlyCopiedPath))
                         {
                             Msg.Show("فایل جدید سند ذخیره نشد: " + FileHelper.LastError);
@@ -429,7 +593,9 @@ namespace CaseManagement
                         OriginalFileName = @OriginalFileName,
                         DocFilePath = @DocFilePath,
                         RelatedCaseRef = @RelatedCaseRef,
-                        DocDescription = @DocDescription
+                        DocDescription = @DocDescription,
+                        DocCategory = @DocCategory,
+                        DocTags = @DocTags
                     WHERE DocID = @DocID AND CasID = @CasID", con))
                 {
                     AddNVarChar(cmd, "@DocType", txtDocType.Text.Trim(), DocTypeLength);
@@ -437,6 +603,8 @@ namespace CaseManagement
                     AddNVarChar(cmd, "@DocFilePath", finalPath, DocFilePathLength);
                     AddNVarChar(cmd, "@RelatedCaseRef", txtRelatedCaseRef.Text.Trim(), RelatedCaseRefLength);
                     AddNVarCharMax(cmd, "@DocDescription", txtDocDescription.Text.Trim());
+                    AddNVarChar(cmd, "@DocCategory", txtDocCategory.Text.Trim(), DocCategoryLength);
+                    AddNVarChar(cmd, "@DocTags", txtDocTags.Text.Trim(), DocTagsLength);
                     AddInt(cmd, "@DocID", currentDocId);
                     AddInt(cmd, "@CasID", CurrentCaseId);
 
@@ -452,24 +620,34 @@ namespace CaseManagement
 
                 AuditLogger.Log("ویرایش", "TblDocs", currentDocId, oldAuditText, BuildDocAuditText(finalPath, finalOriginalFileName));
 
+                CaseManagement.Sync.SyncOutboxService.Capture("TblDocs", currentDocId,
+                    CaseManagement.Sync.OfflineSyncInitializer.OperationUpdate);
+
                 Msg.Show("سند ویرایش شد");
                 LoadDocs();
                 ClearForm();
             }
             catch (Exception ex)
             {
-                if (!string.IsNullOrWhiteSpace(newlyCopiedPath))
+                // آموزش — پاکسازی پس از خطا فقط وقتی مجاز است که فایل واقعاً
+                // «تازه ساخته‌شده» باشد. اگر FileHelper فایل را روی همان مسیرِ
+                // خودِ رکورد جایگزین کرده باشد، حذفِ آن یعنی پاک کردنِ فایلِ
+                // سندی که هنوز در دیتابیس زنده است.
+                if (!string.IsNullOrWhiteSpace(newlyCopiedPath) && !AreSamePath(newlyCopiedPath, oldPath))
                     DeleteStoredFileSafely(newlyCopiedPath);
 
                 Msg.Show("خطا در ویرایش سند: " + ex.Message);
             }
         }
 
+        // آموزش — مثلِ FrmCase.btnDelete_Click: «حذف» دیگر رکورد یا فایل را
+        // واقعاً پاک نمی‌کند، فقط بایگانی می‌کند (IsArchived=1) تا از صفحه‌ی
+        // «بایگانی» قابلِ بازگردانی باشد. فایلِ فیزیکی سند دست‌نخورده می‌ماند.
         private void btnDelete_Click(object sender, EventArgs e)
         {
             if (!SecurityContext.CanDelete())
             {
-                Msg.Show("حذف سند فقط برای مدیر سیستم مجاز است.");
+                Msg.Show("بایگانی سند فقط برای مدیر سیستم مجاز است.");
                 return;
             }
 
@@ -480,78 +658,57 @@ namespace CaseManagement
             }
 
             DialogResult dr = Msg.Show(
-                "آیا این سند حذف شود؟",
-                "حذف",
+                "این سند بایگانی شود؟ اسناد بایگانی‌شده از این فهرست پنهان می‌شوند.",
+                "بایگانی",
                 MessageBoxButtons.YesNo,
                 MessageBoxIcon.Question);
 
             if (dr == DialogResult.No)
                 return;
 
-            string filePathToDelete = "";
             string oldAuditText = GetDocAuditText(currentDocId);
-            int deletedDocId = currentDocId;
+            int archivedDocId = currentDocId;
 
             try
             {
                 using (SQLiteConnection con = db.GetConnection())
+                using (SQLiteCommand cmd = new SQLiteCommand(@"
+                    UPDATE TblDocs SET
+                        IsArchived = 1,
+                        ArchivedAt = datetime('now'),
+                        ArchivedBy = @ArchivedBy
+                    WHERE DocID = @DocID AND CasID = @CasID", con))
                 {
+                    AddNVarChar(cmd, "@ArchivedBy", SecurityContext.Username, 100);
+                    AddInt(cmd, "@DocID", currentDocId);
+                    AddInt(cmd, "@CasID", CurrentCaseId);
+
                     con.Open();
 
-                    using (SQLiteTransaction tr = con.BeginTransaction())
+                    int affectedRows = cmd.ExecuteNonQuery();
+                    if (affectedRows == 0)
                     {
-                        using (SQLiteCommand selectCmd = new SQLiteCommand(@"
-                            SELECT DocFilePath
-                            FROM TblDocs
-                            WHERE DocID = @DocID AND CasID = @CasID", con, tr))
-                        {
-                            AddInt(selectCmd, "@DocID", currentDocId);
-                            AddInt(selectCmd, "@CasID", CurrentCaseId);
-
-                            object value = selectCmd.ExecuteScalar();
-                            if (value == null || value == DBNull.Value)
-                            {
-                                tr.Rollback();
-                                Msg.Show("سند انتخاب‌شده پیدا نشد");
-                                LoadDocs();
-                                ClearForm();
-                                return;
-                            }
-
-                            filePathToDelete = value.ToString();
-                        }
-
-                        using (SQLiteCommand deleteCmd = new SQLiteCommand(@"
-                            DELETE FROM TblDocs
-                            WHERE DocID = @DocID AND CasID = @CasID", con, tr))
-                        {
-                            AddInt(deleteCmd, "@DocID", currentDocId);
-                            AddInt(deleteCmd, "@CasID", CurrentCaseId);
-
-                            int affectedRows = deleteCmd.ExecuteNonQuery();
-                            if (affectedRows == 0)
-                            {
-                                tr.Rollback();
-                                Msg.Show("سند حذف نشد");
-                                return;
-                            }
-                        }
-
-                        tr.Commit();
+                        Msg.Show("سند انتخاب‌شده پیدا نشد");
+                        LoadDocs();
+                        ClearForm();
+                        return;
                     }
                 }
 
-                DeleteStoredFileSafely(filePathToDelete);
+                AuditLogger.Log("بایگانی", "TblDocs", archivedDocId, oldAuditText, "IsArchived=1");
 
-                AuditLogger.Log("حذف", "TblDocs", deletedDocId, oldAuditText, "");
+                // بایگانی یک تغییرِ وضعیت است، نه حذف — پس به‌عنوان ویرایش
+                // همگام می‌شود و رکورد در سمت مقابل باقی می‌ماند.
+                CaseManagement.Sync.SyncOutboxService.Capture("TblDocs", archivedDocId,
+                    CaseManagement.Sync.OfflineSyncInitializer.OperationStatus);
 
-                Msg.Show("سند حذف شد");
+                Msg.Show("سند بایگانی شد");
                 LoadDocs();
                 ClearForm();
             }
             catch (Exception ex)
             {
-                Msg.Show("خطا در حذف سند: " + ex.Message);
+                Msg.Show("خطا در بایگانی سند: " + ex.Message);
             }
         }
 
@@ -594,7 +751,8 @@ namespace CaseManagement
             {
                 using (SQLiteConnection con = db.GetConnection())
                 using (SQLiteCommand cmd = new SQLiteCommand(@"
-                    SELECT DocID, DocType, OriginalFileName, DocFilePath, RelatedCaseRef, DocDescription
+                    SELECT DocID, DocType, OriginalFileName, DocFilePath, RelatedCaseRef, DocDescription,
+                           DocCategory, DocTags, DocNo
                     FROM TblDocs
                     WHERE DocID = @DocID AND CasID = @CasID", con))
                 {
@@ -619,6 +777,9 @@ namespace CaseManagement
                         txtDocFilePath.Text = storedDocFilePath;
                         txtRelatedCaseRef.Text = DbString(dr["RelatedCaseRef"]);
                         txtDocDescription.Text = DbString(dr["DocDescription"]);
+                        txtDocCategory.Text = DbString(dr["DocCategory"]);
+                        txtDocTags.Text = DbString(dr["DocTags"]);
+                        txtDocNo.Text = DbString(dr["DocNo"]);
                         UpdatePreview(storedDocFilePath);
                     }
                 }
@@ -665,7 +826,11 @@ namespace CaseManagement
             }
         }
 
-        private string SavePendingFileToCaseFolder()
+        // آموزش — «مسیر فایل قبلی» صریحاً پاس داده می‌شود (قبلاً همیشه از
+        // storedDocFilePath خوانده می‌شد). مسیرِ ثبتِ جدید باید رشته خالی بدهد
+        // تا FileHelper هرگز فایل سندِ دیگری را جایگزین/حذف نکند؛ مسیر ویرایش
+        // همان فایلِ خودِ رکورد را می‌دهد که رفتار درست و قبلی است.
+        private string SavePendingFileToCaseFolder(string existingStoredPath)
         {
             if (string.IsNullOrWhiteSpace(pendingSourceFilePath))
                 return "";
@@ -691,7 +856,7 @@ namespace CaseManagement
                 CurrentCaseCode,
                 FileHelper.SectionDocs,
                 baseFileName,
-                storedDocFilePath);
+                existingStoredPath ?? "");
 
             if (string.IsNullOrWhiteSpace(savedPath))
                 return "";
@@ -710,7 +875,7 @@ namespace CaseManagement
         {
             using (SQLiteConnection con = db.GetConnection())
             using (SQLiteCommand cmd = new SQLiteCommand(@"
-                SELECT DocFilePath
+                SELECT COALESCE(DocFilePath, '')
                 FROM TblDocs
                 WHERE DocID = @DocID AND CasID = @CasID", con))
             {
@@ -719,11 +884,47 @@ namespace CaseManagement
 
                 con.Open();
 
+                // null یعنی ردیفی وجود ندارد؛ DocFilePath خالی/NULL یک حالت
+                // معتبر است و نباید «سند پیدا نشد» تلقی شود (وگرنه ویرایشِ
+                // چنین سندی هرگز انجام نمی‌شد).
                 object result = cmd.ExecuteScalar();
-                if (result == null || result == DBNull.Value)
+                if (result == null)
                     return null;
 
+                if (result == DBNull.Value)
+                    return "";
+
                 return result.ToString();
+            }
+        }
+
+        // شماره‌گذاری خودکار سند — دقیقاً همان الگوی GetNextFormNo در FrmCase.cs
+        // (MAX عددی + 1) تا با روش موجود در پروژه یکسان بماند.
+        private string GetNextDocNo()
+        {
+            using (SQLiteConnection con = db.GetConnection())
+            using (SQLiteCommand cmd = new SQLiteCommand(@"
+                SELECT COALESCE(MAX(CAST(CASE WHEN DocNo GLOB '*[0-9]*' AND DocNo NOT GLOB '*[^0-9]*' THEN DocNo ELSE '0' END AS INTEGER)), 0) + 1
+                FROM TblDocs", con))
+            {
+                con.Open();
+
+                object result = cmd.ExecuteScalar();
+                int next = (result == null || result == DBNull.Value) ? 1 : Convert.ToInt32(result);
+
+                return next.ToString();
+            }
+        }
+
+        private bool IsDocNoExists(string docNo)
+        {
+            using (SQLiteConnection con = db.GetConnection())
+            using (SQLiteCommand cmd = new SQLiteCommand(
+                "SELECT COUNT(1) FROM TblDocs WHERE DocNo = @DocNo", con))
+            {
+                AddNVarChar(cmd, "@DocNo", docNo, 50);
+                con.Open();
+                return Convert.ToInt32(cmd.ExecuteScalar()) > 0;
             }
         }
 
@@ -731,7 +932,7 @@ namespace CaseManagement
         {
             using (SQLiteConnection con = db.GetConnection())
             using (SQLiteCommand cmd = new SQLiteCommand(@"
-SELECT DocType, OriginalFileName, DocFilePath, RelatedCaseRef
+SELECT DocType, OriginalFileName, DocFilePath, RelatedCaseRef, DocCategory, DocTags, DocNo
 FROM TblDocs
 WHERE DocID = @DocID AND CasID = @CasID", con))
             {
@@ -747,7 +948,10 @@ WHERE DocID = @DocID AND CasID = @CasID", con))
                         "DocType=" + DbString(dr["DocType"]) +
                         "; OriginalFileName=" + DbString(dr["OriginalFileName"]) +
                         "; DocFilePath=" + DbString(dr["DocFilePath"]) +
-                        "; RelatedCaseRef=" + DbString(dr["RelatedCaseRef"]);
+                        "; RelatedCaseRef=" + DbString(dr["RelatedCaseRef"]) +
+                        "; DocCategory=" + DbString(dr["DocCategory"]) +
+                        "; DocTags=" + DbString(dr["DocTags"]) +
+                        "; DocNo=" + DbString(dr["DocNo"]);
                 }
             }
         }
@@ -758,7 +962,10 @@ WHERE DocID = @DocID AND CasID = @CasID", con))
                 "DocType=" + txtDocType.Text.Trim() +
                 "; OriginalFileName=" + (originalFileName ?? "") +
                 "; DocFilePath=" + (filePath ?? "") +
-                "; RelatedCaseRef=" + txtRelatedCaseRef.Text.Trim();
+                "; RelatedCaseRef=" + txtRelatedCaseRef.Text.Trim() +
+                "; DocCategory=" + txtDocCategory.Text.Trim() +
+                "; DocTags=" + txtDocTags.Text.Trim() +
+                "; DocNo=" + txtDocNo.Text.Trim();
         }
 
         private bool IsAllowedToOpenPath(string path)

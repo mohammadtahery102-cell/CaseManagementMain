@@ -12,6 +12,11 @@ namespace CaseManagement.GuardianCardIntegration
     // ─────────────────────────────────────────────────────────────────────────
     public class GuardianCardData
     {
+        // شناسه‌ی داخلیِ پرونده — روی کارت چاپ نمی‌شود (هیچ data-field ای با
+        // این نام در index.html وجود ندارد)، فقط برای تضمینِ یکتاییِ بارکد
+        // در GuardianCardRenderer.BarcodeValue استفاده می‌شود (نگاه کنید همان‌جا).
+        public int CasID { get; set; }
+
         public string OrganizationName { get; set; }
         public string BranchName { get; set; }
         public string BranchCode { get; set; }
@@ -61,6 +66,14 @@ namespace CaseManagement.GuardianCardIntegration
         public string Stamp { get; set; }
 
         public List<PaymentLedgerRow> PaymentLedger { get; set; } = new List<PaymentLedgerRow>();
+
+        // آموزش — برای حالتِ «فقط برای این چاپ» (FrmCardNoticesEdit): یک کپیِ
+        // سطحی لازم است تا ویرایشِ موقتِ کاربر روی آبجکتِ در حالِ نمایشِ فعلی
+        // اثر نگذارد مگر خودش صریحاً درخواست کند (و هرگز به دیتابیس نرود).
+        public GuardianCardData Clone()
+        {
+            return (GuardianCardData)MemberwiseClone();
+        }
     }
 
     public class PaymentLedgerRow

@@ -116,6 +116,67 @@ CREATE TABLE IF NOT EXISTS TblDocs (
 );");
                 ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblDocs_CasID ON TblDocs(CasID);");
 
+                // ─── TblCaseRelation (پرونده‌های مرتبط) ──────────────────────
+                ExecuteNonQuery(con, @"
+CREATE TABLE IF NOT EXISTS TblCaseRelation (
+    RelationID   INTEGER PRIMARY KEY AUTOINCREMENT,
+    CasID        INTEGER NOT NULL,
+    RelatedCasID INTEGER NOT NULL,
+    RelationType TEXT NULL,
+    CreatedAt    TEXT NOT NULL DEFAULT (datetime('now')),
+    CreatedBy    TEXT NULL,
+    CONSTRAINT FK_CaseRelation_Case FOREIGN KEY (CasID)
+        REFERENCES TblCase (CasID) ON DELETE CASCADE,
+    CONSTRAINT FK_CaseRelation_RelatedCase FOREIGN KEY (RelatedCasID)
+        REFERENCES TblCase (CasID) ON DELETE CASCADE
+);");
+                ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblCaseRelation_CasID ON TblCaseRelation(CasID);");
+                ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblCaseRelation_RelatedCasID ON TblCaseRelation(RelatedCasID);");
+
+                // ─── TblArchiveHistory (تاریخچه بایگانی/بازگردانی پرونده‌ها) ──
+                ExecuteNonQuery(con, @"
+CREATE TABLE IF NOT EXISTS TblArchiveHistory (
+    ArchiveHistoryID INTEGER PRIMARY KEY AUTOINCREMENT,
+    CasID            INTEGER NOT NULL,
+    Action           TEXT NOT NULL,
+    ActionAt         TEXT NOT NULL DEFAULT (datetime('now')),
+    ActionBy         TEXT NULL,
+    CONSTRAINT FK_ArchiveHistory_Case FOREIGN KEY (CasID)
+        REFERENCES TblCase (CasID) ON DELETE CASCADE
+);");
+                ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblArchiveHistory_CasID ON TblArchiveHistory(CasID);");
+
+                // ─── TblReportTemplate (فاز ۳ — الگوهای ذخیره‌شده گزارش‌ساز) ──
+                ExecuteNonQuery(con, @"
+CREATE TABLE IF NOT EXISTS TblReportTemplate (
+    TemplateID    INTEGER PRIMARY KEY AUTOINCREMENT,
+    TemplateName  TEXT NOT NULL,
+    SourceKey     TEXT NOT NULL,
+    ColumnsJson   TEXT NOT NULL,
+    FiltersJson   TEXT NULL,
+    GroupByKey    TEXT NULL,
+    SortColumnKey TEXT NULL,
+    SortDescending INTEGER NOT NULL DEFAULT 0,
+    CreatedAt     TEXT NOT NULL DEFAULT (datetime('now')),
+    CreatedBy     TEXT NULL
+);");
+
+                // ─── TblScheduledReport (فاز ۳ — گزارش‌های خودکار زمان‌بندی‌شده) ──
+                ExecuteNonQuery(con, @"
+CREATE TABLE IF NOT EXISTS TblScheduledReport (
+    ScheduleID    INTEGER PRIMARY KEY AUTOINCREMENT,
+    TemplateID    INTEGER NOT NULL,
+    Frequency     TEXT NOT NULL,
+    OutputFormat  TEXT NOT NULL,
+    OutputFolder  TEXT NULL,
+    IsEnabled     INTEGER NOT NULL DEFAULT 1,
+    LastRunAt     TEXT NULL,
+    CreatedAt     TEXT NOT NULL DEFAULT (datetime('now')),
+    CreatedBy     TEXT NULL,
+    CONSTRAINT FK_ScheduledReport_Template FOREIGN KEY (TemplateID)
+        REFERENCES TblReportTemplate (TemplateID) ON DELETE CASCADE
+);");
+
                 // ─── TblUsers (مرجع: SQL Server + MustChangePassword فاز صفر) ─
                 ExecuteNonQuery(con, @"
 CREATE TABLE IF NOT EXISTS TblUsers (
@@ -297,6 +358,14 @@ WHERE CenterID IS NULL AND Role <> 'SuperAdmin';");
                 EnsureColumn(con, "TblUsers", "FailedLoginCount", "INTEGER NOT NULL DEFAULT 0");
                 EnsureColumn(con, "TblUsers", "LockoutUntil",     "TEXT NULL");
 
+                // ─── ستون‌های جدید TblApplicant (درخواست کاربر) ──────────────────
+                // شماره تذکره + یک سند پیوست («چاپ و امضاء و تأیید همین فرم
+                // درخواستی»). افزایشی است، پس دیتابیس‌های موجود بدون مهاجرت
+                // دستی به‌روز می‌شوند و رکوردهای قبلی مقدار NULL می‌گیرند.
+                EnsureColumn(con, "TblApplicant", "TazkiraNo", "TEXT NULL");
+                EnsureColumn(con, "TblApplicant", "DocPath",   "TEXT NULL");
+                EnsureColumn(con, "TblApplicant", "DocType",   "TEXT NULL");
+
                 // ─── ستون‌های جدید TblFamily (بخش ۶): مذهب، وضعیت تأهل، وضعیت خدمات ──
                 EnsureColumn(con, "TblFamily", "Religion",      "TEXT NULL");
                 EnsureColumn(con, "TblFamily", "MaritalStatus", "TEXT NULL");
@@ -314,6 +383,19 @@ WHERE CenterID IS NULL AND Role <> 'SuperAdmin';");
                 EnsureColumn(con, "TblFamily", "SeminaryLevel",       "TEXT NULL"); // دروس حوزوی: سطح ۱/۲/۳
                 EnsureColumn(con, "TblFamily", "EducationCoverage",   "TEXT NULL"); // تحت پوشش آموزشی: بله/خیر
 
+                // ─── بخش ۳: نوع تذکره (الکترونیکی/کاغذی) ─────────────────────────
+                // آموزش — مثل بقیه‌ی مهاجرت‌ها افزایشی و بی‌خطر است: ستون nullable
+                // اضافه می‌شود و رکوردهای موجود دست‌نخورده می‌مانند (نوعشان خالی
+                // می‌ماند و در آمار در گروه «نوع نامشخص» شمرده می‌شوند). عمداً هیچ
+                // UPDATEی برای حدسِ نوع از روی شماره نوشته نشده — خواسته‌ی صریح
+                // کاربر این بود که نوع از شماره تشخیص داده نشود.
+                EnsureColumn(con, "TblCase",   "HeadIdCardType",   "TEXT NULL");
+                EnsureColumn(con, "TblFamily", "MemberIdCardType", "TEXT NULL");
+
+                // ─── بخش ۵: یادداشت وضعیت جسمی سرپرست ────────────────────────────
+                // یادداشت‌های طبی، معلولیت‌ها، شرایط خاص یا مشاهدات مهم.
+                EnsureColumn(con, "TblCase", "PhysicalStatusNotes", "TEXT NULL");
+
                 // ─── تاریخ تولد سرپرست ───────────────────────────────────────────
                 // آموزش — این ستون تا امروز اصلاً وجود نداشت، در حالی که فایلِ
                 // ورودیِ همگام‌سازی ستون «تاریخ تولد» را برای سرپرست هم می‌دهد؛
@@ -322,6 +404,14 @@ WHERE CenterID IS NULL AND Role <> 'SuperAdmin';");
                 // دست‌زدن به داده‌ی موجود). قالب ذخیره میلادیِ ISO است — همان
                 // قراردادی که TblFamily.BirthDate از آن پیروی می‌کند.
                 EnsureColumn(con, "TblCase", "HeadBirthDate", "TEXT NULL");
+
+                // ─── اسامی مؤسسات تحت پوشش ───────────────────────────────────────
+                // آموزش — فیلد «تحت پوشش دیگر مؤسسات» فقط بله/خیر بود و وقتی
+                // پاسخ «بله» می‌شد، هیچ جایی برای ثبتِ نامِ آن مؤسسات وجود
+                // نداشت. این ستون افزایشی و nullable است: پرونده‌های موجود
+                // دست‌نخورده می‌مانند (مقدارش خالی) و فیلدش در فرم پرونده فقط
+                // وقتی «بله» انتخاب شود دیده می‌شود.
+                EnsureColumn(con, "TblCase", "CoveredByOrgNames", "TEXT NULL");
 
                 // ─── GlobalID برای merge هوشمند Backup ──────────────────────────
                 EnsureColumn(con, "TblCase", "GlobalID", "TEXT NULL");
@@ -348,6 +438,44 @@ WHERE GlobalID IS NULL;");
                 EnsureChildGlobalId(con, "TblFamily",    "FamID");
                 EnsureChildGlobalId(con, "TblDocs",      "DocID");
                 EnsureChildGlobalId(con, "TblAssistance","AssistanceID");
+
+                // ─── ماژول AssistanceReceiptIntegration (افزایشی، بدون تغییرِ
+                //     رفتارِ موجود): برگهٔ دریافتیِ مساعدت به‌ازای هر رکوردِ
+                //     TblAssistance. ReceiptNo مثلِ FormNo مرکز-محور است (هر
+                //     مرکز شمارندهٔ خودش را دارد) و فقط در اولین چاپ مقداردهی
+                //     می‌شود؛ PrintedAt فیلترِ «چاپ‌شده/نشده» را می‌سازد.
+                EnsureColumn(con, "TblAssistance", "ReceiptNo",         "INTEGER NULL");
+                EnsureColumn(con, "TblAssistance", "PrintedAt",         "TEXT NULL");
+                EnsureColumn(con, "TblAssistance", "ProgramName",       "TEXT NULL");
+                EnsureColumn(con, "TblAssistance", "PickupLocation",    "TEXT NULL");
+                EnsureColumn(con, "TblAssistance", "CoordinatorPhone",  "TEXT NULL");
+
+                // ─── تبِ «ثبت کمک»: نوع کمکِ نقدی/غیرنقدی. کمکِ غیرنقدی به یک
+                //     «بستهٔ مساعدت» (تعریف‌شده در تنظیمات) پیوند می‌خورد؛ برای
+                //     کمکِ نقدی این ستون همیشه خالی می‌ماند. رابطه به‌صورتِ سادهٔ
+                //     nullable-column است (بدونِ FK اجباری)، دقیقاً هم‌سو با بقیهٔ
+                //     ستون‌های افزایشیِ این جدول.
+                EnsureColumn(con, "TblAssistance", "PackageID", "INTEGER NULL");
+
+                ExecuteNonQuery(con, @"
+CREATE TABLE IF NOT EXISTS TblAssistancePackage (
+    PackageID  INTEGER PRIMARY KEY AUTOINCREMENT,
+    Name       TEXT NOT NULL,
+    SortOrder  INTEGER NOT NULL DEFAULT 0
+);");
+
+                ExecuteNonQuery(con, @"
+CREATE TABLE IF NOT EXISTS TblAssistancePackageItem (
+    ItemID     INTEGER PRIMARY KEY AUTOINCREMENT,
+    PackageID  INTEGER NOT NULL,
+    ItemName   TEXT NOT NULL,
+    Quantity   REAL NOT NULL DEFAULT 0,
+    Unit       TEXT NULL,
+    SortOrder  INTEGER NOT NULL DEFAULT 0,
+    CONSTRAINT FK_PackageItem_Package FOREIGN KEY (PackageID)
+        REFERENCES TblAssistancePackage (PackageID) ON DELETE CASCADE
+);");
+                ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblAssistancePackageItem_PackageID ON TblAssistancePackageItem(PackageID);");
 
                 // ─── مهاجرت: "در انتظار" → "در انتظار تأیید" + ستون StopReason ──
                 MigrateServiceStatusRebuild(con);
@@ -410,8 +538,11 @@ DELETE FROM TblLookup WHERE Category = 'ServiceStatus' AND Value = 'در انت�
                 //     با مقدار واقعیِ در حال استفاده هم‌سو می‌شود تا وقتی این
                 //     دسته‌ها از دیتابیس بارگذاری شوند (گام بعدی)، هیچ تغییری در
                 //     رفتار دیده‌شده کاربر رخ ندهد.
+                // آموزش — «سایر» به درخواستِ کاربر افزوده شد (Additive صرف: هیچ
+                //     مقدارِ قبلی از این آرایه حذف نشد، پس ReconcileLookupCategory
+                //     چیزی از دیتابیس پاک نمی‌کند، فقط «سایر» را اضافه می‌کند).
                 ReconcileLookupCategory(con, "RequestType",
-                    new[] { "یتیم", "معلول", "مهاجر", "بدسرپرست", "کهولت سن", "بی‌سرپرست" });
+                    new[] { "یتیم", "معلول", "مهاجر", "بدسرپرست", "کهولت سن", "بی‌سرپرست", "سایر" });
                 ReconcileLookupCategory(con, "PriorityLevel",
                     new[] { "اول", "دوم", "سوم" });
                 ReconcileLookupCategory(con, "MaritalStatus",
@@ -445,6 +576,256 @@ DELETE FROM TblLookup WHERE Category = 'ServiceStatus' AND Value = 'در انت�
                 });
                 EnsureDefaultLookupSet(con, "AssistanceType", new[] { "نقدی", "غیرنقدی" });
                 EnsureDefaultLookupSet(con, "DocType", new string[0]); // فعلاً مقدار پیش‌فرض ندارد؛ فقط دسته ساخته می‌شود
+
+                // ═══════════════════════════════════════════════════════════════
+                // Phase 1 — استانداردسازی وضعیت/نوع پرونده + تعلیق + تاریخچه
+                // (افزایشی صرف: هیچ ستون/جدول/دادهٔ موجود حذف یا بازنویسی نمی‌شود)
+                // ═══════════════════════════════════════════════════════════════
+
+                // ─── دلایل استاندارد تعلیق (Suspension Reason) ────────────────
+                EnsureDefaultLookupSet(con, "SuspensionReason", new[]
+                {
+                    "تقلب",                    // Fraud
+                    "انتقال محل سکونت",        // Relocated
+                    "رسیدن به سن قانونی",      // Above Legal Age
+                    "بهبود وضعیت اقتصادی",     // Improved Economic Condition
+                    "فوت‌شده",                  // Deceased
+                    "یتیم نبودن",               // Not an Orphan
+                    "سایر"                      // Other
+                });
+
+                // ─── فیلدهای ساختاریافتهٔ تعلیق روی TblCase ────────────────────
+                // StopReason موجود دست‌نخورده می‌ماند (به‌عنوان یادداشتِ اختیاری)؛
+                // SuspensionReason ستون جدید و کدشدهٔ الزامی است.
+                EnsureColumn(con, "TblCase", "SuspensionReason",     "TEXT NULL");
+                EnsureColumn(con, "TblCase", "SuspensionDate",       "TEXT NULL");
+                EnsureColumn(con, "TblCase", "SuspendedByUserId",    "INTEGER NULL");
+                EnsureColumn(con, "TblCase", "SuspendedByUsername",  "TEXT NULL");
+
+                // ─── همان فیلدها روی TblFamily (تعلیق در سطح عضو خانواده) ─────
+                EnsureColumn(con, "TblFamily", "SuspensionReason",    "TEXT NULL");
+                EnsureColumn(con, "TblFamily", "SuspensionDate",      "TEXT NULL");
+                EnsureColumn(con, "TblFamily", "SuspendedByUserId",   "INTEGER NULL");
+                EnsureColumn(con, "TblFamily", "SuspendedByUsername", "TEXT NULL");
+
+                // ─── متن شرایط/هشدارهای کارت شناسایی — قابل ویرایش برای هر پرونده ──
+                // پیش‌فرض NULL = رفتار قبلی حفظ می‌شود (متن سراسری از تنظیمات
+                // مؤسسه در CardService.CardText). اگر کاربر برای این پرونده مقدار
+                // خاصی وارد کند، همان روی کارت این خانواده چاپ می‌شود.
+                EnsureColumn(con, "TblCase", "CardNotice1", "TEXT NULL");
+                EnsureColumn(con, "TblCase", "CardNotice2", "TEXT NULL");
+                EnsureColumn(con, "TblCase", "CardNotice3", "TEXT NULL");
+                EnsureColumn(con, "TblCase", "CardNotice4", "TEXT NULL");
+                EnsureColumn(con, "TblCase", "CardNotice5", "TEXT NULL");
+                EnsureColumn(con, "TblCase", "CardLegalLine", "TEXT NULL");
+
+                // ─── تلفن/آدرسِ اختصاصیِ کارت — override اختیاری این پرونده ─────
+                // آموزش — به‌درخواست کاربر («CARD CUSTOM CONTENT EDITING»):
+                // Phone/Address روی کارت پیش‌فرض از تنظیماتِ مؤسسه می‌آید
+                // (اطلاعاتِ دفترِ صادرکننده)؛ این دو ستون همان الگوی CardNoticeN
+                // را برای override اختصاصیِ یک پرونده تکرار می‌کنند — خالی یعنی
+                // «همان پیش‌فرضِ مؤسسه».
+                EnsureColumn(con, "TblCase", "CardPhone", "TEXT NULL");
+                EnsureColumn(con, "TblCase", "CardAddress", "TEXT NULL");
+
+                // ─── مدیریت قالب کارت («CARD TEMPLATE MANAGEMENT») ────────────────
+                // آموزش — به‌درخواست کاربر، با محدودیتِ معماریِ صریحاً بررسی و
+                // تأییدشده (گزینه‌ی A): چون طرحِ بصریِ کارت (پوشه‌ی GuardianCard)
+                // یک HTML/CSS ثابت با موقعیتِ هر فیلد است — نه یک layout قابل
+                // reflow — «قالب» اینجا یعنی «کدام فیلدهای اختیاری پر شوند»،
+                // نه ترتیب‌دهیِ آزاد یا افزودنِ فیلدهایی که اصلاً در طرح جا
+                // ندارند (مثل MemberRole/CaseType/Description که طبق
+                // docs/TEMPLATE_SCHEMA.json هرگز روی این کارت چاپ نمی‌شوند).
+                // FieldsJson یک آبجکتِ JSON از نامِ فیلد → true/false است.
+                ExecuteNonQuery(con, @"
+CREATE TABLE IF NOT EXISTS TblCardTemplate (
+    TemplateID INTEGER PRIMARY KEY AUTOINCREMENT,
+    Name       TEXT NOT NULL UNIQUE,
+    FieldsJson TEXT NOT NULL,
+    IsDefault  INTEGER NOT NULL DEFAULT 0,
+    CreatedAt  TEXT NOT NULL DEFAULT (datetime('now'))
+);");
+                // ─── طراحِ سبکِ کارت (بخش «Card Designer») — رنگ/فونت/پس‌زمینه/
+                //     واترمارک/هولوگرام/QR/بارکد — به‌درخواست کاربر، بدونِ
+                //     تغییرِ پوشهٔ فریزشدهٔ GuardianCard (فقط override در
+                //     پوشهٔ کاریِ یک‌بارمصرف، نگاه کنید GuardianCardRenderer).
+                // ستونِ جدا از FieldsJson تا معنی دو مفهوم (فیلدهای متنی /
+                // طراحِ بصری) قاطی نشود؛ NULL برای قالب‌های موجود = «رفتارِ
+                // پیش‌فرضِ فعلی» (بدونِ override).
+                EnsureColumn(con, "TblCardTemplate", "DesignJson", "TEXT NULL");
+                // قالبِ پیش‌فرض فقط اگر جدول کاملاً خالی است ساخته می‌شود —
+                // نصب‌های موجود بدون هیچ قالبی دقیقاً همان کارتِ کامل قبلی را
+                // می‌گیرند (همه‌ی فیلدهای اختیاری روشن).
+                using (var checkCmd = new SQLiteCommand("SELECT COUNT(1) FROM TblCardTemplate", con))
+                {
+                    long count = Convert.ToInt64(checkCmd.ExecuteScalar());
+                    if (count == 0)
+                    {
+                        using (var insertCmd = new SQLiteCommand(@"
+INSERT INTO TblCardTemplate (Name, FieldsJson, IsDefault) VALUES (@Name, @Fields, 1)", con))
+                        {
+                            insertCmd.Parameters.AddWithValue("@Name", "کامل (پیش‌فرض)");
+                            insertCmd.Parameters.AddWithValue("@Fields",
+                                "{\"PublicCode\":true,\"Website\":true,\"Email\":true,\"IssuedBy\":true,\"Position\":true,\"Logo\":true,\"Signature\":true,\"Stamp\":true}");
+                            insertCmd.ExecuteNonQuery();
+                        }
+                    }
+                }
+
+                // ─── نقش عضو خانواده (بخش ۱۲) — به درخواست کاربر ─────────────────
+                // مسئله: COUNT(*) روی TblFamily همه‌ی اعضا را «یتیم» فرض می‌کرد،
+                // در حالی که ممکن است مادر/پدر/سرپرست هم در همان جدول ثبت شده
+                // باشند. این ستون نقش هر عضو را صریح مشخص می‌کند تا آمار «تعداد
+                // ایتام» (کارت شناسایی/گزارش‌ها) درست باشد. NULL/خالی = هنوز
+                // بازبینی نشده (رکوردهای قدیمی) — عمداً «یتیم» فرض نمی‌شود.
+                EnsureColumn(con, "TblFamily", "MemberRole", "TEXT NULL");
+                // آموزش — «سرپرست» به‌درخواستِ صریحِ کاربر از فهرست حذف شد
+                // (پنج مقدارِ نهایی: یتیم/پدر/مادر/فرزند/سایر). ReconcileLookupCategory
+                // (نه EnsureDefaultLookupSet) استفاده می‌شود چون این دومی فقط
+                // برای دسته‌ی خالی مقدار می‌گذارد و مقدارِ حذف‌شده را از
+                // نصب‌های موجود پاک نمی‌کرد. رکوردهای TblFamily که همین مقدار
+                // را داشتند، پایین‌تر (بعد از ساختِ TblFamilyRoleHistory) با
+                // مهاجرتِ ایمن به «سایر» منتقل و در تاریخچه ثبت می‌شوند.
+                ReconcileLookupCategory(con, "MemberRole",
+                    new[] { "یتیم", "پدر", "مادر", "فرزند", "سایر" });
+
+                // ─── نسبت خانوادگی (Relation) — جدا از MemberRole ────────────────
+                // آموزش — به‌درخواست کاربر: Relation نسبتِ خویشاوندیِ خام و
+                // غیررسمیِ عضو با سرپرست است (فرزند/پدر/مادر/...)؛ MemberRole
+                // طبقه‌بندیِ رسمیِ تأییدشده برای کارت/گزارش/آمار است. این دو
+                // عمداً جدا نگه داشته می‌شوند — Relation فقط ورودیِ «پیشنهاد»
+                // برای MemberRole است، هرگز جایگزینش نمی‌شود.
+                EnsureColumn(con, "TblFamily", "Relation", "TEXT NULL");
+                EnsureDefaultLookupSet(con, "FamilyRelation",
+                    new[] { "فرزند", "پدر", "مادر", "برادر", "خواهر", "همسر", "نوه", "سایر" });
+
+                // ─── تاریخچهٔ تغییر MemberRole — جدولِ مجزا، نه TblFamilyStatusHistory ──
+                // آموزش — بازبینیِ طراحی به‌درخواست کاربر: TblFamilyStatusHistory
+                // برای «تغییر وضعیت خدمات» ساخته شده بود (نامش، ستون‌های
+                // OldStatus/NewStatus معادلِ ChangeType='ServiceStatus'، و
+                // مهاجرتِ بالا که صریحاً می‌گوید «رکوردهای قدیمی همگی مربوط به
+                // تغییر ServiceStatus بودند»). ثبتِ تغییرِ MemberRole در همان
+                // جدول با ChangeType='MemberRole' دو رویدادِ کسب‌وکاریِ متفاوت
+                // را قاطی می‌کرد. اینجا یک جدولِ اختصاصی ساخته می‌شود.
+                ExecuteNonQuery(con, @"
+CREATE TABLE IF NOT EXISTS TblFamilyRoleHistory (
+    RoleHistoryID     INTEGER PRIMARY KEY AUTOINCREMENT,
+    FamilyMemberID    INTEGER NOT NULL,
+    OldRole           TEXT NULL,
+    NewRole           TEXT NOT NULL,
+    ChangedByUserID   INTEGER NULL,
+    ChangedByUsername TEXT NULL,
+    ChangedAt         TEXT NOT NULL DEFAULT (datetime('now')),
+    Notes             TEXT NULL,
+    CONSTRAINT FK_FamilyRoleHistory_Family FOREIGN KEY (FamilyMemberID)
+        REFERENCES TblFamily (FamID) ON DELETE CASCADE
+);");
+                ExecuteNonQuery(con,
+                    "CREATE INDEX IF NOT EXISTS IX_TblFamilyRoleHistory_FamilyMemberID ON TblFamilyRoleHistory(FamilyMemberID);");
+
+                // ─── مهاجرتِ ایمن: حذفِ مقدار «سرپرست» از MemberRole ─────────────
+                // آموزش — چون «سرپرست» دیگر یک مقدارِ مجازِ MemberRole نیست
+                // (بالا)، رکوردهای TblFamily که همین مقدار را داشتند نباید با
+                // یک مقدارِ نامعتبر/ناسازگار با Lookup باقی بمانند. حدس زده
+                // نمی‌شود کدام‌شان واقعاً «پدر»/«مادر»/«یتیم» بودند (خطرناک)،
+                // پس همه به بازه‌ی خنثیِ «سایر» منتقل می‌شوند تا در ابزارِ
+                // «تعیین نقش اعضا» توسط کاربر بازبینی و تصحیح شوند. هر تغییر در
+                // TblFamilyRoleHistory با یادداشتِ صریح ثبت می‌شود. ایدمپوتنت:
+                // بعد از اولین اجرا دیگر رکوردی با MemberRole='سرپرست' نمی‌ماند.
+                ExecuteNonQuery(con, @"
+INSERT INTO TblFamilyRoleHistory (FamilyMemberID, OldRole, NewRole, ChangedByUserID, ChangedByUsername, ChangedAt, Notes)
+SELECT FamID, 'سرپرست', 'سایر', NULL, 'سیستم (مهاجرت خودکار)', datetime('now'),
+       'حذف مقدار «سرپرست» از فهرست نقش‌ها (MemberRole)؛ به‌صورت خودکار به «سایر» تغییر یافت — توصیه می‌شود دستی بازبینی شود.'
+FROM TblFamily
+WHERE MemberRole = 'سرپرست';");
+                ExecuteNonQuery(con,
+                    "UPDATE TblFamily SET MemberRole = 'سایر' WHERE MemberRole = 'سرپرست';");
+
+                // ─── گسترش تاریخچهٔ وضعیت پرونده به تاریخچهٔ عمومی‌تر (نوع تغییر
+                //     + یادداشت + شناسهٔ کاربر). رکوردهای قدیمی همگی مربوط به
+                //     تغییر ServiceStatus بودند، پس ChangeType آن‌ها پر می‌شود.
+                EnsureColumn(con, "TblCaseStatusHistory", "ChangeType", "TEXT NULL");
+                EnsureColumn(con, "TblCaseStatusHistory", "Notes",      "TEXT NULL");
+                EnsureColumn(con, "TblCaseStatusHistory", "Reason",     "TEXT NULL");
+                EnsureColumn(con, "TblCaseStatusHistory", "UserID",     "INTEGER NULL");
+                ExecuteNonQuery(con,
+                    "UPDATE TblCaseStatusHistory SET ChangeType = 'ServiceStatus' WHERE ChangeType IS NULL;");
+
+                // ─── تاریخچهٔ تغییر وضعیت اعضای خانواده (جدول جدید، معادل
+                //     TblCaseStatusHistory ولی در سطح عضو) ────────────────────
+                ExecuteNonQuery(con, @"
+CREATE TABLE IF NOT EXISTS TblFamilyStatusHistory (
+    FamStatusID INTEGER PRIMARY KEY AUTOINCREMENT,
+    FamID       INTEGER NOT NULL,
+    ChangeType  TEXT NOT NULL,
+    OldValue    TEXT NULL,
+    NewValue    TEXT NOT NULL,
+    Reason      TEXT NULL,
+    Notes       TEXT NULL,
+    ChangedAt   TEXT NOT NULL DEFAULT (datetime('now')),
+    ChangedBy   TEXT NULL,
+    UserID      INTEGER NULL,
+    CONSTRAINT FK_FamilyStatusHistory_Family FOREIGN KEY (FamID)
+        REFERENCES TblFamily (FamID) ON DELETE CASCADE
+);");
+                ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblFamilyStatusHistory_FamID ON TblFamilyStatusHistory(FamID);");
+                // ایمن برای دیتابیس‌هایی که این جدول را قبلاً (بدون ستون Reason) ساخته‌اند.
+                EnsureColumn(con, "TblFamilyStatusHistory", "Reason", "TEXT NULL");
+
+                // ─── مهاجرتِ ایمن: اگر نسخه‌ی قبلیِ همین قابلیت رکوردهای
+                //     MemberRole را (اشتباهاً) داخل TblFamilyStatusHistory ثبت
+                //     کرده، همین‌جا به جدول درست منتقل و از جدول قدیمی پاک
+                //     می‌شود. بدون‌ضرر/ایدمپوتنت: بعد از اولین اجرا دیگر هیچ
+                //     ردیفِ ChangeType='MemberRole' در جدول قدیمی نمی‌ماند، پس
+                //     این دو دستور در اجراهای بعدی چیزی پیدا نمی‌کنند (no-op).
+                //     آموزش — رفعِ باگ: این بلوک باید *بعد* از CREATE TABLE
+                //     بالا باشد (نه قبلش، جایی که قبلاً بود) چون به وجودِ
+                //     TblFamilyStatusHistory وابسته است؛ روی دیتابیسِ کاملاً
+                //     تازه (مثلِ پایگاه‌دادهٔ آزمون‌ها) با خطای «no such table»
+                //     شکست می‌خورد اگر زودتر اجرا شود — دقیقاً همان چیزی که
+                //     آزمون‌های ServiceStatusFilterTests آن را کشف کردند.
+                ExecuteNonQuery(con, @"
+INSERT INTO TblFamilyRoleHistory (FamilyMemberID, OldRole, NewRole, ChangedByUserID, ChangedByUsername, ChangedAt, Notes)
+SELECT FamID, OldValue, NewValue, UserID, ChangedBy, ChangedAt, Reason
+FROM TblFamilyStatusHistory
+WHERE ChangeType = 'MemberRole';");
+                ExecuteNonQuery(con,
+                    "DELETE FROM TblFamilyStatusHistory WHERE ChangeType = 'MemberRole';");
+
+                // ─── تاریخچهٔ انتقال پرونده بین مراکز (Case Transfer) ──────────
+                ExecuteNonQuery(con, @"
+CREATE TABLE IF NOT EXISTS TblCaseTransferHistory (
+    TransferID       INTEGER PRIMARY KEY AUTOINCREMENT,
+    CasID             INTEGER NOT NULL,
+    FromCenterID      INTEGER NULL,
+    ToCenterID        INTEGER NOT NULL,
+    TransferDate      TEXT NOT NULL,
+    TransferReason    TEXT NULL,
+    TransferLetterNo  TEXT NULL,
+    TransferredBy     TEXT NULL,
+    UserID            INTEGER NULL,
+    CreatedAt         TEXT NOT NULL DEFAULT (datetime('now')),
+    CONSTRAINT FK_CaseTransferHistory_Case FOREIGN KEY (CasID)
+        REFERENCES TblCase (CasID) ON DELETE CASCADE
+);");
+                ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblCaseTransferHistory_CasID ON TblCaseTransferHistory(CasID);");
+
+                // ─── تاریخچهٔ وضعیت متقاضی (TblApplicant) — چرخهٔ زندگی مجزا از
+                //     پرونده، طبق تصمیم صریح کاربر جدا نگه داشته می‌شود ─────────
+                ExecuteNonQuery(con, @"
+CREATE TABLE IF NOT EXISTS TblApplicantStatusHistory (
+    ApplicantStatusID INTEGER PRIMARY KEY AUTOINCREMENT,
+    ApplicantID        INTEGER NOT NULL,
+    OldValue            TEXT NULL,
+    NewValue            TEXT NOT NULL,
+    Notes               TEXT NULL,
+    ChangedAt           TEXT NOT NULL DEFAULT (datetime('now')),
+    ChangedBy           TEXT NULL,
+    UserID              INTEGER NULL,
+    CONSTRAINT FK_ApplicantStatusHistory_Applicant FOREIGN KEY (ApplicantID)
+        REFERENCES TblApplicant (ApplicantID) ON DELETE CASCADE
+);");
+                ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblApplicantStatusHistory_ApplicantID ON TblApplicantStatusHistory(ApplicantID);");
 
                 // ─── ساخت admin پیش‌فرض ──────────────────────────────────────
                 EnsureDefaultAdmin(con);
@@ -1070,12 +1451,15 @@ WHERE CasID IN (SELECT CasID FROM TblCase);");
                 "DisabilityDegree TEXT", "DisabilityType TEXT", "MigrationCardType TEXT",
                 "MaritalStatus TEXT", "Surveyors TEXT", "SurveyDate TEXT", "LocationAddress TEXT",
                 "EducationLevel TEXT", "ServiceStatus TEXT", "UrgentSituation TEXT",
-                "Zone TEXT", "Province TEXT", "CreatedAt TEXT", "UpdatedAt TEXT"
+                "Zone TEXT", "Province TEXT", "CreatedAt TEXT", "UpdatedAt TEXT",
+                "IsArchived INTEGER NOT NULL DEFAULT 0", "ArchivedAt TEXT", "ArchivedBy TEXT",
+                "HeadIdCardType TEXT", "PhysicalStatusNotes TEXT"
             });
 
             EnsureColumns(con, "TblFamily", new[]
             {
                 "MemberName TEXT", "MemberFatherName TEXT", "MemberTazkiraNo TEXT", "BirthDate TEXT",
+                "MemberIdCardType TEXT",
                 "MemberSadat TEXT", "Gender TEXT", "PhysicalStatus TEXT", "HasDisability TEXT",
                 "MemberDisabilityDegree TEXT", "MemberEducation TEXT", "SchoolName TEXT",
                 "GradeLevel TEXT", "UniversityName TEXT", "StudyYear TEXT", "Major TEXT",
@@ -1086,8 +1470,18 @@ WHERE CasID IN (SELECT CasID FROM TblCase);");
             EnsureColumns(con, "TblDocs", new[]
             {
                 "DocType TEXT", "OriginalFileName TEXT", "DocFilePath TEXT",
-                "RelatedCaseRef TEXT", "DocDescription TEXT"
+                "RelatedCaseRef TEXT", "DocDescription TEXT",
+                "DocCategory TEXT", "DocTags TEXT", "DocNo TEXT",
+                "IsArchived INTEGER NOT NULL DEFAULT 0", "ArchivedAt TEXT", "ArchivedBy TEXT"
             });
+
+            // آموزش — اسنادی که پیش از افزودن شماره‌گذاری خودکار ثبت شده‌اند
+            // DocNo ندارند، پس نه در جستجوی بارکد پیدا می‌شوند و نه در شمارنده
+            // حساب می‌آیند. DocID (که یکتا و صعودی است) به‌عنوان شماره‌ی اولیه
+            // نوشته می‌شود؛ idempotent است و ردیف‌های شماره‌دار را دست نمی‌زند.
+            ExecuteNonQuery(con, @"
+UPDATE TblDocs SET DocNo = CAST(DocID AS TEXT)
+WHERE DocNo IS NULL OR TRIM(DocNo) = '';");
         }
 
         // بازسازی TblFamily اگر ساختار قدیمی (ستون Id به‌جای FamID) دارد.

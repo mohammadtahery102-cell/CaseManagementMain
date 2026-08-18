@@ -1,4 +1,4 @@
-using CaseManagement.DAL;
+﻿using CaseManagement.DAL;
 using CaseManagement.Helpers;
 using ClosedXML.Excel;
 using System;
@@ -7,6 +7,7 @@ using System.Data;
 using System.Data.SQLite;
 using System.Drawing;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Windows.Forms;
 
@@ -33,14 +34,60 @@ namespace CaseManagement
 
         // ─── تب ۱: جستجوی سرپرست ─────────────────────────────────────────────
         private TextBox txtHCode, txtHFormNo, txtHName, txtHFatherName, txtHTazkira, txtHPhone, txtHDistrict, txtHJob;
+        // «تحت پوشش دیگر مؤسسات» (بله/خیر) و «اسامی مؤسسات تحت پوشش» (جستجوی متنی).
+        private ComboBox cmbHCoveredByOrg;
+        private TextBox txtHCoveredByOrgNames;
         private ComboBox cmbHProvince, cmbHRequestType, cmbHPriority, cmbHSadat, cmbHReligion, cmbHMarital, cmbHEducationTier, cmbHDisabilityType, cmbHStatus;
+        // بخش ۴ — فیلتر نوع تذکره سرپرست
+        private ComboBox cmbHIdCardType;
         private Helpers.PersianDatePicker dtpHFrom, dtpHTo;
         private DataGridView dgvHeadResults;
 
         // ─── تب ۲: جستجوی اعضاء خانواده ──────────────────────────────────────
         private TextBox txtMName, txtMFatherName, txtMTazkira, txtMSkill, txtMDistrict;
         private ComboBox cmbMProvince, cmbMGender, cmbMEducationTier, cmbMMarital, cmbMReligion, cmbMPhysical, cmbMDisabilityType, cmbMStatus;
+        // بخش ۴ — فیلتر نوع تذکره عضو
+        private ComboBox cmbMIdCardType;
         private ComboBox cmbMGrade;   // فیلتر صنف (درخواست کاربر)
+        // فیلتر «نوع درخواست» پرونده در تبِ اعضا — تا بتوان ایتام را از سایر
+        // بخش‌ها (معلول، مهاجر، بدسرپرست، …) در سطحِ عضو هم جدا کرد.
+        private ComboBox cmbMRequestType;
+        // بخش ۱۲ — فیلتر «نقش عضو» (یتیم/پدر/مادر/فرزند/سرپرست/سایر)؛ برخلاف
+        // RequestType (که نوعِ کل پرونده است)، این دقیقاً نقش خودِ همین عضو
+        // را مشخص می‌کند تا بشود مثلاً فقط «یتیم»‌ها را جستجو کرد.
+        private ComboBox cmbMRole;
+
+        // نوارهای صفحه‌بندیِ نتایج (زیرساخت مقیاس‌پذیری — Helpers/GridPager).
+        private Helpers.GridPager _headPager;
+        private Helpers.GridPager _memberPager;
+
+        // آموزش — چرا این پرچم لازم شد: خروجی‌های Excel/Word/PDF در این فرم از
+        // روی محتوای همان جدولِ روی صفحه ساخته می‌شوند. با آمدنِ صفحه‌بندی،
+        // جدول فقط یک صفحه (مثلاً ۱۰۰ ردیف) دارد، پس خروجی‌ها بی‌سروصدا ناقص
+        // می‌شدند — یعنی قابلیتی که کاربر داشت از بین می‌رفت. با این پرچم،
+        // هنگام گرفتن خروجی یک‌بار همه‌ی نتایج بارگذاری می‌شود، فایل ساخته
+        // می‌شود، و بعد جدول به همان صفحه‌ی قبلی برمی‌گردد.
+        private bool _loadAllRows;
+
+        // همه‌ی نتایج را موقتاً بارگذاری کن، خروجی را بگیر، بعد به حالت
+        // صفحه‌بندی‌شده برگرد.
+        private void ExportWithAllRows(Action reload, Action doExport)
+        {
+            Cursor previous = Cursor;
+            Cursor = Cursors.WaitCursor;
+            _loadAllRows = true;
+            try
+            {
+                reload();
+                doExport();
+            }
+            finally
+            {
+                _loadAllRows = false;
+                Cursor = previous;
+                reload();   // جدول به همان صفحه‌ای که کاربر بود برمی‌گردد
+            }
+        }
         private DataGridView dgvMemberResults;
 
         public FrmAdvancedSearch()
@@ -95,10 +142,14 @@ namespace CaseManagement
             txtHPhone = new TextBox();
             txtHDistrict = new TextBox();
             txtHJob = new TextBox();
+            txtHCoveredByOrgNames = new TextBox();
 
             cmbHProvince = MakeCombo("همه", Provinces);
-            cmbHRequestType = MakeCombo("همه", new[] { "یتیم", "معلول", "مهاجر", "بدسرپرست", "کهولت سن", "بی‌سرپرست" });
+            // منبع واحد: به‌جای آرایه‌ی هاردکد، از TblLookup (دسته RequestType/نوع پرونده) خوانده می‌شود.
+            cmbHRequestType = MakeCombo("همه", Helpers.LookupHelper.GetValues("RequestType").ToArray());
             cmbHPriority = MakeCombo("همه", new[] { "اول", "دوم", "سوم" });
+            // همان دو گزینه‌ی فرم پرونده، تا فیلتر دقیقاً با مقدار ذخیره‌شده بخواند.
+            cmbHCoveredByOrg = MakeCombo("همه", new[] { "بله", "خیر" });
             cmbHSadat = MakeCombo("همه", new[] { "عام", "سادات" });
             cmbHReligion = MakeCombo("همه", new[] { "اهل تشیع", "اهل تسنن" });
             cmbHMarital = MakeCombo("همه", new[] { "مجرد", "متأهل", "مطلقه" });
@@ -108,7 +159,13 @@ namespace CaseManagement
             // منطقی روی همان مقادیر هستند (نگاه کنید به GetHeadEducationTierSql).
             cmbHEducationTier = MakeCombo("همه", new[] { "دانشگاهی", "مکتبی", "سایر مقاطع" });
             cmbHDisabilityType = MakeCombo("همه", new[] { "جسمی", "ذهنی", "بینایی", "شنوایی", "گفتاری", "حسی" });
-            cmbHStatus = MakeCombo("همه", new[] { "فعال", "در انتظار تأیید", "قطع موقت", "قطع" });
+            // منبع واحد: به‌جای آرایه‌ی هاردکد، از TblLookup (دسته ServiceStatus) خوانده می‌شود.
+            cmbHStatus = MakeCombo("همه", Helpers.LookupHelper.GetValues("ServiceStatus").ToArray());
+            cmbHIdCardType = MakeCombo("همه", new[]
+            {
+                Helpers.IdCardHelper.Electronic, Helpers.IdCardHelper.Paper,
+                Helpers.IdCardHelper.UnknownDisplay, Helpers.IdCardHelper.NoneDisplay
+            });
 
             dtpHFrom = new Helpers.PersianDatePicker { ShowCheckBox = true, Checked = false };
             dtpHTo = new Helpers.PersianDatePicker { ShowCheckBox = true, Checked = false };
@@ -119,12 +176,15 @@ namespace CaseManagement
                 new KeyValuePair<string, Control>("شماره فرم", txtHFormNo),
                 new KeyValuePair<string, Control>("نام سرپرست", txtHName),
                 new KeyValuePair<string, Control>("نام پدر سرپرست", txtHFatherName),
+                new KeyValuePair<string, Control>("نوع تذکره", cmbHIdCardType),
                 new KeyValuePair<string, Control>("شماره تذکره", txtHTazkira),
                 new KeyValuePair<string, Control>("شماره تماس", txtHPhone),
                 new KeyValuePair<string, Control>("ولایت", cmbHProvince),
                 new KeyValuePair<string, Control>("ولسوالی", txtHDistrict),
                 new KeyValuePair<string, Control>("نوع درخواست", cmbHRequestType),
-                new KeyValuePair<string, Control>("اولویت‌بندی", cmbHPriority),
+                new KeyValuePair<string, Control>("اولویت‌بندی اقتصادی", cmbHPriority),
+                new KeyValuePair<string, Control>("تحت پوشش دیگر مؤسسات", cmbHCoveredByOrg),
+                new KeyValuePair<string, Control>("اسامی مؤسسات تحت پوشش", txtHCoveredByOrgNames),
                 new KeyValuePair<string, Control>("سیادت", cmbHSadat),
                 new KeyValuePair<string, Control>("مذهب", cmbHReligion),
                 new KeyValuePair<string, Control>("وضعیت تأهل", cmbHMarital),
@@ -146,22 +206,39 @@ namespace CaseManagement
 
             Button btnSearch = UiTheme.CreateButton("جستجو", "⌕", UiTheme.Primary);
             btnSearch.Size = new Size(96, 32); btnSearch.Margin = new Padding(3);
-            btnSearch.Click += delegate { LoadHeadResults(); };
+            // جستجوی تازه یعنی مجموعه‌ی نتایج عوض شده؛ پس از صفحه‌ی اول شروع کن.
+            btnSearch.Click += delegate
+            {
+                if (_headPager != null) _headPager.Reset();
+                LoadHeadResults();
+            };
             buttonRow.Controls.Add(btnSearch);
 
             Button btnExport = UiTheme.CreateSecondaryButton("خروجی Excel", "⇑");
             btnExport.Size = new Size(140, 32); btnExport.Margin = new Padding(3);
-            btnExport.Click += delegate { ExportGridToExcel(dgvHeadResults, "جستجوی_سرپرست"); };
+            btnExport.Click += delegate
+            {
+                ExportWithAllRows(LoadHeadResults,
+                    delegate { ExportGridToExcel(dgvHeadResults, "جستجوی_سرپرست"); });
+            };
             buttonRow.Controls.Add(btnExport);
 
             Button btnWordH = UiTheme.CreateSecondaryButton("خروجی Word", "➤");
             btnWordH.Size = new Size(140, 32); btnWordH.Margin = new Padding(3);
-            btnWordH.Click += delegate { ExportGridToWord(dgvHeadResults, "گزارش_سرپرستان", "گزارش سرپرستان", HeadFilterSubtitle()); };
+            btnWordH.Click += delegate
+            {
+                ExportWithAllRows(LoadHeadResults,
+                    delegate { ExportGridToWord(dgvHeadResults, "گزارش_سرپرستان", "گزارش سرپرستان", HeadFilterSubtitle()); });
+            };
             buttonRow.Controls.Add(btnWordH);
 
             Button btnPdfH = UiTheme.CreateSecondaryButton("خروجی PDF", "➤");
             btnPdfH.Size = new Size(140, 32); btnPdfH.Margin = new Padding(3);
-            btnPdfH.Click += delegate { ExportGridToPdf(dgvHeadResults, "گزارش_سرپرستان", "گزارش سرپرستان", HeadFilterSubtitle()); };
+            btnPdfH.Click += delegate
+            {
+                ExportWithAllRows(LoadHeadResults,
+                    delegate { ExportGridToPdf(dgvHeadResults, "گزارش_سرپرستان", "گزارش سرپرستان", HeadFilterSubtitle()); });
+            };
             buttonRow.Controls.Add(btnPdfH);
 
             dgvHeadResults = new DataGridView();
@@ -174,8 +251,15 @@ namespace CaseManagement
             UiTheme.StyleGrid(dgvHeadResults);
             UiTheme.ApplyPersianDateColumns(dgvHeadResults, "CaseDate");
 
+            // صفحه‌بندیِ نتایج — جستجوی بدونِ فیلتر می‌تواند کلِ جدول را برگرداند؛
+            // با صدهزار پرونده این یعنی چند ثانیه انتظار و ده‌ها مگابایت حافظه.
+            // هیچ نتیجه‌ای حذف نمی‌شود؛ فقط صفحه‌به‌صفحه خوانده می‌شود.
+            _headPager = new Helpers.GridPager();
+            _headPager.PageChanged += delegate { LoadHeadResults(); };
+
             Panel gridWrap = new Panel { Dock = DockStyle.Fill, Padding = new Padding(8) };
             gridWrap.Controls.Add(dgvHeadResults);
+            gridWrap.Controls.Add(_headPager);
 
             page.Controls.Add(gridWrap);
             page.Controls.Add(buttonRow);
@@ -262,12 +346,18 @@ namespace CaseManagement
 
         private void LoadHeadResults()
         {
-            StringBuilder sql = new StringBuilder(@"
-SELECT CasID, FormNo, Code, CaseNo, HeadFullName, HeadFatherName, HeadTazkiraNo, Phone,
+            const string headSelect = @"
+SELECT CasID, FormNo, Code, CaseNo, HeadFullName, HeadFatherName, HeadIdCardType, HeadTazkiraNo, Phone,
        Province, District, RequestType, PriorityLevel, HeadSadat, Religion, MaritalStatus,
-       EducationLevel, Job, DisabilityType, ServiceStatus, CaseDate
+       EducationLevel, Job, DisabilityType, CoveredByOrg, CoveredByOrgNames, ServiceStatus, CaseDate
 FROM TblCase
-WHERE 1 = 1");
+WHERE 1 = 1 AND IsArchived = 0";
+
+            StringBuilder sql = new StringBuilder(headSelect);
+
+            // طولِ بخشِ ثابتِ اول را نگه می‌داریم تا بعداً بتوانیم فقط شرط‌های
+            // اضافه‌شده را جدا کنیم و همان‌ها را به کوئریِ شمارش بدهیم.
+            int wherePrefixLength = sql.Length;
 
             using (var con = db.GetConnection())
             using (var cmd = new SQLiteCommand())
@@ -282,6 +372,7 @@ WHERE 1 = 1");
                 AddLikeFilter(sql, cmd, "Phone", "@Phone", txtHPhone.Text);
                 AddLikeFilter(sql, cmd, "District", "@District", txtHDistrict.Text);
                 AddLikeFilter(sql, cmd, "Job", "@Job", txtHJob.Text);
+                AddLikeFilter(sql, cmd, "CoveredByOrgNames", "@CovNames", txtHCoveredByOrgNames.Text);
 
                 AddExactFilter(sql, cmd, "Province", "@Province", cmbHProvince.Text);
                 AddExactFilter(sql, cmd, "RequestType", "@ReqType", cmbHRequestType.Text);
@@ -290,7 +381,9 @@ WHERE 1 = 1");
                 AddExactFilter(sql, cmd, "Religion", "@Religion", cmbHReligion.Text);
                 AddExactFilter(sql, cmd, "MaritalStatus", "@Marital", cmbHMarital.Text);
                 AddExactFilter(sql, cmd, "DisabilityType", "@DisabType", cmbHDisabilityType.Text);
+                AddExactFilter(sql, cmd, "CoveredByOrg", "@CovByOrg", cmbHCoveredByOrg.Text);
                 AddExactFilter(sql, cmd, "ServiceStatus", "@Status", cmbHStatus.Text);
+                AddIdCardFilter(sql, cmd, "HeadIdCardType", "HeadTazkiraNo", "@HIdCard", cmbHIdCardType.Text);
 
                 if (cmbHEducationTier.Text != "همه")
                     sql.Append(GetHeadEducationTierSql(cmbHEducationTier.Text, cmd));
@@ -313,10 +406,34 @@ WHERE 1 = 1");
                     cmd.Parameters.AddWithValue("@CenterID", cid);
                 }
 
-                sql.Append(" ORDER BY CasID DESC");
-                cmd.CommandText = sql.ToString();
+                // فقط شرط‌هایی که فیلترها اضافه کرده‌اند (بدونِ SELECT و FROM)
+                string whereTail = sql.ToString().Substring(wherePrefixLength);
 
                 con.Open();
+
+                // ابتدا تعدادِ کلِ نتایج — تا نوارِ صفحه‌بندی بداند چند صفحه هست.
+                // همان cmd و همان پارامترها استفاده می‌شود، پس شرط‌ها دقیقاً یکی است.
+                long total = 0;
+                cmd.CommandText = "SELECT COUNT(1) FROM TblCase WHERE 1 = 1 AND IsArchived = 0" + whereTail;
+                object scalar = cmd.ExecuteScalar();
+                if (scalar != null && scalar != DBNull.Value) total = Convert.ToInt64(scalar);
+
+                if (_headPager != null) _headPager.SetTotal(total);
+
+                sql.Append(" ORDER BY CasID DESC");
+
+                // هنگام گرفتن خروجی، همه‌ی نتایج لازم است (توضیح در _loadAllRows).
+                if (!_loadAllRows)
+                {
+                    int take = _headPager != null ? _headPager.PageSize : 100;
+                    int skip = _headPager != null ? _headPager.Offset : 0;
+                    sql.Append(" LIMIT @Take OFFSET @Skip");
+                    cmd.Parameters.AddWithValue("@Take", take);
+                    cmd.Parameters.AddWithValue("@Skip", skip);
+                }
+
+                cmd.CommandText = sql.ToString();
+
                 using (var reader = cmd.ExecuteReader())
                 {
                     DataTable table = new DataTable();
@@ -335,18 +452,21 @@ WHERE 1 = 1");
             SetHeader(dgvHeadResults, "CaseNo", "شماره پرونده");
             SetHeader(dgvHeadResults, "HeadFullName", "نام سرپرست");
             SetHeader(dgvHeadResults, "HeadFatherName", "نام پدر سرپرست");
+            SetHeader(dgvHeadResults, "HeadIdCardType", "نوع تذکره");
             SetHeader(dgvHeadResults, "HeadTazkiraNo", "شماره تذکره");
             SetHeader(dgvHeadResults, "Phone", "شماره تماس");
             SetHeader(dgvHeadResults, "Province", "ولایت");
             SetHeader(dgvHeadResults, "District", "ولسوالی");
             SetHeader(dgvHeadResults, "RequestType", "نوع درخواست");
-            SetHeader(dgvHeadResults, "PriorityLevel", "اولویت‌بندی");
+            SetHeader(dgvHeadResults, "PriorityLevel", "اولویت‌بندی اقتصادی");
             SetHeader(dgvHeadResults, "HeadSadat", "سیادت");
             SetHeader(dgvHeadResults, "Religion", "مذهب");
             SetHeader(dgvHeadResults, "MaritalStatus", "وضعیت تأهل");
             SetHeader(dgvHeadResults, "EducationLevel", "تحصیلات");
             SetHeader(dgvHeadResults, "Job", "شغل");
             SetHeader(dgvHeadResults, "DisabilityType", "نوع معلولیت");
+            SetHeader(dgvHeadResults, "CoveredByOrg", "تحت پوشش دیگر مؤسسات");
+            SetHeader(dgvHeadResults, "CoveredByOrgNames", "اسامی مؤسسات تحت پوشش");
             SetHeader(dgvHeadResults, "ServiceStatus", "وضعیت خدمات");
             SetHeader(dgvHeadResults, "CaseDate", "تاریخ تشکیل");
             if (dgvHeadResults.Columns.Contains("CasID"))
@@ -365,13 +485,19 @@ WHERE 1 = 1");
             txtMDistrict = new TextBox();
 
             cmbMProvince = MakeCombo("همه", Provinces);
+            cmbMIdCardType = MakeCombo("همه", new[]
+            {
+                Helpers.IdCardHelper.Electronic, Helpers.IdCardHelper.Paper,
+                Helpers.IdCardHelper.UnknownDisplay, Helpers.IdCardHelper.NoneDisplay
+            });
             cmbMGender = MakeCombo("همه", new[] { "دختر", "پسر" });
             cmbMEducationTier = MakeCombo("همه", new[] { "دانشگاهی", "مکتبی", "سایر مقاطع" });
             cmbMMarital = MakeCombo("همه", new[] { "مجرد", "متأهل", "مطلقه" });
             cmbMReligion = MakeCombo("همه", new[] { "اهل تشیع", "اهل تسنن" });
             cmbMPhysical = MakeCombo("همه", new[] { "سالم", "معلول", "مریض" });
             cmbMDisabilityType = MakeCombo("همه", new[] { "جسمی", "ذهنی", "بینایی", "شنوایی", "گفتاری", "حسی" });
-            cmbMStatus = MakeCombo("همه", new[] { "فعال", "در انتظار تأیید", "قطع موقت", "قطع" });
+            // منبع واحد: به‌جای آرایه‌ی هاردکد، از TblLookup (دسته ServiceStatus) خوانده می‌شود.
+            cmbMStatus = MakeCombo("همه", Helpers.LookupHelper.GetValues("ServiceStatus").ToArray());
 
             // آموزش — فیلتر «صنف» (درخواست کاربر): مقادیر همان ۱ تا ۱۲ هستند
             // که فرم اعضای خانواده هم برای GradeLevel استفاده می‌کند، تا
@@ -380,12 +506,19 @@ WHERE 1 = 1");
             for (int g = 1; g <= 12; g++) grades.Add(g.ToString());
             cmbMGrade = MakeCombo("همه", grades.ToArray());
 
+            // همان فهرستِ تبِ سرپرست، تا دو تب هم‌خوان بمانند.
+            // منبع واحد: به‌جای آرایه‌ی هاردکد، از TblLookup (دسته RequestType/نوع پرونده) خوانده می‌شود.
+            cmbMRequestType = MakeCombo("همه", Helpers.LookupHelper.GetValues("RequestType").ToArray());
+            cmbMRole = MakeCombo("همه", Helpers.LookupHelper.GetValues("MemberRole").ToArray());
+
             var fields = new List<KeyValuePair<string, Control>>
             {
                 new KeyValuePair<string, Control>("نام عضو", txtMName),
                 new KeyValuePair<string, Control>("نام پدر عضو", txtMFatherName),
+                new KeyValuePair<string, Control>("نوع تذکره", cmbMIdCardType),
                 new KeyValuePair<string, Control>("شماره تذکره", txtMTazkira),
                 new KeyValuePair<string, Control>("جنسیت", cmbMGender),
+                new KeyValuePair<string, Control>("نقش عضو", cmbMRole),
                 new KeyValuePair<string, Control>("ولایت", cmbMProvince),
                 new KeyValuePair<string, Control>("ولسوالی", txtMDistrict),
                 new KeyValuePair<string, Control>("تحصیلات", cmbMEducationTier),
@@ -395,6 +528,7 @@ WHERE 1 = 1");
                 new KeyValuePair<string, Control>("وضعیت جسمی", cmbMPhysical),
                 new KeyValuePair<string, Control>("نوع معلولیت", cmbMDisabilityType),
                 new KeyValuePair<string, Control>("مهارت", txtMSkill),
+                new KeyValuePair<string, Control>("نوع درخواست", cmbMRequestType),
                 new KeyValuePair<string, Control>("وضعیت خدمات", cmbMStatus),
             };
 
@@ -408,22 +542,38 @@ WHERE 1 = 1");
 
             Button btnSearch = UiTheme.CreateButton("جستجو", "⌕", UiTheme.Primary);
             btnSearch.Size = new Size(96, 32); btnSearch.Margin = new Padding(3);
-            btnSearch.Click += delegate { LoadMemberResults(); };
+            btnSearch.Click += delegate
+            {
+                if (_memberPager != null) _memberPager.Reset();
+                LoadMemberResults();
+            };
             buttonRow.Controls.Add(btnSearch);
 
             Button btnExport = UiTheme.CreateSecondaryButton("خروجی Excel", "⇑");
             btnExport.Size = new Size(140, 32); btnExport.Margin = new Padding(3);
-            btnExport.Click += delegate { ExportGridToExcel(dgvMemberResults, "جستجوی_اعضاء_خانواده"); };
+            btnExport.Click += delegate
+            {
+                ExportWithAllRows(LoadMemberResults,
+                    delegate { ExportGridToExcel(dgvMemberResults, "جستجوی_اعضاء_خانواده"); });
+            };
             buttonRow.Controls.Add(btnExport);
 
             Button btnWordM = UiTheme.CreateSecondaryButton("خروجی Word", "➤");
             btnWordM.Size = new Size(140, 32); btnWordM.Margin = new Padding(3);
-            btnWordM.Click += delegate { ExportGridToWord(dgvMemberResults, "گزارش_اعضای_خانواده", "گزارش اعضای خانواده", MemberFilterSubtitle()); };
+            btnWordM.Click += delegate
+            {
+                ExportWithAllRows(LoadMemberResults,
+                    delegate { ExportGridToWord(dgvMemberResults, "گزارش_اعضای_خانواده", "گزارش اعضای خانواده", MemberFilterSubtitle()); });
+            };
             buttonRow.Controls.Add(btnWordM);
 
             Button btnPdfM = UiTheme.CreateSecondaryButton("خروجی PDF", "➤");
             btnPdfM.Size = new Size(140, 32); btnPdfM.Margin = new Padding(3);
-            btnPdfM.Click += delegate { ExportGridToPdf(dgvMemberResults, "گزارش_اعضای_خانواده", "گزارش اعضای خانواده", MemberFilterSubtitle()); };
+            btnPdfM.Click += delegate
+            {
+                ExportWithAllRows(LoadMemberResults,
+                    delegate { ExportGridToPdf(dgvMemberResults, "گزارش_اعضای_خانواده", "گزارش اعضای خانواده", MemberFilterSubtitle()); });
+            };
             buttonRow.Controls.Add(btnPdfM);
 
             dgvMemberResults = new DataGridView();
@@ -435,8 +585,12 @@ WHERE 1 = 1");
             dgvMemberResults.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
             UiTheme.StyleGrid(dgvMemberResults);
 
+            _memberPager = new Helpers.GridPager();
+            _memberPager.PageChanged += delegate { LoadMemberResults(); };
+
             Panel gridWrap = new Panel { Dock = DockStyle.Fill, Padding = new Padding(8) };
             gridWrap.Controls.Add(dgvMemberResults);
+            gridWrap.Controls.Add(_memberPager);
 
             page.Controls.Add(gridWrap);
             page.Controls.Add(buttonRow);
@@ -447,13 +601,25 @@ WHERE 1 = 1");
         {
             StringBuilder sql = new StringBuilder(@"
 SELECT f.FamID, c.Code AS [کد پرونده], c.HeadFullName AS [نام سرپرست],
-       f.MemberName, f.MemberFatherName, f.MemberTazkiraNo, f.Gender,
+       f.MemberName, f.MemberFatherName, f.MemberIdCardType, f.MemberTazkiraNo, f.Gender,
+       f.MemberRole,
        c.Province, c.District, f.MemberEducation, f.GradeLevel AS [صنف],
        f.MaritalStatus, f.Religion,
-       f.PhysicalStatus, f.HasDisability, f.Skill, f.ServiceStatus
+       f.PhysicalStatus, f.HasDisability, f.Skill,
+       -- نوع درخواستِ پرونده روی هر سطرِ عضو، تا ایتام از سایر بخش‌ها جدا شود.
+       c.RequestType,
+       -- «وضعیت خدمات» همیشه از سطحِ پرونده (c) خوانده می‌شود، نه از ستونِ
+       -- هم‌نامِ TblFamily. تحت حمایت بودن یک ویژگیِ پرونده است؛ ستونِ سطحِ
+       -- عضو می‌تواند مقدارِ متفاوت و گمراه‌کننده داشته باشد. فیلترِ پایین هم
+       -- روی همین ستون اعمال می‌شود تا گرید و فیلتر با هم بخوانند.
+       c.ServiceStatus
 FROM TblFamily f
 JOIN TblCase c ON c.CasID = f.CasID
-WHERE 1 = 1");
+WHERE 1 = 1 AND c.IsArchived = 0");
+
+            // مثل تبِ سرپرست: طولِ بخشِ ثابت را نگه می‌داریم تا شرط‌ها را جدا
+            // کنیم و همان‌ها را به کوئریِ شمارش بدهیم.
+            int wherePrefixLength = sql.Length;
 
             using (var con = db.GetConnection())
             using (var cmd = new SQLiteCommand())
@@ -467,12 +633,15 @@ WHERE 1 = 1");
                 AddLikeFilter(sql, cmd, "f.Skill", "@Skill", txtMSkill.Text);
 
                 AddExactFilter(sql, cmd, "f.Gender", "@Gender", cmbMGender.Text);
+                AddExactFilter(sql, cmd, "f.MemberRole", "@MRole", cmbMRole.Text);
                 AddExactFilter(sql, cmd, "c.Province", "@Province", cmbMProvince.Text);
                 AddExactFilter(sql, cmd, "f.MaritalStatus", "@Marital", cmbMMarital.Text);
                 AddExactFilter(sql, cmd, "f.Religion", "@Religion", cmbMReligion.Text);
                 AddExactFilter(sql, cmd, "f.PhysicalStatus", "@Physical", cmbMPhysical.Text);
                 AddExactFilter(sql, cmd, "f.HasDisability", "@DisabType", cmbMDisabilityType.Text);
-                AddExactFilter(sql, cmd, "f.ServiceStatus", "@Status", cmbMStatus.Text);
+                AddExactFilter(sql, cmd, "c.ServiceStatus", "@Status", cmbMStatus.Text);
+                AddExactFilter(sql, cmd, "c.RequestType", "@MReqType", cmbMRequestType.Text);
+                AddIdCardFilter(sql, cmd, "f.MemberIdCardType", "f.MemberTazkiraNo", "@MIdCard", cmbMIdCardType.Text);
                 // فیلتر صنف (درخواست کاربر) — دقیقاً مثل بقیه‌ی فیلترهای
                 // «تطابق کامل»؛ مقدار «همه» توسط AddExactFilter نادیده گرفته
                 // می‌شود، پس رفتار پیش‌فرض هیچ تغییری نمی‌کند.
@@ -502,10 +671,34 @@ WHERE 1 = 1");
                     cmd.Parameters.AddWithValue("@CenterID", cid);
                 }
 
-                sql.Append(" ORDER BY f.FamID DESC");
-                cmd.CommandText = sql.ToString();
+                string whereTail = sql.ToString().Substring(wherePrefixLength);
 
                 con.Open();
+
+                long total = 0;
+                cmd.CommandText = @"
+SELECT COUNT(1)
+FROM TblFamily f
+JOIN TblCase c ON c.CasID = f.CasID
+WHERE 1 = 1 AND c.IsArchived = 0" + whereTail;
+                object scalar = cmd.ExecuteScalar();
+                if (scalar != null && scalar != DBNull.Value) total = Convert.ToInt64(scalar);
+
+                if (_memberPager != null) _memberPager.SetTotal(total);
+
+                sql.Append(" ORDER BY f.FamID DESC");
+
+                if (!_loadAllRows)
+                {
+                    int take = _memberPager != null ? _memberPager.PageSize : 100;
+                    int skip = _memberPager != null ? _memberPager.Offset : 0;
+                    sql.Append(" LIMIT @Take OFFSET @Skip");
+                    cmd.Parameters.AddWithValue("@Take", take);
+                    cmd.Parameters.AddWithValue("@Skip", skip);
+                }
+
+                cmd.CommandText = sql.ToString();
+
                 using (var reader = cmd.ExecuteReader())
                 {
                     DataTable table = new DataTable();
@@ -521,8 +714,10 @@ WHERE 1 = 1");
         {
             SetHeader(dgvMemberResults, "MemberName", "نام عضو");
             SetHeader(dgvMemberResults, "MemberFatherName", "نام پدر عضو");
+            SetHeader(dgvMemberResults, "MemberIdCardType", "نوع تذکره");
             SetHeader(dgvMemberResults, "MemberTazkiraNo", "شماره تذکره");
             SetHeader(dgvMemberResults, "Gender", "جنسیت");
+            SetHeader(dgvMemberResults, "MemberRole", "نقش عضو");
             SetHeader(dgvMemberResults, "Province", "ولایت");
             SetHeader(dgvMemberResults, "District", "ولسوالی");
             SetHeader(dgvMemberResults, "MemberEducation", "تحصیلات");
@@ -531,6 +726,7 @@ WHERE 1 = 1");
             SetHeader(dgvMemberResults, "PhysicalStatus", "وضعیت جسمی");
             SetHeader(dgvMemberResults, "HasDisability", "نوع معلولیت");
             SetHeader(dgvMemberResults, "Skill", "مهارت");
+            SetHeader(dgvMemberResults, "RequestType", "نوع درخواست");
             SetHeader(dgvMemberResults, "ServiceStatus", "وضعیت خدمات");
             if (dgvMemberResults.Columns.Contains("FamID"))
                 dgvMemberResults.Columns["FamID"].Visible = false;
@@ -539,6 +735,35 @@ WHERE 1 = 1");
         // ══════════════════════════════════════════════════════════════════
         // کمکی‌های مشترک
         // ══════════════════════════════════════════════════════════════════
+        // ─── فیلتر «نوع تذکره» (بخش ۴) ────────────────────────────────────
+        // آموزش — چرا AddExactFilter کافی نبود: دو گزینه‌ی «بدون تذکره» و
+        // «نوع نامشخص» مقدارِ ذخیره‌شده در دیتابیس نیستند بلکه «نبودِ مقدار»
+        // را توصیف می‌کنند، پس شرطشان باید روی هر دو ستونِ نوع و شماره باشد.
+        private static void AddIdCardFilter(
+            StringBuilder sql, SQLiteCommand cmd,
+            string typeColumn, string numberColumn, string parameterName, string value)
+        {
+            string v = (value ?? "").Trim();
+            if (v.Length == 0 || v == "همه") return;
+
+            if (v == Helpers.IdCardHelper.NoneDisplay)
+            {
+                sql.Append(" AND COALESCE(" + typeColumn + ", '') = ''" +
+                           " AND COALESCE(" + numberColumn + ", '') = ''");
+                return;
+            }
+
+            if (v == Helpers.IdCardHelper.UnknownDisplay)
+            {
+                sql.Append(" AND COALESCE(" + typeColumn + ", '') = ''" +
+                           " AND COALESCE(" + numberColumn + ", '') <> ''");
+                return;
+            }
+
+            sql.Append(" AND " + typeColumn + " = " + parameterName);
+            cmd.Parameters.AddWithValue(parameterName, v);
+        }
+
         private ComboBox MakeCombo(string firstItem, string[] items)
         {
             ComboBox cmb = new ComboBox();

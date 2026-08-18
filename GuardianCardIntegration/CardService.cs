@@ -27,18 +27,36 @@ namespace CaseManagement.GuardianCardIntegration
             _repo = repo;
         }
 
+        // متنِ قابل‌ویرایشِ کارت: اگر مؤسسه در تنظیمات مقداری وارد کرده باشد
+        // همان برمی‌گردد، وگرنه متنِ پیش‌فرضِ قبلی. این باعث می‌شود نصب‌های
+        // موجود بدون هیچ تنظیمی دقیقاً همان کارتِ قبلی را چاپ کنند.
+        private static string CardText(string settingKey, string fallback)
+        {
+            string value = SettingsHelper.Get(settingKey);
+            return string.IsNullOrWhiteSpace(value) ? fallback : value;
+        }
+
         // داده کامل کارت (برای استفاده مستقیم/آزمایش)
         public GuardianCardData BuildCardData(int caseId)
         {
             CaseModel c = _repo.GetCase(caseId);
             int orphansCount = _repo.GetFamilyMemberCount(caseId);
+            bool pendingRoleReview = _repo.HasUnassignedMemberRoles(caseId);
 
             DateTime issueDate = DateTime.Today;
             DateTime expiryDate = _pc.AddYears(issueDate, 1);
 
             var data = new GuardianCardData
             {
-                OrganizationName = SettingsHelper.Get(SettingsHelper.OrgName),
+                CasID = c.CasID,
+
+                // آموزش — متن‌های «مؤسسه‌ای» کارت (نام مؤسسه، تماس، هشدارها،
+                // پاورقی، عنوان امضا) حالا از تنظیمات خوانده می‌شوند تا قابل
+                // ویرایش باشند. CardText(...) اگر کاربر چیزی وارد نکرده باشد
+                // همان مقدار قبلی را برمی‌گرداند، پس رفتار پیش‌فرض عوض نمی‌شود.
+                // مشخصاتِ سرپرست (نام/پدر/تذکره/کد/تعداد ایتام) و بارکد همچنان
+                // فقط از دیتابیس می‌آیند و قابل ویرایش دستی نیستند.
+                OrganizationName = CardText(SettingsHelper.Card_OrgName, SettingsHelper.Get(SettingsHelper.OrgName)),
                 BranchName = SecurityContext.CurrentCenterName,
                 BranchCode = SecurityContext.CurrentCenterCode,
                 // شماره فرم پرونده (اتومات/یکتا/غیرقابل ویرایش) همان شماره
@@ -49,7 +67,11 @@ namespace CaseManagement.GuardianCardIntegration
                 GuardianName = c.HeadFullName,
                 FatherName = c.HeadFatherName,
                 NationalID = c.HeadTazkiraNo,
-                OrphansCount = orphansCount + " نفر",
+                // آموزش — به‌درخواست کاربر: تا نقشِ همه‌ی اعضای این پرونده
+                // بازبینی نشده، به‌جای عددِ (بالقوه گمراه‌کننده‌ی) صفر، پیام
+                // صریح «نیاز به تعیین نقش» چاپ می‌شود (نگاه کنید
+                // CaseCardRepository.HasUnassignedMemberRoles).
+                OrphansCount = pendingRoleReview ? "نیاز به تعیین نقش" : (orphansCount + " نفر"),
                 IssueDate = PersianDateHelper.ToPersianDateString(issueDate),
                 ExpiryDate = PersianDateHelper.ToPersianDateString(expiryDate),
 
@@ -60,7 +82,8 @@ namespace CaseManagement.GuardianCardIntegration
                 // Hardcode شده بود. حالا طبق ولایتِ واقعیِ همین پرونده ساخته
                 // می‌شود؛ اگر ولایت ثبت نشده باشد، به نام مرکز فعال برمی‌گردیم
                 // تا نوار هرگز خالی/گمراه‌کننده نماند.
-                MicrotextLabel = "دفتر نمایندگی " + (string.IsNullOrWhiteSpace(c.Province) ? SecurityContext.CurrentCenterName : c.Province),
+                MicrotextLabel = CardText(SettingsHelper.Card_MicrotextLabel, "دفتر نمایندگی")
+                                 + " " + (string.IsNullOrWhiteSpace(c.Province) ? SecurityContext.CurrentCenterName : c.Province),
                 // آموزش — این پروژه فیلد مجزای «قریه» ندارد (فقط ولایت/ولسوالی)؛
                 // به‌جای حدس زدن مقداری نادرست، خالی می‌ماند تا داده اشتباه روی
                 // کارت چاپ نشود.
@@ -69,13 +92,20 @@ namespace CaseManagement.GuardianCardIntegration
                 // آموزش — Address/Phone/Website/Email روی کارت یعنی اطلاعات
                 // تماسِ «دفتر صادرکننده»، نه سرپرست خانواده — طبق FIELD_MAPPING.md
                 // ("آدرس دفتر:")، پس از تنظیمات مؤسسه خوانده می‌شوند، نه از پرونده.
-                Address = SettingsHelper.Get(SettingsHelper.Address),
-                Phone = SettingsHelper.Get(SettingsHelper.Phone),
-                Website = SettingsHelper.Get(SettingsHelper.Website),
-                Email = SettingsHelper.Get(SettingsHelper.Email),
+                // استثنا — به‌درخواست کاربر («CARD CUSTOM CONTENT EDITING»): اگر
+                // این پرونده override اختصاصی (CardPhone/CardAddress) داشته
+                // باشد (مثلاً یک شمارهٔ تماسِ محلیِ متفاوت برای همین خانواده)،
+                // همان override اولویت دارد؛ وگرنه دقیقاً رفتار قبلی (تنظیمات
+                // مؤسسه) ادامه پیدا می‌کند.
+                Address = !string.IsNullOrWhiteSpace(c.CardAddress) ? c.CardAddress
+                          : CardText(SettingsHelper.Card_Address, SettingsHelper.Get(SettingsHelper.Address)),
+                Phone = !string.IsNullOrWhiteSpace(c.CardPhone) ? c.CardPhone
+                          : CardText(SettingsHelper.Card_Phone, SettingsHelper.Get(SettingsHelper.Phone)),
+                Website = CardText(SettingsHelper.Card_Website, SettingsHelper.Get(SettingsHelper.Website)),
+                Email = CardText(SettingsHelper.Card_Email, SettingsHelper.Get(SettingsHelper.Email)),
 
-                IssuedBy = SecurityContext.Username,
-                Position = SecurityContext.Role,
+                IssuedBy = CardText(SettingsHelper.Card_IssuedBy, SecurityContext.Username),
+                Position = CardText(SettingsHelper.Card_Position, SecurityContext.Role),
 
                 Logo = SettingsHelper.Get(SettingsHelper.LogoPath),
                 Photo = c.PhotoPath,
@@ -95,13 +125,24 @@ namespace CaseManagement.GuardianCardIntegration
                 // «برای کل یک دسته یکسان» هستند (سیاست مؤسسه، نه داده پرونده)،
                 // پس همان متن استاندارد مستندسازی‌شده (docs/TEMPLATE_SCHEMA.json)
                 // همیشه فرستاده می‌شود تا کارت هرگز بدون این هشدارهای قانونی چاپ نشود.
-                Notice1 = "در هنگام توزیع کمک‌ها باید سرپرست حضور داشته باشد.",
-                Notice2 = "در هنگام توزیع کمک‌ها این کارت و تذکره اصلی را با خود داشته باشید.",
-                Notice3 = "در صورت مفقود و تخریب شدن کارت ۵۰۰ افغانی جریمه می‌شوید.",
-                Notice4 = "در هنگام گرفتن کمک‌ها لطفاً پول خود را شمارش کنید.",
-                Notice5 = "کوشش شود پول کمک ایتام برای خود آنها (خوراک و پوشاک) مصرف گردد.",
-                SignatureLabel = "امضای مسئول دفتر",
-                LegalLine = "این کارت شخصی و غیرقابل انتقال است."
+                // آموزش — قابلیت جدید: هر پرونده می‌تواند شرایط/هشدارهای کارتِ
+                // خودش را داشته باشد (CardNoticeN روی TblCase). اگر کاربر برای
+                // این پرونده مقداری وارد نکرده باشد (خالی/NULL)، دقیقاً مثل
+                // قبل به متنِ سراسریِ تنظیمات مؤسسه برمی‌گردیم — نصب‌های موجود
+                // بدون هیچ ویرایشی همان کارتِ قبلی را چاپ می‌کنند.
+                Notice1 = !string.IsNullOrWhiteSpace(c.CardNotice1) ? c.CardNotice1
+                          : CardText(SettingsHelper.Card_Notice1, "در هنگام توزیع کمک‌ها باید سرپرست حضور داشته باشد."),
+                Notice2 = !string.IsNullOrWhiteSpace(c.CardNotice2) ? c.CardNotice2
+                          : CardText(SettingsHelper.Card_Notice2, "در هنگام توزیع کمک‌ها این کارت و تذکره اصلی را با خود داشته باشید."),
+                Notice3 = !string.IsNullOrWhiteSpace(c.CardNotice3) ? c.CardNotice3
+                          : CardText(SettingsHelper.Card_Notice3, "در صورت مفقود و تخریب شدن کارت ۵۰۰ افغانی جریمه می‌شوید."),
+                Notice4 = !string.IsNullOrWhiteSpace(c.CardNotice4) ? c.CardNotice4
+                          : CardText(SettingsHelper.Card_Notice4, "در هنگام گرفتن کمک‌ها لطفاً پول خود را شمارش کنید."),
+                Notice5 = !string.IsNullOrWhiteSpace(c.CardNotice5) ? c.CardNotice5
+                          : CardText(SettingsHelper.Card_Notice5, "کوشش شود پول کمک ایتام برای خود آنها (خوراک و پوشاک) مصرف گردد."),
+                SignatureLabel = CardText(SettingsHelper.Card_SignatureLabel, "امضای مسئول دفتر"),
+                LegalLine = !string.IsNullOrWhiteSpace(c.CardLegalLine) ? c.CardLegalLine
+                          : CardText(SettingsHelper.Card_LegalLine, "این کارت شخصی و غیرقابل انتقال است.")
             };
 
             // آموزش — به‌جای اختراع تاریخچه پرداخت جعلی: در این نسخه از پروژه
@@ -127,14 +168,16 @@ namespace CaseManagement.GuardianCardIntegration
             return data;
         }
 
-        // چاپ جمعی: بازه‌ی شماره فرم را به فهرست پرونده گرفته (مرکز‌محور) و
-        // برای هرکدام داده کارت را می‌سازد. یک پرونده‌ی خراب/ناقص کل دسته را
-        // متوقف نمی‌کند — فقط از فهرست حذف می‌شود و شمارنده‌ی خطا بالا می‌رود.
-        public List<GuardianCardData> BuildCardDataRange(int fromFormNo, int toFormNo, out int failedCount)
+        // آموزش — نسخه‌ی عمومی‌ترِ چاپ جمعی: به‌جای بازه‌ی شماره فرم، یک
+        // فهرستِ صریحِ CasID می‌گیرد (خروجیِ CaseCardRepository.PreviewBatch،
+        // بعد از اینکه کاربر پیش‌نمایش را دیده و تأیید کرده). یک پرونده‌ی
+        // خراب/ناقص کل دسته را متوقف نمی‌کند — فقط از فهرست حذف می‌شود و
+        // شمارنده‌ی خطا بالا می‌رود.
+        public List<GuardianCardData> BuildCardDataForCaseIds(IEnumerable<int> caseIds, out int failedCount)
         {
             failedCount = 0;
             var result = new List<GuardianCardData>();
-            foreach (int caseId in _repo.GetCaseIdsByFormNoRange(fromFormNo, toFormNo))
+            foreach (int caseId in caseIds)
             {
                 try
                 {

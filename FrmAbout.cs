@@ -1,4 +1,4 @@
-using CaseManagement.Helpers;
+﻿using CaseManagement.Helpers;
 using System;
 using System.Drawing;
 using System.Reflection;
@@ -56,7 +56,7 @@ namespace CaseManagement
 
             Version version = Assembly.GetExecutingAssembly().GetName().Version;
             Label lblVersion = new Label();
-            lblVersion.Text = "نسخه " + version.ToString();
+            lblVersion.Text = string.Format(Lang.T("نسخه {0}"), version.ToString());
             lblVersion.Font = UiTheme.Font(UiTheme.SizeBody);
             lblVersion.ForeColor = UiTheme.TextMuted;
             lblVersion.AutoSize = false;

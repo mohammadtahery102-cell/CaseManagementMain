@@ -79,17 +79,49 @@ namespace CaseManagement.Helpers
         }
 
         // ترازی که روی این کنترل «راستِ بصری» می‌دهد (بخش عمودی حفظ می‌شود).
+        //
+        // ─── باگی که آزمونِ تصویریِ فرم پرونده پیدا کرد ──────────────────────
+        //
+        // آموزش — *دو* چیزِ متفاوت می‌توانند ترازِ افقی را برعکس کنند، و تا
+        // امروز فقط یکی‌شان حساب می‌شد:
+        //
+        //   ۱. آینه‌شدنِ چیدمان (WS_EX_LAYOUTRTL) — همان چیزی که IsMirrored
+        //      می‌شمارد. کلِ دستگاهِ مختصات را برمی‌گرداند.
+        //
+        //   ۲. خودِ خاصیتِ RightToLeft روی همان کنترل — این یکی مستقل از
+        //      چیدمان است و فقط *معنیِ* ContentAlignment را جابه‌جا می‌کند:
+        //      روی برچسبی که RightToLeft=Yes دارد، MiddleRight بصراً «چپ»
+        //      رسم می‌شود. مستند و عمدیِ خودِ WinForms است.
+        //
+        // در فرم پرونده دقیقاً حالت دوم رخ می‌داد: چیدمان اصلاً آینه نبود
+        // (با خواندنِ exstyle واقعی تأیید شد: RTL=0 روی کلِ زنجیره)، ولی
+        // Caption.RightToLeft=Yes بود. پس IsMirrored درست می‌گفت «آینه نیست»،
+        // MiddleRight داده می‌شد، و برچسب در سمتِ *چپِ* کادر می‌نشست — همان
+        // چیزی که کاربر گزارش کرد.
+        //
+        // درمان: اثرِ این دو با XOR ترکیب می‌شود. اگر هر دو (یا هیچ‌کدام)
+        // فعال باشند یکدیگر را خنثی می‌کنند؛ اگر فقط یکی فعال باشد، تراز
+        // باید برعکس داده شود تا *بصراً* راست دیده شود.
         public static ContentAlignment VisualRight(Control control, ContentAlignment current)
         {
-            bool mirrored = IsMirrored(control);
+            bool flipped = IsFlipped(control);
 
             bool top = current == ContentAlignment.TopLeft || current == ContentAlignment.TopCenter || current == ContentAlignment.TopRight;
             bool bottom = current == ContentAlignment.BottomLeft || current == ContentAlignment.BottomCenter || current == ContentAlignment.BottomRight;
 
-            if (mirrored)
+            if (flipped)
                 return top ? ContentAlignment.TopLeft : bottom ? ContentAlignment.BottomLeft : ContentAlignment.MiddleLeft;
 
             return top ? ContentAlignment.TopRight : bottom ? ContentAlignment.BottomRight : ContentAlignment.MiddleRight;
+        }
+
+        // آیا معنیِ «چپ/راست» روی این کنترل برعکس شده است؟
+        // ترکیبِ آینه‌شدنِ چیدمان و خاصیتِ RightToLeft خودِ کنترل (توضیح بالا).
+        public static bool IsFlipped(Control control)
+        {
+            bool layoutMirrored = IsMirrored(control);
+            bool rightToLeftText = control != null && control.RightToLeft == RightToLeft.Yes;
+            return layoutMirrored ^ rightToLeftText;
         }
 
         // ─── مقیاس DPI ───────────────────────────────────────────────────────
@@ -180,28 +212,34 @@ namespace CaseManagement.Helpers
             Size scaledDesign = Scale(new Size(designWidth, designHeight));
 
             form.ClientSize = scaledDesign;
-            form.FormBorderStyle = FormBorderStyle.Sizable;
-            form.MaximizeBox = true;
+            // آموزش — خواسته‌ی کاربر: پنجره‌ها نه تمام‌صفحه باز شوند و نه قابل
+            // تغییر اندازه باشند (در حالت تمام‌صفحه دکمه‌ها گم می‌شدند).
+            form.FormBorderStyle = FormBorderStyle.FixedSingle;
+            form.MaximizeBox = false;
             form.MinimizeBox = true;
             form.StartPosition = FormStartPosition.CenterScreen;
 
             // حداقل‌اندازه = اندازه‌ی طراحیِ مقیاس‌شده، ولی هرگز بزرگ‌تر از خودِ
             // صفحه (وگرنه روی نمایشگر کوچک/مقیاس بالا، بخشی از پنجره بیرون
             // می‌ماند و دسترس‌ناپذیر می‌شود).
+            Size target = form.Size;
+
             try
             {
                 Rectangle workingArea = Screen.FromControl(form).WorkingArea;
-                form.MinimumSize = new Size(
-                    Math.Min(form.Size.Width, workingArea.Width),
-                    Math.Min(form.Size.Height, workingArea.Height));
+                target = new Size(
+                    Math.Min(target.Width, workingArea.Width),
+                    Math.Min(target.Height, workingArea.Height));
             }
-            catch
-            {
-                form.MinimumSize = form.Size;
-            }
+            catch { /* اگر اطلاعات صفحه در دسترس نبود، همان اندازه‌ی طراحی می‌ماند */ }
 
+            // اندازه قفل می‌شود: فرم نه بزرگ‌تر می‌شود نه کوچک‌تر.
+            form.MinimumSize = Size.Empty;
             form.MaximumSize = Size.Empty;
-            form.WindowState = FormWindowState.Maximized;
+            form.Size = target;
+            form.MinimumSize = target;
+            form.MaximumSize = target;
+            form.WindowState = FormWindowState.Normal;
 
             if (onBreakpointChanged != null)
                 HookBreakpoint(form, onBreakpointChanged);

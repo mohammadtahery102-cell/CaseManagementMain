@@ -45,16 +45,64 @@ namespace CaseManagement.Helpers
             if (caseData.Rows.Count == 0)
                 throw new Exception("پرونده پیدا نشد.");
 
+            // آموزش — اصلاحاتِ صفحه‌بندی (بزرگ‌ترشدنِ عکسِ سرپرست، حداکثر ۳ عضو
+            // در هر صفحه، حداکثر ۴ سند در هر صفحه) فقط برای «الگوی شماره ۱»
+            // اعمال می‌شود؛ الگوی پیش‌فرض (FullCaseTemplate.docx) دقیقاً همان
+            // رفتارِ قبلی‌اش را حفظ می‌کند (طبقِ درخواستِ صریحِ کاربر).
+            bool isTemplate1 = IsTemplate1(templatePath);
+            // آموزش — «الگوی شماره ۲» (فرمِ فشردهٔ تک‌صفحه‌ایِ «پرونده
+            // نیازمندان») هم مثلِ الگوی شماره ۱ با نامِ فایل تشخیص داده
+            // می‌شود. عمداً از isTemplate1 در FillFamilyBlock/FillDocsBlock
+            // استفاده نمی‌کند (پایین همان مقدار isTemplate1 بدونِ تغییر پاس
+            // داده می‌شود) چون گروه‌بندیِ ۳عضو/صفحه و ۴سند/صفحهٔ الگوی ۱ برای
+            // این الگو لازم نیست — جدولِ فشرده‌اش خودش چند عضو را در یک صفحه
+            // جا می‌دهد. فقط اندازهٔ دو عکس (سرپرست/جمعی) که در همین الگو
+            // کنارِ هم و در یک صفحه باید جا شوند، مخصوصِ آن تنظیم شده.
+            bool isTemplate2 = IsTemplate2(templatePath);
+
             using (WordprocessingDocument doc = WordprocessingDocument.Open(outputPath, true))
             {
-                FillFamilyBlock(doc, familyData);
-                FillDocsBlock(doc, docsData);
+                FillFamilyBlock(doc, familyData, isTemplate1);
+                FillDocsBlock(doc, docsData, isTemplate1);
 
                 DataRow row = caseData.Rows[0];
 
-                ReplaceTextEverywhere(doc, BuildCaseValues(row, familyData.Rows.Count, docsData.Rows.Count));
-                ReplaceImageEverywhere(doc, "{{HeadPhoto}}", GetValue(row, "PhotoPath"), 90f, 110f);
-                ReplaceImageEverywhere(doc, "{{FamilyPhoto}}", GetValue(row, "FamilyPhotoPath"), 250f, 160f);
+                Dictionary<string, string> caseValues = BuildCaseValues(row, familyData.Rows.Count, docsData.Rows.Count);
+                if (isTemplate2)
+                    // آموزش — فایلِ واقعیِ کاربر برای «الگوی شماره ۲» یک جدولِ
+                    // *ثابتِ* ۹ردیفی است (نه {{FamilyBlockStart}}/{{FamilyBlockEnd}}
+                    // مثلِ بقیهٔ الگوها) — FillFamilyBlock بالا برایش کاری نمی‌کند
+                    // (چون نشانگر پیدا نمی‌کند). این‌جا هر ردیف با شمارهٔ ثابتِ
+                    // خودش (MemberName1..9 و...) پر می‌شود؛ فقط ۹ عضوِ اول یک
+                    // پرونده چاپ می‌شوند (اندازهٔ جدول در فایلِ خودِ کاربر).
+                    foreach (KeyValuePair<string, string> item in BuildTemplate2FixedMemberValues(familyData))
+                        caseValues[item.Key] = item.Value;
+                ReplaceTextEverywhere(doc, caseValues);
+                // آموزش — عکسِ سرپرست در «الگوی شماره ۱»: پس از بازخوردِ کاربر
+                // (خیلی بزرگ شده بود)، به نصفِ اندازهٔ قبلی (۴۰۰×۳۸۰ → ۲۰۰×۱۹۰
+                // نقطه، معادلِ ۲.۵ برابرِ اندازهٔ اصلیِ ۸۰×۷۶) برگشت.
+                // الگوی پیش‌فرض دست‌نخورده ماند. فایلِ واقعیِ «الگوی شماره ۲»ی
+                // کاربر {{HeadPhoto}} ندارد (فقط {{FamilyPhoto}})، پس این
+                // فراخوانی برای آن الگو بی‌اثر است (هیچ placeholderـی پیدا
+                // نمی‌شود) — بی‌خطر، چون ReplaceImageEverywhere وقتی متنِ
+                // placeholder را در سند پیدا نکند کاری نمی‌کند.
+                float headW = isTemplate1 ? 200f : 80f;
+                float headH = isTemplate1 ? 190f : 76f;
+                ReplaceImageEverywhere(doc, "{{HeadPhoto}}", GetValue(row, "PhotoPath"), headW, headH);
+                // عکس جمعی دو برابر شد (درخواست کاربر). اندازه‌اش دست‌نخورده
+                // می‌ماند؛ حالا که جدولِ مشخصات + عکسِ سرپرست + عکسِ جمعی در
+                // الگوی شماره ۱ یک بلوکِ اتمیک است، این سه با هم به صفحهٔ بعد
+                // می‌روند نه اینکه جدولِ مشخصات وسط شکسته شود. الگوی شماره ۲:
+                // اندازه‌اش با جعبهٔ واقعیِ «عکس جمعی» در فایلِ کاربر (حدودِ
+                // ۲۲۶×۱۵۷ نقطه) هم‌خوان است.
+                float familyW = isTemplate2 ? 200f : 460f;
+                float familyH = isTemplate2 ? 120f : 132f;
+                ReplaceImageEverywhere(doc, "{{FamilyPhoto}}", GetValue(row, "FamilyPhotoPath"), familyW, familyH);
+
+                // آموزش — لینک موقعیت باید *پس از* جای‌گزینی متن و *پیش از*
+                // پاک‌سازی placeholderهای بی‌مصرف اجرا شود؛ وگرنه یا متنِ خام
+                // چاپ می‌شود یا کادر لینک خالی می‌ماند.
+                ReplaceLocationLink(doc, GetValue(row, "LocationAddress"));
 
                 RemoveUnusedPlaceholdersEverywhere(doc);
 
@@ -80,7 +128,9 @@ namespace CaseManagement.Helpers
                 { "{{HeadFatherName}}", GetValue(row, "HeadFatherName") },
                 { "{{HeadSadat}}", GetValue(row, "HeadSadat") },
                 { "{{Religion}}", GetValue(row, "Religion") },
+                { "{{HeadIdCardType}}", GetValue(row, "HeadIdCardType") },
                 { "{{HeadTazkiraNo}}", GetValue(row, "HeadTazkiraNo") },
+                { "{{PhysicalStatusNotes}}", GetValue(row, "PhysicalStatusNotes") },
                 { "{{HeadOriginalResidence}}", GetValue(row, "HeadOriginalResidence") },
                 { "{{HeadCurrentResidence}}", GetValue(row, "HeadCurrentResidence") },
                 { "{{RelationshipToFamily}}", GetValue(row, "RelationshipToFamily") },
@@ -99,12 +149,26 @@ namespace CaseManagement.Helpers
                 { "{{EducationLevel}}", GetValue(row, "EducationLevel") },
                 { "{{ServiceStatus}}", GetValue(row, "ServiceStatus") },
                 { "{{UrgentSituation}}", GetValue(row, "UrgentSituation") },
+                { "{{StopReason}}", GetValue(row, "StopReason") },
                 { "{{FamilyCount}}", familyCount.ToString() },
-                { "{{DocsCount}}", docsCount.ToString() }
+                { "{{DocsCount}}", docsCount.ToString() },
+                // آموزش — به‌درخواستِ کاربر برای «الگوی شماره ۲» (که فرمِ
+                // کاغذیِ «پرونده نیازمندان» را عیناً بازتولید می‌کند): ستونِ
+                // HeadBirthDate از قبل در TblCase وجود داشت ولی هیچ الگویی
+                // آن را چاپ نمی‌کرد؛ چون این‌جا فقط یک ورودیِ اضافه به
+                // دیکشنری است، الگوهای دیگر (که اصلاً {{HeadBirthDate}}
+                // ندارند) کاملاً بی‌تأثیر می‌مانند.
+                { "{{HeadBirthDate}}", GetDate(row, "HeadBirthDate") }
             };
         }
 
-        private void FillFamilyBlock(WordprocessingDocument doc, DataTable familyData)
+        // آموزش — حداکثر ۳ عضو در هر صفحه (فقط الگوی شماره ۱): پیش از عضوِ
+        // چهارم، هفتم، ... یک Page Break صریح درج می‌شود. cantSplit/keepNext
+        // خودِ قالب (روی جدولِ ۸‌ردیفیِ هر عضو) تضمین می‌کند که یک عضو هرگز
+        // وسط شکسته نشود؛ اینجا فقط گروه‌بندیِ ۳‌تایی اضافه می‌شود.
+        private const int MaxMembersPerPageTemplate1 = 3;
+
+        private void FillFamilyBlock(WordprocessingDocument doc, DataTable familyData, bool isTemplate1)
         {
             Body body = doc.MainDocumentPart.Document.Body;
             int startIndex;
@@ -124,9 +188,16 @@ namespace CaseManagement.Helpers
             }
 
             int index = 1;
+            int insertedElementCount = 0;
 
             foreach (DataRow row in familyData.Rows)
             {
+                if (isTemplate1 && index > 1 && (index - 1) % MaxMembersPerPageTemplate1 == 0)
+                {
+                    body.InsertBefore(new Paragraph(new Run(new Break() { Type = BreakValues.Page })), insertBefore);
+                    insertedElementCount++;
+                }
+
                 foreach (OpenXmlElement sourceElement in template)
                 {
                     OpenXmlElement clone = sourceElement.CloneNode(true);
@@ -135,12 +206,13 @@ namespace CaseManagement.Helpers
                     ReplaceImageInElement(doc.MainDocumentPart, clone, "{{MemberPhoto}}", GetValue(row, "MemberPhotoPath"), 85f, 105f);
 
                     body.InsertBefore(clone, insertBefore);
+                    insertedElementCount++;
                 }
 
                 index++;
             }
 
-            RemoveBlockElements(body, startIndex + (template.Count * familyData.Rows.Count), endIndex + (template.Count * familyData.Rows.Count));
+            RemoveBlockElements(body, startIndex + insertedElementCount, endIndex + insertedElementCount);
         }
 
         private Dictionary<string, string> BuildFamilyValues(DataRow row, int index)
@@ -150,13 +222,20 @@ namespace CaseManagement.Helpers
                 { "{{FamilyBlockStart}}", "" },
                 { "{{FamilyBlockEnd}}", "" },
                 { "{{MemberTitle}}", "عضو شماره " + index },
+                // آموزش — «الگوی شماره ۲» ردیفِ جدولِ فشرده‌اش را با شمارهٔ خامِ
+                // ستونِ «ش» می‌خواهد (نه عبارتِ کاملِ «عضو شماره N» که
+                // {{MemberTitle}} می‌دهد)؛ چون فقط یک ورودیِ تازه به همین
+                // دیکشنریِ موجود است، هیچ الگوی دیگری تحتِ تأثیر قرار نمی‌گیرد.
+                { "{{RowNumber}}", index.ToString() },
                 { "{{FamID}}", GetValue(row, "FamID") },
                 { "{{MemberName}}", GetValue(row, "MemberName") },
                 { "{{MemberFatherName}}", GetValue(row, "MemberFatherName") },
+                { "{{MemberIdCardType}}", GetValue(row, "MemberIdCardType") },
                 { "{{MemberTazkiraNo}}", GetValue(row, "MemberTazkiraNo") },
                 { "{{BirthDate}}", GetDate(row, "BirthDate") },
                 { "{{MemberSadat}}", GetValue(row, "MemberSadat") },
                 { "{{Gender}}", GetValue(row, "Gender") },
+                { "{{MemberRole}}", GetValue(row, "MemberRole") },
                 { "{{PhysicalStatus}}", GetValue(row, "PhysicalStatus") },
                 { "{{HasDisability}}", GetValue(row, "HasDisability") },
                 { "{{MemberDisabilityDegree}}", GetValue(row, "MemberDisabilityDegree") },
@@ -182,10 +261,55 @@ namespace CaseManagement.Helpers
                 { "{{UniversityType}}", GetValue(row, "UniversityType") },
                 { "{{UniversityPrevGrade}}", GetValue(row, "UniversityPrevGrade") },
                 { "{{SeminaryLevel}}", GetValue(row, "SeminaryLevel") },
-                { "{{EducationCoverage}}", GetValue(row, "EducationCoverage") }
+                { "{{EducationCoverage}}", GetValue(row, "EducationCoverage") },
+                // ─── فیلدهای فرم اعضا که تا امروز در گزارش چاپ نمی‌شدند ────────
+                { "{{MemberReligion}}", GetValue(row, "Religion") },
+                { "{{MemberMaritalStatus}}", GetValue(row, "MaritalStatus") },
+                { "{{MemberServiceStatus}}", GetValue(row, "ServiceStatus") },
+                { "{{MemberStopReason}}", GetValue(row, "StopReason") },
+                { "{{DisabilityDetails}}", GetValue(row, "DisabilityDetails") }
             };
         }
-        private void FillDocsBlock(WordprocessingDocument doc, DataTable docsData)
+
+        // آموزش — «الگوی شماره ۲» (فایلِ Word واقعیِ خودِ کاربر) یک جدولِ
+        // *ثابتِ* ۹ردیفی برای اعضاست، نه بلوکِ تکرارشوندهٔ {{FamilyBlockStart}}/
+        // {{FamilyBlockEnd}} که بقیهٔ الگوها دارند — پس FillFamilyBlock برایش
+        // کاری نمی‌کند و هر ردیف باید با شمارهٔ ثابتِ خودش (۱ تا ۹، دقیقاً به
+        // تعدادِ ردیف‌های واقعیِ همان جدول در فایلِ کاربر) پر شود. فقط ۹ عضوِ
+        // اولِ پرونده چاپ می‌شوند؛ این محدودیتِ خودِ طرحِ جدولِ کاربر است، نه
+        // یک تصمیمِ کد.
+        private Dictionary<string, string> BuildTemplate2FixedMemberValues(DataTable familyData)
+        {
+            const int maxRows = 9;
+            var values = new Dictionary<string, string>();
+
+            for (int i = 0; i < maxRows; i++)
+            {
+                string n = (i + 1).ToString();
+                bool hasRow = i < familyData.Rows.Count;
+                DataRow row = hasRow ? familyData.Rows[i] : null;
+
+                values["{{MemberName" + n + "}}"] = hasRow ? GetValue(row, "MemberName") : "";
+                values["{{MemberFatherName" + n + "}}"] = hasRow ? GetValue(row, "MemberFatherName") : "";
+                values["{{MemberTazkiraNo" + n + "}}"] = hasRow ? GetValue(row, "MemberTazkiraNo") : "";
+                values["{{MemberBirthDate" + n + "}}"] = hasRow ? GetDate(row, "BirthDate") : "";
+                values["{{MemberSadat" + n + "}}"] = hasRow ? GetValue(row, "MemberSadat") : "";
+                values["{{MemberRole" + n + "}}"] = hasRow ? GetValue(row, "MemberRole") : "";
+                values["{{MemberEducation" + n + "}}"] = hasRow ? GetValue(row, "MemberEducation") : "";
+                values["{{MemberPhysicalStatus" + n + "}}"] = hasRow ? GetValue(row, "PhysicalStatus") : "";
+            }
+
+            return values;
+        }
+
+        // آموزش — حداکثر ۴ سند در هر صفحه (فقط الگوی شماره ۱)؛ قبلاً بدونِ قید
+        // هر سند صفحهٔ کامل جداگانه می‌گرفت که خودش منبعِ اصلیِ فضای خالیِ
+        // زیاد بود. اندازهٔ عکس هم به یک بندانگشتیِ واقعی کوچک شد (به‌جای
+        // تقریباً اندازهٔ کاملِ صفحه). الگوی پیش‌فرض دقیقاً رفتارِ قبلی‌اش
+        // (هر سند = یک صفحه، عکسِ بزرگ) را حفظ می‌کند.
+        private const int MaxDocsPerPageTemplate1 = 4;
+
+        private void FillDocsBlock(WordprocessingDocument doc, DataTable docsData, bool isTemplate1)
         {
             Body body = doc.MainDocumentPart.Document.Body;
 
@@ -198,31 +322,44 @@ namespace CaseManagement.Helpers
                 return;
             }
 
+            float imageW = isTemplate1 ? 150f : 420f;
+            float imageH = isTemplate1 ? 180f : 560f;
+
             int index = 1;
 
             foreach (DataRow row in docsData.Rows)
             {
-                body.AppendChild(CreateParagraph("سند شماره " + index));
-                body.AppendChild(CreateParagraph("نوع سند: " + GetValue(row, "DocType")));
-                body.AppendChild(CreateParagraph("نام فایل: " + GetValue(row, "OriginalFileName")));
-                body.AppendChild(CreateParagraph("مرجع مرتبط: " + GetValue(row, "RelatedCaseRef")));
-                body.AppendChild(CreateParagraph("توضیحات: " + GetValue(row, "DocDescription")));
+                // آموزش — طبقِ خواستهٔ کاربر: عنوان/بندانگشتی/توضیحِ هر سند یک
+                // بلوکِ واحد بمانند (keepNext/keepLines روی همهٔ پاراگراف‌های
+                // این سند به‌جز آخری، فقط برای الگوی شماره ۱).
+                body.AppendChild(CreateParagraph("سند شماره " + index, isTemplate1));
+                body.AppendChild(CreateParagraph("نوع سند: " + GetValue(row, "DocType"), isTemplate1));
+                body.AppendChild(CreateParagraph("نام فایل: " + GetValue(row, "OriginalFileName"), isTemplate1));
+                body.AppendChild(CreateParagraph("مرجع مرتبط: " + GetValue(row, "RelatedCaseRef"), isTemplate1));
+                body.AppendChild(CreateParagraph("توضیحات: " + GetValue(row, "DocDescription"), isTemplate1));
 
                 string filePath = GetValue(row, "DocFilePath");
 
                 if (IsImageFile(filePath))
                 {
                     Paragraph imageParagraph = new Paragraph();
-                    imageParagraph.AppendChild(new ParagraphProperties(new Justification() { Val = JustificationValues.Center }));
-                    imageParagraph.AppendChild(new Run(CreateImageDrawing(doc.MainDocumentPart, filePath, 420f, 560f)));
+                    List<OpenXmlElement> pPrChildren = new List<OpenXmlElement> { new Justification() { Val = JustificationValues.Center } };
+                    if (isTemplate1) pPrChildren.Insert(0, new KeepLines());
+                    imageParagraph.AppendChild(new ParagraphProperties(pPrChildren));
+                    imageParagraph.AppendChild(new Run(CreateImageDrawing(doc.MainDocumentPart, filePath, imageW, imageH)));
                     body.AppendChild(imageParagraph);
                 }
                 else
                 {
-                    body.AppendChild(CreateParagraph("این سند عکس نیست و فقط مشخصات آن ثبت شد."));
+                    body.AppendChild(CreateParagraph("این سند عکس نیست و فقط مشخصات آن ثبت شد.", isTemplate1));
                 }
 
-                if (index < docsData.Rows.Count)
+                bool isLast = index >= docsData.Rows.Count;
+                bool needsPageBreak = isTemplate1
+                    ? (!isLast && index % MaxDocsPerPageTemplate1 == 0)
+                    : !isLast;
+
+                if (needsPageBreak)
                     body.AppendChild(new Paragraph(new Run(new Break() { Type = BreakValues.Page })));
 
                 index++;
@@ -286,6 +423,32 @@ namespace CaseManagement.Helpers
             return new Paragraph(new Run(new Text(text) { Space = SpaceProcessingModeValues.Preserve }));
         }
 
+        // آموزش — نسخهٔ اضافی برای پاراگراف‌هایی که باید با پاراگرافِ بعدی
+        // بمانند (keepNext) و خودشان هم بین دو صفحه نشکنند (keepLines) — فقط
+        // بخشِ اسنادِ الگوی شماره ۱ از این استفاده می‌کند.
+        private Paragraph CreateParagraph(string text, bool keepTogether)
+        {
+            Paragraph p = CreateParagraph(text);
+            if (keepTogether)
+                p.InsertAt(new ParagraphProperties(new KeepNext(), new KeepLines()), 0);
+            return p;
+        }
+
+        // آموزش — «الگوی شماره ۱» بر اساسِ نامِ فایلِ قالب تشخیص داده می‌شود
+        // (نه یک پرچمِ جداگانه) تا هیچ فراخوانیِ موجودِ ExportFullCaseToWord
+        // نیاز به تغییر نداشته باشد؛ الگوی پیش‌فرض (هر نامِ دیگری) دقیقاً
+        // رفتارِ قبلی‌اش را حفظ می‌کند.
+        private static bool IsTemplate1(string templatePath)
+        {
+            return string.Equals(Path.GetFileNameWithoutExtension(templatePath), "الگوی_شماره_1", StringComparison.Ordinal);
+        }
+
+        // آموزش — همان الگوی تشخیصِ IsTemplate1، برای «الگوی شماره ۲».
+        private static bool IsTemplate2(string templatePath)
+        {
+            return string.Equals(Path.GetFileNameWithoutExtension(templatePath), "الگوی_شماره_2", StringComparison.Ordinal);
+        }
+
         private void ReplaceTextEverywhere(WordprocessingDocument doc, Dictionary<string, string> values)
         {
             ReplaceTextInElement(doc.MainDocumentPart.Document, values);
@@ -305,7 +468,20 @@ namespace CaseManagement.Helpers
 
         private void ReplaceTextInElement(OpenXmlElement root, Dictionary<string, string> values)
         {
-            foreach (Paragraph paragraph in root.Descendants<Paragraph>().ToList())
+            // آموزش — رفعِ باگِ «عنوانِ عضو چاپ نمی‌شد»: Descendants<Paragraph>()
+            // خودِ عنصر را شامل نمی‌شود. در FillFamilyBlock هر عنصرِ بلوک جداگانه
+            // Clone و پاس داده می‌شود؛ وقتی آن عنصر خودش یک Paragraph بود (مثلِ
+            // پاراگرافِ «مشخصات اعضاء خانواده - {{MemberTitle}}»)، هیچ جای‌گزینی
+            // انجام نمی‌شد و در پایان RemoveUnusedPlaceholders آن را خالی می‌کرد.
+            // این افزوده فقط همان حالتِ ازقلم‌افتاده را پوشش می‌دهد؛ برای
+            // Document/Header/Footer/Table رفتار دقیقاً مثل قبل است.
+            List<Paragraph> paragraphs = root.Descendants<Paragraph>().ToList();
+
+            Paragraph rootParagraph = root as Paragraph;
+            if (rootParagraph != null)
+                paragraphs.Insert(0, rootParagraph);
+
+            foreach (Paragraph paragraph in paragraphs)
             {
                 string oldText = string.Concat(paragraph.Descendants<Text>().Select(t => t.Text));
 
@@ -363,7 +539,15 @@ namespace CaseManagement.Helpers
 
         private void ReplaceImageInElement(OpenXmlPart part, OpenXmlElement root, string placeholder, string imagePath, float maxWidthPt, float maxHeightPt)
         {
-            foreach (Paragraph paragraph in root.Descendants<Paragraph>().ToList())
+            // همان نکتهٔ ReplaceTextInElement: اگر خودِ عنصرِ پاس‌داده‌شده یک
+            // Paragraph باشد (عنصرِ Cloneشدهٔ بلوک)، Descendants آن را نمی‌بیند.
+            List<Paragraph> paragraphs = root.Descendants<Paragraph>().ToList();
+
+            Paragraph rootParagraph = root as Paragraph;
+            if (rootParagraph != null)
+                paragraphs.Insert(0, rootParagraph);
+
+            foreach (Paragraph paragraph in paragraphs)
             {
                 string text = string.Concat(paragraph.Descendants<Text>().Select(t => t.Text));
 
@@ -379,6 +563,82 @@ namespace CaseManagement.Helpers
                 paragraph.RemoveAllChildren();
                 paragraph.AppendChild(new ParagraphProperties(new Justification() { Val = JustificationValues.Center }));
                 paragraph.AppendChild(new Run(CreateImageDrawing(part, imagePath, maxWidthPt, maxHeightPt)));
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        // آموزش — «موقعیت جغرافیایی» به‌صورت دکمه/لینک کلیک‌شدنی
+        //
+        // فیلد LocationAddress در فرم پرونده یا خودش یک نشانی اینترنتی است
+        // (لینکی که کارشناس از Google Maps کپی کرده) یا یک آدرس متنی/مختصات.
+        // در حالت دوم همان متن به جست‌وجوی نقشه‌ی گوگل داده می‌شود. نتیجه در
+        // Word و در PDF خروجی، یک لینک کلیک‌شدنی است.
+        // ─────────────────────────────────────────────────────────────────────
+        private void ReplaceLocationLink(WordprocessingDocument doc, string locationAddress)
+        {
+            MainDocumentPart part = doc.MainDocumentPart;
+            Uri address = BuildMapUri(locationAddress);
+
+            foreach (Paragraph paragraph in part.Document.Descendants<Paragraph>().ToList())
+            {
+                string text = string.Concat(paragraph.Descendants<Text>().Select(t => t.Text));
+
+                if (!text.Contains("{{LocationLink}}"))
+                    continue;
+
+                if (address == null)
+                {
+                    ReplaceParagraphText(paragraph, "");
+                    continue;
+                }
+
+                HyperlinkRelationship relationship = part.AddHyperlinkRelationship(address, true);
+
+                ParagraphProperties paragraphProperties = paragraph.ParagraphProperties == null
+                    ? null
+                    : (ParagraphProperties)paragraph.ParagraphProperties.CloneNode(true);
+
+                paragraph.RemoveAllChildren();
+
+                if (paragraphProperties != null)
+                    paragraph.AppendChild(paragraphProperties);
+
+                Run run = new Run(
+                    new RunProperties(
+                        new RunFonts() { Ascii = "Segoe UI", HighAnsi = "Segoe UI", ComplexScript = "B Nazanin" },
+                        new Bold(),
+                        new BoldComplexScript(),
+                        new DocumentFormat.OpenXml.Wordprocessing.Color() { Val = "0563C1" },
+                        new FontSize() { Val = "21" },
+                        new FontSizeComplexScript() { Val = "21" },
+                        new Underline() { Val = UnderlineValues.Single },
+                        new RightToLeftText()),
+                    new Text("نمایش موقعیت روی نقشه") { Space = SpaceProcessingModeValues.Preserve });
+
+                paragraph.AppendChild(new Hyperlink(run) { Id = relationship.Id });
+            }
+        }
+
+        private Uri BuildMapUri(string locationAddress)
+        {
+            if (string.IsNullOrWhiteSpace(locationAddress))
+                return null;
+
+            string value = locationAddress.Trim();
+
+            try
+            {
+                if (value.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                    value.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                    return new Uri(value, UriKind.Absolute);
+
+                return new Uri("https://www.google.com/maps/search/?api=1&query=" + Uri.EscapeDataString(value),
+                    UriKind.Absolute);
+            }
+            catch (UriFormatException)
+            {
+                // نشانی خراب نباید کل خروجی را از کار بیندازد؛ کادر خالی می‌ماند.
+                return null;
             }
         }
 
@@ -526,15 +786,30 @@ namespace CaseManagement.Helpers
             return value.ToString();
         }
 
+        // تاریخ‌های خروجی Word/PDF شمسی و به‌صورت «روز/ماه/سال» (مثل 18/05/1405)
+        // نوشته می‌شوند — به درخواست کاربر.
+        //
+        // آموزش — چرا اینجا و نه داخل PersianDateHelper: متد مشترکِ
+        // ToPersianDateString ترتیبِ «سال/ماه/روز» می‌دهد و ده‌ها جای دیگر
+        // (گریدها، خروجی اکسل، کارت شناسایی) به همان ترتیب متکی‌اند؛ تغییرِ آن
+        // متد همه‌ی آن‌ها را هم عوض می‌کرد. پس فقط ترتیبِ نمایش در همین خروجی
+        // برعکس می‌شود و هیچ جای دیگری دست نمی‌خورد.
         private string GetDate(DataRow row, string columnName)
         {
-            string value = GetValue(row, columnName);
+            return ToPersianExportDate(GetValue(row, columnName));
+        }
+
+        public static string ToPersianExportDate(string value)
+        {
             DateTime dt;
+            if (!DateTime.TryParse(value, out dt))
+                return value;   // مقدارِ غیرتاریخ دست‌نخورده می‌ماند
 
-            if (DateTime.TryParse(value, out dt))
-                return PersianDateHelper.ToPersianDateString(dt);
+            // ToPersianDateString → «1405/05/18»؛ برعکس می‌شود به «18/05/1405».
+            string persian = PersianDateHelper.ToPersianDateString(dt);
+            string[] parts = persian.Split('/');
 
-            return value;
+            return parts.Length == 3 ? parts[2] + "/" + parts[1] + "/" + parts[0] : persian;
         }
     }
 }

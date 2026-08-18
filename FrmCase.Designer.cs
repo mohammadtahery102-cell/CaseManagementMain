@@ -43,6 +43,8 @@ namespace CaseManagement
             this.lblCaseDate = new System.Windows.Forms.Label();
             this.txtRelationshipToFamily = new System.Windows.Forms.TextBox();
             this.txtCoveredByOrg = new System.Windows.Forms.ComboBox();
+            this.txtCoveredByOrgNames = new System.Windows.Forms.TextBox();
+            this.lblCoveredByOrgNames = new System.Windows.Forms.Label();
             this.txtJob = new System.Windows.Forms.TextBox();
             this.txtSkill = new System.Windows.Forms.TextBox();
             this.txtDisabilityDegree = new System.Windows.Forms.ComboBox();
@@ -116,6 +118,8 @@ namespace CaseManagement
             this.label3 = new System.Windows.Forms.Label();
             this.lblStopReason = new System.Windows.Forms.Label();
             this.txtStopReason = new System.Windows.Forms.TextBox();
+            this.lblSuspensionReason = new System.Windows.Forms.Label();
+            this.txtSuspensionReason = new System.Windows.Forms.ComboBox();
             this.grpHead = new System.Windows.Forms.GroupBox();
             this.grpPhysical = new System.Windows.Forms.GroupBox();
             this.grpCase = new System.Windows.Forms.GroupBox();
@@ -271,18 +275,34 @@ namespace CaseManagement
             AddCaseField(gridCase, this.label2,       "ولایت",              this.txtProvince);
             AddCaseField(gridCase, this.label3,       "ولسوالی",            this.txtDistrict);
             AddCaseField(gridCase, this.label4,       "نوع درخواست",        this.txtRequestType);
-            AddCaseField(gridCase, this.label5,       "اولویت‌بندی",        this.txtPriorityLevel);
+            AddCaseField(gridCase, this.label5,       "اولویت‌بندی اقتصادی", this.txtPriorityLevel);
             AddCaseField(gridCase, this.label21,      "نوع برگه مهاجرت",    this.txtMigrationCardType);
-            AddCaseField(gridCase, this.label16,      "تحت پوشش",           this.txtCoveredByOrg);
+            AddCaseField(gridCase, this.label16,      "تحت پوشش دیگر مؤسسات", this.txtCoveredByOrg);
+            // آموزش — «اسامی مؤسسات» فقط وقتی معنی دارد که پاسخِ بالا «بله» باشد،
+            // پس مثل «دلیل قطع موقت» در فرم اعضا، خودِ کادر و کانتینرش با هم
+            // پنهان/آشکار می‌شوند تا جای خالی در شبکه نماند. منطقِ نمایش در
+            // FrmCase.cs → UpdateCoveredByOrgNamesVisibility است.
+            this.fieldCoveredByOrgNames = AddCaseField(
+                gridCase, this.lblCoveredByOrgNames, "اسامی مؤسسات تحت پوشش", this.txtCoveredByOrgNames);
+            this.lblCoveredByOrgNames.Visible   = false;
+            this.txtCoveredByOrgNames.Visible   = false;
+            this.fieldCoveredByOrgNames.Visible = false;
             AddCaseField(gridCase, this.lblCaseDate,  "تاریخ تشکیل پرونده", this.dtpCaseDate);
             AddCaseField(gridCase, this.label24,      "وضعیت خدمات",        this.txtServiceStatus);
             AddCaseField(gridCase, this.label25,      "آدرس لوکیشن",        this.txtLocationAddress);
             AddCaseField(gridCase, this.label23,      "سروی‌کننده‌ها",      this.txtSurveyors);
             AddCaseField(gridCase, this.label28,      "تاریخ سروی",         this.dtpSurveyDate);
 
-            // «دلیل قطع موقت» مثل قبل پنهان است تا وضعیت خدمات «قطع موقت» شود
-            // (منطقش در FrmCase.cs دست‌نخورده مانده و روی همین دو کنترل کار می‌کند).
-            this.caseFieldStopReason = AddCaseField(gridCase, this.lblStopReason, "دلیل قطع موقت", this.txtStopReason);
+            // «دلیل تعلیق» (الزامی) و «یادداشت تعلیق» (اختیاری، همان کنترل قدیمی
+            // StopReason) هر دو پنهان‌اند تا وضعیت خدمات «قطع» یا «قطع موقت» شود
+            // (منطق نمایش/اجبار در FrmCase.cs → UpdateStopReasonVisibility/ValidateForm).
+            this.txtSuspensionReason.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this.caseFieldSuspensionReason = AddCaseField(gridCase, this.lblSuspensionReason, "دلیل تعلیق", this.txtSuspensionReason);
+            this.lblSuspensionReason.Visible = false;
+            this.txtSuspensionReason.Visible = false;
+            this.caseFieldSuspensionReason.Visible = false;
+
+            this.caseFieldStopReason = AddCaseField(gridCase, this.lblStopReason, "یادداشت تعلیق (اختیاری)", this.txtStopReason);
             this.lblStopReason.Visible = false;
             this.txtStopReason.Visible = false;
             this.caseFieldStopReason.Visible = false;
@@ -321,15 +341,164 @@ namespace CaseManagement
             this.grpCase.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
             var cardCase = MkCaseCard("مشخصات پرونده", caseHost, this.grpCase);
 
-            // ═══ پانل قابل‌اسکرول فیلدها (سه کارت پشت‌سرهم) ═══════════════════
-            // ترتیب افزودن معکوسِ نمایش است (هر Dock=Top بالای قبلی می‌نشیند).
-            FieldsScrollPanel fieldsPanel = new FieldsScrollPanel();
+            // ═══ تب «خلاصه پرونده» (فاز A3) — خلاصهٔ خواندنیِ کل پرونده در یک
+            // نگاه. آموزش — همان الگوی MkCaseFieldGrid/AddCaseField/FieldBox که
+            // سرپرست/جسمی/پرونده استفاده می‌کنند، فقط با TextBoxِ ReadOnly
+            // به‌جای فیلدِ قابل‌ویرایش — چون این تب صرفاً نماینده‌ی خواندنیِ
+            // داده‌ی موجود است، نه فرم ورودیِ جدید. مقادیر در
+            // UpdateCaseSummaryTab (FrmCase.cs) از همان کنترل‌های موجود کپی
+            // می‌شوند؛ فقط سه مقدار (تعداد اعضاء/آخرین کمک/آخرین تغییر) از
+            // کوئری‌های سبکِ تازه‌ای می‌آیند که در هیچ‌جای دیگر این فرم نبودند.
+            this.txtSummaryCode           = new System.Windows.Forms.TextBox();
+            this.txtSummaryHeadName       = new System.Windows.Forms.TextBox();
+            this.txtSummaryRequestType    = new System.Windows.Forms.TextBox();
+            this.txtSummaryServiceStatus  = new System.Windows.Forms.TextBox();
+            this.txtSummaryLocation       = new System.Windows.Forms.TextBox();
+            this.txtSummaryMemberCount    = new System.Windows.Forms.TextBox();
+            this.txtSummaryLastAssistance = new System.Windows.Forms.TextBox();
+            this.txtSummaryLastChange     = new System.Windows.Forms.TextBox();
+            foreach (System.Windows.Forms.TextBox sBox in new[]
+            {
+                this.txtSummaryCode, this.txtSummaryHeadName, this.txtSummaryRequestType,
+                this.txtSummaryServiceStatus, this.txtSummaryLocation, this.txtSummaryMemberCount,
+                this.txtSummaryLastAssistance, this.txtSummaryLastChange
+            })
+            {
+                sBox.ReadOnly = true;
+                sBox.TabStop = false;
+                sBox.BackColor = System.Drawing.SystemColors.Control;
+            }
+
+            var gridSummary = MkCaseFieldGrid();
+            System.Windows.Forms.Label lblSumCode = new System.Windows.Forms.Label();
+            System.Windows.Forms.Label lblSumHead = new System.Windows.Forms.Label();
+            System.Windows.Forms.Label lblSumReq  = new System.Windows.Forms.Label();
+            System.Windows.Forms.Label lblSumSvc  = new System.Windows.Forms.Label();
+            System.Windows.Forms.Label lblSumLoc  = new System.Windows.Forms.Label();
+            System.Windows.Forms.Label lblSumCnt  = new System.Windows.Forms.Label();
+            System.Windows.Forms.Label lblSumLast = new System.Windows.Forms.Label();
+            System.Windows.Forms.Label lblSumChg  = new System.Windows.Forms.Label();
+            AddCaseField(gridSummary, lblSumCode, "کد اختصاصی",             this.txtSummaryCode);
+            AddCaseField(gridSummary, lblSumHead, "نام سرپرست",             this.txtSummaryHeadName);
+            AddCaseField(gridSummary, lblSumReq,  "نوع پرونده",             this.txtSummaryRequestType);
+            AddCaseField(gridSummary, lblSumSvc,  "وضعیت خدمات",            this.txtSummaryServiceStatus);
+            AddCaseField(gridSummary, lblSumLoc,  "موقعیت (ولایت/ولسوالی)", this.txtSummaryLocation);
+            AddCaseField(gridSummary, lblSumCnt,  "تعداد اعضای خانواده",    this.txtSummaryMemberCount);
+            AddCaseField(gridSummary, lblSumLast, "آخرین کمک",              this.txtSummaryLastAssistance);
+            AddCaseField(gridSummary, lblSumChg,  "آخرین تغییر",            this.txtSummaryLastChange);
+
+            this.picSummaryPhoto = new System.Windows.Forms.PictureBox();
+            this.picSummaryPhoto.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.picSummaryPhoto.SizeMode = System.Windows.Forms.PictureBoxSizeMode.Zoom;
+            this.picSummaryPhoto.TabStop = false;
+            this.picSummaryPhoto.Size = new System.Drawing.Size(110, 110);
+            this.picSummaryPhoto.Dock = System.Windows.Forms.DockStyle.Right;
+
+            System.Windows.Forms.Panel summaryPhotoRow = new System.Windows.Forms.Panel();
+            summaryPhotoRow.Dock = System.Windows.Forms.DockStyle.Top;
+            summaryPhotoRow.Height = 130;
+            summaryPhotoRow.Padding = new System.Windows.Forms.Padding(18, 10, 18, 0);
+            summaryPhotoRow.Controls.Add(this.picSummaryPhoto);
+
+            System.Windows.Forms.Panel summaryHost = new System.Windows.Forms.Panel();
+            summaryHost.Dock = System.Windows.Forms.DockStyle.Top;
+            summaryHost.AutoSize = true;
+            summaryHost.AutoSizeMode = System.Windows.Forms.AutoSizeMode.GrowAndShrink;
+            summaryHost.BackColor = System.Drawing.Color.Transparent;
+            // ترتیبِ افزودنِ عمدی: gridSummary اول، summaryPhotoRow دوم — طبق
+            // همان قاعده‌ی اثبات‌شده‌ی این فایل (کنترلی که آخر اضافه شود،
+            // بالاترین جا را در Dock=Top می‌گیرد)، پس عکس بالای فیلدها می‌نشیند.
+            summaryHost.Controls.Add(gridSummary);
+            summaryHost.Controls.Add(summaryPhotoRow);
+
+            var cardSummary = MkCaseCard("خلاصه پرونده", summaryHost, new System.Windows.Forms.GroupBox());
+
+            // ═══ فیلدها به‌صورت تب‌دار (به درخواست کاربر — مثل فرم اعضای خانواده) ═══
+            // آموزش — قبلاً هر سه کارت پشت‌سرهم داخل یک پانلِ اسکرول‌شونده بودند
+            // و کاربر باید تا پایین اسکرول می‌کرد. حالا هر کارت داخل یک تب
+            // می‌نشیند؛ دقیقاً همان الگوی FrmFamily.
+            //
+            // هیچ فیلد/کنترلی حذف یا جابه‌جا نشد: همان cardHead/cardPhysical/
+            // cardCase (با همان grpHead/grpPhysical/grpCase و همان نام کنترل‌ها)
+            // فقط والدشان عوض شد، پس منطق FrmCase.cs دست‌نخورده کار می‌کند.
+            // هر تب پانلِ اسکرولِ خودش را دارد تا محتوای بلند (مثل «مشخصات
+            // پرونده» با شرح وضعیت فوری) روی نمایشگر کوچک هم کامل در دسترس باشد.
+            // ═══ تب چهارم: اعضاء خانواده (فاز ۱ — قبلاً پنجرهٔ مجزا/مودال بود) ═══
+            // آموزش — این تب فقط یک میزبانِ خالی (Panel) + پیام جای‌گزین است.
+            // خودِ نمونهٔ FrmFamily و منطق جاسازی/رفرش در FrmCase.cs
+            // (EnsureFamilyEmbedded/SyncMembersTab) انجام می‌شود؛ اینجا فقط
+            // ظرف ساخته می‌شود تا وقتی پرونده‌ای انتخاب نشده، کاربر پیام روشنی
+            // ببیند به‌جای گرید/فرم خالی. برخلاف تب‌های دیگر، AutoScroll ندارد
+            // (FrmFamily وقتی embedded باشد، Dock=Fill خودش را با تب هماهنگ می‌کند).
+            this.lblMembersPlaceholder = new System.Windows.Forms.Label();
+            this.lblMembersPlaceholder.Name = "lblMembersPlaceholder";
+            this.lblMembersPlaceholder.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.lblMembersPlaceholder.Text = "برای مشاهده و ویرایش اعضاء، اول پرونده را ذخیره یا جستجو کنید.";
+            this.lblMembersPlaceholder.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
+            this.lblMembersPlaceholder.RightToLeft = System.Windows.Forms.RightToLeft.Yes;
+            this.lblMembersPlaceholder.Font = CaseManagement.Helpers.UiTheme.FontBold(CaseManagement.Helpers.UiTheme.SizeMedium);
+            this.lblMembersPlaceholder.ForeColor = CaseManagement.Helpers.UiTheme.TextDark;
+
+            this.tabMembersHost = new System.Windows.Forms.Panel();
+            this.tabMembersHost.Name = "tabMembersHost";
+            this.tabMembersHost.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.tabMembersHost.BackColor = CaseManagement.Helpers.UiTheme.CardBack;
+            this.tabMembersHost.Controls.Add(this.lblMembersPlaceholder);
+
+            System.Windows.Forms.TabPage tabMembers = new System.Windows.Forms.TabPage("اعضاء خانواده");
+            tabMembers.BackColor = CaseManagement.Helpers.UiTheme.CardBack;
+            tabMembers.Padding   = System.Windows.Forms.Padding.Empty;
+            tabMembers.Controls.Add(this.tabMembersHost);
+
+            // ═══ تب «اسناد پرونده» (فاز A4 — قبلاً پنجرهٔ مجزا/مودال بود) ═══
+            // آموزش — عیناً همان الگوی تب اعضاء: میزبانِ خالی + پیام جای‌گزین؛
+            // نمونهٔ FrmDocs و منطق جاسازی/رفرش در FrmCase.cs
+            // (EnsureDocsEmbedded/SyncMembersTab) انجام می‌شود.
+            this.lblDocsPlaceholder = new System.Windows.Forms.Label();
+            this.lblDocsPlaceholder.Name = "lblDocsPlaceholder";
+            this.lblDocsPlaceholder.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.lblDocsPlaceholder.Text = "برای مشاهده و مدیریت اسناد، اول پرونده را ذخیره یا جستجو کنید.";
+            this.lblDocsPlaceholder.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
+            this.lblDocsPlaceholder.RightToLeft = System.Windows.Forms.RightToLeft.Yes;
+            this.lblDocsPlaceholder.Font = CaseManagement.Helpers.UiTheme.FontBold(CaseManagement.Helpers.UiTheme.SizeMedium);
+            this.lblDocsPlaceholder.ForeColor = CaseManagement.Helpers.UiTheme.TextDark;
+
+            this.tabDocsHost = new System.Windows.Forms.Panel();
+            this.tabDocsHost.Name = "tabDocsHost";
+            this.tabDocsHost.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.tabDocsHost.BackColor = CaseManagement.Helpers.UiTheme.CardBack;
+            this.tabDocsHost.Controls.Add(this.lblDocsPlaceholder);
+
+            System.Windows.Forms.TabPage tabDocs = new System.Windows.Forms.TabPage("اسناد پرونده");
+            tabDocs.BackColor = CaseManagement.Helpers.UiTheme.CardBack;
+            tabDocs.Padding   = System.Windows.Forms.Padding.Empty;
+            tabDocs.Controls.Add(this.tabDocsHost);
+
+            this.tabsCase = new RtlTabControl();
+            this.tabsCase.Name              = "tabsCase";
+            this.tabsCase.Dock              = System.Windows.Forms.DockStyle.Fill;
+            this.tabsCase.Font              = CaseManagement.Helpers.UiTheme.FontBold(CaseManagement.Helpers.UiTheme.SizeSmall);
+            this.tabsCase.RightToLeft       = System.Windows.Forms.RightToLeft.Yes;
+            this.tabsCase.RightToLeftLayout = true;
+            this.tabsCase.Padding           = new System.Drawing.Point(14, 4);
+            this.tabsCase.TabPages.Add(MkCaseTab("خلاصه پرونده", cardSummary));
+            // آموزش — این تب در فیلد نگه داشته می‌شود چون «جدید»/«ویرایش» باید
+            // کاربر را به یک تبِ واقعاً قابلِ ویرایش ببرند؛ تبِ «خلاصه پرونده»
+            // همیشه خواندنی است و اگر کاربر روی آن بماند، بعد از زدنِ «جدید»
+            // هیچ فیلدِ قابلِ تایپی نمی‌بیند (باگی که کاربر گزارش کرد).
+            this.tabHeadInfo = MkCaseTab("مشخصات کلی سرپرست", cardHead);
+            this.tabsCase.TabPages.Add(this.tabHeadInfo);
+            this.tabsCase.TabPages.Add(MkCaseTab("مشخصات جسمی", cardPhysical));
+            this.tabsCase.TabPages.Add(MkCaseTab("مشخصات پرونده", cardCase));
+            this.tabsCase.TabPages.Add(tabMembers);
+            this.tabsCase.TabPages.Add(tabDocs);
+            this.tabsCase.SelectedIndexChanged += new System.EventHandler(this.tabsCase_SelectedIndexChanged);
+
+            System.Windows.Forms.Panel fieldsPanel = new System.Windows.Forms.Panel();
+            fieldsPanel.Name = "fieldsPanel";
             fieldsPanel.Dock = System.Windows.Forms.DockStyle.Fill;
-            fieldsPanel.AutoScroll = true;
-            fieldsPanel.Padding = new System.Windows.Forms.Padding(10, 10, 10, 10);
-            fieldsPanel.Controls.Add(cardCase);
-            fieldsPanel.Controls.Add(cardPhysical);
-            fieldsPanel.Controls.Add(cardHead);
+            fieldsPanel.Padding = new System.Windows.Forms.Padding(4);
+            fieldsPanel.Controls.Add(this.tabsCase);
 
             // آموزش — رفع باگ Tab نامنظم: چون گروه‌ها به این ترتیب (grpCase،
             // grpPhysical، grpHead) اضافه شدند، بدون این سه خط، Tab پیش‌فرض
@@ -474,6 +643,17 @@ namespace CaseManagement
             StyleBtn(this.btnExportExcel, "اکسل", 62, 32); this.btnExportExcel.Click += new System.EventHandler(this.btnExportExcel_Click);
             StyleBtn(this.btnBatchExport, "خروجی جمعی", 104, 32); this.btnBatchExport.Click += new System.EventHandler(this.btnBatchExport_Click);
             StyleBtn(this.btnChooseStorageFolder, "محل ذخیره", 96, 32); this.btnChooseStorageFolder.Click += new System.EventHandler(this.btnChooseStorageFolder_Click);
+            // آموزش — برچسبِ گروه، هم‌سبکِ «خروجی‌ها:». بدونِ آن، این چهار دکمه
+            // با دکمه‌های «عضو/سند»ِ داخلِ تب‌ها هم‌شکل دیده می‌شدند و معلوم
+            // نبود کدام روی پرونده کار می‌کند (گزارشِ کاربر). هیچ دکمه‌ای
+            // حذف/جابه‌جا نشد — فقط یک برچسبِ راهنما اضافه شد.
+            this.lblCaseSection = new System.Windows.Forms.Label();
+            this.lblCaseSection.Text = "پرونده:";
+            this.lblCaseSection.AutoSize = false;
+            this.lblCaseSection.Size = new System.Drawing.Size(52, 32);
+            this.lblCaseSection.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            this.lblCaseSection.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
+            bottomActionsRow.Controls.Add(this.lblCaseSection);
             bottomActionsRow.Controls.Add(this.btnNew);
             bottomActionsRow.Controls.Add(this.btnSave);
             bottomActionsRow.Controls.Add(this.btnEdit);
@@ -496,13 +676,67 @@ namespace CaseManagement
             bottomBar.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
             bottomBar.Controls.Add(bottomActionsRow, 0, 0);
 
+            // ═══ فاز A2 — نوار جستجوی سریع: بخش ثابتِ بالای کل فضای کاری،
+            // بالاتر از toolbar. آموزش — چهار فیلد هم‌زمان (کد پرونده/نام
+            // سرپرست/شماره تذکره/شماره تماس)، عیناً همان ستون‌های
+            // CaseSearchTypeColumns که قبلاً نوار جستجوی بالای گرید هم از آن‌ها
+            // استفاده می‌کرد (آن نوار حذف شد تا دو جستجوی موازی نداشته باشیم).
+            // منطق واقعی/کوئری در SearchCasesGrid (FrmCase.cs) است؛ اینجا فقط چیدمان.
+            this.txtQsCode     = new System.Windows.Forms.TextBox();
+            this.txtQsHeadName = new System.Windows.Forms.TextBox();
+            this.txtQsTazkira  = new System.Windows.Forms.TextBox();
+            this.txtQsPhone    = new System.Windows.Forms.TextBox();
+            foreach (System.Windows.Forms.TextBox qsBox in new[] { this.txtQsCode, this.txtQsHeadName, this.txtQsTazkira, this.txtQsPhone })
+            {
+                CaseManagement.Helpers.UiTheme.StyleTextBox(qsBox);
+                qsBox.KeyDown += new System.Windows.Forms.KeyEventHandler(this.QuickSearchField_KeyDown);
+            }
+
+            System.Windows.Forms.Button btnQuickSearch = CaseManagement.Helpers.UiTheme.CreateButton("جستجو", "⌕", CaseManagement.Helpers.UiTheme.Primary);
+            btnQuickSearch.Dock = System.Windows.Forms.DockStyle.Fill;
+            btnQuickSearch.Click += new System.EventHandler(this.btnQuickSearch_Click);
+
+            System.Windows.Forms.Button btnQuickSearchClear = CaseManagement.Helpers.UiTheme.CreateSecondaryButton("پاک‌سازی", "✕");
+            btnQuickSearchClear.Dock = System.Windows.Forms.DockStyle.Fill;
+            btnQuickSearchClear.Click += new System.EventHandler(this.btnQuickSearchClear_Click);
+
+            System.Windows.Forms.Button btnAdvancedSearch = CaseManagement.Helpers.UiTheme.CreateSecondaryButton("جستجوی پیشرفته", "⋯");
+            btnAdvancedSearch.Dock = System.Windows.Forms.DockStyle.Fill;
+            btnAdvancedSearch.Click += new System.EventHandler(this.btnAdvancedSearch_Click);
+
+            System.Windows.Forms.TableLayoutPanel caseQuickSearchBar = new System.Windows.Forms.TableLayoutPanel();
+            caseQuickSearchBar.Name = "caseQuickSearchBar";
+            caseQuickSearchBar.Dock = System.Windows.Forms.DockStyle.Fill;
+            caseQuickSearchBar.BackColor = CaseManagement.Helpers.UiTheme.CardBack;
+            caseQuickSearchBar.Padding = new System.Windows.Forms.Padding(8, 4, 8, 4);
+            caseQuickSearchBar.ColumnCount = 7;
+            caseQuickSearchBar.RowCount = 1;
+            caseQuickSearchBar.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 25F));
+            caseQuickSearchBar.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 25F));
+            caseQuickSearchBar.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 25F));
+            caseQuickSearchBar.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 25F));
+            caseQuickSearchBar.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 100F));
+            caseQuickSearchBar.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 96F));
+            caseQuickSearchBar.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 120F));
+            caseQuickSearchBar.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
+
+            caseQuickSearchBar.Controls.Add(MkQuickSearchField("کد اختصاصی",   this.txtQsCode),     0, 0);
+            caseQuickSearchBar.Controls.Add(MkQuickSearchField("نام سرپرست",   this.txtQsHeadName), 1, 0);
+            caseQuickSearchBar.Controls.Add(MkQuickSearchField("شماره تذکره",  this.txtQsTazkira),  2, 0);
+            caseQuickSearchBar.Controls.Add(MkQuickSearchField("شماره تماس",   this.txtQsPhone),    3, 0);
+            caseQuickSearchBar.Controls.Add(MkQuickSearchButtonCell(btnQuickSearch),      4, 0);
+            caseQuickSearchBar.Controls.Add(MkQuickSearchButtonCell(btnQuickSearchClear), 5, 0);
+            caseQuickSearchBar.Controls.Add(MkQuickSearchButtonCell(btnAdvancedSearch),   6, 0);
+
             // ═══ ریشه چیدمان ═════════════════════════════════════════════════
             System.Windows.Forms.TableLayoutPanel rootLayout = new System.Windows.Forms.TableLayoutPanel();
             rootLayout.Dock = System.Windows.Forms.DockStyle.Fill;
             rootLayout.ColumnCount = 2;
-            rootLayout.RowCount = 3;
+            rootLayout.RowCount = 4;
             rootLayout.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 62F));
             rootLayout.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 38F));
+            // ردیف نوار جستجوی سریع (فاز A2) — بالاترین ردیف، همیشه ثابت.
+            rootLayout.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 76F));
             rootLayout.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 50F));
             rootLayout.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
             // ردیف نوار دکمه‌ها — ارتفاع اولیه برای دو خط دکمه؛ کدِ فرم
@@ -510,22 +744,28 @@ namespace CaseManagement
             // هیچ دکمه‌ای در هیچ عرضی پنهان نماند.
             rootLayout.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 96F));
             this.rootLayout = rootLayout;
-            rootLayout.Controls.Add(toolbar, 0, 0);
+            rootLayout.Controls.Add(caseQuickSearchBar, 0, 0);
+            rootLayout.SetColumnSpan(caseQuickSearchBar, 2);
+            rootLayout.Controls.Add(toolbar, 0, 1);
             rootLayout.SetColumnSpan(toolbar, 2);
-            rootLayout.Controls.Add(fieldsPanel, 0, 1);
-            rootLayout.Controls.Add(leftPanel, 1, 1);
-            rootLayout.Controls.Add(bottomBar, 0, 2);
+            rootLayout.Controls.Add(fieldsPanel, 0, 2);
+            rootLayout.Controls.Add(leftPanel, 1, 2);
+            // نگه‌داشتنِ ارجاع: تب‌های «اعضاء»/«اسناد» فرم‌های کاملی هستند و در
+            // ۶۲٪ عرض له می‌شوند، پس هنگام فعال‌بودنشان این ستون جمع می‌شود.
+            this.leftWorkspacePanel = leftPanel;
+            rootLayout.Controls.Add(bottomBar, 0, 3);
             rootLayout.SetColumnSpan(bottomBar, 2);
 
             // آموزش — رفع باگ Tab نامنظم (بند ۵): چون leftPanel (گرید/عکس‌ها،
             // سمت چپ) قبلاً بین fieldsPanel و bottomBar در ترتیب پیش‌فرض قرار
             // می‌گرفت، فوکوس بعد از آخرین فیلد به‌جای دکمه «ذخیره» ابتدا به
             // کنترل‌های سمت چپ می‌پرید. با این ترتیب صریح، Tab همیشه:
-            // toolbar → fieldsPanel (فیلدها) → bottomBar (ذخیره) → leftPanel
-            toolbar.TabIndex = 0;
-            fieldsPanel.TabIndex = 1;
-            bottomBar.TabIndex = 2;
-            leftPanel.TabIndex = 3;
+            // caseQuickSearchBar → toolbar → fieldsPanel (فیلدها) → bottomBar (ذخیره) → leftPanel
+            caseQuickSearchBar.TabIndex = 0;
+            toolbar.TabIndex = 1;
+            fieldsPanel.TabIndex = 2;
+            bottomBar.TabIndex = 3;
+            leftPanel.TabIndex = 4;
 
             //
             // FrmCase
@@ -542,7 +782,13 @@ namespace CaseManagement
             this.Font = new System.Drawing.Font("Segoe UI", 9.75F);
             // آموزش — ارتفاع فرم افزایش یافت (۷۲۰→۱۰۴۰) تا سه گروه (سرپرست/
             // جسمی/پرونده) بدون فشردگی و با فاصله حرفه‌ای جا شوند.
-            this.ClientSize = new System.Drawing.Size(1180, 880);
+            // آموزش — فاز A (بازخورد کاربر): با افزودنِ نوار جستجوی سریع و نوار
+            // سرِ پرونده در بالای فضای کاری، اندازهٔ قبلی (۱۱۸۰×۸۸۰) دیگر جا
+            // نمی‌داد و فیلدها/دکمه‌های نوار جستجو روی صفحه‌های کوچک‌تر فشرده/
+            // نامرئی می‌شدند. اندازه افزایش یافت تا همه‌چیز با فاصلهٔ راحت جا شود
+            // (FitToScreen در FrmCase_Load همچنان روی نمایشگرهای کوچک‌تر آن را
+            // متناسب می‌کند، این تغییر فقط اندازهٔ طراحی/پیش‌فرض را بزرگ‌تر می‌کند).
+            this.ClientSize = new System.Drawing.Size(1440, 960);
             this.Controls.Add(rootLayout);
             // تمام‌صفحه‌ی خودکار (درخواست کاربر). حداقلِ اندازه و بیشینه‌سازی در
             // FrmCase_Load اعمال می‌شود — آن‌جا اندازه‌ی واقعی صفحه در دسترس است.
@@ -599,6 +845,7 @@ namespace CaseManagement
 
         // افزودن یک فیلد به شبکه. خودِ کنترلِ ورودی همان شیء قبلی می‌ماند، پس
         // نام، رویدادها و هر کدی که با آن کار می‌کند دست‌نخورده باقی است.
+        //
         private static CaseManagement.Helpers.FieldBox AddCaseField(
             System.Windows.Forms.TableLayoutPanel grid,
             System.Windows.Forms.Label captionLabel, string captionText,
@@ -608,6 +855,82 @@ namespace CaseManagement
             box.Dock = System.Windows.Forms.DockStyle.Top;
             grid.Controls.Add(box);
             return box;
+        }
+
+        // آموزش — فاز A2 (Quick Search Bar): همان الگوی کپشنِ بالا + ورودی که
+        // در FieldBox هم استفاده می‌شود، اما سبک‌تر و مخصوصِ نوار جستجو.
+        private static System.Windows.Forms.Panel MkQuickSearchField(
+            string captionText, System.Windows.Forms.TextBox valueBox)
+        {
+            System.Windows.Forms.Label caption = new System.Windows.Forms.Label();
+            caption.Text = captionText;
+            caption.AutoSize = false;
+            caption.Dock = System.Windows.Forms.DockStyle.Top;
+            caption.Height = 16;
+            caption.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            caption.Font = CaseManagement.Helpers.UiTheme.FontBold(CaseManagement.Helpers.UiTheme.SizeSmall - 0.5F);
+            caption.ForeColor = CaseManagement.Helpers.UiTheme.TextDark;
+            caption.BackColor = System.Drawing.Color.Transparent;
+
+            valueBox.Dock = System.Windows.Forms.DockStyle.Fill;
+            valueBox.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
+
+            System.Windows.Forms.Panel host = new System.Windows.Forms.Panel();
+            host.Dock = System.Windows.Forms.DockStyle.Fill;
+            host.Margin = new System.Windows.Forms.Padding(4, 2, 4, 2);
+            host.Controls.Add(valueBox);
+            host.Controls.Add(caption);
+            return host;
+        }
+
+        // خانه‌ی یک دکمه در نوار جستجوی سریع — فقط برای هم‌ترازیِ عمودیِ دکمه
+        // با فیلدهای کنارش (که کپشن+ورودی دارند)، دکمه داخل یک پنلِ پدینگ‌دار
+        // قرار می‌گیرد به‌جای چسبیدن مستقیم به سلولِ TableLayoutPanel.
+        private static System.Windows.Forms.Panel MkQuickSearchButtonCell(System.Windows.Forms.Button button)
+        {
+            System.Windows.Forms.Panel host = new System.Windows.Forms.Panel();
+            host.Dock = System.Windows.Forms.DockStyle.Fill;
+            host.Padding = new System.Windows.Forms.Padding(4, 18, 4, 4);
+            host.Controls.Add(button);
+            return host;
+        }
+
+        // ─── رفعِ باگِ «چپ‌چین بودن تب‌ها» ───────────────────────────────────
+        // آموزش — همان کلاسی که در FrmFamily.Designer.cs استفاده شد: WinForms
+        // مقدار TabControl.RightToLeftLayout را می‌پذیرد ولی exstyle بومیِ
+        // WS_EX_LAYOUTRTL را به هندلِ پنجره اعمال نمی‌کند، پس نوار سربرگ‌ها از
+        // چپ شروع می‌شود و ResponsiveLayout.IsMirrored هم اشتباه محاسبه می‌کند.
+        private class RtlTabControl : System.Windows.Forms.TabControl
+        {
+            protected override System.Windows.Forms.CreateParams CreateParams
+            {
+                get
+                {
+                    const int WS_EX_LAYOUTRTL = 0x00400000;
+                    System.Windows.Forms.CreateParams cp = base.CreateParams;
+                    if (RightToLeftLayout)
+                        cp.ExStyle |= WS_EX_LAYOUTRTL;
+                    return cp;
+                }
+            }
+        }
+
+        // یک تب با پانلِ اسکرولِ اختصاصی که کارتِ داده‌شده را در خود دارد.
+        private static System.Windows.Forms.TabPage MkCaseTab(
+            string title, System.Windows.Forms.Control card)
+        {
+            FieldsScrollPanel scroller = new FieldsScrollPanel();
+            scroller.Dock = System.Windows.Forms.DockStyle.Fill;
+            scroller.AutoScroll = true;
+            scroller.Padding = new System.Windows.Forms.Padding(10, 10, 10, 10);
+            scroller.BackColor = System.Drawing.Color.Transparent;
+            scroller.Controls.Add(card);
+
+            System.Windows.Forms.TabPage page = new System.Windows.Forms.TabPage(title);
+            page.BackColor = CaseManagement.Helpers.UiTheme.CardBack;
+            page.Padding = System.Windows.Forms.Padding.Empty;
+            page.Controls.Add(scroller);
+            return page;
         }
 
         // کارت سفیدِ گردگوشه با سربرگ عنوان. GroupBoxِ اصلی به‌عنوان میزبانِ
@@ -705,6 +1028,10 @@ namespace CaseManagement
         private System.Windows.Forms.Label lblCaseDate;
         private System.Windows.Forms.TextBox txtRelationshipToFamily;
         private System.Windows.Forms.ComboBox txtCoveredByOrg;
+        // اسامی مؤسسات تحت پوشش — فقط وقتی «تحت پوشش دیگر مؤسسات = بله» دیده می‌شود.
+        private System.Windows.Forms.TextBox txtCoveredByOrgNames;
+        private System.Windows.Forms.Label lblCoveredByOrgNames;
+        private CaseManagement.Helpers.FieldBox fieldCoveredByOrgNames;
         private System.Windows.Forms.TextBox txtJob;
         private System.Windows.Forms.TextBox txtSkill;
         private System.Windows.Forms.ComboBox txtDisabilityDegree;
@@ -737,6 +1064,10 @@ namespace CaseManagement
         // کانتینرِ فیلد «دلیل قطع موقت» — برای پنهان/نمایان‌کردن کلِ فیلد
         // هماهنگ با منطقِ موجود در FrmCase.cs.
         private CaseManagement.Helpers.FieldBox caseFieldStopReason;
+        // کانتینرِ فیلد «دلیل تعلیق» — همان الگو، برای وضعیت «قطع»/«قطع موقت».
+        private CaseManagement.Helpers.FieldBox caseFieldSuspensionReason;
+        private System.Windows.Forms.Label lblSuspensionReason;
+        private System.Windows.Forms.ComboBox txtSuspensionReason;
         private System.Windows.Forms.Button btnPrint;
         private System.Windows.Forms.Label lblServiceStatusFilter;
         private System.Windows.Forms.CheckBox chkHeadHealthy;
@@ -789,5 +1120,38 @@ namespace CaseManagement
         private System.Windows.Forms.GroupBox grpHead;
         private System.Windows.Forms.GroupBox grpPhysical;
         private System.Windows.Forms.GroupBox grpCase;
+        private RtlTabControl tabsCase;
+        private System.Windows.Forms.Panel tabMembersHost;
+        private System.Windows.Forms.Label lblMembersPlaceholder;
+
+        // فاز A2 — نوار جستجوی سریع (Quick Search Bar)
+        private System.Windows.Forms.TextBox txtQsCode;
+        private System.Windows.Forms.TextBox txtQsHeadName;
+        private System.Windows.Forms.TextBox txtQsTazkira;
+        private System.Windows.Forms.TextBox txtQsPhone;
+
+        // فاز A3 — تب «خلاصه پرونده»
+        private System.Windows.Forms.PictureBox picSummaryPhoto;
+        private System.Windows.Forms.TextBox txtSummaryCode;
+        private System.Windows.Forms.TextBox txtSummaryHeadName;
+        private System.Windows.Forms.TextBox txtSummaryRequestType;
+        private System.Windows.Forms.TextBox txtSummaryServiceStatus;
+        private System.Windows.Forms.TextBox txtSummaryLocation;
+        private System.Windows.Forms.TextBox txtSummaryMemberCount;
+        private System.Windows.Forms.TextBox txtSummaryLastAssistance;
+        private System.Windows.Forms.TextBox txtSummaryLastChange;
+
+        // فاز A4 — تب «اسناد پرونده»
+        private System.Windows.Forms.Panel tabDocsHost;
+        private System.Windows.Forms.Label lblDocsPlaceholder;
+
+        // تبِ «مشخصات کلی سرپرست» — مقصدِ خودکارِ دکمه‌های جدید/ویرایش
+        private System.Windows.Forms.TabPage tabHeadInfo;
+
+        // ستونِ سمتِ چپ (عکس‌ها + فیلتر + فهرستِ پرونده‌ها)
+        internal System.Windows.Forms.Panel leftWorkspacePanel;
+
+        // برچسبِ گروهِ دکمه‌های پرونده در نوار پایین (هم‌سبکِ lblExportSection)
+        private System.Windows.Forms.Label lblCaseSection;
     }
 }

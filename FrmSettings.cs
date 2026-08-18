@@ -1,10 +1,11 @@
-using CaseManagement.DAL;
+﻿using CaseManagement.DAL;
 using CaseManagement.Helpers;
 using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.SQLite;
 using System.Drawing;
+using System.Linq;
 using System.Windows.Forms;
 
 namespace CaseManagement
@@ -119,6 +120,8 @@ namespace CaseManagement
         private TextBox _txtWebsite;
         private TextBox _txtDescription;
         private TextBox _txtBackupPath;
+        private TextBox _txtManualPath;
+        private CheckedListBox _clbCaseGridColumns;
         private TextBox _txtPhotoStoragePath;
         private NumericUpDown _numStartCaseNo;
         private NumericUpDown _numStartReceiptNo;
@@ -126,6 +129,7 @@ namespace CaseManagement
         private Color _selectedThemeColor = UiTheme.Primary;
         private Panel _pnlFontColorSwatch;
         private Color _selectedFontColor = UiTheme.TextDark;
+        private ComboBox _cmbDashboardRows;
         private PictureBox _picLogoPreview;
         // آموزش — امضا/مهر مؤسسه (برای کارت شناسایی سرپرست و اسناد چاپی):
         // فیلدهای _txtSignaturePath/_txtStampPath از قبل برای یک تب «چاپ و
@@ -148,6 +152,12 @@ namespace CaseManagement
         public FrmSettings()
         {
             BuildUi();
+
+            // ⚠ این فرم ۱۱ تب دارد و هر تب دکمه‌ی «ذخیره»ی خودش را. پس Ctrl+S
+            // عمداً به یک دکمه‌ی ثابت بسته نشده، بلکه در لحظه‌ی فشردن، دکمه‌ی
+            // ذخیره‌ی *تبِ نمایان* را پیدا می‌کند. بستنش به دکمه‌ای مشخص یعنی
+            // ذخیره‌شدنِ تنظیماتِ تبی که کاربر اصلاً در آن نیست.
+            Helpers.FormShortcuts.For(this).SaveVisible();
         }
 
         private void BuildUi()
@@ -180,6 +190,11 @@ namespace CaseManagement
             Panel tabMaintenance  = new Panel();
             Panel tabDeleteCases  = new Panel();
             Panel tabAbout        = new Panel();
+            Panel tabLanguage     = new Panel();   // تبِ تازه‌ی زبان (افزایشی)
+            Panel tabGuardianCard = new Panel();   // متن‌های کارت شناسایی (افزایشی)
+            Panel tabAssistancePackages = new Panel(); // بسته‌های مساعدتِ غیرنقدی (افزایشی)
+            tabGuardianCard.BackColor = UiTheme.Background;
+            tabAssistancePackages.BackColor = UiTheme.Background;
             tabDeleteCases.BackColor = UiTheme.Background;
             tabAbout.BackColor       = UiTheme.Background;
             tabGeneral.BackColor     = UiTheme.Background;
@@ -204,6 +219,9 @@ namespace CaseManagement
             if (SecurityContext.CanDelete())
                 BuildDeleteCasesTab(tabDeleteCases);
             BuildAboutTab(tabAbout);
+            BuildLanguageTab(tabLanguage);
+            BuildGuardianCardTab(tabGuardianCard);
+            BuildAssistancePackagesTab(tabAssistancePackages);
 
             Panel contentHost = new Panel { Dock = DockStyle.Fill, BackColor = UiTheme.Background };
             PillTabStrip pillTabs = new PillTabStrip();
@@ -238,6 +256,9 @@ namespace CaseManagement
                 addPage("پشتیبان‌گیری", tabBackup);
 
             addPage("اعلان‌ها", tabNotify);
+            addPage("کارت شناسایی", tabGuardianCard);
+            addPage("بسته‌های مساعدت", tabAssistancePackages);
+            addPage("زبان", tabLanguage);
             addPage("اطلاعات پایه", tabLookup);
             addPage("نگهداری", tabMaintenance);
             // حذف پرونده‌ها فقط برای کاربر دارای مجوز حذف (مدیر) نمایش داده می‌شود.
@@ -263,9 +284,32 @@ namespace CaseManagement
         // انتخاب و پس از تأیید صریح حذف می‌شوند. دو حالت: «فقط دیتابیس» یا
         // «کامل (همراه پوشه‌ی فایل‌ها)». حذف TblCase با FK آبشاری، اعضا/اسناد/
         // کمک‌های همان پرونده را هم پاک می‌کند. همه‌چیز به مرکز کاربر محدود است.
+        //
+        // آموزش — بازبینیِ کامل (به درخواستِ کاربر، پس از یک گزارشِ بررسی):
+        //   ۱. بکاپِ کاملِ *اجباری* پیش از هر حذف — دقیقاً همان الگوی
+        //      SyncEngine.Apply («اگر بکاپ نشد، ادامه نده»). این مهم‌ترین
+        //      نقصِ نسخه‌ی قبلی بود: حذف «قابل‌بازگشت نیست» ولی هیچ بکاپی
+        //      نمی‌گرفت.
+        //   ۲. فیلترِ ولایت/ولسوالی/کدِاختصاصی/شماره‌فرم — کنارِ جست‌جوی سریعِ
+        //      قبلی (کد+نام)، نه به‌جایش.
+        //   ۳. سقفِ نمایش (همان MaxGridRows که در FrmCase برای رفعِ کندیِ
+        //      ~۱۲هزار پرونده استفاده شد) تا این تب هم بدونِ فیلتر کند نشود.
+        //   ۴. دیالوگِ تأیید حالا فهرستِ واقعیِ کد/نامِ انتخاب‌شده‌ها را نشان
+        //      می‌دهد (تا سقفی معقول)، نه فقط یک عدد.
+        //   ۵. برای حذفِ «کامل»، یک تأییدِ دوم با تایپِ عددِ دقیقِ تعداد.
+        //   ۶. هشدارِ صریح کنارِ گزینه‌ی «فقط دیتابیس» دربارهٔ فایل‌های یتیم.
+        //   ۷. یک اتصالِ مشترک برای کلِ دسته به‌جای بازکردنِ اتصالِ جدید به
+        //      ازای هر پرونده.
+        //   ۸. کلیدِ Enter در جعبه‌ی جست‌جو.
+        //   ۹. شماره‌ی ردیف (با همان منطقِ راست‌به‌چپِ درست‌شده‌ی FrmCase).
+        //  ۱۰. رنگ‌آمیزیِ ردیفِ تیک‌خورده (هشدارِ بصری).
         // ══════════════════════════════════════════════════════════════════
         private DataGridView _gridDeleteCases;
         private TextBox _txtDeleteSearch;
+        private ComboBox _cmbDeleteProvince;
+        private ComboBox _cmbDeleteDistrict;
+        private TextBox _txtDeleteCodeFilter;
+        private TextBox _txtDeleteFormNoFilter;
         private RadioButton _radDeleteDbOnly;
         private RadioButton _radDeleteComplete;
         private Label _lblDeleteCount;
@@ -273,24 +317,30 @@ namespace CaseManagement
         private const string DelSelCol = "sel";
         private const string DelIdCol = "CasID";
         private const string DelCodeCol = "Code";
+        private const int MaxDeleteGridRows = 500;
 
         private void BuildDeleteCasesTab(Panel tab)
         {
-            Panel top = new Panel { Dock = DockStyle.Top, Height = 96, BackColor = UiTheme.CardBack, Padding = new Padding(14, 8, 14, 4) };
+            Panel top = new Panel { Dock = DockStyle.Top, Height = 178, BackColor = UiTheme.CardBack, Padding = new Padding(14, 6, 14, 4) };
 
+            // ── ردیف ۱: جست‌جوی سریع (کد یا نام) ────────────────────────────
             FlowLayoutPanel searchFlow = new FlowLayoutPanel
             {
-                Dock = DockStyle.Top, Height = 44, FlowDirection = FlowDirection.RightToLeft
+                Dock = DockStyle.Top, Height = 40, FlowDirection = FlowDirection.RightToLeft
             };
-            _txtDeleteSearch = new TextBox { Width = 240, Height = 28 };
+            searchFlow.Controls.Add(new Label
+            {
+                Text = "جست‌جوی سریع (کد یا نام):", AutoSize = false, Width = 150, Height = 28,
+                TextAlign = ContentAlignment.MiddleRight, Margin = new Padding(4, 10, 2, 4)
+            });
+            _txtDeleteSearch = new TextBox { Width = 220, Height = 28 };
             UiTheme.StyleTextBox(_txtDeleteSearch);
-            _txtDeleteSearch.Margin = new Padding(4, 8, 4, 4);
+            _txtDeleteSearch.Margin = new Padding(2, 8, 4, 4);
+            _txtDeleteSearch.KeyDown += delegate (object s, KeyEventArgs e)
+            {
+                if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; LoadDeleteCases(); }
+            };
             searchFlow.Controls.Add(_txtDeleteSearch);
-
-            Button btnSearch = UiTheme.CreateButton("جستجو", "⌕", UiTheme.Primary);
-            btnSearch.Size = new Size(110, 30); btnSearch.Margin = new Padding(4, 7, 4, 4);
-            btnSearch.Click += delegate { LoadDeleteCases(); };
-            searchFlow.Controls.Add(btnSearch);
 
             Button btnSelectAll = UiTheme.CreateSecondaryButton("انتخاب همه", "☑");
             btnSelectAll.Size = new Size(120, 30); btnSelectAll.Margin = new Padding(4, 7, 4, 4);
@@ -304,10 +354,57 @@ namespace CaseManagement
 
             top.Controls.Add(searchFlow);
 
+            // ── ردیف ۲: فیلترِ ولایت/ولسوالی/کدِاختصاصی/شماره‌فرم ────────────
+            FlowLayoutPanel filterFlow = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Top, Height = 40, FlowDirection = FlowDirection.RightToLeft
+            };
+
+            _cmbDeleteProvince = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 140, Height = 28, Margin = new Padding(2, 6, 4, 4) };
+            LookupHelper.FillCombo(_cmbDeleteProvince, "Province", "همه ولایت‌ها");
+            _cmbDeleteProvince.SelectedIndexChanged += delegate { LoadDeleteDistrictFilter(); };
+            filterFlow.Controls.Add(_cmbDeleteProvince);
+
+            _cmbDeleteDistrict = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 140, Height = 28, Margin = new Padding(2, 6, 8, 4) };
+            filterFlow.Controls.Add(_cmbDeleteDistrict);
+            LoadDeleteDistrictFilter();
+
+            _txtDeleteCodeFilter = new TextBox { Width = 130, Height = 28 };
+            UiTheme.StyleTextBox(_txtDeleteCodeFilter);
+            _txtDeleteCodeFilter.Margin = new Padding(2, 6, 2, 4);
+            filterFlow.Controls.Add(_txtDeleteCodeFilter);
+            filterFlow.Controls.Add(new Label { Text = "کد اختصاصی:", AutoSize = false, Width = 80, Height = 28, TextAlign = ContentAlignment.MiddleRight, Margin = new Padding(4, 10, 0, 4) });
+
+            _txtDeleteFormNoFilter = new TextBox { Width = 100, Height = 28 };
+            UiTheme.StyleTextBox(_txtDeleteFormNoFilter);
+            _txtDeleteFormNoFilter.Margin = new Padding(2, 6, 2, 4);
+            filterFlow.Controls.Add(_txtDeleteFormNoFilter);
+            filterFlow.Controls.Add(new Label { Text = "شماره فرم:", AutoSize = false, Width = 76, Height = 28, TextAlign = ContentAlignment.MiddleRight, Margin = new Padding(4, 10, 0, 4) });
+
+            Button btnApplyFilter = UiTheme.CreateButton("اعمال فیلتر", "⌕", UiTheme.Primary);
+            btnApplyFilter.Size = new Size(110, 28); btnApplyFilter.Margin = new Padding(8, 6, 4, 4);
+            btnApplyFilter.Click += delegate { LoadDeleteCases(); };
+            filterFlow.Controls.Add(btnApplyFilter);
+
+            Button btnClearFilter = UiTheme.CreateSecondaryButton("پاک‌سازی فیلتر", "✕");
+            btnClearFilter.Size = new Size(110, 28); btnClearFilter.Margin = new Padding(2, 6, 4, 4);
+            btnClearFilter.Click += delegate
+            {
+                _cmbDeleteProvince.SelectedIndex = 0;
+                LoadDeleteDistrictFilter();
+                _txtDeleteCodeFilter.Text = "";
+                _txtDeleteFormNoFilter.Text = "";
+                _txtDeleteSearch.Text = "";
+                LoadDeleteCases();
+            };
+            filterFlow.Controls.Add(btnClearFilter);
+
+            top.Controls.Add(filterFlow);
+
             // نوار گزینه‌ها + دکمه حذف
             FlowLayoutPanel optFlow = new FlowLayoutPanel
             {
-                Dock = DockStyle.Bottom, Height = 44, FlowDirection = FlowDirection.RightToLeft
+                Dock = DockStyle.Bottom, Height = 64, FlowDirection = FlowDirection.RightToLeft, WrapContents = true
             };
             _radDeleteDbOnly = new RadioButton
             {
@@ -334,12 +431,20 @@ namespace CaseManagement
             };
             optFlow.Controls.Add(_lblDeleteCount);
 
+            Label lblOrphanWarning = new Label
+            {
+                Text = "توجه: در حالتِ «فقط دیتابیس»، عکس/سند/خروجیِ همان پرونده روی دیسک باقی می‌ماند (بدونِ ارتباط با هیچ پرونده‌ای).",
+                AutoSize = false, Width = 900, Height = 30, TextAlign = ContentAlignment.MiddleRight,
+                ForeColor = UiTheme.Warning, Font = UiTheme.Font(UiTheme.SizeSmall), Margin = new Padding(6, 8, 6, 4)
+            };
+            optFlow.Controls.Add(lblOrphanWarning);
+
             top.Controls.Add(optFlow);
 
             _gridDeleteCases = new DataGridView
             {
                 Dock = DockStyle.Fill, AllowUserToAddRows = false, AllowUserToDeleteRows = false,
-                RowHeadersVisible = false, MultiSelect = false,
+                RowHeadersVisible = true, RowHeadersWidth = 44, MultiSelect = false,
                 SelectionMode = DataGridViewSelectionMode.FullRowSelect,
                 AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill
             };
@@ -349,13 +454,21 @@ namespace CaseManagement
             _gridDeleteCases.Columns.Add(new DataGridViewTextBoxColumn { Name = DelCodeCol, HeaderText = "کد اختصاصی", ReadOnly = true, FillWeight = 60 });
             _gridDeleteCases.Columns.Add(new DataGridViewTextBoxColumn { Name = "HeadFullName", HeaderText = "نام سرپرست", ReadOnly = true, FillWeight = 110 });
             _gridDeleteCases.Columns.Add(new DataGridViewTextBoxColumn { Name = "Province", HeaderText = "ولایت", ReadOnly = true, FillWeight = 60 });
+            _gridDeleteCases.Columns.Add(new DataGridViewTextBoxColumn { Name = "District", HeaderText = "ولسوالی", ReadOnly = true, FillWeight = 60 });
+            _gridDeleteCases.Columns.Add(new DataGridViewTextBoxColumn { Name = "FormNo", HeaderText = "شماره فرم", ReadOnly = true, FillWeight = 50 });
             _gridDeleteCases.Columns.Add(new DataGridViewTextBoxColumn { Name = "ServiceStatus", HeaderText = "وضعیت", ReadOnly = true, FillWeight = 60 });
             _gridDeleteCases.CurrentCellDirtyStateChanged += delegate
             {
                 if (_gridDeleteCases.IsCurrentCellDirty)
                     _gridDeleteCases.CommitEdit(DataGridViewDataErrorContexts.Commit);
             };
-            _gridDeleteCases.CellValueChanged += delegate { UpdateDeleteCount(); };
+            _gridDeleteCases.CellValueChanged += delegate (object s, DataGridViewCellEventArgs e)
+            {
+                UpdateDeleteCount();
+                if (e.ColumnIndex >= 0 && e.RowIndex >= 0 && _gridDeleteCases.Columns[e.ColumnIndex].Name == DelSelCol)
+                    ColorDeleteRow(_gridDeleteCases.Rows[e.RowIndex]);
+            };
+            _gridDeleteCases.RowPostPaint += DgvDeleteCases_RowPostPaint;
 
             tab.Controls.Add(_gridDeleteCases);
             tab.Controls.Add(top);
@@ -363,21 +476,79 @@ namespace CaseManagement
             LoadDeleteCases();
         }
 
+        // پر کردنِ کمبوی ولسوالی بر اساسِ ولایتِ انتخاب‌شده (همان الگوی
+        // FrmDashboard.LoadFilterDistricts).
+        private void LoadDeleteDistrictFilter()
+        {
+            if (_cmbDeleteDistrict == null) return;
+            _cmbDeleteDistrict.Items.Clear();
+            _cmbDeleteDistrict.Items.Add("همه ولسوالی‌ها");
+
+            if (_cmbDeleteProvince.SelectedIndex > 0)
+            {
+                try
+                {
+                    foreach (string d in AfghanGeoData.GetDistricts(_cmbDeleteProvince.Text.Trim()))
+                        _cmbDeleteDistrict.Items.Add(d);
+                }
+                catch { }
+            }
+            _cmbDeleteDistrict.SelectedIndex = 0;
+        }
+
+        // رسمِ شماره‌ی ردیف — همان منطقِ راست‌به‌چپِ درست‌شده‌ی FrmCase
+        // (DgvCases_RowPostPaint)، چون این گرید هم RightToLeft=Yes دارد.
+        private void DgvDeleteCases_RowPostPaint(object sender, DataGridViewRowPostPaintEventArgs e)
+        {
+            string rowNumber = (e.RowIndex + 1).ToString();
+            SizeF size = e.Graphics.MeasureString(rowNumber, _gridDeleteCases.RowHeadersDefaultCellStyle.Font ?? _gridDeleteCases.Font);
+
+            int headerLeft = _gridDeleteCases.RightToLeft == RightToLeft.Yes
+                ? e.RowBounds.Right
+                : e.RowBounds.Left - _gridDeleteCases.RowHeadersWidth;
+            Rectangle headerBounds = new Rectangle(headerLeft, e.RowBounds.Top, _gridDeleteCases.RowHeadersWidth, e.RowBounds.Height);
+
+            e.Graphics.DrawString(rowNumber, _gridDeleteCases.Font, SystemBrushes.ControlText,
+                headerBounds.Left + (headerBounds.Width - size.Width) / 2,
+                headerBounds.Top + (headerBounds.Height - size.Height) / 2);
+        }
+
+        // هشدارِ بصری: ردیفی که برای حذف تیک خورده، پس‌زمینه‌ی قرمزِ کم‌رنگ می‌گیرد.
+        private void ColorDeleteRow(DataGridViewRow row)
+        {
+            bool selected = Convert.ToBoolean(row.Cells[DelSelCol].Value ?? false);
+            row.DefaultCellStyle.BackColor = selected ? Color.FromArgb(255, 235, 235) : Color.Empty;
+        }
+
         private void LoadDeleteCases()
         {
             string term = _txtDeleteSearch == null ? "" : _txtDeleteSearch.Text.Trim();
+            string province = (_cmbDeleteProvince == null || _cmbDeleteProvince.SelectedIndex <= 0) ? "" : _cmbDeleteProvince.Text.Trim();
+            string district = (_cmbDeleteDistrict == null || _cmbDeleteDistrict.SelectedIndex <= 0) ? "" : _cmbDeleteDistrict.Text.Trim();
+            string code = _txtDeleteCodeFilter == null ? "" : _txtDeleteCodeFilter.Text.Trim();
+            string formNo = _txtDeleteFormNoFilter == null ? "" : _txtDeleteFormNoFilter.Text.Trim();
+
             _gridDeleteCases.Rows.Clear();
 
             using (var con = _db.GetConnection())
             using (var cmd = new SQLiteCommand(@"
-SELECT CasID, Code, HeadFullName, Province, ServiceStatus
+SELECT CasID, Code, HeadFullName, Province, District, FormNo, ServiceStatus
 FROM TblCase
 WHERE (@CID = 0 OR CenterID = @CID)
   AND (@Term = '' OR Code LIKE '%' || @Term || '%' OR HeadFullName LIKE '%' || @Term || '%')
-ORDER BY CasID DESC", con))
+  AND (@Prov = '' OR Province = @Prov)
+  AND (@Dist = '' OR District LIKE '%' || @Dist || '%')
+  AND (@Code = '' OR Code LIKE '%' || @Code || '%')
+  AND (@FormNo = '' OR CAST(FormNo AS TEXT) LIKE '%' || @FormNo || '%')
+ORDER BY CasID DESC
+LIMIT " + MaxDeleteGridRows, con))
             {
                 cmd.Parameters.AddWithValue("@CID", SecurityContext.CenterFilterId);
                 cmd.Parameters.AddWithValue("@Term", term);
+                cmd.Parameters.AddWithValue("@Prov", province);
+                cmd.Parameters.AddWithValue("@Dist", district);
+                cmd.Parameters.AddWithValue("@Code", code);
+                cmd.Parameters.AddWithValue("@FormNo", formNo);
                 con.Open();
                 using (var dr = cmd.ExecuteReader())
                 {
@@ -389,6 +560,8 @@ ORDER BY CasID DESC", con))
                             dr["Code"] == DBNull.Value ? "" : dr["Code"].ToString(),
                             dr["HeadFullName"] == DBNull.Value ? "" : dr["HeadFullName"].ToString(),
                             dr["Province"] == DBNull.Value ? "" : dr["Province"].ToString(),
+                            dr["District"] == DBNull.Value ? "" : dr["District"].ToString(),
+                            dr["FormNo"] == DBNull.Value ? "" : dr["FormNo"].ToString(),
                             dr["ServiceStatus"] == DBNull.Value ? "" : dr["ServiceStatus"].ToString());
                     }
                 }
@@ -399,7 +572,11 @@ ORDER BY CasID DESC", con))
         private void SetAllDeleteSelection(bool selected)
         {
             foreach (DataGridViewRow row in _gridDeleteCases.Rows)
-                if (!row.IsNewRow) row.Cells[DelSelCol].Value = selected;
+            {
+                if (row.IsNewRow) continue;
+                row.Cells[DelSelCol].Value = selected;
+                ColorDeleteRow(row);
+            }
             UpdateDeleteCount();
         }
 
@@ -409,7 +586,7 @@ ORDER BY CasID DESC", con))
             int n = 0;
             foreach (DataGridViewRow row in _gridDeleteCases.Rows)
                 if (!row.IsNewRow && Convert.ToBoolean(row.Cells[DelSelCol].Value ?? false)) n++;
-            _lblDeleteCount.Text = "انتخاب‌شده: " + n;
+            _lblDeleteCount.Text = string.Format(Lang.T("انتخاب‌شده: {0}"), n);
         }
 
         private void BtnDeleteCases_Click(object sender, EventArgs e)
@@ -421,13 +598,14 @@ ORDER BY CasID DESC", con))
             }
 
             var targets = new List<KeyValuePair<int, string>>(); // CasID -> Code
+            var targetNames = new List<string>();
             foreach (DataGridViewRow row in _gridDeleteCases.Rows)
             {
                 if (row.IsNewRow) continue;
                 if (!Convert.ToBoolean(row.Cells[DelSelCol].Value ?? false)) continue;
-                targets.Add(new KeyValuePair<int, string>(
-                    Convert.ToInt32(row.Cells[DelIdCol].Value),
-                    (row.Cells[DelCodeCol].Value ?? "").ToString()));
+                string code = (row.Cells[DelCodeCol].Value ?? "").ToString();
+                targets.Add(new KeyValuePair<int, string>(Convert.ToInt32(row.Cells[DelIdCol].Value), code));
+                targetNames.Add(code + " — " + (row.Cells["HeadFullName"].Value ?? ""));
             }
 
             if (targets.Count == 0)
@@ -438,54 +616,156 @@ ORDER BY CasID DESC", con))
 
             bool complete = _radDeleteComplete.Checked;
             string mode = complete ? "به‌همراه پوشه‌ی فایل‌ها (عکس/سند/خروجی)" : "فقط از دیتابیس نرم‌افزار";
+
+            // فهرستِ واقعیِ پرونده‌های انتخاب‌شده (تا سقفی معقول) در دیالوگِ تأیید.
+            const int previewCap = 15;
+            string preview = string.Join("\n", targetNames.Take(previewCap));
+            if (targetNames.Count > previewCap)
+                preview += "\n… و " + (targetNames.Count - previewCap) + " موردِ دیگر";
+
             if (!UiTheme.ShowConfirm(this,
-                    "تعداد " + targets.Count + " پرونده " + mode + " حذف می‌شود.\n" +
+                    "تعداد " + targets.Count + " پرونده " + mode + " حذف می‌شود:\n\n" + preview + "\n\n" +
                     "این عملیات همه‌ی اعضا، اسناد و کمک‌های همان پرونده‌ها را نیز حذف می‌کند و قابل بازگشت نیست.\n" +
+                    "پیش از حذف، یک بکاپِ کامل خودکار گرفته می‌شود.\n" +
                     "آیا مطمئن هستید؟",
                     "تأیید حذف پرونده‌ها"))
                 return;
 
-            int deleted = 0, folderFailed = 0;
-            foreach (var t in targets)
+            // برای حذفِ «کامل»، یک تأییدِ دومِ صریح (تایپِ عددِ دقیقِ تعداد) —
+            // ریسکِ بیشتری دارد چون فایل‌ها هم برای همیشه پاک می‌شوند.
+            if (complete && !ConfirmByTypingCount(targets.Count))
+                return;
+
+            // ── بکاپِ کاملِ *اجباری* پیش از هر حذف ──────────────────────────
+            // آموزش — دقیقاً همان الگوی SyncEngine.Apply: اگر بکاپ نشد، اصلاً
+            // ادامه نده. حذف «قابل بازگشت نیست»، پس این تنها تورِ ایمنی است.
+            string backupPath;
+            try
             {
-                try
+                UseWaitCursor = true;
+                backupPath = new BackupHelper().ExportBackup(CaseManagement.Sync.SyncEngine.ResolveBackupFolder());
+            }
+            catch (Exception ex)
+            {
+                UiTheme.ShowError(this, "بکاپ‌گیریِ اجباری پیش از حذف ناموفق بود؛ برای ایمنیِ داده، هیچ پرونده‌ای حذف نشد:\n" + ex.Message);
+                return;
+            }
+            finally { UseWaitCursor = false; }
+
+            int deleted = 0, folderFailed = 0;
+
+            // ── یک اتصالِ مشترک برای کلِ دسته (به‌جای بازکردنِ اتصالِ جدید
+            // به ازای هر پرونده) — کاراییِ بهتر برای دسته‌های بزرگ.
+            using (var con = _db.GetConnection())
+            {
+                con.Open();
+
+                foreach (var t in targets)
                 {
-                    // ۱) حذف رکورد پرونده (FK آبشاری: اعضا/اسناد/کمک‌ها هم پاک می‌شوند)
-                    //    محدود به مرکز کاربر جاری (لایه‌ی دفاعی).
-                    using (var con = _db.GetConnection())
-                    using (var cmd = new SQLiteCommand(
-                        "DELETE FROM TblCase WHERE CasID = @Id AND (@CID = 0 OR CenterID = @CID)", con))
+                    try
                     {
-                        cmd.Parameters.AddWithValue("@Id", t.Key);
-                        cmd.Parameters.AddWithValue("@CID", SecurityContext.CenterFilterId);
-                        con.Open();
-                        int affected = cmd.ExecuteNonQuery();
+                        // هویتِ رکورد *پیش از* حذف برداشته می‌شود (بعد از DELETE
+                        // دیگر خواندنی نیست)، ولی فقط در صورتِ حذفِ واقعی ثبت
+                        // می‌گردد — این حذف ممکن است به‌خاطرِ تعلق به مرکزِ
+                        // دیگر انجام نشود.
+                        var pendingDelete =
+                            CaseManagement.Sync.SyncOutboxService.PrepareDelete("TblCase", t.Key);
+
+                        int affected;
+                        using (var cmd = new SQLiteCommand(
+                            "DELETE FROM TblCase WHERE CasID = @Id AND (@CID = 0 OR CenterID = @CID)", con))
+                        {
+                            cmd.Parameters.AddWithValue("@Id", t.Key);
+                            cmd.Parameters.AddWithValue("@CID", SecurityContext.CenterFilterId);
+                            affected = cmd.ExecuteNonQuery();
+                        }
                         if (affected == 0) continue; // متعلق به مرکز دیگر — رد شد
-                    }
 
-                    // ۲) در حالت «کامل»، پوشه‌ی فایل‌های پرونده هم حذف می‌شود.
-                    if (complete && !string.IsNullOrWhiteSpace(t.Value))
+                        // حذف واقعاً انجام شد ⇒ حالا در صفِ همگام‌سازی ثبت می‌شود.
+                        CaseManagement.Sync.SyncOutboxService.CommitDelete(pendingDelete);
+
+                        // در حالتِ «کامل»، پوشه‌ی فایل‌های پرونده هم حذف می‌شود.
+                        if (complete && !string.IsNullOrWhiteSpace(t.Value))
+                        {
+                            if (!FileHelper.DeleteCaseFolder(t.Value))
+                                folderFailed++;
+                        }
+
+                        AuditLogger.Log("حذف پرونده", "TblCase", t.Key, "Code=" + t.Value,
+                            complete ? "کامل (با پوشه)" : "فقط دیتابیس");
+                        deleted++;
+                    }
+                    catch (Exception ex)
                     {
-                        if (!FileHelper.DeleteCaseFolder(t.Value))
-                            folderFailed++;
+                        System.Diagnostics.Debug.WriteLine("[DeleteCase " + t.Key + "] " + ex.Message);
                     }
-
-                    AuditLogger.Log("حذف پرونده", "TblCase", t.Key, "Code=" + t.Value,
-                        complete ? "کامل (با پوشه)" : "فقط دیتابیس");
-                    deleted++;
-                }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine("[DeleteCase " + t.Key + "] " + ex.Message);
                 }
             }
 
-            string msg = deleted + " پرونده حذف شد.";
+            string msg = deleted + " پرونده حذف شد.\nمسیرِ بکاپِ گرفته‌شده پیش از حذف:\n" + backupPath;
             if (folderFailed > 0)
                 msg += "\nتوجه: پوشه‌ی " + folderFailed + " پرونده حذف نشد (شاید در حال استفاده بود).";
             UiTheme.ShowSuccess(this, msg);
 
             LoadDeleteCases();
+        }
+
+        // تأییدِ دومِ صریح برای حذفِ «کامل»: کاربر باید عددِ دقیقِ تعداد را
+        // تایپ کند. یک دیالوگِ کوچکِ ساده، هم‌راستا با سبکِ بقیه‌ی فرم‌های
+        // کوچکِ این پروژه (مثلِ ShowAddReminderDialog در FrmDashboard).
+        private bool ConfirmByTypingCount(int expectedCount)
+        {
+            using (Form frm = new Form())
+            {
+                frm.Text = "تأییدِ نهاییِ حذفِ کامل";
+                frm.RightToLeft = RightToLeft.Yes;
+                frm.RightToLeftLayout = true;
+                frm.FormBorderStyle = FormBorderStyle.FixedDialog;
+                frm.StartPosition = FormStartPosition.CenterParent;
+                frm.MaximizeBox = false;
+                frm.MinimizeBox = false;
+                frm.BackColor = UiTheme.Background;
+                frm.Font = UiTheme.Font(UiTheme.SizeBody);
+                UiTheme.MakeFixedSize(frm, 420, 190);
+
+                Label lbl = new Label
+                {
+                    Text = "برای تأییدِ نهاییِ حذفِ کامل (همراه با فایل‌ها)، عددِ «" + expectedCount + "» را دقیقاً تایپ کنید:",
+                    AutoSize = false, Location = new Point(20, 20), Size = new Size(370, 50),
+                    TextAlign = ContentAlignment.TopRight
+                };
+                frm.Controls.Add(lbl);
+
+                TextBox txt = new TextBox { Location = new Point(20, 76), Size = new Size(370, 30), TextAlign = HorizontalAlignment.Center };
+                UiTheme.StyleTextBox(txt);
+                frm.Controls.Add(txt);
+
+                bool confirmed = false;
+                Button btnOk = UiTheme.CreateButton("تأیید نهایی", "✔", UiTheme.Danger);
+                btnOk.SetBounds(230, 122, 160, 34);
+                btnOk.Click += delegate
+                {
+                    if (txt.Text.Trim() == expectedCount.ToString())
+                    {
+                        confirmed = true;
+                        frm.DialogResult = DialogResult.OK;
+                    }
+                    else
+                    {
+                        UiTheme.ShowWarning(frm, "عددِ واردشده با تعدادِ انتخاب‌شده یکی نیست.");
+                    }
+                };
+                frm.Controls.Add(btnOk);
+
+                Button btnCancel = UiTheme.CreateSecondaryButton("انصراف", "✕");
+                btnCancel.SetBounds(30, 122, 160, 34);
+                btnCancel.Click += delegate { frm.DialogResult = DialogResult.Cancel; };
+                frm.Controls.Add(btnCancel);
+
+                frm.CancelButton = btnCancel;
+                frm.ShowDialog(this);
+                return confirmed;
+            }
         }
 
         // ══════════════════════════════════════════════════════════════════
@@ -819,6 +1099,20 @@ ORDER BY CasID DESC", con))
             fontColorRow.Controls.Add(_pnlFontColorSwatch);
             appFlow.Controls.Add(fontColorRow);
 
+            appFlow.Controls.Add(new Label
+            {
+                Text = "چیدمان کارت‌های آماری داشبورد", AutoSize = false, Width = 320, Height = 22,
+                TextAlign = ContentAlignment.MiddleRight, Font = UiTheme.FontBold(UiTheme.SizeSmall),
+                ForeColor = UiTheme.TextDark, Margin = new Padding(0, 8, 0, 4)
+            });
+            _cmbDashboardRows = new ComboBox
+            {
+                DropDownStyle = ComboBoxStyle.DropDownList, Width = 320, Height = 30,
+                Font = UiTheme.Font(UiTheme.SizeBody), Margin = new Padding(0, 0, 0, 8)
+            };
+            _cmbDashboardRows.Items.AddRange(new object[] { "۲ ردیف (فشرده‌تر)", "۳ ردیف", "۴ ردیف (کارت‌های بزرگ‌تر)" });
+            appFlow.Controls.Add(_cmbDashboardRows);
+
             cardAppearance.Content.Controls.Add(appFlow);
             rightHost.Controls.Add(cardAppearance);
 
@@ -1050,6 +1344,9 @@ ORDER BY CasID DESC", con))
             }
             _pnlFontColorSwatch.BackColor = _selectedFontColor;
 
+            int dashRows = SettingsHelper.GetInt(SettingsHelper.DashboardSummaryRows, 2);
+            _cmbDashboardRows.SelectedIndex = dashRows == 3 ? 1 : (dashRows == 4 ? 2 : 0);
+
             ShowImagePreview(_picLogoPreview, _txtLogoPath.Text);
             ShowImagePreview(_picSignaturePreview, _txtSignaturePath.Text);
             ShowImagePreview(_picStampPreview, _txtStampPath.Text);
@@ -1076,7 +1373,10 @@ ORDER BY CasID DESC", con))
             SettingsHelper.Set(SettingsHelper.ThemeColor, ColorTranslator.ToHtml(_selectedThemeColor));
             SettingsHelper.Set(SettingsHelper.FontColor, ColorTranslator.ToHtml(_selectedFontColor));
 
-            UiTheme.ShowSuccess(this, "تنظیمات مؤسسه ذخیره شد. برای اعمال کامل رنگ‌ها/فونت روی همه پنجره‌ها، برنامه را دوباره باز کنید.");
+            int dashRowsToSave = _cmbDashboardRows.SelectedIndex == 1 ? 3 : (_cmbDashboardRows.SelectedIndex == 2 ? 4 : 2);
+            SettingsHelper.Set(SettingsHelper.DashboardSummaryRows, dashRowsToSave.ToString());
+
+            UiTheme.ShowSuccess(this, "تنظیمات مؤسسه ذخیره شد. برای اعمال کامل رنگ‌ها/فونت/چیدمان داشبورد روی همه پنجره‌ها، برنامه را دوباره باز کنید.");
         }
 
         // ══════════════════════════════════════════════════════════════════
@@ -1860,10 +2160,149 @@ ORDER BY SortOrder, Value", con))
             flow.Controls.Add(MakeBrowseFieldPanel("مسیر موقت (Temp)", _txtTempPath,
                 delegate { BrowseFolderInto(_txtTempPath); }));
 
+            // ─── جزوه آموزشی (به درخواست کاربر: قابل جایگزینی) ───────────────
+            // برخلاف بقیه‌ی فیلدهای این تب که «پوشه» می‌گیرند، این یکی «فایل»
+            // می‌گیرد. اگر خالی بماند، همان جزوه‌ی همراهِ نصب باز می‌شود، پس
+            // رفتار پیش‌فرض هیچ تغییری نمی‌کند.
+            _txtManualPath = new TextBox { ReadOnly = true };
+            UiTheme.StyleTextBox(_txtManualPath);
+            flow.Controls.Add(MakeBrowseFieldPanel("فایل جزوه آموزشی (PDF یا Word)", _txtManualPath,
+                BtnBrowseManual_Click));
+
+            Button btnResetManual = UiTheme.CreateSecondaryButton("بازگشت به جزوه پیش‌فرض", "↺");
+            btnResetManual.Size = new Size(210, 30);
+            btnResetManual.Margin = new Padding(6, 26, 6, 4);
+            btnResetManual.Click += delegate { _txtManualPath.Text = ""; };
+            flow.Controls.Add(btnResetManual);
+
+            // ─── قالب‌های خروجی Word ─────────────────────────────────────────
+            // قابلیت «چند قالب» از قبل کار می‌کند: هر فایل .docx داخل پوشه‌ی
+            // Templates خودکار کشف می‌شود و اگر بیش از یکی باشد هنگام خروجی از
+            // کاربر پرسیده می‌شود (ReportTemplateHelper/FrmTemplatePicker).
+            // تنها چیزی که کم بود، راهی برای رسیدن به آن پوشه بود.
+            Button btnOpenTemplates = UiTheme.CreateSecondaryButton("پوشه قالب‌های خروجی Word", "▤");
+            btnOpenTemplates.Size = new Size(240, 30);
+            btnOpenTemplates.Margin = new Padding(6, 26, 6, 4);
+            btnOpenTemplates.Click += delegate { OpenWordTemplatesFolder(); };
+            flow.Controls.Add(btnOpenTemplates);
+
+            flow.Controls.Add(new Label
+            {
+                Text = "هر فایل .docx که در این پوشه بگذارید، هنگام گرفتن خروجی Word " +
+                       "به‌عنوان یک الگو قابل انتخاب می‌شود. فایل‌هایی با پسوند _Sample نادیده گرفته می‌شوند.",
+                AutoSize = false, Size = new Size(880, 32),
+                ForeColor = UiTheme.TextMuted, Font = UiTheme.Font(UiTheme.SizeSmall),
+                TextAlign = ContentAlignment.MiddleRight, Margin = new Padding(6, 2, 6, 4)
+            });
+
+            flow.Controls.Add(BuildCaseGridColumnsPanel());
+
             tab.Controls.Add(flow);
             tab.Controls.Add(bottomBar);
 
             LoadPathsSettings();
+        }
+
+        // پوشه‌ی قالب‌های Word را در File Explorer باز می‌کند (اگر نبود، می‌سازد).
+        private void OpenWordTemplatesFolder()
+        {
+            try
+            {
+                string folder = System.IO.Path.Combine(Application.StartupPath, "Templates");
+                System.IO.Directory.CreateDirectory(folder);
+
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = folder,
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                UiTheme.ShowError(this, "بازکردن پوشه قالب‌ها ممکن نشد: " + ex.Message);
+            }
+        }
+
+        // ─── ستون‌های گرید لیست پرونده‌ها (درخواست کاربر) ─────────────────────
+        // «کد اختصاصی» همیشه نمایش داده می‌شود و در فهرست نیست؛ کاربر علاوه بر
+        // آن حداکثر چهار ستون انتخاب می‌کند. سقف همان‌جا هنگام تیک‌زدن اعمال
+        // می‌شود (نه هنگام ذخیره) تا بازخورد فوری باشد.
+        private Panel BuildCaseGridColumnsPanel()
+        {
+            Panel field = new Panel { Width = 540, Height = 168, Margin = new Padding(6, 10, 6, 4) };
+
+            field.Controls.Add(new Label
+            {
+                Text = "ستون‌های لیست پرونده‌ها — «" + CaseGridColumns.FixedColumnTitle +
+                       "» همیشه نمایش داده می‌شود؛ حداکثر " + CaseGridColumns.MaxSelectable +
+                       " ستون دیگر انتخاب کنید:",
+                AutoSize = false, Dock = DockStyle.Top, Height = 34,
+                TextAlign = ContentAlignment.MiddleRight,
+                Font = UiTheme.FontBold(UiTheme.SizeSmall), ForeColor = UiTheme.TextDark
+            });
+
+            _clbCaseGridColumns = new CheckedListBox
+            {
+                Dock = DockStyle.Fill,
+                CheckOnClick = true,
+                RightToLeft = RightToLeft.Yes,
+                MultiColumn = true,
+                ColumnWidth = 170,
+                Font = UiTheme.Font(UiTheme.SizeBody),
+                IntegralHeight = false
+            };
+
+            foreach (CaseGridColumn column in CaseGridColumns.Available)
+                _clbCaseGridColumns.Items.Add(column.DisplayName);
+
+            // اعمال سقف: اگر کاربر بخواهد پنجمی را تیک بزند، تیک لغو می‌شود و
+            // پیام روشن داده می‌شود (به‌جای اینکه بی‌صدا نادیده گرفته شود).
+            _clbCaseGridColumns.ItemCheck += delegate (object s, ItemCheckEventArgs e)
+            {
+                if (e.NewValue != CheckState.Checked)
+                    return;
+
+                if (_clbCaseGridColumns.CheckedIndices.Count >= CaseGridColumns.MaxSelectable)
+                {
+                    e.NewValue = CheckState.Unchecked;
+                    UiTheme.ShowWarning(this,
+                        "حداکثر " + CaseGridColumns.MaxSelectable +
+                        " ستون می‌توانید انتخاب کنید تا جدول بدون اسکرول افقی جا شود." +
+                        Environment.NewLine + "ابتدا یکی از ستون‌های انتخاب‌شده را بردارید.");
+                }
+            };
+
+            field.Controls.Add(_clbCaseGridColumns);
+            return field;
+        }
+
+        private void LoadCaseGridColumnsSetting()
+        {
+            if (_clbCaseGridColumns == null)
+                return;
+
+            var selectedKeys = new HashSet<string>(
+                CaseGridColumns.GetSelected().Select(c => c.Key), StringComparer.OrdinalIgnoreCase);
+
+            for (int i = 0; i < CaseGridColumns.Available.Count; i++)
+                _clbCaseGridColumns.SetItemChecked(i, selectedKeys.Contains(CaseGridColumns.Available[i].Key));
+        }
+
+        private void SaveCaseGridColumnsSetting()
+        {
+            if (_clbCaseGridColumns == null)
+                return;
+
+            var chosen = new List<CaseGridColumn>();
+            foreach (int index in _clbCaseGridColumns.CheckedIndices)
+                chosen.Add(CaseGridColumns.Available[index]);
+
+            // اگر کاربر همه را برداشت، به‌جای گریدِ تک‌ستونی به پیش‌فرض برمی‌گردیم.
+            string csv = chosen.Count == 0
+                ? string.Join(",", CaseGridColumns.DefaultKeys)
+                : CaseGridColumns.ToCsv(chosen);
+
+            SettingsHelper.Set(SettingsHelper.CaseGridColumns, csv);
         }
 
         private void LoadPathsSettings()
@@ -1873,6 +2312,26 @@ ORDER BY SortOrder, Value", con))
             _txtReportsPath.Text      = SettingsHelper.Get(SettingsHelper.ReportsPath);
             _txtLogsPath.Text         = SettingsHelper.Get(SettingsHelper.LogsPath);
             _txtTempPath.Text         = SettingsHelper.Get(SettingsHelper.TempPath);
+            _txtManualPath.Text       = SettingsHelper.Get(SettingsHelper.ManualPath);
+            LoadCaseGridColumnsSetting();
+        }
+
+        // انتخاب فایل جزوه آموزشی. فقط وجود فایل بررسی می‌شود؛ محتوایش هرچه
+        // باشد با برنامه‌ی پیش‌فرضِ ویندوز باز خواهد شد.
+        private void BtnBrowseManual_Click(object sender, EventArgs e)
+        {
+            using (OpenFileDialog ofd = new OpenFileDialog
+            {
+                Filter = "جزوه آموزشی|*.pdf;*.doc;*.docx|همه فایل‌ها|*.*",
+                CheckFileExists = true
+            })
+            {
+                if (!string.IsNullOrWhiteSpace(_txtManualPath.Text) && System.IO.File.Exists(_txtManualPath.Text))
+                    ofd.FileName = _txtManualPath.Text;
+
+                if (ofd.ShowDialog(this) == DialogResult.OK)
+                    _txtManualPath.Text = ofd.FileName;
+            }
         }
 
         private void BtnSavePaths_Click(object sender, EventArgs e)
@@ -1882,7 +2341,9 @@ ORDER BY SortOrder, Value", con))
             SettingsHelper.Set(SettingsHelper.ReportsPath, _txtReportsPath.Text.Trim());
             SettingsHelper.Set(SettingsHelper.LogsPath, _txtLogsPath.Text.Trim());
             SettingsHelper.Set(SettingsHelper.TempPath, _txtTempPath.Text.Trim());
-            UiTheme.ShowSuccess(this, "مسیرها ذخیره شد.");
+            SettingsHelper.Set(SettingsHelper.ManualPath, _txtManualPath.Text.Trim());
+            SaveCaseGridColumnsSetting();
+            UiTheme.ShowSuccess(this, "تنظیمات ذخیره شد.");
         }
 
         // ══════════════════════════════════════════════════════════════════
@@ -1981,15 +2442,13 @@ ORDER BY SortOrder, Value", con))
                     string lastBackup = SettingsHelper.Get(SettingsHelper.LastBackupDate, "");
                     string lastRestore = SettingsHelper.Get(SettingsHelper.LastRestoreDate, "");
 
-                    _lblMaintenanceStats.Text =
-                        "حجم دیتابیس: " + (dbSizeBytes / 1024.0 / 1024.0).ToString("N2") + " مگابایت" +
-                        "     |     تعداد پرونده‌ها: " + cases +
-                        "     |     تعداد اعضای خانواده: " + families +
-                        "     |     تعداد اسناد: " + docs + "\n" +
-                        "تعداد کاربران: " + users +
-                        "     |     تعداد مراکز: " + centers +
-                        "     |     آخرین Backup: " + (string.IsNullOrEmpty(lastBackup) ? "—" : lastBackup) +
-                        "     |     آخرین Restore: " + (string.IsNullOrEmpty(lastRestore) ? "—" : lastRestore);
+                    // قالب کامل تا ترجمه‌پذیر باشد (توضیح در GridPager/UpdateInfo).
+                    _lblMaintenanceStats.Text = string.Format(
+                        Lang.T("حجم دیتابیس: {0} مگابایت     |     تعداد پرونده‌ها: {1}     |     تعداد اعضای خانواده: {2}     |     تعداد اسناد: {3}\nتعداد کاربران: {4}     |     تعداد مراکز: {5}     |     آخرین Backup: {6}     |     آخرین Restore: {7}"),
+                        (dbSizeBytes / 1024.0 / 1024.0).ToString("N2"),
+                        cases, families, docs, users, centers,
+                        string.IsNullOrEmpty(lastBackup) ? "—" : lastBackup,
+                        string.IsNullOrEmpty(lastRestore) ? "—" : lastRestore);
                 }
             }
             catch (Exception ex)
@@ -2420,7 +2879,7 @@ WHERE UserID = @ID", con))
             _numBackupRetention.Value = SettingsHelper.GetInt(SettingsHelper.BackupRetentionCount, 14);
 
             string lastBackup = SettingsHelper.Get(SettingsHelper.LastBackupDate, "");
-            _lblBackupStatus.Text = "آخرین Backup: " + (string.IsNullOrEmpty(lastBackup) ? "هنوز گرفته نشده" : lastBackup);
+            _lblBackupStatus.Text = string.Format(Lang.T("آخرین Backup: {0}"), string.IsNullOrEmpty(lastBackup) ? Lang.T("هنوز گرفته نشده") : lastBackup);
         }
 
         private void BtnSaveBackupSettings_Click(object sender, EventArgs e)
@@ -2559,6 +3018,445 @@ WHERE UserID = @ID", con))
             tab.Controls.Add(bottomBar);
 
             LoadNotificationSettings();
+        }
+
+        // ─── زبان سیستم ──────────────────────────────────────────────────────
+        // تبِ تازه و کاملاً افزایشی: هیچ تب یا گزینه‌ای را جابه‌جا یا حذف
+        // نمی‌کند. تعویضِ زبان فوری است و نیازی به بستن برنامه ندارد، چون
+        // LanguageSweep همه‌ی پنجره‌های باز را دوباره ترجمه می‌کند.
+        private ComboBox _cmbLanguage;
+
+        private void BuildLanguageTab(Panel tab)
+        {
+            FlowLayoutPanel flow = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown,
+                WrapContents = false, AutoScroll = true, Padding = new Padding(14, 12, 14, 12)
+            };
+
+            Label lblTitle = new Label
+            {
+                Text = "زبان سیستم", AutoSize = false, Width = 700, Height = 34,
+                Font = UiTheme.FontBold(UiTheme.SizeMedium), ForeColor = UiTheme.TextDark,
+                TextAlign = ContentAlignment.MiddleRight
+            };
+            flow.Controls.Add(lblTitle);
+
+            Label lblHint = new Label
+            {
+                Text = "زبانِ نمایشِ برنامه. مقادیرِ ذخیره‌شده در دیتابیس (مثل وضعیت خدمات) " +
+                       "ترجمه نمی‌شوند تا گزارش‌ها و جستجوها دقیقاً مثل قبل کار کنند.",
+                AutoSize = false, Width = 700, Height = 46,
+                Font = UiTheme.Font(UiTheme.SizeSmall), ForeColor = UiTheme.TextMuted,
+                TextAlign = ContentAlignment.MiddleRight
+            };
+            flow.Controls.Add(lblHint);
+
+            _cmbLanguage = new ComboBox
+            {
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                Width = 320, Font = UiTheme.Font(UiTheme.SizeBody),
+                Margin = new Padding(0, 10, 0, 0)
+            };
+            foreach (string code in Lang.AllCodes)
+                _cmbLanguage.Items.Add(new LanguageItem(code));
+
+            for (int i = 0; i < _cmbLanguage.Items.Count; i++)
+            {
+                if (((LanguageItem)_cmbLanguage.Items[i]).Code == Lang.Current)
+                { _cmbLanguage.SelectedIndex = i; break; }
+            }
+            if (_cmbLanguage.SelectedIndex < 0) _cmbLanguage.SelectedIndex = 0;
+
+            flow.Controls.Add(new Panel { Width = 700, Height = 6 });
+            flow.Controls.Add(_cmbLanguage);
+
+            Button btnApply = UiTheme.CreateButton("اعمال زبان", "✔", UiTheme.Success);
+            btnApply.Size = new Size(160, 38);
+            btnApply.Margin = new Padding(0, 14, 0, 0);
+            btnApply.Click += delegate
+            {
+                LanguageItem item = _cmbLanguage.SelectedItem as LanguageItem;
+                if (item == null) return;
+
+                Lang.SetLanguage(item.Code);
+                UiTheme.ShowSuccess(this, "زبان تغییر کرد.");
+            };
+            flow.Controls.Add(btnApply);
+
+            Label lblFile = new Label
+            {
+                Text = "برای تکمیل یا اصلاح ترجمه‌ها، فایل متنیِ همان زبان را در پوشه‌ی " +
+                       "Languages کنارِ برنامه ویرایش کنید (هر خط: متن فارسی=ترجمه).",
+                AutoSize = false, Width = 700, Height = 44,
+                Font = UiTheme.Font(UiTheme.SizeSmall - 1F), ForeColor = UiTheme.TextMuted,
+                TextAlign = ContentAlignment.MiddleRight,
+                Margin = new Padding(0, 16, 0, 0)
+            };
+            flow.Controls.Add(lblFile);
+
+            tab.Controls.Add(flow);
+        }
+
+        // ══════════════════════════════════════════════════════════════════
+        // تب: متن‌های کارت شناسایی سرپرست
+        //
+        // آموزش — چرا این تب اضافه شد: متن‌های مؤسسه‌ایِ کارت (نام مؤسسه، تماس،
+        // پنج هشدار پشت کارت، عنوان امضا، پاورقی حقوقی) پیش‌تر داخل
+        // CardService.BuildCardData ثابت بودند و تغییرشان به کامپایل مجدد نیاز
+        // داشت. حالا هرکدام یک فیلد ویرایش‌پذیر دارند.
+        //
+        // آنچه عمداً اینجا نیست: مشخصاتِ خودِ سرپرست (نام، نام پدر، تذکره، کد
+        // اختصاصی، تعداد ایتام) و بارکد. این‌ها داده‌ی پرونده‌اند؛ بارکد را هم
+        // سیستم برای هر خانواده از شماره فرم/کد اختصاصیِ یکتا خودش می‌سازد
+        // (GuardianCardRenderer.BarcodeValue) و نباید دستی دست‌کاری شود.
+        //
+        // هر فیلد که خالی بماند = همان مقدار پیش‌فرضِ قبلی؛ پس نصب‌های موجود
+        // بدون هیچ تنظیمی دقیقاً همان کارتِ قبلی را چاپ می‌کنند.
+        // ══════════════════════════════════════════════════════════════════
+        private readonly List<KeyValuePair<string, TextBox>> _cardTextInputs =
+            new List<KeyValuePair<string, TextBox>>();
+
+        private void BuildGuardianCardTab(Panel tab)
+        {
+            Panel bottomBar = new Panel { Dock = DockStyle.Bottom, Height = 54, BackColor = UiTheme.CardBack };
+            FlowLayoutPanel saveFlow = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, Padding = new Padding(14, 8, 14, 8)
+            };
+            Button btnSave = UiTheme.CreateButton("ذخیره متن‌های کارت", "✔", UiTheme.Success);
+            btnSave.Size = new Size(200, 38);
+            UiTheme.SetTip(btnSave, "ذخیره‌ی متن‌های کارت شناسایی؛ از چاپ بعدی اعمال می‌شود.");
+            btnSave.Click += BtnSaveGuardianCardTexts_Click;
+            saveFlow.Controls.Add(btnSave);
+
+            Button btnResetCard = UiTheme.CreateSecondaryButton("بازگشت به متن‌های پیش‌فرض", "↺");
+            btnResetCard.Size = new Size(230, 38);
+            UiTheme.SetTip(btnResetCard, "همه‌ی فیلدهای این تب خالی می‌شوند تا متن‌های استاندارد برنامه دوباره چاپ شوند.");
+            btnResetCard.Click += delegate
+            {
+                if (!UiTheme.ShowConfirm(this,
+                        "همه‌ی متن‌های سفارشیِ کارت پاک می‌شوند و متن‌های پیش‌فرض برنامه جایشان را می‌گیرند." +
+                        Environment.NewLine + Environment.NewLine + "ادامه می‌دهید؟",
+                        "بازگشت به پیش‌فرض"))
+                    return;
+
+                foreach (KeyValuePair<string, TextBox> pair in _cardTextInputs)
+                    pair.Value.Text = "";
+                BtnSaveGuardianCardTexts_Click(null, EventArgs.Empty);
+            };
+            saveFlow.Controls.Add(btnResetCard);
+            bottomBar.Controls.Add(saveFlow);
+
+            FlowLayoutPanel flow = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown,
+                WrapContents = false, AutoScroll = true, Padding = new Padding(14, 12, 14, 12)
+            };
+
+            Label lblCardHint = new Label
+            {
+                Text = "متن‌های زیر روی کارت شناسایی سرپرست چاپ می‌شوند و همگی قابل ویرایش‌اند. " +
+                       "هر فیلدی که خالی بماند، متن پیش‌فرضِ نوشته‌شده زیر همان کادر چاپ می‌شود." +
+                       Environment.NewLine +
+                       "مشخصات خودِ سرپرست و بارکد اینجا نیستند: بارکد را سیستم برای هر خانواده به‌صورت خودکار و یکتا می‌سازد.",
+                AutoSize = false, Width = 760, Height = 62,
+                Font = UiTheme.Font(UiTheme.SizeSmall), ForeColor = UiTheme.TextMuted,
+                TextAlign = ContentAlignment.MiddleRight
+            };
+            flow.Controls.Add(lblCardHint);
+
+            AddCardTextField(flow, "نام مؤسسه روی کارت", SettingsHelper.Card_OrgName,
+                SettingsHelper.Get(SettingsHelper.OrgName), false);
+            AddCardTextField(flow, "نوار تزئینی دور کارت (پیشوند)", SettingsHelper.Card_MicrotextLabel,
+                "دفتر نمایندگی", false);
+            AddCardTextField(flow, "آدرس دفتر", SettingsHelper.Card_Address,
+                SettingsHelper.Get(SettingsHelper.Address), false);
+            AddCardTextField(flow, "شماره تماس", SettingsHelper.Card_Phone,
+                SettingsHelper.Get(SettingsHelper.Phone), false);
+            AddCardTextField(flow, "وب‌سایت", SettingsHelper.Card_Website,
+                SettingsHelper.Get(SettingsHelper.Website), false);
+            AddCardTextField(flow, "ایمیل", SettingsHelper.Card_Email,
+                SettingsHelper.Get(SettingsHelper.Email), false);
+            AddCardTextField(flow, "صادرکننده", SettingsHelper.Card_IssuedBy,
+                SecurityContext.Username, false);
+            AddCardTextField(flow, "سمت صادرکننده", SettingsHelper.Card_Position,
+                SecurityContext.Role, false);
+            AddCardTextField(flow, "عنوان امضا", SettingsHelper.Card_SignatureLabel,
+                "امضای مسئول دفتر", false);
+            AddCardTextField(flow, "پاورقی حقوقی", SettingsHelper.Card_LegalLine,
+                "این کارت شخصی و غیرقابل انتقال است.", false);
+
+            AddCardTextField(flow, "هشدار ۱", SettingsHelper.Card_Notice1,
+                "در هنگام توزیع کمک‌ها باید سرپرست حضور داشته باشد.", true);
+            AddCardTextField(flow, "هشدار ۲", SettingsHelper.Card_Notice2,
+                "در هنگام توزیع کمک‌ها این کارت و تذکره اصلی را با خود داشته باشید.", true);
+            AddCardTextField(flow, "هشدار ۳", SettingsHelper.Card_Notice3,
+                "در صورت مفقود و تخریب شدن کارت ۵۰۰ افغانی جریمه می‌شوید.", true);
+            AddCardTextField(flow, "هشدار ۴", SettingsHelper.Card_Notice4,
+                "در هنگام گرفتن کمک‌ها لطفاً پول خود را شمارش کنید.", true);
+            AddCardTextField(flow, "هشدار ۵", SettingsHelper.Card_Notice5,
+                "کوشش شود پول کمک ایتام برای خود آنها (خوراک و پوشاک) مصرف گردد.", true);
+
+            tab.Controls.Add(flow);
+            tab.Controls.Add(bottomBar);
+        }
+
+        // ══════════════════════════════════════════════════════════════════
+        // تب: بسته‌های مساعدتِ غیرنقدی (افزایشی) — حداکثر ۵ بسته، هرکدام با
+        // چند قلمِ جنس (مثلاً «آرد ۱ بوجی، روغن ۱ بشکه، شکر ۴ کیلو»). ذخیره‌شده
+        // در TblAssistancePackage/TblAssistancePackageItem و از تبِ «ثبت کمک»
+        // (FrmFinance) و فرمِ چاپِ گروهیِ بسته استفاده می‌شود.
+        // ══════════════════════════════════════════════════════════════════
+        private ListBox _lstPackages;
+        private TextBox _txtPackageName;
+        private DataGridView _dgvPackageItems;
+        private readonly AssistanceReceiptIntegration.AssistancePackageRepository _packageRepo =
+            new AssistanceReceiptIntegration.AssistancePackageRepository();
+        private List<AssistanceReceiptIntegration.AssistancePackage> _packagesCache =
+            new List<AssistanceReceiptIntegration.AssistancePackage>();
+        private int _editingPackageId = 0;
+
+        private void BuildAssistancePackagesTab(Panel tab)
+        {
+            Label lblHint = new Label
+            {
+                Text = "برای کمکِ «غیرنقدی» در تبِ «ثبت کمک»، به‌جای مبلغ یکی از این بسته‌ها انتخاب می‌شود. " +
+                       "حداکثر " + AssistanceReceiptIntegration.AssistancePackageRepository.MaxPackages + " بسته قابل تعریف است.",
+                Dock = DockStyle.Top, Height = 40, Padding = new Padding(14, 10, 14, 0),
+                Font = UiTheme.Font(UiTheme.SizeSmall), ForeColor = UiTheme.TextMuted,
+                TextAlign = ContentAlignment.MiddleRight
+            };
+
+            Panel left = new Panel { Dock = DockStyle.Right, Width = 220, Padding = new Padding(10) };
+
+            _lstPackages = new ListBox { Dock = DockStyle.Fill, Font = UiTheme.Font(UiTheme.SizeBody) };
+            _lstPackages.SelectedIndexChanged += delegate { LoadPackageIntoEditor(); };
+
+            FlowLayoutPanel leftButtons = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Bottom, Height = 44, FlowDirection = FlowDirection.RightToLeft
+            };
+            Button btnNewPackage = UiTheme.CreateSecondaryButton("بستهٔ جدید", "+");
+            btnNewPackage.Size = new Size(100, 32);
+            btnNewPackage.Click += delegate { StartNewPackage(); };
+            Button btnDeletePackage = UiTheme.CreateSecondaryButton("حذف", "✕");
+            btnDeletePackage.Size = new Size(90, 32);
+            btnDeletePackage.Click += delegate { DeleteSelectedPackage(); };
+            leftButtons.Controls.Add(btnDeletePackage);
+            leftButtons.Controls.Add(btnNewPackage);
+
+            left.Controls.Add(_lstPackages);
+            left.Controls.Add(leftButtons);
+
+            Panel right = new Panel { Dock = DockStyle.Fill, Padding = new Padding(10) };
+
+            Label lblName = new Label
+            {
+                Text = "نام بسته", Dock = DockStyle.Top, Height = 24,
+                TextAlign = ContentAlignment.MiddleRight, Font = UiTheme.FontBold(UiTheme.SizeSmall)
+            };
+            _txtPackageName = new TextBox { Dock = DockStyle.Top };
+            UiTheme.StyleTextBox(_txtPackageName);
+
+            Label lblItems = new Label
+            {
+                Text = "اقلامِ بسته", Dock = DockStyle.Top, Height = 28,
+                TextAlign = ContentAlignment.MiddleRight, Font = UiTheme.FontBold(UiTheme.SizeSmall),
+                Padding = new Padding(0, 10, 0, 0)
+            };
+
+            _dgvPackageItems = new DataGridView
+            {
+                Dock = DockStyle.Fill, AllowUserToAddRows = true, AllowUserToDeleteRows = true,
+                RightToLeft = RightToLeft.Yes, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill
+            };
+            _dgvPackageItems.Columns.Add("ItemName", "نام قلم");
+            _dgvPackageItems.Columns.Add("Quantity", "مقدار");
+            _dgvPackageItems.Columns.Add("Unit", "واحد");
+
+            Button btnSavePackage = UiTheme.CreateButton("ذخیرهٔ بسته", "✔", UiTheme.Success);
+            btnSavePackage.Size = new Size(140, 36);
+            btnSavePackage.Margin = new Padding(0, 10, 0, 0);
+            btnSavePackage.Click += delegate { SaveEditingPackage(); };
+
+            Panel saveBar = new Panel { Dock = DockStyle.Bottom, Height = 50 };
+            saveBar.Controls.Add(btnSavePackage);
+
+            right.Controls.Add(_dgvPackageItems);
+            right.Controls.Add(lblItems);
+            right.Controls.Add(_txtPackageName);
+            right.Controls.Add(lblName);
+            right.Controls.Add(saveBar);
+
+            tab.Controls.Add(right);
+            tab.Controls.Add(left);
+            tab.Controls.Add(lblHint);
+
+            ReloadPackagesList();
+        }
+
+        private void ReloadPackagesList()
+        {
+            _packagesCache = _packageRepo.GetAllPackages();
+            _lstPackages.Items.Clear();
+            foreach (AssistanceReceiptIntegration.AssistancePackage pkg in _packagesCache)
+                _lstPackages.Items.Add(pkg.Name);
+
+            _editingPackageId = 0;
+            _txtPackageName.Text = "";
+            _dgvPackageItems.Rows.Clear();
+        }
+
+        private void LoadPackageIntoEditor()
+        {
+            int idx = _lstPackages.SelectedIndex;
+            if (idx < 0 || idx >= _packagesCache.Count) return;
+
+            AssistanceReceiptIntegration.AssistancePackage pkg = _packagesCache[idx];
+            _editingPackageId = pkg.PackageID;
+            _txtPackageName.Text = pkg.Name;
+
+            _dgvPackageItems.Rows.Clear();
+            foreach (AssistanceReceiptIntegration.AssistancePackageItem item in pkg.Items)
+                _dgvPackageItems.Rows.Add(item.ItemName, item.Quantity, item.Unit);
+        }
+
+        private void StartNewPackage()
+        {
+            if (_packagesCache.Count >= AssistanceReceiptIntegration.AssistancePackageRepository.MaxPackages)
+            {
+                Msg.Show("حداکثر " + AssistanceReceiptIntegration.AssistancePackageRepository.MaxPackages + " بسته قابل تعریف است.");
+                return;
+            }
+            _lstPackages.ClearSelected();
+            _editingPackageId = 0;
+            _txtPackageName.Text = "";
+            _dgvPackageItems.Rows.Clear();
+            _txtPackageName.Focus();
+        }
+
+        private void SaveEditingPackage()
+        {
+            if (string.IsNullOrWhiteSpace(_txtPackageName.Text))
+            {
+                Msg.Show("نامِ بسته را وارد کنید.");
+                return;
+            }
+
+            var pkg = new AssistanceReceiptIntegration.AssistancePackage
+            {
+                PackageID = _editingPackageId,
+                Name = _txtPackageName.Text.Trim(),
+                SortOrder = _editingPackageId == 0 ? _packagesCache.Count : 0
+            };
+
+            foreach (DataGridViewRow row in _dgvPackageItems.Rows)
+            {
+                if (row.IsNewRow) continue;
+                object nameVal = row.Cells["ItemName"].Value;
+                if (nameVal == null || string.IsNullOrWhiteSpace(nameVal.ToString())) continue;
+
+                decimal qty = 0;
+                object qtyVal = row.Cells["Quantity"].Value;
+                if (qtyVal != null) decimal.TryParse(qtyVal.ToString(), out qty);
+
+                pkg.Items.Add(new AssistanceReceiptIntegration.AssistancePackageItem
+                {
+                    ItemName = nameVal.ToString().Trim(),
+                    Quantity = qty,
+                    Unit = row.Cells["Unit"].Value == null ? "" : row.Cells["Unit"].Value.ToString().Trim()
+                });
+            }
+
+            try
+            {
+                _packageRepo.SavePackage(pkg);
+                UiTheme.ShowSuccess(this, "بسته ذخیره شد.");
+                ReloadPackagesList();
+            }
+            catch (Exception ex)
+            {
+                Msg.Show("خطا در ذخیرهٔ بسته: " + ex.Message);
+            }
+        }
+
+        private void DeleteSelectedPackage()
+        {
+            if (_editingPackageId <= 0)
+            {
+                Msg.Show("اول یک بسته را از فهرست انتخاب کنید.");
+                return;
+            }
+            if (!UiTheme.ShowConfirm(this, "این بسته حذف شود؟", "حذفِ بسته"))
+                return;
+
+            _packageRepo.DeletePackage(_editingPackageId);
+            ReloadPackagesList();
+        }
+
+        // یک فیلدِ متنیِ کارت: برچسب + کادر + راهنمای «پیش‌فرض». مقدارِ
+        // ذخیره‌شده داخل کادر می‌آید؛ کادرِ خالی یعنی «از پیش‌فرض استفاده کن».
+        private void AddCardTextField(FlowLayoutPanel parent, string labelText, string settingKey,
+                                      string defaultText, bool multiline)
+        {
+            Label lbl = new Label
+            {
+                Text = labelText, AutoSize = false, Width = 760, Height = 22,
+                Font = UiTheme.FontBold(UiTheme.SizeSmall), ForeColor = UiTheme.TextDark,
+                TextAlign = ContentAlignment.MiddleRight, Margin = new Padding(0, 10, 0, 0)
+            };
+            parent.Controls.Add(lbl);
+
+            TextBox txt = new TextBox
+            {
+                Width = 760, Font = UiTheme.Font(UiTheme.SizeBody),
+                RightToLeft = RightToLeft.Yes, TextAlign = HorizontalAlignment.Right,
+                Text = SettingsHelper.Get(settingKey)
+            };
+            if (multiline)
+            {
+                txt.Multiline = true;
+                txt.Height = 46;
+                txt.ScrollBars = ScrollBars.Vertical;
+            }
+            UiTheme.SetTip(txt,
+                "خالی بگذارید تا متن پیش‌فرض چاپ شود:" + Environment.NewLine + defaultText);
+            parent.Controls.Add(txt);
+
+            Label hint = new Label
+            {
+                Text = "پیش‌فرض: " + defaultText,
+                AutoSize = false, Width = 760, Height = 20,
+                Font = UiTheme.Font(UiTheme.SizeSmall - 1F), ForeColor = UiTheme.TextMuted,
+                TextAlign = ContentAlignment.MiddleRight
+            };
+            parent.Controls.Add(hint);
+
+            _cardTextInputs.Add(new KeyValuePair<string, TextBox>(settingKey, txt));
+        }
+
+        private void BtnSaveGuardianCardTexts_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                foreach (KeyValuePair<string, TextBox> pair in _cardTextInputs)
+                    SettingsHelper.Set(pair.Key, pair.Value.Text.Trim());
+
+                UiTheme.ShowSuccess(this, "متن‌های کارت شناسایی ذخیره شد. از چاپ بعدی اعمال می‌شود.");
+            }
+            catch (Exception ex)
+            {
+                UiTheme.ShowWarning(this, "ذخیره‌ی متن‌های کارت ممکن نشد: " + ex.Message);
+            }
+        }
+
+        // آیتمِ کمبوی زبان: نامِ هر زبان به خودِ همان زبان نمایش داده می‌شود.
+        private class LanguageItem
+        {
+            public string Code { get; private set; }
+            public LanguageItem(string code) { Code = code; }
+            public override string ToString() { return Lang.DisplayName(Code); }
         }
 
         private CheckBox MakeNotifyCheckbox(FlowLayoutPanel parent, string text)

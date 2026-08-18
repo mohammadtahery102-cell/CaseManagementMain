@@ -1,7 +1,4 @@
 using System;
-using System.Diagnostics;
-using System.IO;
-using System.Text;
 using System.Windows.Forms;
 using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
@@ -14,7 +11,8 @@ namespace CaseManagement.Helpers
     // آموزش: فقط ستون‌های «قابل‌نمایش» گرید (به همان ترتیب و با همان عنوان فارسی)
     // و مقادیرِ «نمایش‌داده‌شده» (FormattedValue — پس تاریخ‌ها شمسی و مرتب) خروجی
     // می‌شوند؛ یعنی خروجی دقیقاً همان چیزی است که کاربر با فیلتر ولایت/ولسوالی
-    // می‌بیند. PDF از روی همان Word با LibreOffice ساخته می‌شود (اگر نصب باشد).
+    // می‌بیند. PDF از روی همان Word با PdfConversionHelper ساخته می‌شود (اول
+    // Microsoft Word، سپس LibreOffice، هرکدام نصب باشد).
     // ─────────────────────────────────────────────────────────────────────────
     public static class GridReportExporter
     {
@@ -86,7 +84,11 @@ namespace CaseManagement.Helpers
             }
         }
 
-        private static Paragraph MakeParagraph(string text, bool bold, string size,
+        // internal (نه private): «مرکز کنترل توسعه‌دهنده» برای گزارش سلامت از
+        // همین دو سازندهٔ قالب استفاده می‌کند تا ظاهر اسناد یکسان بماند و منطق
+        // قالب‌بندی Word در دو جا تکرار نشود. رفتار برای فراخوانی‌های موجود
+        // ذره‌ای تغییر نکرده است.
+        internal static Paragraph MakeParagraph(string text, bool bold, string size,
             JustificationValues align, string color)
         {
             RunProperties rp = new RunProperties(new RunFonts { Ascii = "Tahoma", HighAnsi = "Tahoma", ComplexScript = "Tahoma" });
@@ -100,7 +102,7 @@ namespace CaseManagement.Helpers
                 new Run(rp, new Text(text ?? "") { Space = SpaceProcessingModeValues.Preserve }));
         }
 
-        private static TableCell MakeCell(string text, bool isHeader)
+        internal static TableCell MakeCell(string text, bool isHeader)
         {
             RunProperties rp = new RunProperties(new RunFonts { Ascii = "Tahoma", HighAnsi = "Tahoma", ComplexScript = "Tahoma" });
             if (isHeader)
@@ -126,77 +128,15 @@ namespace CaseManagement.Helpers
             return new TableCell(tcp, para);
         }
 
-        // ─── تبدیل Word → PDF با LibreOffice (اگر نصب باشد) ──────────────────
+        // ─── تبدیل Word → PDF — Word (اگر نصب باشد) سپس LibreOffice ──────────
         public static bool IsPdfAvailable()
         {
-            return GetLibreOfficePath() != null;
+            return PdfConversionHelper.IsAvailable();
         }
 
         public static string ConvertDocxToPdf(string docxPath)
         {
-            string libre = GetLibreOfficePath();
-            if (libre == null)
-                throw new Exception("برای ساخت PDF باید LibreOffice نصب باشد.");
-
-            string outputFolder = Path.GetDirectoryName(docxPath);
-            string expectedPdf = Path.Combine(outputFolder, Path.GetFileNameWithoutExtension(docxPath) + ".pdf");
-            if (File.Exists(expectedPdf)) File.Delete(expectedPdf);
-
-            ProcessStartInfo psi = new ProcessStartInfo
-            {
-                FileName = libre,
-                Arguments = "--headless --nologo --nofirststartwizard --nolockcheck --convert-to pdf " +
-                            "--outdir \"" + outputFolder + "\" \"" + docxPath + "\"",
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
-            };
-
-            var output = new StringBuilder();
-            var error = new StringBuilder();
-            using (Process process = new Process())
-            {
-                process.StartInfo = psi;
-                process.OutputDataReceived += (s, a) => { if (a.Data != null) output.AppendLine(a.Data); };
-                process.ErrorDataReceived += (s, a) => { if (a.Data != null) error.AppendLine(a.Data); };
-                if (!process.Start()) throw new Exception("LibreOffice اجرا نشد.");
-                process.BeginOutputReadLine();
-                process.BeginErrorReadLine();
-                if (!process.WaitForExit(180000))
-                {
-                    try { process.Kill(); } catch { }
-                    throw new Exception("زمان ساخت PDF بیش از حد طولانی شد.");
-                }
-                process.WaitForExit();
-                if (!File.Exists(expectedPdf))
-                    throw new Exception("LibreOffice نتوانست PDF بسازد. " + output + " " + error);
-            }
-            return expectedPdf;
-        }
-
-        private static string GetLibreOfficePath()
-        {
-            string[] candidates =
-            {
-                @"C:\Program Files\LibreOffice\program\soffice.exe",
-                @"C:\Program Files (x86)\LibreOffice\program\soffice.exe"
-            };
-            foreach (string p in candidates)
-                if (File.Exists(p)) return p;
-
-            try
-            {
-                string pathEnv = Environment.GetEnvironmentVariable("PATH") ?? "";
-                foreach (string dir in pathEnv.Split(Path.PathSeparator))
-                {
-                    if (string.IsNullOrWhiteSpace(dir)) continue;
-                    string candidate = Path.Combine(dir.Trim(), "soffice.exe");
-                    if (File.Exists(candidate)) return candidate;
-                }
-            }
-            catch { }
-            return null;
+            return PdfConversionHelper.ConvertDocxToPdf(docxPath);
         }
     }
 }

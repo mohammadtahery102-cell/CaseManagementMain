@@ -21,7 +21,9 @@ namespace CaseManagement.Models
         public string HeadFatherName { get; set; }
         public string HeadSadat { get; set; }
         public string Religion { get; set; }
+        public string HeadIdCardType { get; set; }
         public string HeadTazkiraNo { get; set; }
+        public string PhysicalStatusNotes { get; set; }
         public string HeadOriginalResidence { get; set; }
         public string HeadCurrentResidence { get; set; }
         public string RelationshipToFamily { get; set; }
@@ -43,5 +45,17 @@ namespace CaseManagement.Models
         public string Province { get; set; }
         public DateTime? CreatedAt { get; set; }
         public DateTime? UpdatedAt { get; set; }
+
+        // متن شرایط/هشدارهای کارت شناسایی — override اختصاصی این پرونده.
+        // NULL/خالی یعنی «مقدار سراسری تنظیمات مؤسسه» استفاده شود
+        // (نگاه کنید CardService.CardText).
+        public string CardNotice1 { get; set; }
+        public string CardNotice2 { get; set; }
+        public string CardNotice3 { get; set; }
+        public string CardNotice4 { get; set; }
+        public string CardNotice5 { get; set; }
+        public string CardLegalLine { get; set; }
+        public string CardPhone { get; set; }
+        public string CardAddress { get; set; }
     }
 }

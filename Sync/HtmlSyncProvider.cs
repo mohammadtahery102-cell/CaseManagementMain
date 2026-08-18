@@ -101,8 +101,10 @@ namespace CaseManagement.Sync
 
         // CHECK constraint واقعی TblCase.ServiceStatus — مقدار خارج از این فهرست
         // هرگز نوشته نمی‌شود (تا کل تراکنش به‌خاطر یک مقدار نامعتبر Rollback نشود).
-        private static readonly HashSet<string> AllowedServiceStatuses =
-            new HashSet<string>(StringComparer.Ordinal) { "فعال", "در انتظار تأیید", "قطع موقت", "قطع" };
+        // منبع واحد: به‌جای آرایه‌ی هاردکدِ جداگانه، از TblLookup (دسته ServiceStatus —
+        // همان منبعی که FrmCase/FrmAdvancedSearch/FrmReportFilter استفاده می‌کنند) خوانده می‌شود.
+        private static HashSet<string> AllowedServiceStatuses =>
+            new HashSet<string>(LookupHelper.GetValues("ServiceStatus"), StringComparer.Ordinal);
 
         // ─── مرحله ۲: تجزیه ──────────────────────────────────────────────────
         public ParsedSyncData Parse(SyncSource source, IProgress<SyncProgress> progress)

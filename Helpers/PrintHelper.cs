@@ -135,6 +135,104 @@ namespace CaseManagement.Helpers
             return r;
         }
 
+        // ─── کارت خانواده: سرپرست (لیبل:مقدار) + جدول اعضا در یک سند واحد ──────
+        // برخلاف PrintKeyValueDocument/PrintDataTable که دست‌نخورده می‌مانند،
+        // این متد جدید فقط بلوک‌های ترسیمِ اختصاصیِ خودش را دارد تا رفتار آن دو
+        // متد قدیمی تغییر نکند.
+        public static void PrintFamilyCard(IWin32Window owner, string title, List<KeyValuePair<string, string>> headFields, DataTable members)
+        {
+            int rowIndex = 0;
+            bool headBlockDrawn = false;
+
+            using (PrintDocument doc = new PrintDocument())
+            {
+                doc.DocumentName = title;
+                doc.BeginPrint += delegate { rowIndex = 0; headBlockDrawn = false; };
+                doc.PrintPage += delegate (object s, PrintPageEventArgs e)
+                {
+                    Graphics g = e.Graphics;
+                    int y = e.MarginBounds.Top;
+                    DrawHeader(g, e, title, ref y);
+
+                    // اطلاعات سرپرست فقط یک‌بار، در صفحه اول، بالای جدول اعضا چاپ می‌شود.
+                    if (!headBlockDrawn)
+                    {
+                        DrawKeyValueBlock(g, e, headFields, ref y);
+                        headBlockDrawn = true;
+                    }
+
+                    rowIndex = DrawTableBlock(g, e, members, rowIndex, ref y);
+                    e.HasMorePages = rowIndex < members.Rows.Count;
+
+                    DrawFooter(g, e);
+                };
+
+                ShowPreview(owner, doc, title);
+            }
+        }
+
+        private static void DrawKeyValueBlock(Graphics g, PrintPageEventArgs e, List<KeyValuePair<string, string>> fields, ref int y)
+        {
+            if (fields == null || fields.Count == 0) return;
+
+            int labelWidth = 170;
+            int rowHeight = 24;
+            StringFormat sfLabel = new StringFormat { Alignment = StringAlignment.Far, LineAlignment = StringAlignment.Center };
+            StringFormat sfValue = new StringFormat { Alignment = StringAlignment.Far, LineAlignment = StringAlignment.Center };
+
+            foreach (KeyValuePair<string, string> kv in fields)
+            {
+                RectangleF labelRect = new RectangleF(e.MarginBounds.Right - labelWidth, y, labelWidth, rowHeight);
+                RectangleF valueRect = new RectangleF(e.MarginBounds.Left, y, e.MarginBounds.Right - labelWidth - e.MarginBounds.Left - 10, rowHeight);
+
+                g.DrawString(kv.Key + " :", LabelFont, Brushes.Black, labelRect, sfLabel);
+                g.DrawString(kv.Value ?? "", ValueFont, Brushes.Black, valueRect, sfValue);
+                y += rowHeight;
+            }
+
+            g.DrawLine(Pens.Black, e.MarginBounds.Left, y + 4, e.MarginBounds.Right, y + 4);
+            y += 16;
+        }
+
+        private static int DrawTableBlock(Graphics g, PrintPageEventArgs e, DataTable table, int startRow, ref int y)
+        {
+            int colCount = table.Columns.Count;
+            if (colCount == 0) return table.Rows.Count;
+
+            float colWidth = e.MarginBounds.Width / (float)colCount;
+            int rowHeight = 24;
+            StringFormat sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+
+            float x = e.MarginBounds.Right;
+            for (int c = 0; c < colCount; c++)
+            {
+                x -= colWidth;
+                RectangleF rect = new RectangleF(x, y, colWidth, rowHeight);
+                g.FillRectangle(Brushes.WhiteSmoke, rect);
+                g.DrawRectangle(Pens.Gray, x, y, colWidth, rowHeight);
+                g.DrawString(UiTheme.TranslateHeader(table.Columns[c].ColumnName), HeaderFont, Brushes.Black, rect, sf);
+            }
+            y += rowHeight;
+
+            int r = startRow;
+            while (r < table.Rows.Count && y + rowHeight < e.MarginBounds.Bottom)
+            {
+                x = e.MarginBounds.Right;
+                for (int c = 0; c < colCount; c++)
+                {
+                    x -= colWidth;
+                    RectangleF rect = new RectangleF(x, y, colWidth, rowHeight);
+                    g.DrawRectangle(Pens.LightGray, x, y, colWidth, rowHeight);
+                    object val = table.Rows[r][c];
+                    g.DrawString(val == null || val == DBNull.Value ? "" : val.ToString(), ValueFont, Brushes.Black, rect, sf);
+                }
+                y += rowHeight;
+                r++;
+            }
+
+            return r;
+        }
+
         // ─── لوگو/مهر/امضا روی سربرگ و پاورقی — قابل روشن/خاموش از تب چاپ ─────
         private static void DrawHeader(Graphics g, PrintPageEventArgs e, string title, ref int y)
         {

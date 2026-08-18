@@ -41,6 +41,10 @@ namespace CaseManagement.Helpers
                 LoadTable(con, dataSet, "TblFamily",    "SELECT * FROM TblFamily");
                 LoadTable(con, dataSet, "TblDocs",      "SELECT * FROM TblDocs");
                 LoadTable(con, dataSet, "TblAssistance","SELECT * FROM TblAssistance");
+                // فاز ۲ — پرونده‌های مرتبط و تاریخچه بایگانی؛ بدون این دو، بکاپ
+                // این داده‌ها را بی‌صدا از دست می‌داد.
+                LoadTable(con, dataSet, "TblCaseRelation",  "SELECT * FROM TblCaseRelation");
+                LoadTable(con, dataSet, "TblArchiveHistory","SELECT * FROM TblArchiveHistory");
 
                 // آموزش — رفع باگ: این جداول قبلاً اصلاً در بکاپ نبودند، پس
                 // بازیابی فاجعه (نصب تازه) بی‌صدا همه کاربران/تنظیمات/لیست‌های
@@ -59,7 +63,7 @@ namespace CaseManagement.Helpers
             if (!string.IsNullOrWhiteSpace(storageRoot) && Directory.Exists(storageRoot))
             {
                 string backupFilesFolder = Path.Combine(backupFolder, FilesFolderName);
-                CopyDirectory(storageRoot, backupFilesFolder, backupFolder);
+                CopyDirectory(storageRoot, backupFilesFolder, backupFolder, true);
             }
 
             return backupFolder;
@@ -178,6 +182,14 @@ namespace CaseManagement.Helpers
                             // نمی‌شود تا تاریخچه در آن سمت تکراری نشود.
                             if (dataSet.Tables.Contains("TblCaseStatusHistory"))
                                 MergeCaseStatusHistory(con, tr, dataSet.Tables["TblCaseStatusHistory"], casIdMap, newlyInsertedOrigIds);
+
+                            // فاز ۲ — پرونده‌های مرتبط: هر دو سرِ رابطه باید
+                            // remap شوند، وگرنه رابطه به پرونده‌ی اشتباه وصل می‌شود.
+                            if (dataSet.Tables.Contains("TblCaseRelation"))
+                                MergeCaseRelations(con, tr, dataSet.Tables["TblCaseRelation"], casIdMap);
+
+                            if (dataSet.Tables.Contains("TblArchiveHistory"))
+                                MergeArchiveHistory(con, tr, dataSet.Tables["TblArchiveHistory"], casIdMap, newlyInsertedOrigIds);
                         }
                         else
                         {
@@ -193,6 +205,11 @@ namespace CaseManagement.Helpers
                                 ExecuteNonQuery(con, tr, "DELETE FROM TblCaseStatusHistory");
                                 InsertTable(con, tr, "TblCaseStatusHistory", dataSet.Tables["TblCaseStatusHistory"]);
                             }
+                            // در این حالت CasID اصلی حفظ می‌شود، پس درج مستقیم درست است.
+                            if (dataSet.Tables.Contains("TblCaseRelation"))
+                                InsertTable(con, tr, "TblCaseRelation", dataSet.Tables["TblCaseRelation"]);
+                            if (dataSet.Tables.Contains("TblArchiveHistory"))
+                                InsertTable(con, tr, "TblArchiveHistory", dataSet.Tables["TblArchiveHistory"]);
                             result.CasesInserted = caseTable.Rows.Count;
                         }
 
@@ -318,6 +335,77 @@ VALUES (@CasID, @OldStatus, @NewStatus, @ChangedAt, @ChangedBy)", con, tr))
                     cmd.Parameters.AddWithValue("@NewStatus", GetVal(row, "NewStatus", ""));
                     cmd.Parameters.AddWithValue("@ChangedAt", GetVal(row, "ChangedAt", DBNull.Value));
                     cmd.Parameters.AddWithValue("@ChangedBy", GetVal(row, "ChangedBy", DBNull.Value));
+                    cmd.ExecuteNonQuery();
+                }
+            }
+        }
+
+        // ── پرونده‌های مرتبط (فاز ۲) ────────────────────────────────────────
+        // آموزش — این جدول دو کلید خارجی به TblCase دارد (CasID و RelatedCasID).
+        // MergeChildTable عمومی فقط CasID را remap می‌کند، پس اگر از آن استفاده
+        // می‌شد، سرِ دوم رابطه به پرونده‌ی اشتباه (یا ناموجود) اشاره می‌کرد.
+        // تکراری‌ها با خودِ جفتِ (CasID, RelatedCasID) تشخیص داده می‌شوند، پس
+        // وارد کردن چندباره‌ی یک بکاپ رابطه‌ی تکراری نمی‌سازد.
+        private static void MergeCaseRelations(SQLiteConnection con, SQLiteTransaction tr,
+            DataTable table, Dictionary<int, int> casIdMap)
+        {
+            if (table == null || table.Rows.Count == 0) return;
+
+            foreach (DataRow row in table.Rows)
+            {
+                int origCasId = Convert.ToInt32(GetVal(row, "CasID", 0));
+                int origRelId = Convert.ToInt32(GetVal(row, "RelatedCasID", 0));
+
+                int newCasId, newRelId;
+                if (!casIdMap.TryGetValue(origCasId, out newCasId)) continue;
+                if (!casIdMap.TryGetValue(origRelId, out newRelId)) continue;
+                if (newCasId == newRelId) continue;
+
+                using (var existsCmd = new SQLiteCommand(
+                    "SELECT COUNT(1) FROM TblCaseRelation WHERE CasID = @C AND RelatedCasID = @R", con, tr))
+                {
+                    existsCmd.Parameters.AddWithValue("@C", newCasId);
+                    existsCmd.Parameters.AddWithValue("@R", newRelId);
+                    if (Convert.ToInt32(existsCmd.ExecuteScalar()) > 0) continue;
+                }
+
+                using (var cmd = new SQLiteCommand(@"
+INSERT INTO TblCaseRelation (CasID, RelatedCasID, RelationType, CreatedAt, CreatedBy)
+VALUES (@CasID, @RelatedCasID, @RelationType, @CreatedAt, @CreatedBy)", con, tr))
+                {
+                    cmd.Parameters.AddWithValue("@CasID",        newCasId);
+                    cmd.Parameters.AddWithValue("@RelatedCasID", newRelId);
+                    cmd.Parameters.AddWithValue("@RelationType", GetVal(row, "RelationType", DBNull.Value));
+                    cmd.Parameters.AddWithValue("@CreatedAt",    GetVal(row, "CreatedAt", DBNull.Value));
+                    cmd.Parameters.AddWithValue("@CreatedBy",    GetVal(row, "CreatedBy", DBNull.Value));
+                    cmd.ExecuteNonQuery();
+                }
+            }
+        }
+
+        // ── تاریخچه بایگانی (فاز ۲) — مثل تاریخچه وضعیت، کلید یکتا ندارد پس
+        // فقط برای پرونده‌های تازه‌درج‌شده منتقل می‌شود تا تکراری نشود.
+        private static void MergeArchiveHistory(SQLiteConnection con, SQLiteTransaction tr,
+            DataTable table, Dictionary<int, int> casIdMap, HashSet<int> newlyInsertedOrigIds)
+        {
+            if (table == null || table.Rows.Count == 0) return;
+
+            foreach (DataRow row in table.Rows)
+            {
+                int origCasId = Convert.ToInt32(GetVal(row, "CasID", 0));
+                if (!newlyInsertedOrigIds.Contains(origCasId)) continue;
+
+                int newCasId;
+                if (!casIdMap.TryGetValue(origCasId, out newCasId)) continue;
+
+                using (var cmd = new SQLiteCommand(@"
+INSERT INTO TblArchiveHistory (CasID, Action, ActionAt, ActionBy)
+VALUES (@CasID, @Action, @ActionAt, @ActionBy)", con, tr))
+                {
+                    cmd.Parameters.AddWithValue("@CasID",    newCasId);
+                    cmd.Parameters.AddWithValue("@Action",   GetVal(row, "Action", ""));
+                    cmd.Parameters.AddWithValue("@ActionAt", GetVal(row, "ActionAt", DBNull.Value));
+                    cmd.Parameters.AddWithValue("@ActionBy", GetVal(row, "ActionBy", DBNull.Value));
                     cmd.ExecuteNonQuery();
                 }
             }
@@ -462,6 +550,9 @@ VALUES (@CasID, @OldStatus, @NewStatus, @ChangedAt, @ChangedBy)", con, tr))
         // بین می‌برد (باگ قبلی).
         private static void DeleteCurrentData(SQLiteConnection con, SQLiteTransaction tr)
         {
+            // فرزندها پیش از والد، صریح (نه با تکیه بر CASCADE) — همان الگوی قبلی.
+            ExecuteNonQuery(con, tr, "DELETE FROM TblCaseRelation");
+            ExecuteNonQuery(con, tr, "DELETE FROM TblArchiveHistory");
             ExecuteNonQuery(con, tr, "DELETE FROM TblAssistance");
             ExecuteNonQuery(con, tr, "DELETE FROM TblDocs");
             ExecuteNonQuery(con, tr, "DELETE FROM TblFamily");
@@ -590,7 +681,41 @@ VALUES (@CasID, @OldStatus, @NewStatus, @ChangedAt, @ChangedBy)", con, tr))
             }
         }
 
-        private static void CopyDirectory(string sourceFolder, string targetFolder, string excludedFolder)
+        // آموزش — رفع باگ «مسیر طولانی‌تر از ۲۶۰ کاراکتر» هنگام بکاپ:
+        // پوشه‌ی بکاپ خودکار (AutoBackups) داخلِ همان storage root ساخته می‌شود
+        // (AutoBackupService)، پس کپیِ کاملِ storage root بکاپ‌های قبلی را هم
+        // با خود می‌برد: بکاپ ۳ شامل بکاپ ۲ شامل بکاپ ۱ … هر لایه ~۵۴ کاراکتر
+        // به طول مسیر اضافه می‌کند تا از سقف ویندوز رد شود (و حجم بکاپ نمایی
+        // رشد کند). excludedFolder فقط پوشه‌ی بکاپِ همین اجرا را رد می‌کرد،
+        // نه بکاپ‌های قبلی. این تابع نامِ پوشه‌های بکاپ را تشخیص می‌دهد تا در
+        // مسیرِ export نادیده گرفته شوند. بازیابی (ImportBackup) دست‌نخورده است.
+        private static bool IsBackupFolderName(string folderName)
+        {
+            if (string.IsNullOrWhiteSpace(folderName)) return false;
+
+            return string.Equals(folderName, "AutoBackups", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(folderName, "SyncBackups", StringComparison.OrdinalIgnoreCase)
+                || folderName.StartsWith("CaseManagementBackup_", StringComparison.OrdinalIgnoreCase);
+        }
+
+        // آیا مسیرِ نسبیِ داده‌شده داخل یکی از پوشه‌های بکاپ قرار دارد؟
+        private static bool IsInsideBackupFolder(string relativePath)
+        {
+            if (string.IsNullOrWhiteSpace(relativePath)) return false;
+
+            string[] parts = relativePath.Split(
+                Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+            for (int i = 0; i < parts.Length; i++)
+            {
+                if (IsBackupFolderName(parts[i]))
+                    return true;
+            }
+            return false;
+        }
+
+        private static void CopyDirectory(string sourceFolder, string targetFolder, string excludedFolder,
+                                          bool skipNestedBackups = false)
         {
             Directory.CreateDirectory(targetFolder);
 
@@ -630,6 +755,10 @@ VALUES (@CasID, @OldStatus, @NewStatus, @ChangedAt, @ChangedBy)", con, tr))
                 }
 
                 string relative = directoryFull.Substring(sourceFull.Length);
+
+                if (skipNestedBackups && IsInsideBackupFolder(relative))
+                    continue;
+
                 Directory.CreateDirectory(Path.Combine(targetFull, relative));
             }
 
@@ -644,6 +773,10 @@ VALUES (@CasID, @OldStatus, @NewStatus, @ChangedAt, @ChangedBy)", con, tr))
                 }
 
                 string relative = fileFull.Substring(sourceFull.Length);
+
+                if (skipNestedBackups && IsInsideBackupFolder(relative))
+                    continue;
+
                 string targetPath = Path.Combine(targetFull, relative);
                 string targetDirectory = Path.GetDirectoryName(targetPath);
 
