@@ -706,6 +706,26 @@ namespace CaseManagement.Helpers
             control.Region = new Region(path);
         }
 
+        // ─── حالت بی‌دیالوگ (فقط برای آزمون خودکار) ──────────────────────────
+        // آموزش — چرا این کلید لازم شد: مسیرهای واقعی برنامه (مثل ثبت کمک در
+        // FrmFinance.btnSave_Click) در پایان کارشان یک دیالوگ مودال نشان
+        // می‌دهند. آزمون خودکار همان متد را مستقیم صدا می‌زند، ولی ShowDialog
+        // حلقه‌ی پیامِ خودش را باز می‌کند و منتظر کلیک می‌ماند — کسی نیست که
+        // کلیک کند، پس نخِ آزمون تا ابد بلوکه می‌شود و کل اجرای مجموعه‌ی آزمون
+        // نیمه‌کاره رها می‌شود (با /Blame اثبات شد: ۴ آزمون FrmFinance مجموعه
+        // را متوقف می‌کردند و ~۲۲۰ آزمون اصلاً اجرا نمی‌شدند).
+        //
+        // این کلید فقط در آزمون روشن می‌شود. در اجرای عادی برنامه مقدارش
+        // false است و هیچ رفتاری برای کاربر تغییر نمی‌کند — نه پیامی حذف شده
+        // و نه منطقی جابه‌جا شده است.
+        public static bool SuppressDialogs = false;
+
+        // پاسخِ فرضی برای دیالوگ‌های «تأیید» وقتی SuppressDialogs روشن است.
+        // پیش‌فرض عمداً «نه» است تا آزمونی که ناخواسته به یک تأییدِ خطرناک
+        // (حذف/بازنویسی) می‌رسد، آن را خاموش تأیید نکند. آزمونی که واقعاً
+        // می‌خواهد مسیرِ «بله» را بسنجد، خودش این مقدار را عوض می‌کند.
+        public static DialogResult SuppressedConfirmResult = DialogResult.No;
+
         // ─── دیالوگ‌های پیام سفارشی — جایگزین زیباتر MessageBox.Show ────────
         public static void ShowSuccess(IWin32Window owner, string message)
         {
@@ -752,6 +772,19 @@ namespace CaseManagement.Helpers
 
             string shownTitle = string.IsNullOrWhiteSpace(title) ? defaultTitle : title;
 
+            // حالت بی‌دیالوگِ آزمون — دقیقاً همان نگاشتِ پایینِ متد، فقط بدون
+            // باز کردنِ پنجره؛ پس هیچ فراخواننده‌ای رفتار متفاوتی نمی‌بیند.
+            if (SuppressDialogs)
+            {
+                if (!isConfirm)
+                    return DialogResult.OK;
+
+                if (buttons == MessageBoxButtons.OKCancel)
+                    return SuppressedConfirmResult == DialogResult.Yes ? DialogResult.OK : DialogResult.Cancel;
+
+                return SuppressedConfirmResult == DialogResult.Yes ? DialogResult.Yes : DialogResult.No;
+            }
+
             using (FrmMessage frm = new FrmMessage(message, shownTitle, accent, accentLight, glyph, isConfirm))
             {
                 DialogResult result = frm.ShowDialog(owner);
@@ -781,6 +814,8 @@ namespace CaseManagement.Helpers
 
         public static bool ShowConfirm(IWin32Window owner, string message, string title)
         {
+            if (SuppressDialogs) return SuppressedConfirmResult == DialogResult.Yes;
+
             using (FrmMessage frm = new FrmMessage(message, string.IsNullOrEmpty(title) ? "تأیید" : title, Primary, HoverTint, "؟", true))
             {
                 return frm.ShowDialog(owner) == DialogResult.Yes;
@@ -789,6 +824,8 @@ namespace CaseManagement.Helpers
 
         private static void ShowMessage(IWin32Window owner, string message, string title, Color accent, Color accentLight, string glyph)
         {
+            if (SuppressDialogs) return;
+
             using (FrmMessage frm = new FrmMessage(message, title, accent, accentLight, glyph, false))
             {
                 frm.ShowDialog(owner);
