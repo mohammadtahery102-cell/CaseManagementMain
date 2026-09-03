@@ -55,11 +55,15 @@ namespace CaseManagement.Helpers
                 TextAlign = ContentAlignment.MiddleRight
             };
 
+            // آموزش — رفعِ دوباره‌کاری: وقتی واحد فقط همان کلمه‌ی عنوان است
+            // (مثل «کل پرونده‌ها» + واحدِ «پرونده»)، خط واحد چیزِ تازه‌ای نمی‌گفت.
+            // اگر واحد خالی داده شود، این خط اصلاً جا نمی‌گیرد.
+            bool showUnit = !string.IsNullOrEmpty(unit);
             Label lblUnit = new Label
             {
-                Text = unit, Dock = DockStyle.Top, Height = 18, BackColor = Color.Transparent,
+                Text = unit, Dock = DockStyle.Top, Height = showUnit ? 18 : 0, BackColor = Color.Transparent,
                 Font = UiTheme.Font(UiTheme.SizeSmall - 1F), ForeColor = UiTheme.TextMuted,
-                TextAlign = ContentAlignment.MiddleRight
+                TextAlign = ContentAlignment.MiddleRight, Visible = showUnit
             };
 
             _spark = new Sparkline { Dock = DockStyle.Fill, LineColor = accent };
@@ -114,8 +118,18 @@ namespace CaseManagement.Helpers
     // نشانِ گردِ رنگی با یک گلیفِ آیکونی در مرکز.
     public class IconBadge : Control
     {
-        private readonly string _glyph;
-        private readonly Color _accent;
+        private string _glyph;
+        private Color _accent;
+
+        // به‌روزرسانیِ درجا — تا فهرست‌هایی مثل «آخرین فعالیت‌ها» بتوانند به‌جای
+        // ساختِ دوباره‌ی کنترل‌ها فقط محتوایشان را عوض کنند (بسیار ارزان‌تر).
+        public void SetIcon(string glyph, Color accent)
+        {
+            if (_glyph == glyph && _accent == accent) return;
+            _glyph = glyph;
+            _accent = accent;
+            Invalidate();
+        }
 
         public IconBadge(string glyph, Color accent)
         {

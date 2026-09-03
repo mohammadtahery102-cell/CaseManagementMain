@@ -195,6 +195,51 @@ CREATE TABLE IF NOT EXISTS AccAudit (
                 EnsureColumn(con, "AccSalary", "FundID", "INTEGER NULL");
                 EnsureColumn(con, "AccExpenseItem", "FundID", "INTEGER NULL");
 
+                // ─── ابطال به‌جای حذف (اصل عدم حذف اسناد مالی) ────────────────
+                // آموزش: تا پیش از این، «حذف» یک سند مالی یعنی DELETE واقعی —
+                // مبلغ از همه‌ی مانده‌ها و گزارش‌ها ناپدید می‌شد و در ردّ حسابرسی
+                // فقط یک شماره‌ی شناسه باقی می‌ماند، بدون هیچ اطلاعی از این‌که
+                // چه چیزی و با چه مبلغی حذف شده. طبق اصول حسابداری، سند مالیِ
+                // ثبت‌شده حذف نمی‌شود بلکه «باطل» می‌شود.
+                //
+                // این چهار ستون کاملاً افزایشی‌اند: مقدار پیش‌فرض IsReversed=0
+                // یعنی تمام رکوردهای موجود دقیقاً مثل قبل «معتبر» تلقی می‌شوند
+                // و هیچ محاسبه‌ای تغییر نمی‌کند.
+                foreach (string t in new[] { "AccTransaction", "AccStipend", "AccSalary", "AccExpenseItem" })
+                {
+                    EnsureColumn(con, t, "IsReversed", "INTEGER NOT NULL DEFAULT 0");
+                    EnsureColumn(con, t, "VoidReason", "TEXT NULL");
+                    EnsureColumn(con, t, "VoidedBy", "TEXT NULL");
+                    EnsureColumn(con, t, "VoidedAt", "TEXT NULL");
+                }
+
+                // ─── پیوندِ سندِ اصلاحی به سندِ باطل‌شده ───────────────────────
+                // آموزش: «ویرایش» یک سند مالی در این سیستم یعنی ابطالِ سند قبلی
+                // و صدور یک سندِ تازه با مقادیر درست. بدون این ستون، آن دو سند
+                // در دیتابیس هیچ ارتباطی با هم ندارند و حسابرس نمی‌تواند بفهمد
+                // سندِ باطل‌شده با کدام سند جایگزین شده است. مقدار NULL یعنی
+                // «سندِ عادی، اصلاحیه نیست» — پس تمام رکوردهای موجود بدون هیچ
+                // تغییری معتبر می‌مانند.
+                EnsureColumn(con, "AccTransaction", "RevisesTxnID", "INTEGER NULL");
+
+                // ─── ردّ حسابرسی کامل: مقدار قبلی / مقدار جدید / دلیل ─────────
+                // آموزش: جدول AccAudit فقط یک ستون Detail داشت، پس بعد از هر
+                // ویرایش دیگر معلوم نبود عدد «قبلی» چه بوده — یعنی الزام
+                // «ثبت مقدار قبلی و مقدار جدید» برآورده نمی‌شد.
+                EnsureColumn(con, "AccAudit", "OldValue", "TEXT NULL");
+                EnsureColumn(con, "AccAudit", "NewValue", "TEXT NULL");
+                EnsureColumn(con, "AccAudit", "Reason", "TEXT NULL");
+
+                // ایندکس‌های پشتیبانِ تشخیص تکرار و فیلتر ابطال (فقط سرعت؛ هیچ
+                // محدودیت یکتایی اعمال نمی‌شود تا رکوردهای تکراریِ موجود در
+                // دیتابیس فعلی باعث شکست مهاجرت نشوند — گزارش صحت آن‌ها را
+                // فهرست می‌کند تا کاربر خودش تصمیم بگیرد).
+                Exec(con, "CREATE INDEX IF NOT EXISTS IX_AccTxn_DocNo ON AccTransaction(PeriodID, DocNo);");
+                Exec(con, "CREATE INDEX IF NOT EXISTS IX_AccTxn_Reversed ON AccTransaction(IsReversed);");
+                Exec(con, "CREATE INDEX IF NOT EXISTS IX_AccStipend_Fund ON AccStipend(FundID);");
+                Exec(con, "CREATE INDEX IF NOT EXISTS IX_AccSalary_Fund ON AccSalary(FundID);");
+                Exec(con, "CREATE INDEX IF NOT EXISTS IX_AccExpItem_Fund ON AccExpenseItem(FundID);");
+
                 SeedDefaults(con);
             }
         }

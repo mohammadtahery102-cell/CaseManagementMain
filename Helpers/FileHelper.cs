@@ -579,6 +579,47 @@ namespace CaseManagement.Helpers
                 return false;
             }
 
+            if (!LooksLikeDeclaredDocumentType(sourceFullPath, extension))
+            {
+                SetLastError("محتوای فایل با نوع سند اعلام‌شده (پسوند) سازگار نیست.", null);
+                return false;
+            }
+
+            return true;
+        }
+
+        // آموزش — بدون این بررسی، فایلی مثل malware.exe فقط با تغییر پسوند به
+        // .pdf از کنترل پسوندِ بالا رد می‌شد (همان ریسکی که LooksLikeImageFile
+        // برای عکس‌ها از قبل می‌بست). امضای باینری هر فرمت را می‌سنجد؛ برای
+        // فرمت‌هایی که امضای قابل‌اتکا ندارند (txt/rtf) بررسی رد می‌شود (true).
+        private static bool LooksLikeDeclaredDocumentType(string path, string extension)
+        {
+            if (extension == ".jpg" || extension == ".jpeg" || extension == ".png" ||
+                extension == ".tif" || extension == ".tiff")
+                return LooksLikeImageFile(path, extension);
+
+            if (extension == ".txt" || extension == ".rtf")
+                return true;
+
+            byte[] header = new byte[8];
+
+            using (FileStream fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                int read = fs.Read(header, 0, header.Length);
+                if (read < 4)
+                    return false;
+            }
+
+            if (extension == ".pdf")
+                return header[0] == 0x25 && header[1] == 0x50 && header[2] == 0x44 && header[3] == 0x46;
+
+            // .docx/.xlsx بسته‌های ZIP هستند (PK\x03\x04)؛ .doc/.xls قدیمی OLE هستند.
+            if (extension == ".docx" || extension == ".xlsx")
+                return header[0] == 0x50 && header[1] == 0x4B && header[2] == 0x03 && header[3] == 0x04;
+
+            if (extension == ".doc" || extension == ".xls")
+                return header[0] == 0xD0 && header[1] == 0xCF && header[2] == 0x11 && header[3] == 0xE0;
+
             return true;
         }
 

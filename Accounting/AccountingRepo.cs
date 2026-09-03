@@ -55,32 +55,74 @@ ORDER BY Year DESC, Month DESC", P("@cid", Cid));
 
         public int AddPeriod(int year, int monthFrom, int monthTo, string title, string start, string end, double opening)
         {
-            _db.ExecuteNonQuery(@"
+            // آموزش — ExecuteInsertReturningId جایگزین الگوی قبلیِ
+            // «ExecuteNonQuery سپس ExecuteScalar(last_insert_rowid)» شد، چون آن
+            // الگو روی دو کانکشن جدا اجرا می‌شد و همیشه صفر برمی‌گرداند.
+            // توضیح کامل در DAL/DatabaseHelper.ExecuteInsertReturningId.
+            int id = (int)_db.ExecuteInsertReturningId(@"
 INSERT INTO AccPeriod (Year, Month, MonthTo, Title, StartDate, EndDate, OpeningBalance, Status, CenterID, CreatedBy)
 VALUES (@y, @m, @mt, @t, @s, @e, @o, 'باز', @cid, @by)",
                 P("@y", year), P("@m", monthFrom), P("@mt", monthTo), P("@t", title), P("@s", start), P("@e", end),
                 P("@o", opening), P("@cid", CurrentCid), P("@by", SecurityContext.Username));
-            return Convert.ToInt32(_db.ExecuteScalar("SELECT last_insert_rowid()"));
+            AccAudit.Log("ثبت دوره مالی", "AccPeriod", id, title + " / مانده ابتدا " + opening.ToString("N0"));
+            return id;
         }
 
+        // آموزش — «AND (@cid = 0 OR CenterID = @cid)» به همه‌ی دستورهای نوشتن
+        // اضافه شد. قبلاً فقط SELECTها فیلتر مرکز داشتند و UPDATE/DELETEها
+        // نداشتند؛ یعنی خواندن محدود به مرکز کاربر بود ولی نوشتن نه.
         public void UpdatePeriod(int id, int year, int monthFrom, int monthTo, string title, string start, string end, double opening)
         {
-            _db.ExecuteNonQuery(@"
+            double oldOpening = GetPeriodOpening(id);
+
+            int affected = _db.ExecuteNonQuery(@"
 UPDATE AccPeriod SET Year=@y, Month=@m, MonthTo=@mt, Title=@t, StartDate=@s, EndDate=@e, OpeningBalance=@o
-WHERE PeriodID=@id AND Status='باز'",
+WHERE PeriodID=@id AND Status='باز' AND (@cid = 0 OR CenterID = @cid)",
                 P("@y", year), P("@m", monthFrom), P("@mt", monthTo), P("@t", title), P("@s", start), P("@e", end),
-                P("@o", opening), P("@id", id));
+                P("@o", opening), P("@id", id), P("@cid", Cid));
+
+            if (affected == 0)
+                throw new AccountingRuleException("این دوره مالی قابل ویرایش نیست — یا «بسته» شده یا متعلق به مرکز دیگری است.");
+
+            AccAudit.LogChange("ویرایش دوره مالی", "AccPeriod", id,
+                "مانده ابتدا " + oldOpening.ToString("N0"), title + " / مانده ابتدا " + opening.ToString("N0"), "");
         }
 
         public void SetPeriodStatus(int id, string status)
         {
-            _db.ExecuteNonQuery("UPDATE AccPeriod SET Status=@st WHERE PeriodID=@id", P("@st", status), P("@id", id));
+            string oldStatus = _db.ExecuteScalar(
+                "SELECT Status FROM AccPeriod WHERE PeriodID=@id AND (@cid = 0 OR CenterID = @cid)",
+                P("@id", id), P("@cid", Cid)) as string;
+
+            int affected = _db.ExecuteNonQuery("UPDATE AccPeriod SET Status=@st WHERE PeriodID=@id AND (@cid = 0 OR CenterID = @cid)",
+                P("@st", status), P("@id", id), P("@cid", Cid));
+
+            if (affected == 0)
+                throw new AccountingRuleException("این دوره مالی در مرکز فعال شما یافت نشد.");
+
+            // بستن/بازکردن دوره یک رویداد مالیِ حساس است و باید ردّ حسابرسی
+            // داشته باشد — قبلاً هیچ لاگی برای آن ثبت نمی‌شد.
+            AccAudit.LogChange(status == "بسته" ? "بستن دوره مالی" : "بازکردن دوره مالی",
+                "AccPeriod", id, oldStatus ?? "", status,
+                "مانده پایان دوره: " + GetPeriodClosing(id).ToString("N0"));
         }
 
         public bool IsPeriodOpen(int id)
         {
             object v = _db.ExecuteScalar("SELECT Status FROM AccPeriod WHERE PeriodID=@id AND (@cid = 0 OR CenterID = @cid)", P("@id", id), P("@cid", Cid));
             return v != null && v.ToString() == "باز";
+        }
+
+        // برای ابزار اصلاح تاریخی (AccRepair): برخلاف IsPeriodOpen (که شناسه‌ی
+        // دوره را می‌گیرد)، این متد جدول/رکورد را می‌گیرد و از طریق پیوند به
+        // AccPeriod، دوره‌ی *فعلیِ همان رکورد* را بررسی می‌کند. رکورد بدون دوره
+        // همیشه «باز» درنظر گرفته می‌شود (همان قاعده‌ی GetRecordState/EnsureMutable).
+        public bool IsRecordPeriodOpen(string table, string idColumn, int id)
+        {
+            object status = _db.ExecuteScalar(
+                "SELECT p.Status FROM " + table + " t LEFT JOIN AccPeriod p ON p.PeriodID = t.PeriodID WHERE t." + idColumn + " = @id",
+                P("@id", id));
+            return status == null || status.ToString() != "بسته";
         }
 
         public double GetPeriodOpening(int id)
@@ -95,15 +137,18 @@ WHERE PeriodID=@id AND Status='باز'",
         // دیگر به همین PeriodID وصل بود، در مانده کاربرِ مرکز دیگر هم حساب
         // می‌شد. مطابق همان اصل «هیچ گزارشی نباید خارج از CenterID فعال کاربر
         // داده ببیند» که در بخش مدیریت پرونده رعایت شده، اینجا هم @cid اضافه شد.
+        // آموزش — «AND COALESCE(IsReversed,0)=0» در تمام جمع‌ها اضافه شد تا
+        // اسناد باطل‌شده در هیچ مانده‌ای شمرده نشوند. COALESCE لازم است چون
+        // ستون تازه اضافه شده و در دیتابیس‌های قدیمی ممکن است NULL باشد.
         public double GetPeriodClosing(int id)
         {
             double opening = GetPeriodOpening(id);
-            double income = ToDouble(_db.ExecuteScalar("SELECT COALESCE(SUM(Amount),0) FROM AccTransaction WHERE PeriodID=@id AND Direction='دریافت' AND (@cid = 0 OR CenterID = @cid)", P("@id", id), P("@cid", Cid)));
-            double payments = ToDouble(_db.ExecuteScalar("SELECT COALESCE(SUM(Amount),0) FROM AccTransaction WHERE PeriodID=@id AND Direction='پرداخت' AND (@cid = 0 OR CenterID = @cid)", P("@id", id), P("@cid", Cid)));
-            double stipend = ToDouble(_db.ExecuteScalar("SELECT COALESCE(SUM(TotalPaid),0) FROM AccStipend WHERE PeriodID=@id AND (@cid = 0 OR CenterID = @cid)", P("@id", id), P("@cid", Cid)));
-            double salary = ToDouble(_db.ExecuteScalar("SELECT COALESCE(SUM(Amount),0) FROM AccSalary WHERE PeriodID=@id AND (@cid = 0 OR CenterID = @cid)", P("@id", id), P("@cid", Cid)));
-            double items = ToDouble(_db.ExecuteScalar("SELECT COALESCE(SUM(Price),0) FROM AccExpenseItem WHERE PeriodID=@id AND (@cid = 0 OR CenterID = @cid)", P("@id", id), P("@cid", Cid)));
-            return opening + income - payments - stipend - salary - items;
+            double income = ToDouble(_db.ExecuteScalar("SELECT COALESCE(SUM(Amount),0) FROM AccTransaction WHERE PeriodID=@id AND Direction='دریافت' AND (@cid = 0 OR CenterID = @cid) AND COALESCE(IsReversed,0)=0", P("@id", id), P("@cid", Cid)));
+            double payments = ToDouble(_db.ExecuteScalar("SELECT COALESCE(SUM(Amount),0) FROM AccTransaction WHERE PeriodID=@id AND Direction='پرداخت' AND (@cid = 0 OR CenterID = @cid) AND COALESCE(IsReversed,0)=0", P("@id", id), P("@cid", Cid)));
+            double stipend = ToDouble(_db.ExecuteScalar("SELECT COALESCE(SUM(TotalPaid),0) FROM AccStipend WHERE PeriodID=@id AND (@cid = 0 OR CenterID = @cid) AND COALESCE(IsReversed,0)=0", P("@id", id), P("@cid", Cid)));
+            double salary = ToDouble(_db.ExecuteScalar("SELECT COALESCE(SUM(Amount),0) FROM AccSalary WHERE PeriodID=@id AND (@cid = 0 OR CenterID = @cid) AND COALESCE(IsReversed,0)=0", P("@id", id), P("@cid", Cid)));
+            double items = ToDouble(_db.ExecuteScalar("SELECT COALESCE(SUM(Price),0) FROM AccExpenseItem WHERE PeriodID=@id AND (@cid = 0 OR CenterID = @cid) AND COALESCE(IsReversed,0)=0", P("@id", id), P("@cid", Cid)));
+            return Money.Round(opening + income - payments - stipend - salary - items);
         }
 
         // ═══════════════════════════════════════════════════════════════════
@@ -135,13 +180,25 @@ ORDER BY FundID", P("@cid", Cid));
 
         public void UpdateFund(int id, string name, string type, double opening)
         {
-            _db.ExecuteNonQuery("UPDATE AccFund SET Name=@n, FundType=@t, OpeningBalance=@o WHERE FundID=@id",
-                P("@n", name), P("@t", type), P("@o", opening), P("@id", id));
+            double oldOpening = GetFundOpening(id);
+
+            int affected = _db.ExecuteNonQuery("UPDATE AccFund SET Name=@n, FundType=@t, OpeningBalance=@o WHERE FundID=@id AND (@cid = 0 OR CenterID = @cid)",
+                P("@n", name), P("@t", type), P("@o", opening), P("@id", id), P("@cid", Cid));
+
+            if (affected == 0)
+                throw new AccountingRuleException("این صندوق در مرکز فعال شما یافت نشد.");
+
+            // مانده اولیه‌ی صندوق مستقیماً روی همه‌ی مانده‌ها اثر می‌گذارد، پس
+            // تغییرش باید مقدار قبلی و جدید را در ردّ حسابرسی ثبت کند.
+            AccAudit.LogChange("ویرایش صندوق", "AccFund", id,
+                "مانده اولیه " + oldOpening.ToString("N0"), name + " / مانده اولیه " + opening.ToString("N0"), "");
         }
 
         public void ToggleFund(int id)
         {
-            _db.ExecuteNonQuery("UPDATE AccFund SET IsActive = CASE WHEN IsActive=1 THEN 0 ELSE 1 END WHERE FundID=@id", P("@id", id));
+            _db.ExecuteNonQuery("UPDATE AccFund SET IsActive = CASE WHEN IsActive=1 THEN 0 ELSE 1 END WHERE FundID=@id AND (@cid = 0 OR CenterID = @cid)",
+                P("@id", id), P("@cid", Cid));
+            AccAudit.Log("تغییر وضعیت صندوق", "AccFund", id, "");
         }
 
         // مانده صندوق = مانده اولیه + دریافت‌ها − پرداخت‌ها − شهریه − حقوق − هزینه‌های همین صندوق
@@ -154,12 +211,12 @@ ORDER BY FundID", P("@cid", Cid));
         public double GetFundBalance(int fundId)
         {
             double opening = ToDouble(_db.ExecuteScalar("SELECT OpeningBalance FROM AccFund WHERE FundID=@id AND (@cid = 0 OR CenterID = @cid)", P("@id", fundId), P("@cid", Cid)));
-            double income = ToDouble(_db.ExecuteScalar("SELECT COALESCE(SUM(Amount),0) FROM AccTransaction WHERE FundID=@id AND Direction='دریافت' AND (@cid = 0 OR CenterID = @cid)", P("@id", fundId), P("@cid", Cid)));
-            double payments = ToDouble(_db.ExecuteScalar("SELECT COALESCE(SUM(Amount),0) FROM AccTransaction WHERE FundID=@id AND Direction='پرداخت' AND (@cid = 0 OR CenterID = @cid)", P("@id", fundId), P("@cid", Cid)));
-            double stipend = ToDouble(_db.ExecuteScalar("SELECT COALESCE(SUM(TotalPaid),0) FROM AccStipend WHERE FundID=@id AND (@cid = 0 OR CenterID = @cid)", P("@id", fundId), P("@cid", Cid)));
-            double salary = ToDouble(_db.ExecuteScalar("SELECT COALESCE(SUM(Amount),0) FROM AccSalary WHERE FundID=@id AND (@cid = 0 OR CenterID = @cid)", P("@id", fundId), P("@cid", Cid)));
-            double expense = ToDouble(_db.ExecuteScalar("SELECT COALESCE(SUM(Price),0) FROM AccExpenseItem WHERE FundID=@id AND (@cid = 0 OR CenterID = @cid)", P("@id", fundId), P("@cid", Cid)));
-            return opening + income - payments - stipend - salary - expense;
+            double income = ToDouble(_db.ExecuteScalar("SELECT COALESCE(SUM(Amount),0) FROM AccTransaction WHERE FundID=@id AND Direction='دریافت' AND (@cid = 0 OR CenterID = @cid) AND COALESCE(IsReversed,0)=0", P("@id", fundId), P("@cid", Cid)));
+            double payments = ToDouble(_db.ExecuteScalar("SELECT COALESCE(SUM(Amount),0) FROM AccTransaction WHERE FundID=@id AND Direction='پرداخت' AND (@cid = 0 OR CenterID = @cid) AND COALESCE(IsReversed,0)=0", P("@id", fundId), P("@cid", Cid)));
+            double stipend = ToDouble(_db.ExecuteScalar("SELECT COALESCE(SUM(TotalPaid),0) FROM AccStipend WHERE FundID=@id AND (@cid = 0 OR CenterID = @cid) AND COALESCE(IsReversed,0)=0", P("@id", fundId), P("@cid", Cid)));
+            double salary = ToDouble(_db.ExecuteScalar("SELECT COALESCE(SUM(Amount),0) FROM AccSalary WHERE FundID=@id AND (@cid = 0 OR CenterID = @cid) AND COALESCE(IsReversed,0)=0", P("@id", fundId), P("@cid", Cid)));
+            double expense = ToDouble(_db.ExecuteScalar("SELECT COALESCE(SUM(Price),0) FROM AccExpenseItem WHERE FundID=@id AND (@cid = 0 OR CenterID = @cid) AND COALESCE(IsReversed,0)=0", P("@id", fundId), P("@cid", Cid)));
+            return Money.Round(opening + income - payments - stipend - salary - expense);
         }
 
         // ═══════════════════════════════════════════════════════════════════
@@ -191,13 +248,22 @@ ORDER BY Name", P("@cid", Cid));
 
         public void UpdateParty(int id, string name, string type, string phone, string note)
         {
-            _db.ExecuteNonQuery("UPDATE AccParty SET Name=@n, PartyType=@t, Phone=@p, Note=@no WHERE PartyID=@id",
-                P("@n", name), P("@t", type), P("@p", phone), P("@no", note), P("@id", id));
+            string oldName = GetPartyName(id);
+
+            int affected = _db.ExecuteNonQuery("UPDATE AccParty SET Name=@n, PartyType=@t, Phone=@p, Note=@no WHERE PartyID=@id AND (@cid = 0 OR CenterID = @cid)",
+                P("@n", name), P("@t", type), P("@p", phone), P("@no", note), P("@id", id), P("@cid", Cid));
+
+            if (affected == 0)
+                throw new AccountingRuleException("این طرف حساب در مرکز فعال شما یافت نشد.");
+
+            AccAudit.LogChange("ویرایش طرف حساب", "AccParty", id, oldName, name, "");
         }
 
         public void ToggleParty(int id)
         {
-            _db.ExecuteNonQuery("UPDATE AccParty SET IsActive = CASE WHEN IsActive=1 THEN 0 ELSE 1 END WHERE PartyID=@id", P("@id", id));
+            _db.ExecuteNonQuery("UPDATE AccParty SET IsActive = CASE WHEN IsActive=1 THEN 0 ELSE 1 END WHERE PartyID=@id AND (@cid = 0 OR CenterID = @cid)",
+                P("@id", id), P("@cid", Cid));
+            AccAudit.Log("تغییر وضعیت طرف حساب", "AccParty", id, "");
         }
 
         // ═══════════════════════════════════════════════════════════════════
@@ -270,6 +336,24 @@ FROM AccTransaction WHERE (@cid = 0 OR CenterID = @cid) AND (@per IS NULL OR Per
         }
 
         // یک تراکنش کامل برای ساخت فاکتور/سند چاپی
+        // شناسه‌های خامِ یک سند، برای پر کردنِ فرم هنگام اصلاح.
+        // آموزش — چرا GetTransactionById کافی نیست: آن متد برای نمایش و چاپ
+        // ساخته شده و *نامِ* طرف‌حساب/صندوق/دسته را برمی‌گرداند، نه شناسه‌شان.
+        // برای انتخابِ درستِ آیتم در کمبوباکس‌ها به خودِ شناسه نیاز است؛
+        // تطبیق با نام شکننده است (دو صندوق هم‌نام، تغییر نام بعدی).
+        public DataRow GetTransactionForEdit(int txnId)
+        {
+            DataTable dt = _db.Query(@"
+SELECT TxnID, DocNo, TxnDate, Direction, PeriodID, PartyID, FundID, CategoryType, CategoryID,
+       Amount, Qty, DollarAmount, DollarRate, Description, AttachmentPath,
+       COALESCE(IsReversed,0) AS IsReversed
+FROM AccTransaction
+WHERE TxnID = @id AND (@cid = 0 OR CenterID = @cid)",
+                P("@id", txnId), P("@cid", Cid));
+
+            return dt.Rows.Count == 0 ? null : dt.Rows[0];
+        }
+
         public DataRow GetTransactionById(int txnId)
         {
             DataTable dt = _db.Query(@"
@@ -288,32 +372,337 @@ WHERE t.TxnID = @id AND (@cid = 0 OR t.CenterID = @cid)", P("@id", txnId), P("@c
             return dt.Rows.Count > 0 ? dt.Rows[0] : null;
         }
 
+        // نتیجه‌ی ثبت یک تراکنش — شماره سندِ نهایی ممکن است با شماره‌ی پیشنهادی
+        // فرق کند (اگر هم‌زمان کاربر دیگری همان شماره را گرفته باشد).
+        public class TransactionSaveResult
+        {
+            public int TxnId;
+            public string DocNo;
+            public bool DocNoReassigned;
+        }
+
+        // امضای قدیمی — حفظ شده تا هیچ فراخوانی موجودی نشکند.
         public int AddTransaction(string docNo, string date, string direction, int? periodId, int? partyId,
             int? fundId, string categoryType, int? categoryId, double amount, string qty,
             double? dollarAmount, double? dollarRate, string description, string attachment)
         {
-            _db.ExecuteNonQuery(@"
+            return AddTransactionAtomic(docNo, date, direction, periodId, partyId, fundId, categoryType,
+                categoryId, amount, qty, dollarAmount, dollarRate, description, attachment, true).TxnId;
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        // ثبت اتمیک تراکنش — کل «بررسی تکرار + گرفتن شماره سند + درج» داخل یک
+        // تراکنش پایگاه‌داده.
+        //
+        // آموزش — چرا این تغییر لازم بود: مسیر قبلی سه گام جدا داشت که هرکدام
+        // روی کانکشن خودش اجرا می‌شد:
+        //     ۱) DocNoExists(docNo)      ← خواندن
+        //     ۲) NextDocNo(period)       ← خواندن MAX+1
+        //     ۳) AddTransaction(...)     ← نوشتن
+        // بین گام ۱/۲ و گام ۳ هیچ قفلی وجود نداشت. اگر دو کاربر (یا یک کاربر
+        // با دوبار کلیک سریع روی دکمه) هم‌زمان ثبت می‌کردند، هر دو همان
+        // «شماره‌ی بعدی» را می‌خواندند و هر دو با همان شماره درج می‌شدند.
+        // این دقیقاً همان چیزی است که در دیتابیس فعلی دیده می‌شود: تراکنش‌های
+        // ۱ و ۲ با تاریخ، جهت، صندوق و مبلغ کاملاً یکسان (۱٬۳۲۲٬۰۰۰ افغانی).
+        //
+        // حالا هر سه گام داخل یک تراکنش با قفلِ نوشتنِ فوری (BeginImmediate)
+        // انجام می‌شوند، پس دو ثبت هم‌زمان ناچار پشت‌سرهم اجرا می‌شوند و
+        // دومی شماره‌ی واقعاً بعدی را می‌گیرد.
+        //
+        // confirmedDuplicate: اگر کاربر آگاهانه تأیید کرده باشد که این پرداختِ
+        // تکراری واقعی است (مثلاً دو پرداخت جداگانه با مبلغ یکسان در یک روز)،
+        // ثبت انجام می‌شود؛ در غیر این صورت با خطای قابل‌فهم متوقف می‌شود.
+        // ─────────────────────────────────────────────────────────────────────
+        public TransactionSaveResult AddTransactionAtomic(string docNo, string date, string direction,
+            int? periodId, int? partyId, int? fundId, string categoryType, int? categoryId,
+            double amount, string qty, double? dollarAmount, double? dollarRate,
+            string description, string attachment, bool confirmedDuplicate)
+        {
+            if (!Money.IsValidPositive(amount))
+                throw new AccountingRuleException("مبلغ تراکنش باید عددی بزرگ‌تر از صفر و حداکثر " +
+                                                  Money.MaxAmount.ToString("N0") + " افغانی باشد.");
+
+            if (!Money.IsConversionConsistent(amount, dollarAmount ?? 0, dollarRate ?? 0))
+                throw new AccountingRuleException(
+                    "مبلغ افغانی با مبلغ دلاری و نرخ هم‌خوان نیست.\n" +
+                    "مبلغ دلاری × نرخ = " + Money.Convert(dollarAmount ?? 0, dollarRate ?? 0).ToString("N0") +
+                    "\nمبلغ واردشده = " + amount.ToString("N0"));
+
+            var result = new TransactionSaveResult();
+            string finalDoc = (docNo ?? "").Trim();
+            double roundedAmount = Money.Round(amount);
+            int cid = Cid;
+            object currentCid = CurrentCid;
+
+            _db.ExecuteInTransaction(delegate (SQLiteConnection con, SQLiteTransaction tr)
+            {
+                // ─ ۱) تشخیص سند تکراری (همان دوره/صندوق/جهت/مبلغ/تاریخ) ─
+                if (!confirmedDuplicate)
+                {
+                    using (var dup = new SQLiteCommand(@"
+SELECT COUNT(1) FROM AccTransaction
+WHERE (@per IS NULL OR PeriodID = @per) AND Direction = @dir AND TxnDate = @date
+  AND COALESCE(FundID,-1) = COALESCE(@fund,-1) AND ABS(Amount - @amt) < 0.005
+  AND (@cid = 0 OR CenterID = @cid) AND COALESCE(IsReversed,0) = 0", con, tr))
+                    {
+                        dup.Parameters.AddRange(new[]
+                        {
+                            P("@per", (object)periodId ?? DBNull.Value), P("@dir", direction), P("@date", date),
+                            P("@fund", (object)fundId ?? DBNull.Value), P("@amt", roundedAmount), P("@cid", cid)
+                        });
+
+                        if (Convert.ToInt32(dup.ExecuteScalar()) > 0)
+                            throw new AccountingDuplicateException(
+                                "یک تراکنش کاملاً مشابه از قبل ثبت شده است:\n" +
+                                "تاریخ " + date + " — " + direction + " — " + roundedAmount.ToString("N0") + " افغانی\n\n" +
+                                "اگر این واقعاً یک پرداخت جداگانه است، تأیید کنید تا ثبت شود.");
+                    }
+                }
+
+                // ─ ۲) گرفتن شماره سند داخل همین تراکنش ─
+                bool needNewDoc = string.IsNullOrEmpty(finalDoc);
+                if (!needNewDoc)
+                {
+                    using (var chk = new SQLiteCommand(
+                        "SELECT COUNT(1) FROM AccTransaction WHERE DocNo=@d AND (@cid = 0 OR CenterID = @cid) AND (@per IS NULL OR PeriodID = @per)", con, tr))
+                    {
+                        chk.Parameters.AddRange(new[]
+                        {
+                            P("@d", finalDoc), P("@cid", cid), P("@per", (object)periodId ?? DBNull.Value)
+                        });
+                        needNewDoc = Convert.ToInt32(chk.ExecuteScalar()) > 0;
+                    }
+                }
+
+                if (needNewDoc)
+                {
+                    using (var next = new SQLiteCommand(@"
+SELECT COALESCE(MAX(CAST(CASE WHEN DocNo GLOB '*[0-9]*' AND DocNo NOT GLOB '*[^0-9]*' THEN DocNo ELSE '0' END AS INTEGER)),0)+1
+FROM AccTransaction WHERE (@cid = 0 OR CenterID = @cid) AND (@per IS NULL OR PeriodID = @per)", con, tr))
+                    {
+                        next.Parameters.AddRange(new[] { P("@cid", cid), P("@per", (object)periodId ?? DBNull.Value) });
+                        finalDoc = Convert.ToInt32(next.ExecuteScalar()).ToString();
+                        result.DocNoReassigned = true;
+                    }
+                }
+
+                // ─ ۳) درج ─
+                using (var ins = new SQLiteCommand(@"
 INSERT INTO AccTransaction
     (DocNo, TxnDate, Direction, PeriodID, PartyID, FundID, CategoryType, CategoryID,
      Amount, Qty, DollarAmount, DollarRate, Description, AttachmentPath, CenterID, CreatedBy)
 VALUES
     (@doc, @date, @dir, @per, @party, @fund, @ctype, @cat,
-     @amt, @qty, @damt, @drate, @desc, @att, @cid, @by)",
-                P("@doc", docNo), P("@date", date), P("@dir", direction),
-                P("@per", (object)periodId ?? DBNull.Value), P("@party", (object)partyId ?? DBNull.Value),
-                P("@fund", (object)fundId ?? DBNull.Value), P("@ctype", categoryType),
-                P("@cat", (object)categoryId ?? DBNull.Value), P("@amt", amount), P("@qty", qty),
-                P("@damt", (object)dollarAmount ?? DBNull.Value), P("@drate", (object)dollarRate ?? DBNull.Value),
-                P("@desc", description), P("@att", attachment), P("@cid", CurrentCid), P("@by", SecurityContext.Username));
-            int id = Convert.ToInt32(_db.ExecuteScalar("SELECT last_insert_rowid()"));
-            AccAudit.Log(direction == "دریافت" ? "ثبت دریافت" : "ثبت پرداخت", "AccTransaction", id, docNo + " / " + amount.ToString("N0"));
-            return id;
+     @amt, @qty, @damt, @drate, @desc, @att, @cid, @by)", con, tr))
+                {
+                    ins.Parameters.AddRange(new[]
+                    {
+                        P("@doc", finalDoc), P("@date", date), P("@dir", direction),
+                        P("@per", (object)periodId ?? DBNull.Value), P("@party", (object)partyId ?? DBNull.Value),
+                        P("@fund", (object)fundId ?? DBNull.Value), P("@ctype", categoryType),
+                        P("@cat", (object)categoryId ?? DBNull.Value), P("@amt", roundedAmount), P("@qty", qty),
+                        P("@damt", (object)dollarAmount ?? DBNull.Value), P("@drate", (object)dollarRate ?? DBNull.Value),
+                        P("@desc", description), P("@att", attachment),
+                        P("@cid", currentCid), P("@by", SecurityContext.Username)
+                    });
+                    ins.ExecuteNonQuery();
+                }
+
+                using (var idCmd = new SQLiteCommand("SELECT last_insert_rowid();", con, tr))
+                    result.TxnId = Convert.ToInt32(idCmd.ExecuteScalar());
+            });
+
+            result.DocNo = finalDoc;
+            AccAudit.LogChange(direction == "دریافت" ? "ثبت دریافت" : "ثبت پرداخت",
+                "AccTransaction", result.TxnId, null,
+                "سند " + finalDoc + " / " + roundedAmount.ToString("N0") + " افغانی", "");
+            return result;
         }
 
+        // ─────────────────────────────────────────────────────────────────────
+        // اصلاح سند — «ابطال + صدور سند اصلاحی» در یک تراکنش اتمیک.
+        //
+        // آموزش — چرا سند مالی مستقیماً UPDATE نمی‌شود: سندِ ثبت‌شده یک رویدادِ
+        // واقع‌شده است. اگر مبلغش را جای خود عوض کنیم، گزارشی که دیروز چاپ و
+        // امضا شده دیگر با دیتابیس نمی‌خواند و هیچ‌کس نمی‌تواند بگوید کدام‌یک
+        // درست است. روشِ اصولی این است که سندِ غلط «باطل» و یک سندِ تازه با
+        // مقادیر درست صادر شود؛ آن‌وقت هر دو در دفتر می‌مانند و مسیرِ اصلاح
+        // قابل ردیابی است.
+        //
+        // چرا اتمیک: اگر ابطال انجام شود ولی درجِ سندِ اصلاحی شکست بخورد (نقض
+        // قاعده، خطای دیسک، قطع برق)، مبلغ به‌کلی از دفتر ناپدید می‌شود و
+        // مانده‌ها غلط می‌شوند. هر دو گام داخل یک تراکنش پایگاه‌داده‌اند، پس
+        // یا هر دو انجام می‌شوند یا هیچ‌کدام.
+        //
+        // خروجی: همان TransactionSaveResult سندِ تازه.
+        // ─────────────────────────────────────────────────────────────────────
+        public TransactionSaveResult ReviseTransactionAtomic(int originalId, string docNo, string date,
+            string direction, int? periodId, int? partyId, int? fundId, string categoryType, int? categoryId,
+            double amount, string qty, double? dollarAmount, double? dollarRate,
+            string description, string attachment, string reason, bool confirmedDuplicate)
+        {
+            if (string.IsNullOrWhiteSpace(reason))
+                throw new AccountingRuleException("نوشتن دلیل اصلاح الزامی است؛ بدون آن ردّ حسابرسی ناقص می‌ماند.");
+
+            if (!Money.IsValidPositive(amount))
+                throw new AccountingRuleException("مبلغ تراکنش باید عددی بزرگ‌تر از صفر و حداکثر " +
+                                                  Money.MaxAmount.ToString("N0") + " افغانی باشد.");
+
+            if (!Money.IsConversionConsistent(amount, dollarAmount ?? 0, dollarRate ?? 0))
+                throw new AccountingRuleException(
+                    "مبلغ افغانی با مبلغ دلاری و نرخ هم‌خوان نیست.\n" +
+                    "مبلغ دلاری × نرخ = " + Money.Convert(dollarAmount ?? 0, dollarRate ?? 0).ToString("N0") +
+                    "\nمبلغ واردشده = " + amount.ToString("N0"));
+
+            // دوره‌ی خودِ سندِ اصلی باید باز باشد — نه فقط دوره‌ای که در کمبو
+            // انتخاب شده. (همان نگهبانی که VoidTransaction هم به کار می‌برد.)
+            EnsureMutable("AccTransaction", "TxnID", originalId, "تراکنش");
+
+            DataRow before = GetTransactionById(originalId);
+            if (before == null)
+                throw new AccountingRuleException("سند اصلی پیدا نشد؛ ممکن است کاربر دیگری آن را باطل کرده باشد.");
+
+            string oldSnapshot = "سند " + before["DocNo"] + " / " + before["Direction"] + " / " +
+                                 Convert.ToDouble(before["Amount"]).ToString("N0") + " افغانی";
+
+            var result = new TransactionSaveResult();
+            string finalDoc = (docNo ?? "").Trim();
+            double roundedAmount = Money.Round(amount);
+            int cid = Cid;
+            object currentCid = CurrentCid;
+
+            _db.ExecuteInTransaction(delegate (SQLiteConnection con, SQLiteTransaction tr)
+            {
+                // ─ ۱) ابطال سند اصلی ─
+                // شرط COALESCE(IsReversed,0)=0 مسابقه را می‌بندد: اگر بین
+                // بررسی بالا و اینجا کاربر دیگری همین سند را باطل کرده باشد،
+                // هیچ سطری به‌روز نمی‌شود و ما کل تراکنش را برمی‌گردانیم.
+                int affected;
+                using (var vd = new SQLiteCommand(@"
+UPDATE AccTransaction
+SET IsReversed = 1, VoidReason = @r, VoidedBy = @by, VoidedAt = datetime('now')
+WHERE TxnID = @id AND (@cid = 0 OR CenterID = @cid) AND COALESCE(IsReversed,0) = 0", con, tr))
+                {
+                    vd.Parameters.AddRange(new[]
+                    {
+                        P("@id", originalId), P("@r", "اصلاح سند — " + reason),
+                        P("@by", SecurityContext.Username), P("@cid", cid)
+                    });
+                    affected = vd.ExecuteNonQuery();
+                }
+
+                if (affected == 0)
+                    throw new AccountingRuleException(
+                        "این سند هم‌اکنون توسط کاربر دیگری باطل شده است. فهرست را تازه کنید و دوباره تلاش کنید.");
+
+                // ─ ۲) تشخیص سند تکراری برای سندِ تازه ─
+                // سندِ اصلی همین الان باطل شد، پس خودش در این شمارش نمی‌آید و
+                // «اصلاحِ بدون تغییرِ مبلغ» به‌اشتباه تکراری اعلام نمی‌شود.
+                if (!confirmedDuplicate)
+                {
+                    using (var dup = new SQLiteCommand(@"
+SELECT COUNT(1) FROM AccTransaction
+WHERE (@per IS NULL OR PeriodID = @per) AND Direction = @dir AND TxnDate = @date
+  AND COALESCE(FundID,-1) = COALESCE(@fund,-1) AND ABS(Amount - @amt) < 0.005
+  AND (@cid = 0 OR CenterID = @cid) AND COALESCE(IsReversed,0) = 0", con, tr))
+                    {
+                        dup.Parameters.AddRange(new[]
+                        {
+                            P("@per", (object)periodId ?? DBNull.Value), P("@dir", direction), P("@date", date),
+                            P("@fund", (object)fundId ?? DBNull.Value), P("@amt", roundedAmount), P("@cid", cid)
+                        });
+
+                        if (Convert.ToInt32(dup.ExecuteScalar()) > 0)
+                            throw new AccountingDuplicateException(
+                                "یک تراکنش کاملاً مشابه از قبل ثبت شده است:\n" +
+                                "تاریخ " + date + " — " + direction + " — " + roundedAmount.ToString("N0") + " افغانی\n\n" +
+                                "اگر این واقعاً سند درستِ اصلاح‌شده است، تأیید کنید تا ثبت شود.");
+                    }
+                }
+
+                // ─ ۳) شماره سندِ اصلاحی ─
+                // آموزش — چرا شماره‌ی سندِ قبلی دوباره استفاده نمی‌شود: آن شماره
+                // حالا به یک سندِ باطل‌شده تعلق دارد و در دفتر باقی است. دادنِ
+                // همان شماره به سندِ تازه یعنی دو سند با یک شماره، که یکتاییِ
+                // شماره سند را می‌شکند. پس همیشه شماره‌ی تازه گرفته می‌شود.
+                using (var next = new SQLiteCommand(@"
+SELECT COALESCE(MAX(CAST(CASE WHEN DocNo GLOB '*[0-9]*' AND DocNo NOT GLOB '*[^0-9]*' THEN DocNo ELSE '0' END AS INTEGER)),0)+1
+FROM AccTransaction WHERE (@cid = 0 OR CenterID = @cid) AND (@per IS NULL OR PeriodID = @per)", con, tr))
+                {
+                    next.Parameters.AddRange(new[] { P("@cid", cid), P("@per", (object)periodId ?? DBNull.Value) });
+                    string generated = Convert.ToInt32(next.ExecuteScalar()).ToString();
+                    if (generated != finalDoc) result.DocNoReassigned = true;
+                    finalDoc = generated;
+                }
+
+                // ─ ۴) درج سندِ اصلاحی، با پیوند به سندِ باطل‌شده ─
+                using (var ins = new SQLiteCommand(@"
+INSERT INTO AccTransaction
+    (DocNo, TxnDate, Direction, PeriodID, PartyID, FundID, CategoryType, CategoryID,
+     Amount, Qty, DollarAmount, DollarRate, Description, AttachmentPath, CenterID, CreatedBy, RevisesTxnID)
+VALUES
+    (@doc, @date, @dir, @per, @party, @fund, @ctype, @cat,
+     @amt, @qty, @damt, @drate, @desc, @att, @cid, @by, @orig)", con, tr))
+                {
+                    ins.Parameters.AddRange(new[]
+                    {
+                        P("@doc", finalDoc), P("@date", date), P("@dir", direction),
+                        P("@per", (object)periodId ?? DBNull.Value), P("@party", (object)partyId ?? DBNull.Value),
+                        P("@fund", (object)fundId ?? DBNull.Value), P("@ctype", categoryType),
+                        P("@cat", (object)categoryId ?? DBNull.Value), P("@amt", roundedAmount), P("@qty", qty),
+                        P("@damt", (object)dollarAmount ?? DBNull.Value), P("@drate", (object)dollarRate ?? DBNull.Value),
+                        P("@desc", description), P("@att", attachment),
+                        P("@cid", currentCid), P("@by", SecurityContext.Username), P("@orig", originalId)
+                    });
+                    ins.ExecuteNonQuery();
+                }
+
+                using (var idCmd = new SQLiteCommand("SELECT last_insert_rowid();", con, tr))
+                    result.TxnId = Convert.ToInt32(idCmd.ExecuteScalar());
+            });
+
+            result.DocNo = finalDoc;
+
+            // دو ردیفِ حسابرسی: یکی روی سندِ باطل‌شده، یکی روی سندِ تازه. هر دو
+            // لازم‌اند تا از هر طرف که به سند نگاه شود، مسیرِ اصلاح پیدا باشد.
+            AccAudit.LogChange("ابطال بابت اصلاح", "AccTransaction", originalId,
+                oldSnapshot, "باطل شد — جایگزین: سند " + finalDoc, reason);
+            AccAudit.LogChange("صدور سند اصلاحی", "AccTransaction", result.TxnId,
+                oldSnapshot, "سند " + finalDoc + " / " + roundedAmount.ToString("N0") + " افغانی", reason);
+
+            return result;
+        }
+
+        // آموزش — تغییر معنایی مهم (طبق اصول حسابداری): «حذف» یک سند مالی
+        // دیگر رکورد را از دیتابیس پاک نمی‌کند، بلکه آن را «باطل» می‌کند.
+        // دلیل: با DELETE واقعی، مبلغ از تمام مانده‌ها و گزارش‌ها ناپدید می‌شد
+        // بدون آن‌که هیچ نشانی از آنچه حذف شده باقی بماند — ردّ حسابرسی فقط
+        // یک شماره‌ی شناسه ثبت می‌کرد. حالا رکورد سرجایش می‌ماند، با پرچم
+        // IsReversed و دلیل ابطال؛ همه‌ی محاسبات مانده آن را نادیده می‌گیرند
+        // اما در حسابرسی کاملاً قابل ردیابی است.
+        //
+        // امضای قدیمی حفظ شده تا کدهای موجود بشکنند نشوند؛ به Void هدایت می‌شود.
         public void DeleteTransaction(int id)
         {
-            _db.ExecuteNonQuery("DELETE FROM AccTransaction WHERE TxnID=@id", P("@id", id));
-            AccAudit.Log("حذف تراکنش", "AccTransaction", id, "");
+            VoidTransaction(id, "");
+        }
+
+        public void VoidTransaction(int id, string reason)
+        {
+            EnsureMutable("AccTransaction", "TxnID", id, "تراکنش");
+
+            DataRow before = GetTransactionById(id);
+            string snapshot = before == null ? "" :
+                "سند " + before["DocNo"] + " / " + before["Direction"] + " / " +
+                Convert.ToDouble(before["Amount"]).ToString("N0") + " افغانی";
+
+            _db.ExecuteNonQuery(@"
+UPDATE AccTransaction
+SET IsReversed = 1, VoidReason = @r, VoidedBy = @by, VoidedAt = datetime('now')
+WHERE TxnID = @id AND (@cid = 0 OR CenterID = @cid) AND COALESCE(IsReversed,0) = 0",
+                P("@id", id), P("@r", reason), P("@by", SecurityContext.Username), P("@cid", Cid));
+
+            AccAudit.LogChange("ابطال تراکنش", "AccTransaction", id, snapshot, "باطل شد", reason);
         }
 
         // دفتر صندوق: تمام تراکنش‌ها (اختیاری فیلتر دوره/صندوق)
@@ -332,13 +721,72 @@ LEFT JOIN AccExpenseCategory ec ON ec.CatID = t.CategoryID AND t.CategoryType='E
 WHERE (@cid = 0 OR t.CenterID = @cid)
   AND (@per IS NULL OR t.PeriodID = @per)
   AND (@fund IS NULL OR t.FundID = @fund)
+  AND COALESCE(t.IsReversed,0) = 0
 ORDER BY t.TxnID DESC",
                 P("@cid", Cid), P("@per", (object)periodId ?? DBNull.Value), P("@fund", (object)fundId ?? DBNull.Value));
         }
 
+        // آموزش — هر مقدار مبلغی که از دیتابیس بیرون می‌آید از یک نقطه عبور و
+        // گِرد می‌شود تا خطای انباشته‌ی ممیز شناور در جمع‌ها (SUM) به مقایسه‌های
+        // صحت‌سنجی نشت نکند. توضیح کامل در Accounting/Money.cs.
         private static double ToDouble(object v)
         {
-            return v == null || v == DBNull.Value ? 0 : Convert.ToDouble(v);
+            return v == null || v == DBNull.Value ? 0 : Money.Round(Convert.ToDouble(v));
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // نگهبان‌های صحت (اعمال در لایه‌ی داده، نه فقط UI)
+        // ═══════════════════════════════════════════════════════════════════
+        // آموزش — چرا این نگهبان‌ها در Repo هستند و نه فقط در فرم: بررسی‌های
+        // قبلی («دوره باز است؟») فقط در FrmAccounting و فقط روی *دوره‌ی
+        // انتخاب‌شده در کمبو* انجام می‌شد، نه روی دوره‌ی خودِ رکوردی که ویرایش
+        // می‌شود. یعنی کافی بود کاربر ردیفی از یک دوره‌ی بسته را انتخاب کند و
+        // در کمبو یک دوره‌ی باز بگذارد تا ویرایش انجام شود. هم‌چنین دستورهای
+        // UPDATE/DELETE هیچ‌کدام فیلتر CenterID نداشتند، در حالی که تمام
+        // SELECTها داشتند — یعنی خواندن محدود به مرکز بود ولی نوشتن نه.
+        // با گذاشتن نگهبان در Repo، هر مسیری (فرم فعلی یا هر کد آینده) که به
+        // این متدها برسد ناچار از رعایت قاعده است.
+
+        private struct RecordState
+        {
+            public bool Exists;
+            public bool PeriodClosed;
+            public bool Reversed;
+        }
+
+        private RecordState GetRecordState(string table, string idColumn, int id)
+        {
+            var st = new RecordState();
+            DataTable dt = _db.Query(
+                "SELECT COALESCE(p.Status,'باز') AS St, COALESCE(t.IsReversed,0) AS Rv " +
+                "FROM " + table + " t LEFT JOIN AccPeriod p ON p.PeriodID = t.PeriodID " +
+                "WHERE t." + idColumn + " = @id AND (@cid = 0 OR t.CenterID = @cid)",
+                P("@id", id), P("@cid", Cid));
+
+            if (dt.Rows.Count == 0) return st;
+            st.Exists = true;
+            st.PeriodClosed = dt.Rows[0]["St"].ToString() == "بسته";
+            st.Reversed = Convert.ToInt32(dt.Rows[0]["Rv"]) != 0;
+            return st;
+        }
+
+        // پیش از هر ویرایش/ابطال، رکورد باید: در مرکز فعال کاربر باشد، دوره‌اش
+        // باز باشد، و قبلاً باطل نشده باشد.
+        private void EnsureMutable(string table, string idColumn, int id, string entityLabel)
+        {
+            RecordState st = GetRecordState(table, idColumn, id);
+
+            if (!st.Exists)
+                throw new AccountingRuleException(entityLabel + " مورد نظر در مرکز فعال شما یافت نشد.");
+
+            if (st.PeriodClosed)
+                throw new AccountingRuleException(
+                    "دوره مالی این " + entityLabel + " «بسته» است.\n" +
+                    "رکوردهای دوره‌ی بسته‌شده قابل ویرایش یا حذف نیستند. " +
+                    "برای اصلاح، یک سند اصلاحی در دوره‌ی باز ثبت کنید.");
+
+            if (st.Reversed)
+                throw new AccountingRuleException("این " + entityLabel + " قبلاً باطل شده و دیگر قابل تغییر نیست.");
         }
 
         // ═══════════════════════════════════════════════════════════════════
@@ -354,6 +802,7 @@ SELECT s.StipendID, s.PeriodID, s.Province AS [ولایت], s.District AS [ول�
 FROM AccStipend s
 LEFT JOIN AccFund f ON f.FundID = s.FundID
 WHERE (@cid = 0 OR s.CenterID = @cid) AND (@per IS NULL OR s.PeriodID = @per)
+  AND COALESCE(s.IsReversed,0) = 0
 ORDER BY s.SadatType, s.FamilySize",
                 P("@cid", Cid), P("@per", (object)periodId ?? DBNull.Value));
         }
@@ -361,14 +810,27 @@ ORDER BY s.SadatType, s.FamilySize",
         public int AddStipend(int? periodId, string province, string district, string center, string sadatType,
             int familySize, int familyCount, int orphanCount, double amountPerFamily, int? fundId)
         {
-            double total = familyCount * amountPerFamily;
-            _db.ExecuteNonQuery(@"
+            // آموزش — این بررسی‌ها قبلاً هیچ‌جا نبودند (نه در فرم و نه اینجا)،
+            // پس ثبت ردیف شهریه با «۰ خانوار» یا «مبلغ ۰» کاملاً موفق انجام
+            // می‌شد و یک رکورد مالیِ بی‌معنا با TotalPaid=0 می‌ساخت.
+            if (familyCount <= 0)
+                throw new AccountingRuleException("تعداد خانوار باید بزرگ‌تر از صفر باشد.");
+            if (!Money.IsValidPositive(amountPerFamily))
+                throw new AccountingRuleException("مبلغ شهریه هر خانواده باید بزرگ‌تر از صفر باشد.");
+            if (orphanCount < 0)
+                throw new AccountingRuleException("تعداد یتیم نمی‌تواند منفی باشد.");
+
+            double total = Money.Round(familyCount * amountPerFamily);
+
+            if (!Money.IsValidPositive(total))
+                throw new AccountingRuleException("جمع پرداختی محاسبه‌شده معتبر نیست (از سقف مجاز فراتر رفته است).");
+
+            int id = (int)_db.ExecuteInsertReturningId(@"
 INSERT INTO AccStipend (PeriodID, Province, District, Center, SadatType, FamilySize, FamilyCount, OrphanCount, AmountPerFamily, TotalPaid, FundID, CenterID)
 VALUES (@per,@prov,@dist,@cen,@sadat,@size,@fc,@oc,@amt,@tot,@fund,@cid)",
                 P("@per", (object)periodId ?? DBNull.Value), P("@prov", province), P("@dist", district), P("@cen", center),
                 P("@sadat", sadatType), P("@size", familySize), P("@fc", familyCount), P("@oc", orphanCount),
                 P("@amt", amountPerFamily), P("@tot", total), P("@fund", (object)fundId ?? DBNull.Value), P("@cid", CurrentCid));
-            int id = Convert.ToInt32(_db.ExecuteScalar("SELECT last_insert_rowid()"));
             AccAudit.Log("ثبت شهریه", "AccStipend", id, sadatType + " / " + familySize + "نفره / " + total.ToString("N0"));
             return id;
         }
@@ -376,20 +838,51 @@ VALUES (@per,@prov,@dist,@cen,@sadat,@size,@fc,@oc,@amt,@tot,@fund,@cid)",
         public void UpdateStipend(int id, string province, string district, string center, string sadatType,
             int familySize, int familyCount, int orphanCount, double amountPerFamily, int? fundId)
         {
-            double total = familyCount * amountPerFamily;
+            EnsureMutable("AccStipend", "StipendID", id, "ردیف شهریه");
+
+            if (familyCount <= 0)
+                throw new AccountingRuleException("تعداد خانوار باید بزرگ‌تر از صفر باشد.");
+            if (!Money.IsValidPositive(amountPerFamily))
+                throw new AccountingRuleException("مبلغ شهریه هر خانواده باید بزرگ‌تر از صفر باشد.");
+
+            DataRow before = GetStipendById(id);
+            string oldValue = before == null ? "" :
+                before["SadatType"] + " / " + before["FamilyCount"] + " خانوار × " +
+                Convert.ToDouble(before["AmountPerFamily"]).ToString("N0") + " = " +
+                Convert.ToDouble(before["TotalPaid"]).ToString("N0");
+
+            double total = Money.Round(familyCount * amountPerFamily);
             _db.ExecuteNonQuery(@"
 UPDATE AccStipend SET Province=@prov, District=@dist, Center=@cen, SadatType=@sadat, FamilySize=@size,
        FamilyCount=@fc, OrphanCount=@oc, AmountPerFamily=@amt, TotalPaid=@tot, FundID=@fund
-WHERE StipendID=@id",
+WHERE StipendID=@id AND (@cid = 0 OR CenterID = @cid)",
                 P("@prov", province), P("@dist", district), P("@cen", center), P("@sadat", sadatType),
                 P("@size", familySize), P("@fc", familyCount), P("@oc", orphanCount), P("@amt", amountPerFamily),
-                P("@tot", total), P("@fund", (object)fundId ?? DBNull.Value), P("@id", id));
+                P("@tot", total), P("@fund", (object)fundId ?? DBNull.Value), P("@id", id), P("@cid", Cid));
+
+            AccAudit.LogChange("ویرایش شهریه", "AccStipend", id, oldValue,
+                sadatType + " / " + familyCount + " خانوار × " + amountPerFamily.ToString("N0") + " = " + total.ToString("N0"), "");
         }
 
         public void DeleteStipend(int id)
         {
-            _db.ExecuteNonQuery("DELETE FROM AccStipend WHERE StipendID=@id", P("@id", id));
-            AccAudit.Log("حذف شهریه", "AccStipend", id, "");
+            VoidStipend(id, "");
+        }
+
+        public void VoidStipend(int id, string reason)
+        {
+            EnsureMutable("AccStipend", "StipendID", id, "ردیف شهریه");
+
+            DataRow before = GetStipendById(id);
+            string snapshot = before == null ? "" :
+                before["SadatType"] + " / " + Convert.ToDouble(before["TotalPaid"]).ToString("N0") + " افغانی";
+
+            _db.ExecuteNonQuery(@"
+UPDATE AccStipend SET IsReversed = 1, VoidReason = @r, VoidedBy = @by, VoidedAt = datetime('now')
+WHERE StipendID = @id AND (@cid = 0 OR CenterID = @cid) AND COALESCE(IsReversed,0) = 0",
+                P("@id", id), P("@r", reason), P("@by", SecurityContext.Username), P("@cid", Cid));
+
+            AccAudit.LogChange("ابطال شهریه", "AccStipend", id, snapshot, "باطل شد", reason);
         }
 
         // یک ردیف شهریه کامل برای ساخت رسید/فاکتور چاپی
@@ -416,30 +909,63 @@ SELECT s.SalaryID, s.PeriodID, s.EmployeeName AS [نام], s.Position AS [سمت
 FROM AccSalary s
 LEFT JOIN AccFund f ON f.FundID = s.FundID
 WHERE (@cid = 0 OR s.CenterID = @cid) AND (@per IS NULL OR s.PeriodID = @per)
+  AND COALESCE(s.IsReversed,0) = 0
 ORDER BY s.EmployeeName",
                 P("@cid", Cid), P("@per", (object)periodId ?? DBNull.Value));
         }
 
         public int AddSalary(int? periodId, string name, string position, double amount, string note, int? fundId)
         {
-            _db.ExecuteNonQuery("INSERT INTO AccSalary (PeriodID, EmployeeName, Position, Amount, Note, FundID, CenterID) VALUES (@per,@n,@p,@a,@note,@fund,@cid)",
+            if (string.IsNullOrWhiteSpace(name))
+                throw new AccountingRuleException("نام کارمند نمی‌تواند خالی باشد.");
+            if (!Money.IsValidPositive(amount))
+                throw new AccountingRuleException("مبلغ حقوق باید بزرگ‌تر از صفر باشد.");
+
+            int id = (int)_db.ExecuteInsertReturningId("INSERT INTO AccSalary (PeriodID, EmployeeName, Position, Amount, Note, FundID, CenterID) VALUES (@per,@n,@p,@a,@note,@fund,@cid)",
                 P("@per", (object)periodId ?? DBNull.Value), P("@n", name), P("@p", position), P("@a", amount), P("@note", note),
                 P("@fund", (object)fundId ?? DBNull.Value), P("@cid", CurrentCid));
-            int id = Convert.ToInt32(_db.ExecuteScalar("SELECT last_insert_rowid()"));
             AccAudit.Log("ثبت حقوق", "AccSalary", id, name + " / " + amount.ToString("N0"));
             return id;
         }
 
         public void UpdateSalary(int id, string name, string position, double amount, string note, int? fundId)
         {
-            _db.ExecuteNonQuery("UPDATE AccSalary SET EmployeeName=@n, Position=@p, Amount=@a, Note=@note, FundID=@fund WHERE SalaryID=@id",
-                P("@n", name), P("@p", position), P("@a", amount), P("@note", note), P("@fund", (object)fundId ?? DBNull.Value), P("@id", id));
+            EnsureMutable("AccSalary", "SalaryID", id, "ردیف حقوق");
+
+            if (string.IsNullOrWhiteSpace(name))
+                throw new AccountingRuleException("نام کارمند نمی‌تواند خالی باشد.");
+            if (!Money.IsValidPositive(amount))
+                throw new AccountingRuleException("مبلغ حقوق باید بزرگ‌تر از صفر باشد.");
+
+            DataRow before = GetSalaryById(id);
+            string oldValue = before == null ? "" :
+                before["EmployeeName"] + " / " + Convert.ToDouble(before["Amount"]).ToString("N0");
+
+            _db.ExecuteNonQuery("UPDATE AccSalary SET EmployeeName=@n, Position=@p, Amount=@a, Note=@note, FundID=@fund WHERE SalaryID=@id AND (@cid = 0 OR CenterID = @cid)",
+                P("@n", name), P("@p", position), P("@a", amount), P("@note", note), P("@fund", (object)fundId ?? DBNull.Value), P("@id", id), P("@cid", Cid));
+
+            AccAudit.LogChange("ویرایش حقوق", "AccSalary", id, oldValue, name + " / " + amount.ToString("N0"), "");
         }
 
         public void DeleteSalary(int id)
         {
-            _db.ExecuteNonQuery("DELETE FROM AccSalary WHERE SalaryID=@id", P("@id", id));
-            AccAudit.Log("حذف حقوق", "AccSalary", id, "");
+            VoidSalary(id, "");
+        }
+
+        public void VoidSalary(int id, string reason)
+        {
+            EnsureMutable("AccSalary", "SalaryID", id, "ردیف حقوق");
+
+            DataRow before = GetSalaryById(id);
+            string snapshot = before == null ? "" :
+                before["EmployeeName"] + " / " + Convert.ToDouble(before["Amount"]).ToString("N0") + " افغانی";
+
+            _db.ExecuteNonQuery(@"
+UPDATE AccSalary SET IsReversed = 1, VoidReason = @r, VoidedBy = @by, VoidedAt = datetime('now')
+WHERE SalaryID = @id AND (@cid = 0 OR CenterID = @cid) AND COALESCE(IsReversed,0) = 0",
+                P("@id", id), P("@r", reason), P("@by", SecurityContext.Username), P("@cid", Cid));
+
+            AccAudit.LogChange("ابطال حقوق", "AccSalary", id, snapshot, "باطل شد", reason);
         }
 
         // یک ردیف حقوق کامل برای ساخت فیش حقوقی چاپی
@@ -466,36 +992,69 @@ FROM AccExpenseItem e
 LEFT JOIN AccExpenseCategory ec ON ec.CatID = e.CategoryID
 LEFT JOIN AccFund f ON f.FundID = e.FundID
 WHERE (@cid = 0 OR e.CenterID = @cid) AND (@per IS NULL OR e.PeriodID = @per)
+  AND COALESCE(e.IsReversed,0) = 0
 ORDER BY e.ItemID",
                 P("@cid", Cid), P("@per", (object)periodId ?? DBNull.Value));
         }
 
         public int AddExpenseItem(int? periodId, int? categoryId, string categoryName, string description, string qty, double price, string docNo, string itemDate, int? fundId)
         {
-            _db.ExecuteNonQuery(@"
+            if (string.IsNullOrWhiteSpace(description))
+                throw new AccountingRuleException("شرح هزینه نمی‌تواند خالی باشد.");
+            if (!Money.IsValidPositive(price))
+                throw new AccountingRuleException("قیمت/مبلغ هزینه باید بزرگ‌تر از صفر باشد.");
+
+            int id = (int)_db.ExecuteInsertReturningId(@"
 INSERT INTO AccExpenseItem (PeriodID, CategoryID, CategoryName, Description, Qty, Price, DocNo, ItemDate, FundID, CenterID)
 VALUES (@per,@cat,@catn,@desc,@qty,@price,@doc,@date,@fund,@cid)",
                 P("@per", (object)periodId ?? DBNull.Value), P("@cat", (object)categoryId ?? DBNull.Value), P("@catn", categoryName),
                 P("@desc", description), P("@qty", qty), P("@price", price), P("@doc", docNo), P("@date", itemDate),
                 P("@fund", (object)fundId ?? DBNull.Value), P("@cid", CurrentCid));
-            int id = Convert.ToInt32(_db.ExecuteScalar("SELECT last_insert_rowid()"));
             AccAudit.Log("ثبت هزینه جاری", "AccExpenseItem", id, description + " / " + price.ToString("N0"));
             return id;
         }
 
         public void UpdateExpenseItem(int id, int? categoryId, string categoryName, string description, string qty, double price, string docNo, string itemDate, int? fundId)
         {
+            EnsureMutable("AccExpenseItem", "ItemID", id, "قلم هزینه");
+
+            if (string.IsNullOrWhiteSpace(description))
+                throw new AccountingRuleException("شرح هزینه نمی‌تواند خالی باشد.");
+            if (!Money.IsValidPositive(price))
+                throw new AccountingRuleException("قیمت/مبلغ هزینه باید بزرگ‌تر از صفر باشد.");
+
+            DataRow before = GetExpenseItemById(id);
+            string oldValue = before == null ? "" :
+                before["Description"] + " / " + Convert.ToDouble(before["Price"]).ToString("N0");
+
             _db.ExecuteNonQuery(@"
 UPDATE AccExpenseItem SET CategoryID=@cat, CategoryName=@catn, Description=@desc, Qty=@qty, Price=@price, DocNo=@doc, ItemDate=@date, FundID=@fund
-WHERE ItemID=@id",
+WHERE ItemID=@id AND (@cid = 0 OR CenterID = @cid)",
                 P("@cat", (object)categoryId ?? DBNull.Value), P("@catn", categoryName), P("@desc", description),
-                P("@qty", qty), P("@price", price), P("@doc", docNo), P("@date", itemDate), P("@fund", (object)fundId ?? DBNull.Value), P("@id", id));
+                P("@qty", qty), P("@price", price), P("@doc", docNo), P("@date", itemDate), P("@fund", (object)fundId ?? DBNull.Value), P("@id", id), P("@cid", Cid));
+
+            AccAudit.LogChange("ویرایش هزینه جاری", "AccExpenseItem", id, oldValue, description + " / " + price.ToString("N0"), "");
         }
 
         public void DeleteExpenseItem(int id)
         {
-            _db.ExecuteNonQuery("DELETE FROM AccExpenseItem WHERE ItemID=@id", P("@id", id));
-            AccAudit.Log("حذف هزینه جاری", "AccExpenseItem", id, "");
+            VoidExpenseItem(id, "");
+        }
+
+        public void VoidExpenseItem(int id, string reason)
+        {
+            EnsureMutable("AccExpenseItem", "ItemID", id, "قلم هزینه");
+
+            DataRow before = GetExpenseItemById(id);
+            string snapshot = before == null ? "" :
+                before["Description"] + " / " + Convert.ToDouble(before["Price"]).ToString("N0") + " افغانی";
+
+            _db.ExecuteNonQuery(@"
+UPDATE AccExpenseItem SET IsReversed = 1, VoidReason = @r, VoidedBy = @by, VoidedAt = datetime('now')
+WHERE ItemID = @id AND (@cid = 0 OR CenterID = @cid) AND COALESCE(IsReversed,0) = 0",
+                P("@id", id), P("@r", reason), P("@by", SecurityContext.Username), P("@cid", Cid));
+
+            AccAudit.LogChange("ابطال هزینه جاری", "AccExpenseItem", id, snapshot, "باطل شد", reason);
         }
 
         // یک ردیف هزینه جاری کامل برای ساخت سند هزینه چاپی
@@ -516,7 +1075,7 @@ WHERE e.ItemID = @id AND (@cid = 0 OR e.CenterID = @cid)", P("@id", id), P("@cid
         public double SumStipend(int? periodId, string sadatType)
         {
             return ToDouble(_db.ExecuteScalar(
-                "SELECT COALESCE(SUM(TotalPaid),0) FROM AccStipend WHERE (@per IS NULL OR PeriodID=@per) AND (@st IS NULL OR SadatType=@st) AND (@cid = 0 OR CenterID = @cid)",
+                "SELECT COALESCE(SUM(TotalPaid),0) FROM AccStipend WHERE (@per IS NULL OR PeriodID=@per) AND (@st IS NULL OR SadatType=@st) AND (@cid = 0 OR CenterID = @cid) AND COALESCE(IsReversed,0)=0",
                 P("@per", (object)periodId ?? DBNull.Value), P("@st", (object)sadatType ?? DBNull.Value), P("@cid", Cid)));
         }
 
@@ -528,28 +1087,28 @@ WHERE e.ItemID = @id AND (@cid = 0 OR e.CenterID = @cid)", P("@id", id), P("@cid
         public double SumSalary(int? periodId)
         {
             return ToDouble(_db.ExecuteScalar(
-                "SELECT COALESCE(SUM(Amount),0) FROM AccSalary WHERE (@per IS NULL OR PeriodID=@per) AND (@cid = 0 OR CenterID = @cid)",
+                "SELECT COALESCE(SUM(Amount),0) FROM AccSalary WHERE (@per IS NULL OR PeriodID=@per) AND (@cid = 0 OR CenterID = @cid) AND COALESCE(IsReversed,0)=0",
                 P("@per", (object)periodId ?? DBNull.Value), P("@cid", Cid)));
         }
 
         public double SumExpenseItems(int? periodId)
         {
             return ToDouble(_db.ExecuteScalar(
-                "SELECT COALESCE(SUM(Price),0) FROM AccExpenseItem WHERE (@per IS NULL OR PeriodID=@per) AND (@cid = 0 OR CenterID = @cid)",
+                "SELECT COALESCE(SUM(Price),0) FROM AccExpenseItem WHERE (@per IS NULL OR PeriodID=@per) AND (@cid = 0 OR CenterID = @cid) AND COALESCE(IsReversed,0)=0",
                 P("@per", (object)periodId ?? DBNull.Value), P("@cid", Cid)));
         }
 
         public double SumExpenseByCategory(int? periodId, string categoryName)
         {
             return ToDouble(_db.ExecuteScalar(
-                "SELECT COALESCE(SUM(Price),0) FROM AccExpenseItem WHERE (@per IS NULL OR PeriodID=@per) AND CategoryName=@cn AND (@cid = 0 OR CenterID = @cid)",
+                "SELECT COALESCE(SUM(Price),0) FROM AccExpenseItem WHERE (@per IS NULL OR PeriodID=@per) AND CategoryName=@cn AND (@cid = 0 OR CenterID = @cid) AND COALESCE(IsReversed,0)=0",
                 P("@per", (object)periodId ?? DBNull.Value), P("@cn", categoryName), P("@cid", Cid)));
         }
 
         public double SumTransactions(int? periodId, string direction, string categoryType)
         {
             return ToDouble(_db.ExecuteScalar(
-                "SELECT COALESCE(SUM(Amount),0) FROM AccTransaction WHERE (@per IS NULL OR PeriodID=@per) AND Direction=@dir AND (@ct IS NULL OR CategoryType=@ct) AND (@cid = 0 OR CenterID = @cid)",
+                "SELECT COALESCE(SUM(Amount),0) FROM AccTransaction WHERE (@per IS NULL OR PeriodID=@per) AND Direction=@dir AND (@ct IS NULL OR CategoryType=@ct) AND (@cid = 0 OR CenterID = @cid) AND COALESCE(IsReversed,0)=0",
                 P("@per", (object)periodId ?? DBNull.Value), P("@dir", direction), P("@ct", (object)categoryType ?? DBNull.Value), P("@cid", Cid)));
         }
 
@@ -569,6 +1128,7 @@ WHERE (@cid = 0 OR t.CenterID = @cid)
   AND (@per IS NULL OR t.PeriodID = @per)
   AND (@party IS NULL OR t.PartyID = @party)
   AND (@fund IS NULL OR t.FundID = @fund)
+  AND COALESCE(t.IsReversed,0) = 0
 ORDER BY t.TxnDate, t.TxnID",
                 P("@cid", Cid), P("@per", (object)periodId ?? DBNull.Value),
                 P("@party", (object)partyId ?? DBNull.Value), P("@fund", (object)fundId ?? DBNull.Value));
@@ -620,25 +1180,45 @@ ON CONFLICT(SettingKey) DO UPDATE SET SettingValue=@v, UpdatedAt=datetime('now')
         // آموزش — این سه متد برای «دفتر صندوق» (گزارش ۶) لازم شدند تا مانده‌ی
         // نهایی گزارش با GetFundBalance (که حالا این سه را هم کم می‌کند)
         // هم‌خوان بماند؛ بدون این‌ها گزارش عددی متفاوت و اشتباه نشان می‌داد.
-        public DataTable GetStipendsByFund(int fundId)
+        // آموزش — رفع باگ گزارش «دفتر صندوق»: این سه متد هیچ فیلتر دوره‌ای
+        // نداشتند، در حالی که تراکنش‌های همان گزارش *با* فیلتر دوره نمایش داده
+        // می‌شدند. نتیجه: وقتی کاربر دوره‌ی خاصی را انتخاب می‌کرد، دفتر صندوق
+        // تراکنش‌های آن دوره را با شهریه/حقوق/هزینه‌ی *همه‌ی دوره‌ها* قاطی
+        // نشان می‌داد. حالا پارامتر دوره اضافه شده است.
+        //
+        // امضای بدون‌پارامترِ قبلی به‌صورت overload حفظ شده تا اگر جای دیگری
+        // از آن استفاده شود، کد بشکند نه.
+        public DataTable GetStipendsByFund(int fundId) { return GetStipendsByFund(fundId, null); }
+
+        public DataTable GetStipendsByFund(int fundId, int? periodId)
         {
             return _db.Query(@"
 SELECT SadatType, FamilySize, TotalPaid FROM AccStipend
-WHERE FundID=@fund AND (@cid = 0 OR CenterID = @cid)", P("@fund", fundId), P("@cid", Cid));
+WHERE FundID=@fund AND (@cid = 0 OR CenterID = @cid)
+  AND (@per IS NULL OR PeriodID = @per) AND COALESCE(IsReversed,0)=0",
+                P("@fund", fundId), P("@cid", Cid), P("@per", (object)periodId ?? DBNull.Value));
         }
 
-        public DataTable GetSalariesByFund(int fundId)
+        public DataTable GetSalariesByFund(int fundId) { return GetSalariesByFund(fundId, null); }
+
+        public DataTable GetSalariesByFund(int fundId, int? periodId)
         {
             return _db.Query(@"
 SELECT EmployeeName, Amount FROM AccSalary
-WHERE FundID=@fund AND (@cid = 0 OR CenterID = @cid)", P("@fund", fundId), P("@cid", Cid));
+WHERE FundID=@fund AND (@cid = 0 OR CenterID = @cid)
+  AND (@per IS NULL OR PeriodID = @per) AND COALESCE(IsReversed,0)=0",
+                P("@fund", fundId), P("@cid", Cid), P("@per", (object)periodId ?? DBNull.Value));
         }
 
-        public DataTable GetExpenseItemsByFund(int fundId)
+        public DataTable GetExpenseItemsByFund(int fundId) { return GetExpenseItemsByFund(fundId, null); }
+
+        public DataTable GetExpenseItemsByFund(int fundId, int? periodId)
         {
             return _db.Query(@"
 SELECT Description, ItemDate, Price FROM AccExpenseItem
-WHERE FundID=@fund AND (@cid = 0 OR CenterID = @cid)", P("@fund", fundId), P("@cid", Cid));
+WHERE FundID=@fund AND (@cid = 0 OR CenterID = @cid)
+  AND (@per IS NULL OR PeriodID = @per) AND COALESCE(IsReversed,0)=0",
+                P("@fund", fundId), P("@cid", Cid), P("@per", (object)periodId ?? DBNull.Value));
         }
 
         // تمام تراکنش‌های یک صندوق به ترتیب ثبت (برای محاسبه مانده تجمعی صحیح)
@@ -649,7 +1229,7 @@ SELECT t.TxnID, t.DocNo, t.TxnDate, t.Direction, t.Amount, t.PeriodID,
        p.Name AS PartyName, t.Description
 FROM AccTransaction t
 LEFT JOIN AccParty p ON p.PartyID = t.PartyID
-WHERE t.FundID = @fund AND (@cid = 0 OR t.CenterID = @cid)
+WHERE t.FundID = @fund AND (@cid = 0 OR t.CenterID = @cid) AND COALESCE(t.IsReversed,0) = 0
 ORDER BY t.TxnID", P("@fund", fundId), P("@cid", Cid));
         }
 
@@ -661,7 +1241,7 @@ SELECT t.TxnID, t.DocNo, t.TxnDate, t.Direction, t.Amount, t.Description,
        f.Name AS FundName
 FROM AccTransaction t
 LEFT JOIN AccFund f ON f.FundID = t.FundID
-WHERE t.PartyID = @party AND (@cid = 0 OR t.CenterID = @cid)
+WHERE t.PartyID = @party AND (@cid = 0 OR t.CenterID = @cid) AND COALESCE(t.IsReversed,0) = 0
 ORDER BY t.TxnID", P("@party", partyId), P("@cid", Cid));
         }
 
@@ -672,6 +1252,7 @@ SELECT COALESCE(ec.Name,'سایر') AS [عنوان], COALESCE(SUM(e.Price),0) AS
 FROM AccExpenseItem e
 LEFT JOIN AccExpenseCategory ec ON ec.CatID = e.CategoryID
 WHERE (@per IS NULL OR e.PeriodID = @per) AND (@cid = 0 OR e.CenterID = @cid)
+  AND COALESCE(e.IsReversed,0) = 0
 GROUP BY COALESCE(ec.Name,'سایر')
 ORDER BY [مبلغ] DESC",
                 P("@per", (object)periodId ?? DBNull.Value), P("@cid", Cid));

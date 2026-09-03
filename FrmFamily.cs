@@ -34,6 +34,8 @@ namespace CaseManagement
         private const int SkillLength = 100;
         private const int LeaveReasonLength = 200;
         private const int MemberPhotoPathLength = 500;
+        private const int MemberRoleLength = 50;
+        private const int RelationLength = 50;
 
         private const long MaxMemberPhotoBytes = 5L * 1024 * 1024;
 
@@ -48,20 +50,54 @@ namespace CaseManagement
         public int CurrentCaseId { get; set; } = 0;
         public string CurrentCaseCode { get; set; } = "";
 
+        // آموزش — فاز ۱ (تب اعضاء داخل FrmCase): وقتی این فرم به‌جای پنجره‌ی
+        // مستقل داخل یک TabPage میزبانی می‌شود، FrmCase این پرچم را قبل از
+        // Show() روی true می‌گذارد. هیچ منطق دیگری به این پرچم وابسته نیست
+        // جز FrmFamily_Load (زیر) — رفتار حالت مستقل/مودال کاملاً دست‌نخورده می‌ماند.
+        public bool IsEmbedded { get; set; } = false;
+
+        // آموزش — پیمایشِ پرونده از داخلِ همین تب (درخواستِ کاربر: «دکمهٔ بعدی
+        // و قبلی که نظر به شمارهٔ فرم پرونده بالا و پایین برود»). این فرم
+        // نباید خودش پرونده بارگذاری کند (منطقِ پرونده فقط در FrmCase است)، پس
+        // FrmCase موقعِ جاسازی این delegate را می‌دهد: ورودی ۱+/۱- و خروجی
+        // «آیا پروندهٔ دیگری پیدا و بارگذاری شد». در حالتِ مستقل/مودال null
+        // می‌ماند و نوارِ دکمه‌ها اصلاً نمایش داده نمی‌شود.
+        public Func<int, bool> CaseNavigator { get; set; }
+
         private int currentFamilyId = 0;
         private string storedMemberPhotoPath = "";
         private string pendingSourcePhotoPath = "";
+
+        // ─── ویژگی ۵ (فعال‌سازی) — قفل رکورد ────────────────────────────────
+        // آموزش: برخلافِ FrmCase که یک حالتِ صریحِ «ویرایش» دارد، اینجا فیلدها
+        // همیشه قابلِ تایپ‌اند و بارگذاریِ یک عضو (LoadMemberToForm) همان لحظه‌ای
+        // است که ریسکِ هم‌پوشانیِ ویرایش شروع می‌شود؛ پس قفل همان‌جا گرفته
+        // می‌شود، نه در دکمه‌ی «ویرایش».
+        private int  _familyLockId = 0;
+        private bool _familyLockedByOther = false;
+        private System.Windows.Forms.Timer _familyLockHeartbeat;
 
         public FrmFamily()
         {
             InitializeComponent();
             ApplyCustomTheme();
+
+            Helpers.FormShortcuts.For(this)
+                .Save(btnSave)
+                .New(btnNew)
+                .Edit(btnEdit)
+                .Delete(btnDelete)
+                .Print(btnPrint);
         }
 
         // ─── اعمال ظاهر یکسان روی فرمی که با طراح (Designer) ساخته شده ──────
         private void ApplyCustomTheme()
         {
             UiTheme.ApplySweep(this);
+
+            // بخش ۳ — ورودی هوشمند تذکره: فقط رقم، درج خودکار «-» در حالت
+            // الکترونیکی، و تغییر خودکار قالب با تغییر نوع تذکره.
+            IdCardHelper.Attach(cmbMemberIdCardType, txtMemberTazkiraNo);
 
             // آموزش — چهار دکمه‌ی اصلی متن و آیکون و رنگشان را از خودِ Designer
             // می‌گیرند (PaintBtn). فراخوانی SetButtonIcon برایشان باعث می‌شد
@@ -76,6 +112,20 @@ namespace CaseManagement
             // Sweep دوباره اعمال می‌شود.
             lblHeadInfo.ForeColor = Color.White;
 
+            // آموزش — ApplySweep هر Panel را سفید می‌کند؛ نوارِ سرِ فرم و
+            // میزبانِ دکمه‌های پیمایش باید سرمه‌ای بمانند (وگرنه دکمه‌های آبی
+            // روی زمینهٔ سفید وسطِ نوارِ تیره یک لکهٔ سفید می‌سازند).
+            headBarPanel.BackColor = UiTheme.PrimaryDark;
+            panCaseNav.BackColor   = UiTheme.PrimaryDark;
+
+            foreach (Button navBtn in new[] { btnPrevCase, btnNextCase })
+            {
+                navBtn.BackColor = UiTheme.Primary;
+                navBtn.ForeColor = Color.White;
+                navBtn.FlatAppearance.MouseOverBackColor = ControlPaint.Light(UiTheme.Primary, 0.18f);
+                navBtn.FlatAppearance.MouseDownBackColor = ControlPaint.Dark(UiTheme.Primary, 0.08f);
+            }
+
             btnDelete.BackColor = UiTheme.Danger;
             btnDelete.FlatAppearance.MouseOverBackColor = ControlPaint.Light(UiTheme.Danger, 0.18f);
             btnDelete.FlatAppearance.MouseDownBackColor = ControlPaint.Dark(UiTheme.Danger, 0.08f);
@@ -87,8 +137,33 @@ namespace CaseManagement
 
         private void FrmFamily_Load(object sender, EventArgs e)
         {
-            // تمام‌صفحه‌ی خودکار + قفلِ حداقل اندازه (توضیح در UiTheme.MakeMainWindow)
-            UiTheme.MakeMainWindow(this, ClientSize.Width, ClientSize.Height);
+            // آموزش — وقتی embedded است (TopLevel=false داخل تب FrmCase)، این
+            // فرم دیگر یک پنجره‌ی مستقل نیست؛ قفل‌کردن Min/MaxSize و
+            // FormBorderStyle توسط MakeFixedSize با Dock=Fill داخل تب تداخل
+            // می‌کند (اندازه‌ی تب را نمی‌تواند دنبال کند). در حالت مستقل/مودال
+            // رفتار قبلی کاملاً دست‌نخورده می‌ماند.
+            if (!IsEmbedded)
+            {
+                // اندازه‌ی ثابت (نه Maximize) — به درخواست کاربر (توضیح در UiTheme.MakeFixedSize)
+                UiTheme.MakeFixedSize(this, ClientSize.Width, ClientSize.Height);
+            }
+            else
+            {
+                // آموزش — رفعِ گزارشِ کاربر «دکمه‌ها برای اسناد و اعضاء جداست»:
+                // داخلِ فضای کاریِ پرونده، این دکمه‌ها کنارِ دکمه‌های *پرونده*
+                // دیده می‌شوند و چون هر دو «جدید/ذخیره/ویرایش/حذف» بودند،
+                // تشخیصِ اینکه کدام روی پرونده و کدام روی عضو کار می‌کند ممکن
+                // نبود. در حالتِ embedded صریحاً «عضو» به متن اضافه می‌شود؛
+                // حالتِ مستقل/مودال دقیقاً مثل قبل می‌ماند.
+                btnNew.Text    = "＋   عضو جدید";
+                btnSave.Text   = "✔   ذخیره عضو";
+                btnEdit.Text   = "ویرایش عضو";
+                btnDelete.Text = "✕   حذف عضو";
+
+                // دکمه‌های «پروندهٔ قبلی/بعدی» فقط وقتی معنا دارند که FrmCase
+                // میزبان باشد و delegate پیمایش را داده باشد.
+                panCaseNav.Visible = CaseNavigator != null;
+            }
 
             Text = "اعضای خانواده" +
                    (string.IsNullOrEmpty(CurrentCaseCode) ? "" : "  —  پرونده: " + CurrentCaseCode) +
@@ -109,9 +184,58 @@ namespace CaseManagement
             ClearForm();
         }
 
+        // آموزش — فاز ۱: وقتی FrmFamily embedded داخل تب FrmCase است، به‌جای
+        // ساختن نمونه‌ی تازه هر بار، FrmCase همین نمونه را نگه می‌دارد و وقتی
+        // کاربر پرونده‌ی دیگری را در گرید انتخاب می‌کند، این متد را صدا
+        // می‌زند. دقیقاً همان مراحلِ انتهای FrmFamily_Load را تکرار می‌کند
+        // (بدون LoadLookupCombos/ConfigureGrid چون آن‌ها یک‌بار در Load کافی‌اند
+        // و LookupHelper خودش cache شده است).
+        // آموزش — دو دکمهٔ پیمایش. خودشان هیچ کوئری‌ای نمی‌زنند؛ فقط delegate
+        // را صدا می‌زنند. اگر پرونده‌ای پیدا شود، FrmCase بارگذاری می‌کند و
+        // خودش RefreshForCase همین فرم را صدا می‌زند (SyncMembersTab)، پس
+        // این‌جا کاری برای به‌روزرسانی لازم نیست.
+        private void btnPrevCase_Click(object sender, EventArgs e)
+        {
+            if (CaseNavigator != null)
+                CaseNavigator(-1);
+        }
+
+        private void btnNextCase_Click(object sender, EventArgs e)
+        {
+            if (CaseNavigator != null)
+                CaseNavigator(1);
+        }
+
+        public void RefreshForCase(int caseId, string caseCode)
+        {
+            CurrentCaseId = caseId;
+            CurrentCaseCode = caseCode;
+
+            Text = "اعضای خانواده" +
+                   (string.IsNullOrEmpty(CurrentCaseCode) ? "" : "  —  پرونده: " + CurrentCaseCode) +
+                   "  [" + SecurityContext.CenterDisplay + "]";
+
+            LoadHeadInfo();
+            LoadFamilyMembers();
+            ClearForm();
+        }
+
         // با انتخاب «سالم» به‌عنوان وضعیت جسمی، فیلدهای نوع/درجه معلولیت و
         // توضیحات تفصیلی معلولیت غیرفعال و پاک می‌شوند (چون فرد معلولیتی ندارد).
+        //
+        // آموزش — دقیقاً همان اصلاحی که برای فیلدهای تحصیلی انجام شد (توضیح
+        // کامل بالای UpdateEducationFieldsState): خالی کردنِ فیلدها فقط وقتی
+        // درست است که *کاربر* وضعیت جسمی را عوض کند. هنگام *بارگذاری* یک عضو
+        // موجود، این کار داده‌ی معتبرِ رکوردهای قدیمی را از بین می‌برد — عضوی
+        // که وضعیت جسمی‌اش «سالم» ثبت شده ولی اطلاعات معلولیت هم دارد، با
+        // بازکردن و زدنِ «ویرایش» آن اطلاعات را از دست می‌داد. پس مسیر
+        // بارگذاری فقط وضعیت فعال/غیرفعال را اعمال می‌کند.
         private void UpdatePhysicalFieldsState()
+        {
+            UpdatePhysicalFieldsState(true);
+        }
+
+        private void UpdatePhysicalFieldsState(bool clearMismatchedFields)
         {
             bool isHealthy = txtPhysicalStatus.Text == "سالم";
 
@@ -119,7 +243,7 @@ namespace CaseManagement
             txtMemberDisabilityDegree.Enabled = !isHealthy;
             txtDisabilityDetails.Enabled = !isHealthy;
 
-            if (isHealthy)
+            if (isHealthy && clearMismatchedFields)
             {
                 if (txtHasDisability.Items.Count > 0) txtHasDisability.SelectedIndex = 0; // گزینه خالی
                 txtMemberDisabilityDegree.SelectedIndex = -1;
@@ -137,6 +261,8 @@ namespace CaseManagement
         private void LoadLookupCombos()
         {
             LookupHelper.FillCombo(txtMemberSadat, "MemberSadat");
+            LookupHelper.FillCombo(cmbMemberRole, "MemberRole");
+            LookupHelper.FillCombo(cmbRelation, "FamilyRelation");
             LookupHelper.FillCombo(cmbReligion, "Madhab");
             LookupHelper.FillCombo(txtGender, "MemberGender");
             LookupHelper.FillCombo(cmbMaritalStatus, "MaritalStatus");
@@ -157,6 +283,7 @@ namespace CaseManagement
 
             LookupHelper.FillCombo(txtGradeLevel, "GradeLevel");
             LookupHelper.FillCombo(txtStudyYear, "StudyYear");
+            LookupHelper.FillCombo(txtSuspensionReason, "SuspensionReason");
         }
 
         // نمایش کد/نام/نام پدر سرپرست در بالای فرم
@@ -209,7 +336,20 @@ namespace CaseManagement
         //   ترک تحصیل: فقط دلیل ترک تحصیل + توضیحات فعال (همه بقیه غیرفعال)
         //   بی‌سواد: فقط توضیحات فعال (هیچ فیلد تحصیلی دیگری کاربرد ندارد)
         //   توضیحات کلی (txtDetails): همیشه فعال، مستقل از نوع تحصیل
+        // آموزش — رفع «پاک شدن ناخواسته‌ی اطلاعات تحصیلی رکوردهای قبلی»:
+        // این متد دو کار جدا انجام می‌داد؛ (۱) فعال/غیرفعال کردن فیلدها و
+        // (۲) خالی کردنِ فیلدهایی که به نوع تحصیل انتخاب‌شده مربوط نیستند.
+        // کار (۲) وقتی *کاربر* نوع تحصیل را عوض می‌کند درست است، ولی هنگام
+        // *بارگذاری* یک عضو موجود اشتباه بود: مقادیر خوانده‌شده از دیتابیس
+        // روی فرم پاک می‌شدند و با زدنِ «ویرایش» همان خالی‌ها ذخیره می‌شد،
+        // یعنی داده‌ی معتبرِ رکوردهای قدیمی از بین می‌رفت. حالا مسیر بارگذاری
+        // فقط وضعیت فعال/غیرفعال را اعمال می‌کند و هیچ مقداری را پاک نمی‌کند.
         private void UpdateEducationFieldsState()
+        {
+            UpdateEducationFieldsState(true);
+        }
+
+        private void UpdateEducationFieldsState(bool clearMismatchedFields)
         {
             string edu = txtMemberEducation.Text;
 
@@ -241,36 +381,56 @@ namespace CaseManagement
             // توضیحات کلی همیشه فعال است (طبق درخواست کاربر)
             txtDetails.Enabled = true;
 
-            if (!isSchool) { txtSchoolName.Text = ""; txtGradeLevel.SelectedIndex = -1; cmbSchoolType.SelectedIndex = -1; txtSchoolPrevGrade.Text = ""; }
-            if (!isUniversity) { txtUniversityName.Text = ""; txtStudyYear.SelectedIndex = -1; txtMajor.Text = ""; cmbUniversityType.SelectedIndex = -1; txtUniversityPrevGrade.Text = ""; }
-            if (!isSeminary) { txtStudyField.Text = ""; cmbSeminaryLevel.SelectedIndex = -1; }
-            if (!isDropout) txtLeaveReason.Text = "";
-            if (!isSchool && !isUniversity) cmbEducationCoverage.SelectedIndex = -1;
+            if (clearMismatchedFields)
+            {
+                if (!isSchool) { txtSchoolName.Text = ""; txtGradeLevel.SelectedIndex = -1; cmbSchoolType.SelectedIndex = -1; txtSchoolPrevGrade.Text = ""; }
+                if (!isUniversity) { txtUniversityName.Text = ""; txtStudyYear.SelectedIndex = -1; txtMajor.Text = ""; cmbUniversityType.SelectedIndex = -1; txtUniversityPrevGrade.Text = ""; }
+                if (!isSeminary) { txtStudyField.Text = ""; cmbSeminaryLevel.SelectedIndex = -1; }
+                if (!isDropout) txtLeaveReason.Text = "";
+                if (!isSchool && !isUniversity) cmbEducationCoverage.SelectedIndex = -1;
+            }
 
             // آموزش — فیلد «وضعیت رسمی تحصیلی» به درخواست کاربر حذف شد؛
             // txtOfficialStatus دیگر در UI نیست و مقدارش همیشه خالی می‌ماند.
             txtOfficialStatus.Text = "";
         }
 
-        // "دلیل قطع موقت" فقط وقتی وضعیت "قطع موقت" است نمایش و اجباری می‌شود
+        // فیلدهای تعلیق («دلیل تعلیق» الزامی + «یادداشت» اختیاری) فقط وقتی
+        // وضعیت خدمات «قطع» یا «قطع موقت» است نمایش داده می‌شوند.
         private void cmbServiceStatus_SelectedIndexChanged(object sender, EventArgs e)
         {
             UpdateStopReasonVisibility();
         }
 
+        private bool IsSuspendedStatus(string status)
+        {
+            return status == "قطع موقت" || status == "قطع";
+        }
+
         private void UpdateStopReasonVisibility()
         {
-            bool isTempStopped = cmbServiceStatus.Text == "قطع موقت";
-            lblStopReason.Visible = isTempStopped;
-            txtStopReason.Visible = isTempStopped;
+            bool isSuspended = IsSuspendedStatus(cmbServiceStatus.Text);
 
-            if (!isTempStopped)
+            lblStopReason.Visible = isSuspended;
+            txtStopReason.Visible = isSuspended;
+            if (fieldStopReason != null) fieldStopReason.Visible = isSuspended;
+
+            lblSuspensionReason.Visible = isSuspended;
+            txtSuspensionReason.Visible = isSuspended;
+            if (fieldSuspensionReason != null) fieldSuspensionReason.Visible = isSuspended;
+
+            if (!isSuspended)
+            {
                 txtStopReason.Text = "";
+                txtSuspensionReason.SelectedIndex = -1;
+            }
         }
 
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
+            ReleaseFamilyLock();
             ClearPicture(picMemberPhoto);
+            DisposeAllThumbnails();
             base.OnFormClosed(e);
         }
 
@@ -285,16 +445,69 @@ namespace CaseManagement
             UiTheme.ApplyPersianDateColumns(dgvFamily, "BirthDate");
         }
 
+        // قفلِ عضوِ جاری را آزاد و تایمرِ تمدید را متوقف می‌کند — قبل از
+        // بارگذاریِ عضوی دیگر، پاک‌کردنِ فرم، یا بستنِ فرم صدا زده می‌شود.
+        private void ReleaseFamilyLock()
+        {
+            if (_familyLockId > 0)
+            {
+                CaseManagement.Enterprise.LockService.Release(_familyLockId);
+                _familyLockId = 0;
+            }
+
+            _familyLockedByOther = false;
+
+            if (_familyLockHeartbeat != null)
+                _familyLockHeartbeat.Stop();
+        }
+
+        // تلاش برای قفل کردنِ عضوِ تازه‌بارگذاری‌شده. اگر توسط کاربر دیگری
+        // قفل باشد، داده همچنان برای مشاهده نمایش داده می‌شود (فقط هشدار داده
+        // می‌شود)؛ خودِ ذخیره (btnEdit_Click) با پرچمِ _familyLockedByOther
+        // مسدود می‌شود.
+        private void TryLockFamilyMember(int famId)
+        {
+            if (famId <= 0) return;
+
+            CaseManagement.Enterprise.LockResult lockResult =
+                CaseManagement.Enterprise.LockService.TryAcquire("TblFamily", famId);
+
+            if (!lockResult.Acquired)
+            {
+                _familyLockedByOther = true;
+                Msg.Show(lockResult.DeniedMessage);
+                return;
+            }
+
+            _familyLockId = lockResult.LockID;
+
+            if (_familyLockHeartbeat == null)
+            {
+                _familyLockHeartbeat = new System.Windows.Forms.Timer();
+                _familyLockHeartbeat.Interval = 5 * 60 * 1000; // ۵ دقیقه
+                _familyLockHeartbeat.Tick += delegate
+                {
+                    CaseManagement.Enterprise.LockService.Heartbeat(_familyLockId);
+                };
+            }
+
+            _familyLockHeartbeat.Start();
+        }
+
         private void ClearForm()
         {
+            ReleaseFamilyLock();
             currentFamilyId = 0;
             storedMemberPhotoPath = "";
             pendingSourcePhotoPath = "";
 
             txtMemberName.Text = "";
             txtMemberFatherName.Text = "";
+            cmbMemberIdCardType.SelectedIndex = 0;
             txtMemberTazkiraNo.Text = "";
             txtMemberSadat.SelectedIndex = -1;
+            cmbMemberRole.SelectedIndex = -1;
+            cmbRelation.SelectedIndex = -1;
             txtGender.SelectedIndex = -1;
             txtPhysicalStatus.SelectedIndex = -1;
             txtHasDisability.SelectedIndex = 0;
@@ -325,6 +538,7 @@ namespace CaseManagement
             cmbMaritalStatus.SelectedIndex = -1;
             cmbServiceStatus.SelectedIndex = 0;
             txtStopReason.Text = "";
+            txtSuspensionReason.SelectedIndex = -1;
             UpdateStopReasonVisibility();
             UpdateEducationFieldsState();
 
@@ -407,11 +621,27 @@ namespace CaseManagement
                 return false;
             }
 
-            if (cmbServiceStatus.Text == "قطع موقت" && string.IsNullOrWhiteSpace(txtStopReason.Text))
+            if (IsSuspendedStatus(cmbServiceStatus.Text) && string.IsNullOrWhiteSpace(txtSuspensionReason.Text))
             {
-                Msg.Show("دلیل قطع موقت را وارد کنید");
-                txtStopReason.Focus();
+                Msg.Show("دلیل تعلیق را از لیست انتخاب کنید");
+                txtSuspensionReason.Focus();
                 return false;
+            }
+
+            // ─── بخش ۳: اعتبارسنجی تذکره، وابسته به نوع انتخاب‌شده ───────────
+            // قاعده کاملاً در IdCardHelper است تا با فرم پرونده یکی بماند.
+            if (txtMemberTazkiraNo.Text.Trim().Length > 0)
+            {
+                string idCardError;
+                if (!IdCardHelper.IsValid(cmbMemberIdCardType.Text, txtMemberTazkiraNo.Text, out idCardError))
+                {
+                    Msg.Show(idCardError);
+                    if (string.IsNullOrWhiteSpace(cmbMemberIdCardType.Text))
+                        cmbMemberIdCardType.Focus();
+                    else
+                        txtMemberTazkiraNo.Focus();
+                    return false;
+                }
             }
 
             return ValidateTextLengths();
@@ -546,7 +776,7 @@ namespace CaseManagement
             {
                 using (SQLiteConnection con = db.GetConnection())
                 using (SQLiteCommand cmd = new SQLiteCommand(@"
-                    SELECT FamID, MemberName, MemberFatherName, Gender, BirthDate, MemberEducation, Skill, MemberPhotoPath,
+                    SELECT FamID, MemberName, MemberFatherName, Gender, MemberRole, BirthDate, MemberEducation, Skill, MemberPhotoPath,
                            CASE WHEN BirthDate IS NULL THEN NULL
                                 ELSE CAST((julianday('now') - julianday(BirthDate)) / 365.25 AS INTEGER) END AS Age
                     FROM TblFamily
@@ -558,6 +788,11 @@ namespace CaseManagement
 
                     DataTable dt = new DataTable();
                     da.Fill(dt);
+
+                    // آموزش — ترتیب مهم است: با عوض شدن DataSource، ردیف‌های
+                    // فعلی (و تصاویر کوچکِ داخلشان) از بین می‌روند، پس آزادسازی
+                    // باید *قبل* از انتساب انجام شود وگرنه آن Bitmapها نشت می‌کنند.
+                    DisposeAllThumbnails();
                     dgvFamily.DataSource = dt;
                 }
 
@@ -591,6 +826,7 @@ namespace CaseManagement
 
             HideFamilyGridColumn("FamID");
             HideFamilyGridColumn("Gender");
+            HideFamilyGridColumn("MemberRole");
             HideFamilyGridColumn("BirthDate");
             HideFamilyGridColumn("MemberEducation");
             HideFamilyGridColumn("Skill");
@@ -695,7 +931,45 @@ namespace CaseManagement
                 object pathValue = row.Cells["MemberPhotoPath"].Value;
                 string path = pathValue == null || pathValue == DBNull.Value ? "" : pathValue.ToString();
                 row.Height = 44;
+
+                // آموزش — رفع نشت حافظه/GDI: این متد بعد از هر ثبت/ویرایش/حذف
+                // دوباره اجرا می‌شود و برای هر ردیف یک Bitmap تازه می‌سازد.
+                // قبلاً Bitmapِ قبلیِ همان سلول بدون Dispose رها می‌شد، پس با
+                // هر بار بارگذاری فهرست، به‌تعدادِ اعضا handle گرافیکی نشت
+                // می‌کرد. حالا تصویر قبلی صریحاً آزاد می‌شود.
+                DisposeThumbnailCell(row);
                 row.Cells[MemberPhotoThumbColumnName].Value = LoadThumbnail(path, 38);
+            }
+        }
+
+        // تصویر کوچکِ ذخیره‌شده در سلولِ عکسِ یک ردیف را آزاد می‌کند.
+        private void DisposeThumbnailCell(DataGridViewRow row)
+        {
+            if (!dgvFamily.Columns.Contains(MemberPhotoThumbColumnName))
+                return;
+
+            DataGridViewCell cell = row.Cells[MemberPhotoThumbColumnName];
+            Image oldThumb = cell.Value as Image;
+
+            if (oldThumb == null)
+                return;
+
+            cell.Value = null;
+            oldThumb.Dispose();
+        }
+
+        // همه‌ی تصاویر کوچکِ گرید را آزاد می‌کند (هنگام بستن فرم).
+        private void DisposeAllThumbnails()
+        {
+            if (!dgvFamily.Columns.Contains(MemberPhotoThumbColumnName))
+                return;
+
+            foreach (DataGridViewRow row in dgvFamily.Rows)
+            {
+                if (row.IsNewRow)
+                    continue;
+
+                DisposeThumbnailCell(row);
             }
         }
 
@@ -759,7 +1033,7 @@ namespace CaseManagement
 
         private void btnSave_Click(object sender, EventArgs e)
         {
-            if (!SecurityContext.CanEdit())
+            if (!CaseManagement.Enterprise.PermissionService.Require("Family.Edit"))
             {
                 Msg.Show("کاربر فقط مشاهده اجازه ثبت عضو خانواده ندارد.");
                 return;
@@ -776,9 +1050,25 @@ namespace CaseManagement
 
             string savedPhotoPath = "";
             bool copiedNewPhoto = false;
+            string tazkiraAuditNote = null;
 
             try
             {
+                // آموزش — هشدارِ تذکرهٔ تکراری: بررسیِ نرم، نه مانعِ قطعی. همان
+                // الگویی که در FrmCase استفاده شده — کاربر باید صراحتاً تأیید
+                // کند تا ثبت ادامه یابد.
+                List<string> tazkiraMatches = DuplicateDetector.FindByTazkira(txtMemberTazkiraNo.Text.Trim(), "TblFamily", 0);
+                if (tazkiraMatches.Count > 0)
+                {
+                    if (!UiTheme.ShowConfirm(this,
+                        "این شماره تذکره قبلاً برای موارد زیر ثبت شده است:\n\n" +
+                        string.Join("\n", tazkiraMatches) +
+                        "\n\nآیا مطمئن هستید که می‌خواهید ادامه دهید؟", "احتمال ثبت تکراری"))
+                        return;
+
+                    tazkiraAuditNote = "تذکره " + txtMemberTazkiraNo.Text.Trim() + " => " + string.Join(" | ", tazkiraMatches);
+                }
+
                 if (!string.IsNullOrWhiteSpace(pendingSourcePhotoPath))
                 {
                     savedPhotoPath = SavePendingPhotoToCaseFolder();
@@ -795,35 +1085,50 @@ namespace CaseManagement
                 using (SQLiteCommand cmd = new SQLiteCommand(@"
                     INSERT INTO TblFamily
                     (
-                        CasID, MemberName, MemberFatherName, MemberTazkiraNo, BirthDate,
-                        MemberSadat, Gender, PhysicalStatus, HasDisability, MemberDisabilityDegree,
+                        CasID, MemberName, MemberFatherName, MemberIdCardType, MemberTazkiraNo, BirthDate,
+                        MemberSadat, Gender, MemberRole, Relation, PhysicalStatus, HasDisability, MemberDisabilityDegree,
                         MemberEducation, SchoolName, GradeLevel, UniversityName, StudyYear,
                         Major, StudyField, OfficialStatus, Skill, LeaveReason, Details, DisabilityDetails, MemberPhotoPath,
-                        Religion, MaritalStatus, ServiceStatus, StopReason,
+                        Religion, MaritalStatus, ServiceStatus, StopReason, SuspensionReason,
                         SchoolType, SchoolPrevGrade, UniversityType, UniversityPrevGrade, SeminaryLevel, EducationCoverage,
-                        GlobalID
+                        GlobalID, SuspensionDate, SuspendedByUserId, SuspendedByUsername
                     )
                     VALUES
                     (
-                        @CasID, @MemberName, @MemberFatherName, @MemberTazkiraNo, @BirthDate,
-                        @MemberSadat, @Gender, @PhysicalStatus, @HasDisability, @MemberDisabilityDegree,
+                        @CasID, @MemberName, @MemberFatherName, @MemberIdCardType, @MemberTazkiraNo, @BirthDate,
+                        @MemberSadat, @Gender, @MemberRole, @Relation, @PhysicalStatus, @HasDisability, @MemberDisabilityDegree,
                         @MemberEducation, @SchoolName, @GradeLevel, @UniversityName, @StudyYear,
                         @Major, @StudyField, @OfficialStatus, @Skill, @LeaveReason, @Details, @DisabilityDetails, @MemberPhotoPath,
-                        @Religion, @MaritalStatus, @ServiceStatus, @StopReason,
+                        @Religion, @MaritalStatus, @ServiceStatus, @StopReason, @SuspensionReason,
                         @SchoolType, @SchoolPrevGrade, @UniversityType, @UniversityPrevGrade, @SeminaryLevel, @EducationCoverage,
                         lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-' ||
-                        lower(hex(randomblob(2))) || '-' || lower(hex(randomblob(2))) || '-' || lower(hex(randomblob(6)))
+                        lower(hex(randomblob(2))) || '-' || lower(hex(randomblob(2))) || '-' || lower(hex(randomblob(6))),
+                        @SuspensionDate, @SuspendedByUserId, @SuspendedByUsername
                     );
                     SELECT last_insert_rowid();", con))
                 {
                     AddInt(cmd, "@CasID", CurrentCaseId);
                     AddFamilyParameters(cmd, savedPhotoPath);
+                    AddFamilySuspensionStampParameters(cmd);
 
                     con.Open();
                     currentFamilyId = Convert.ToInt32(cmd.ExecuteScalar());
                 }
 
                 AuditLogger.Log("ثبت", "TblFamily", currentFamilyId, "", BuildFamilyAuditText(savedPhotoPath));
+                if (tazkiraAuditNote != null)
+                    AuditLogger.Log("هشدار تذکره تکراری - تأیید کاربر", "TblFamily", currentFamilyId, "", tazkiraAuditNote);
+                AuditLogger.RecordFamilyStatusChange(currentFamilyId, "", cmbServiceStatus.Text,
+                    txtSuspensionReason.Text.Trim(), txtStopReason.Text.Trim());
+
+                // صفِ همگام‌سازی — همان الگوی فرم پرونده.
+                CaseManagement.Sync.SyncOutboxService.Capture("TblFamily", currentFamilyId,
+                    CaseManagement.Sync.OfflineSyncInitializer.OperationCreate);
+
+                // تاریخچهٔ کاملِ رکورد — BuildFamilyAuditText فقط پنج فیلد را ثبت
+                // می‌کند؛ این عکسِ فوری همهٔ ستون‌های عضو را نگه می‌دارد.
+                CaseManagement.Enterprise.VersionService.Capture("TblFamily", currentFamilyId,
+                    CaseManagement.Enterprise.VersionService.OperationInsert);
 
                 Msg.Show("عضو خانواده ذخیره شد");
                 LoadFamilyMembers();
@@ -840,7 +1145,7 @@ namespace CaseManagement
 
         private void btnEdit_Click(object sender, EventArgs e)
         {
-            if (!SecurityContext.CanEdit())
+            if (!CaseManagement.Enterprise.PermissionService.Require("Family.Edit"))
             {
                 Msg.Show("کاربر فقط مشاهده اجازه ویرایش عضو خانواده ندارد.");
                 return;
@@ -852,16 +1157,25 @@ namespace CaseManagement
                 return;
             }
 
+            if (_familyLockedByOther)
+            {
+                Msg.Show("این عضو هم‌اکنون توسط کاربر دیگری در حال ویرایش است. لطفاً بعداً تلاش کنید.");
+                return;
+            }
+
             if (!ValidateForm())
                 return;
 
             string oldPhotoPath = "";
             string finalPhotoPath = "";
             string newlyCopiedPhotoPath = "";
+            string tazkiraAuditNote = null;
 
             try
             {
                 string oldAuditText = GetFamilyAuditText(currentFamilyId);
+                string oldStatus = GetFamilyStatusById(currentFamilyId);
+                string oldMemberRole = GetFamilyMemberRoleById(currentFamilyId);
                 oldPhotoPath = GetStoredMemberPhotoPath(currentFamilyId);
                 if (oldPhotoPath == null)
                 {
@@ -869,6 +1183,19 @@ namespace CaseManagement
                     LoadFamilyMembers();
                     ClearForm();
                     return;
+                }
+
+                // آموزش — هشدارِ تذکرهٔ تکراری، همان الگویِ مسیرِ ثبتِ رکوردِ جدید.
+                List<string> tazkiraMatches = DuplicateDetector.FindByTazkira(txtMemberTazkiraNo.Text.Trim(), "TblFamily", currentFamilyId);
+                if (tazkiraMatches.Count > 0)
+                {
+                    if (!UiTheme.ShowConfirm(this,
+                        "این شماره تذکره قبلاً برای موارد زیر ثبت شده است:\n\n" +
+                        string.Join("\n", tazkiraMatches) +
+                        "\n\nآیا مطمئن هستید که می‌خواهید ادامه دهید؟", "احتمال ثبت تکراری"))
+                        return;
+
+                    tazkiraAuditNote = "تذکره " + txtMemberTazkiraNo.Text.Trim() + " => " + string.Join(" | ", tazkiraMatches);
                 }
 
                 finalPhotoPath = oldPhotoPath;
@@ -897,10 +1224,13 @@ namespace CaseManagement
                     UPDATE TblFamily SET
                         MemberName = @MemberName,
                         MemberFatherName = @MemberFatherName,
+                        MemberIdCardType = @MemberIdCardType,
                         MemberTazkiraNo = @MemberTazkiraNo,
                         BirthDate = @BirthDate,
                         MemberSadat = @MemberSadat,
                         Gender = @Gender,
+                        MemberRole = @MemberRole,
+                        Relation = @Relation,
                         PhysicalStatus = @PhysicalStatus,
                         HasDisability = @HasDisability,
                         MemberDisabilityDegree = @MemberDisabilityDegree,
@@ -921,15 +1251,20 @@ namespace CaseManagement
                         MaritalStatus = @MaritalStatus,
                         ServiceStatus = @ServiceStatus,
                         StopReason = @StopReason,
+                        SuspensionReason = @SuspensionReason,
                         SchoolType = @SchoolType,
                         SchoolPrevGrade = @SchoolPrevGrade,
                         UniversityType = @UniversityType,
                         UniversityPrevGrade = @UniversityPrevGrade,
                         SeminaryLevel = @SeminaryLevel,
-                        EducationCoverage = @EducationCoverage
+                        EducationCoverage = @EducationCoverage,
+                        SuspensionDate = CASE WHEN ServiceStatus = @ServiceStatus THEN SuspensionDate ELSE @SuspensionDate END,
+                        SuspendedByUserId = CASE WHEN ServiceStatus = @ServiceStatus THEN SuspendedByUserId ELSE @SuspendedByUserId END,
+                        SuspendedByUsername = CASE WHEN ServiceStatus = @ServiceStatus THEN SuspendedByUsername ELSE @SuspendedByUsername END
                     WHERE FamID = @FamID AND CasID = @CasID", con))
                 {
                     AddFamilyParameters(cmd, finalPhotoPath);
+                    AddFamilySuspensionStampParameters(cmd);
                     AddInt(cmd, "@FamID", currentFamilyId);
                     AddInt(cmd, "@CasID", CurrentCaseId);
 
@@ -944,6 +1279,22 @@ namespace CaseManagement
                     DeleteStoredPhotoSafely(oldPhotoPath);
 
                 AuditLogger.Log("ویرایش", "TblFamily", currentFamilyId, oldAuditText, BuildFamilyAuditText(finalPhotoPath));
+                if (tazkiraAuditNote != null)
+                    AuditLogger.Log("هشدار تذکره تکراری - تأیید کاربر", "TblFamily", currentFamilyId, "", tazkiraAuditNote);
+                AuditLogger.RecordFamilyStatusChange(currentFamilyId, oldStatus, cmbServiceStatus.Text,
+                    txtSuspensionReason.Text.Trim(), txtStopReason.Text.Trim());
+                // آموزش — به‌درخواست کاربر (تاریخچهٔ ممیزی نقش عضو، بخش ۱۲):
+                // هر تغییرِ MemberRole در جدولِ اختصاصیِ خودش
+                // (TblFamilyRoleHistory) ثبت می‌شود — عمداً جدا از
+                // TblFamilyStatusHistory (که فقط برای وضعیت خدمات است).
+                AuditLogger.RecordFamilyRoleChange(currentFamilyId, oldMemberRole, cmbMemberRole.Text.Trim());
+
+                CaseManagement.Sync.SyncOutboxService.Capture("TblFamily", currentFamilyId,
+                    CaseManagement.Sync.OfflineSyncInitializer.OperationUpdate);
+
+                // تاریخچهٔ کاملِ رکورد — توضیح در مسیر ثبت آمده است.
+                CaseManagement.Enterprise.VersionService.Capture("TblFamily", currentFamilyId,
+                    CaseManagement.Enterprise.VersionService.OperationUpdate);
 
                 Msg.Show("عضو خانواده ویرایش شد");
                 LoadFamilyMembers();
@@ -958,9 +1309,23 @@ namespace CaseManagement
             }
         }
 
+        // ─── تاریخچهٔ تغییراتِ همین عضو ─────────────────────────────────────
+        // هم‌الگوی btnHistory_Click در فرم پرونده.
+        private void btnHistory_Click(object sender, EventArgs e)
+        {
+            if (currentFamilyId == 0)
+            {
+                Msg.Show("اول عضو خانواده را انتخاب کن");
+                return;
+            }
+
+            using (var frm = new CaseManagement.Enterprise.FrmVersions("TblFamily", currentFamilyId))
+                frm.ShowDialog(this);
+        }
+
         private void btnDelete_Click(object sender, EventArgs e)
         {
-            if (!SecurityContext.CanDelete())
+            if (!CaseManagement.Enterprise.PermissionService.Require("Family.Delete"))
             {
                 Msg.Show("حذف عضو خانواده فقط برای مدیر سیستم مجاز است.");
                 return;
@@ -985,6 +1350,18 @@ namespace CaseManagement
             string oldAuditText = GetFamilyAuditText(currentFamilyId);
             int deletedFamilyId = currentFamilyId;
 
+            // ⚠ هویتِ رکورد پیش از باز شدن تراکنشِ حذف برداشته می‌شود (بعد از
+            // DELETE دیگر خواندنی نیست، و خواندن از یک اتصالِ دیگر وسطِ تراکنش
+            // می‌تواند به قفل بخورد). ثبت در صف فقط پس از حذفِ موفق انجام
+            // می‌شود.
+            var pendingDelete =
+                CaseManagement.Sync.SyncOutboxService.PrepareDelete("TblFamily", currentFamilyId);
+
+            // به همان دلیلِ بالا، عکسِ فوریِ کاملِ رکورد هم پیش از تراکنشِ حذف
+            // برداشته می‌شود؛ ثبتِ نسخهٔ «حذف» فقط پس از حذفِ موفق انجام می‌گیرد.
+            string deletedSnapshot = CaseManagement.Enterprise.VersionService
+                .ReadSnapshotText("TblFamily", currentFamilyId);
+
             try
             {
                 using (SQLiteConnection con = db.GetConnection())
@@ -993,8 +1370,13 @@ namespace CaseManagement
 
                     using (SQLiteTransaction tr = con.BeginTransaction())
                     {
+                        // آموزش — COALESCE لازم است: MemberPhotoPath در دیتابیس
+                        // NULL-پذیر است، و قبلاً DBNull با «رکورد پیدا نشد» یکی
+                        // گرفته می‌شد؛ نتیجه این بود که عضوی که عکس ندارد (مقدار
+                        // NULL، مثلاً از ورودی اکسل یا همگام‌سازی) هرگز حذف
+                        // نمی‌شد و پیام «عضو انتخاب‌شده پیدا نشد» می‌گرفت.
                         using (SQLiteCommand selectCmd = new SQLiteCommand(@"
-                            SELECT MemberPhotoPath
+                            SELECT COALESCE(MemberPhotoPath, '')
                             FROM TblFamily
                             WHERE FamID = @FamID AND CasID = @CasID", con, tr))
                         {
@@ -1038,6 +1420,12 @@ namespace CaseManagement
 
                 AuditLogger.Log("حذف", "TblFamily", deletedFamilyId, oldAuditText, "");
 
+                // حذف واقعاً انجام شد (مسیرهای ناموفق پیش‌تر return کرده‌اند).
+                CaseManagement.Sync.SyncOutboxService.CommitDelete(pendingDelete);
+
+                CaseManagement.Enterprise.VersionService.CaptureDeleted(
+                    "TblFamily", deletedFamilyId, deletedSnapshot);
+
                 Msg.Show("عضو خانواده حذف شد");
                 LoadFamilyMembers();
                 ClearForm();
@@ -1066,6 +1454,12 @@ namespace CaseManagement
 
         private void btnPrint_Click(object sender, EventArgs e)
         {
+            if (!CaseManagement.Enterprise.PermissionService.Require("Family.Print"))
+            {
+                Msg.Show("کاربر اجازه چاپ فهرست اعضای خانواده را ندارد.");
+                return;
+            }
+
             DataTable table = dgvFamily.DataSource as DataTable;
             if (table == null || table.Rows.Count == 0)
             {
@@ -1078,6 +1472,77 @@ namespace CaseManagement
             PrintHelper.PrintDataTable(this, "اعضای خانواده — پرونده " + CurrentCaseCode, printTable);
         }
 
+        // ─── کارت خانواده: اطلاعات سرپرست + فهرست اعضا در یک سند واحد ──────────
+        // برخلاف کارت شناسایی سرپرست (GuardianCardIntegration که یک قالب HTML
+        // ثابت و بسته‌بندی‌شده دارد و طبق قانون پروژه هرگز تغییر نمی‌کند)، این
+        // «کارت خانواده» یک سند چاپیِ ساده از همان زیرساختِ PrintHelper موجود
+        // است — بدون نیاز به قالب جدید یا دست‌زدن به بسته‌ی GuardianCard.
+        private void btnFamilyCard_Click(object sender, EventArgs e)
+        {
+            if (CurrentCaseId <= 0)
+            {
+                Msg.Show("اول پرونده را ذخیره یا از لیست انتخاب کن");
+                return;
+            }
+
+            DataTable table = dgvFamily.DataSource as DataTable;
+            if (table == null || table.Rows.Count == 0)
+            {
+                Msg.Show("این خانواده هیچ عضوی ندارد");
+                return;
+            }
+
+            var headFields = new List<KeyValuePair<string, string>>();
+
+            try
+            {
+                using (SQLiteConnection con = db.GetConnection())
+                using (SQLiteCommand cmd = new SQLiteCommand(
+                    "SELECT Code, FormNo, HeadFullName, HeadFatherName, Province, District, Phone, ServiceStatus FROM TblCase WHERE CasID = @CasID", con))
+                {
+                    AddInt(cmd, "@CasID", CurrentCaseId);
+                    con.Open();
+                    using (var dr = cmd.ExecuteReader())
+                    {
+                        if (dr.Read())
+                        {
+                            headFields.Add(new KeyValuePair<string, string>("کد اختصاصی", dr["Code"] == DBNull.Value ? "" : dr["Code"].ToString()));
+                            headFields.Add(new KeyValuePair<string, string>("شماره فرم", dr["FormNo"] == DBNull.Value ? "" : dr["FormNo"].ToString()));
+                            headFields.Add(new KeyValuePair<string, string>("نام سرپرست", dr["HeadFullName"] == DBNull.Value ? "" : dr["HeadFullName"].ToString()));
+                            headFields.Add(new KeyValuePair<string, string>("نام پدر سرپرست", dr["HeadFatherName"] == DBNull.Value ? "" : dr["HeadFatherName"].ToString()));
+                            headFields.Add(new KeyValuePair<string, string>("ولایت", dr["Province"] == DBNull.Value ? "" : dr["Province"].ToString()));
+                            headFields.Add(new KeyValuePair<string, string>("ولسوالی", dr["District"] == DBNull.Value ? "" : dr["District"].ToString()));
+                            headFields.Add(new KeyValuePair<string, string>("شماره تماس", dr["Phone"] == DBNull.Value ? "" : dr["Phone"].ToString()));
+                            headFields.Add(new KeyValuePair<string, string>("وضعیت خدمات", dr["ServiceStatus"] == DBNull.Value ? "" : dr["ServiceStatus"].ToString()));
+                            headFields.Add(new KeyValuePair<string, string>("تعداد اعضای خانواده", table.Rows.Count.ToString()));
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Msg.Show("خطا در خواندن اطلاعات سرپرست: " + ex.Message);
+                return;
+            }
+
+            DataTable printTable = new DataTable();
+            printTable.Columns.Add("MemberName");
+            printTable.Columns.Add("MemberFatherName");
+            printTable.Columns.Add("Gender");
+            printTable.Columns.Add("BirthDate");
+            foreach (DataRow row in table.Rows)
+            {
+                printTable.Rows.Add(
+                    table.Columns.Contains("MemberName") ? row["MemberName"] : DBNull.Value,
+                    table.Columns.Contains("MemberFatherName") ? row["MemberFatherName"] : DBNull.Value,
+                    table.Columns.Contains("Gender") ? row["Gender"] : DBNull.Value,
+                    table.Columns.Contains("BirthDate") ? row["BirthDate"] : DBNull.Value);
+            }
+            Helpers.PersianDateHelper.ConvertDateColumnsToPersian(printTable, "BirthDate");
+
+            PrintHelper.PrintFamilyCard(this, "کارت خانواده — پرونده " + CurrentCaseCode, headFields, printTable);
+        }
+
         private void dgvFamily_CellContentClick(object sender, DataGridViewCellEventArgs e)
         {
             dgvFamily_CellClick(sender, e);
@@ -1085,16 +1550,18 @@ namespace CaseManagement
 
         private void LoadMemberToForm(int famId)
         {
+            ReleaseFamilyLock();
+
             try
             {
                 using (SQLiteConnection con = db.GetConnection())
                 using (SQLiteCommand cmd = new SQLiteCommand(@"
                     SELECT
-                        FamID, MemberName, MemberFatherName, MemberTazkiraNo, BirthDate,
-                        MemberSadat, Gender, PhysicalStatus, HasDisability, MemberDisabilityDegree,
+                        FamID, MemberName, MemberFatherName, MemberIdCardType, MemberTazkiraNo, BirthDate,
+                        MemberSadat, Gender, MemberRole, Relation, PhysicalStatus, HasDisability, MemberDisabilityDegree,
                         MemberEducation, SchoolName, GradeLevel, UniversityName, StudyYear,
                         Major, StudyField, OfficialStatus, Skill, LeaveReason, Details, DisabilityDetails, MemberPhotoPath,
-                        Religion, MaritalStatus, ServiceStatus, StopReason,
+                        Religion, MaritalStatus, ServiceStatus, StopReason, SuspensionReason,
                         SchoolType, SchoolPrevGrade, UniversityType, UniversityPrevGrade, SeminaryLevel, EducationCoverage
                     FROM TblFamily
                     WHERE FamID = @FamID AND CasID = @CasID", con))
@@ -1115,9 +1582,15 @@ namespace CaseManagement
 
                         txtMemberName.Text = DbString(dr["MemberName"]);
                         txtMemberFatherName.Text = DbString(dr["MemberFatherName"]);
+                        // ترتیب مهم است: اول نوع تذکره، بعد شماره — چون
+                        // IdCardHelper.Attach با تغییر نوع، شماره را دوباره
+                        // قالب‌بندی می‌کند.
+                        cmbMemberIdCardType.Text = DbString(dr["MemberIdCardType"]);
                         txtMemberTazkiraNo.Text = DbString(dr["MemberTazkiraNo"]);
                         txtMemberSadat.Text = DbString(dr["MemberSadat"]);
                         txtGender.Text = DbString(dr["Gender"]);
+                        cmbMemberRole.Text = DbString(dr["MemberRole"]);
+                        cmbRelation.Text = DbString(dr["Relation"]);
                         txtPhysicalStatus.Text = DbString(dr["PhysicalStatus"]);
                         txtHasDisability.Text = DbString(dr["HasDisability"]);
                         txtMemberDisabilityDegree.Text = DbString(dr["MemberDisabilityDegree"]);
@@ -1138,6 +1611,8 @@ namespace CaseManagement
                         cmbMaritalStatus.Text = DbString(dr["MaritalStatus"]);
                         cmbServiceStatus.Text = DbString(dr["ServiceStatus"]);
                         txtStopReason.Text = DbString(dr["StopReason"]);
+                        int suspReasonIdx = txtSuspensionReason.FindStringExact(DbString(dr["SuspensionReason"]));
+                        txtSuspensionReason.SelectedIndex = suspReasonIdx;
 
                         // فیلدهای تحصیلی جدید
                         cmbSchoolType.Text = DbString(dr["SchoolType"]);
@@ -1148,8 +1623,12 @@ namespace CaseManagement
                         cmbEducationCoverage.Text = DbString(dr["EducationCoverage"]);
 
                         UpdateStopReasonVisibility();
-                        UpdateEducationFieldsState();
-                        UpdatePhysicalFieldsState();
+                        // false = فقط فعال/غیرفعال؛ مقادیر خوانده‌شده از دیتابیس
+                        // پاک نمی‌شوند (توضیح کامل بالای UpdateEducationFieldsState).
+                        UpdateEducationFieldsState(false);
+                        // false = فقط فعال/غیرفعال؛ اطلاعات معلولیتِ ذخیره‌شده
+                        // پاک نمی‌شود (توضیح بالای UpdatePhysicalFieldsState).
+                        UpdatePhysicalFieldsState(false);
 
                         if (dr["BirthDate"] != DBNull.Value)
                         {
@@ -1171,6 +1650,8 @@ namespace CaseManagement
                             ClearPicture(picMemberPhoto);
                     }
                 }
+
+                TryLockFamilyMember(currentFamilyId);
             }
             catch (Exception ex)
             {
@@ -1201,11 +1682,11 @@ namespace CaseManagement
                 cleanCode,
                 "");
 
+            // آموزش — پیام خطا اینجا نشان داده نمی‌شود: هر دو فراخوان (ثبت و
+            // ویرایش) خودشان دقیقاً همین پیام را می‌دهند، پس قبلاً کاربر دو
+            // پنجره‌ی خطای یکسان پشت‌سرهم می‌دید.
             if (string.IsNullOrWhiteSpace(savedPath))
-            {
-                Msg.Show("عکس عضو خانواده ذخیره نشد: " + FileHelper.LastError);
                 return "";
-            }
 
             if (savedPath.Length > MemberPhotoPathLength)
             {
@@ -1238,6 +1719,36 @@ namespace CaseManagement
                     return "";
 
                 return result.ToString();
+            }
+        }
+
+        private string GetFamilyStatusById(int famId)
+        {
+            using (SQLiteConnection con = db.GetConnection())
+            using (SQLiteCommand cmd = new SQLiteCommand(
+                "SELECT ServiceStatus FROM TblFamily WHERE FamID = @FamID AND CasID = @CasID", con))
+            {
+                AddInt(cmd, "@FamID", famId);
+                AddInt(cmd, "@CasID", CurrentCaseId);
+                con.Open();
+
+                object result = cmd.ExecuteScalar();
+                return result == null || result == DBNull.Value ? "" : result.ToString();
+            }
+        }
+
+        private string GetFamilyMemberRoleById(int famId)
+        {
+            using (SQLiteConnection con = db.GetConnection())
+            using (SQLiteCommand cmd = new SQLiteCommand(
+                "SELECT MemberRole FROM TblFamily WHERE FamID = @FamID AND CasID = @CasID", con))
+            {
+                AddInt(cmd, "@FamID", famId);
+                AddInt(cmd, "@CasID", CurrentCaseId);
+                con.Open();
+
+                object result = cmd.ExecuteScalar();
+                return result == null || result == DBNull.Value ? "" : result.ToString();
             }
         }
 
@@ -1308,10 +1819,13 @@ WHERE FamID = @FamID AND CasID = @CasID", con))
         {
             AddNVarChar(cmd, "@MemberName", txtMemberName.Text.Trim(), MemberNameLength);
             AddNVarChar(cmd, "@MemberFatherName", txtMemberFatherName.Text.Trim(), MemberFatherNameLength);
+            AddNVarChar(cmd, "@MemberIdCardType", cmbMemberIdCardType.Text.Trim(), 50);
             AddNVarChar(cmd, "@MemberTazkiraNo", txtMemberTazkiraNo.Text.Trim(), MemberTazkiraNoLength);
             AddNullableDate(cmd, "@BirthDate", dtpBirthDate.Checked ? (DateTime?)dtpBirthDate.Value.Date : null);
             AddNVarChar(cmd, "@MemberSadat", txtMemberSadat.Text.Trim(), MemberSadatLength);
             AddNVarChar(cmd, "@Gender", txtGender.Text.Trim(), GenderLength);
+            AddNVarChar(cmd, "@MemberRole", cmbMemberRole.Text.Trim(), MemberRoleLength);
+            AddNVarChar(cmd, "@Relation", cmbRelation.Text.Trim(), RelationLength);
             AddNVarChar(cmd, "@PhysicalStatus", txtPhysicalStatus.Text.Trim(), PhysicalStatusLength);
             AddNVarChar(cmd, "@HasDisability", txtHasDisability.Text.Trim(), HasDisabilityLength);
             AddNVarChar(cmd, "@MemberDisabilityDegree", txtMemberDisabilityDegree.Text.Trim(), MemberDisabilityDegreeLength);
@@ -1330,8 +1844,10 @@ WHERE FamID = @FamID AND CasID = @CasID", con))
             AddNVarChar(cmd, "@MemberPhotoPath", memberPhotoPath ?? "", MemberPhotoPathLength);
             AddNVarChar(cmd, "@Religion", cmbReligion.Text.Trim(), 50);
             AddNVarChar(cmd, "@MaritalStatus", cmbMaritalStatus.Text.Trim(), 50);
+            bool isSuspended = IsSuspendedStatus(cmbServiceStatus.Text);
             AddNVarChar(cmd, "@ServiceStatus", string.IsNullOrEmpty(cmbServiceStatus.Text) ? "فعال" : cmbServiceStatus.Text, 50);
-            AddNVarChar(cmd, "@StopReason", cmbServiceStatus.Text == "قطع موقت" ? txtStopReason.Text.Trim() : "", 500);
+            AddNVarChar(cmd, "@StopReason", isSuspended ? txtStopReason.Text.Trim() : "", 500);
+            AddNVarChar(cmd, "@SuspensionReason", isSuspended ? txtSuspensionReason.Text.Trim() : "", 100);
 
             // ─── فیلدهای تحصیلی جدید (مطابق قالب Word) ───────────────────────
             AddNVarChar(cmd, "@SchoolType", cmbSchoolType.Text.Trim(), 50);
@@ -1340,6 +1856,26 @@ WHERE FamID = @FamID AND CasID = @CasID", con))
             AddNVarChar(cmd, "@UniversityPrevGrade", txtUniversityPrevGrade.Text.Trim(), 50);
             AddNVarChar(cmd, "@SeminaryLevel", cmbSeminaryLevel.Text.Trim(), 50);
             AddNVarChar(cmd, "@EducationCoverage", cmbEducationCoverage.Text.Trim(), 50);
+        }
+
+        // مقادیرِ «مُهرِ تعلیق» عضو خانواده — همان الگوی FrmCase.AddSuspensionStampParameters.
+        private void AddFamilySuspensionStampParameters(SQLiteCommand cmd)
+        {
+            bool isSuspended = IsSuspendedStatus(cmbServiceStatus.Text);
+
+            if (isSuspended)
+            {
+                cmd.Parameters.AddWithValue("@SuspensionDate", DateTime.Now.Date.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture));
+                cmd.Parameters.AddWithValue("@SuspendedByUserId",
+                    SecurityContext.UserId > 0 ? (object)SecurityContext.UserId : DBNull.Value);
+                AddNVarChar(cmd, "@SuspendedByUsername", SecurityContext.Username ?? "", 100);
+            }
+            else
+            {
+                cmd.Parameters.AddWithValue("@SuspensionDate", DBNull.Value);
+                cmd.Parameters.AddWithValue("@SuspendedByUserId", DBNull.Value);
+                cmd.Parameters.AddWithValue("@SuspendedByUsername", DBNull.Value);
+            }
         }
 
         private static void AddNullableDate(SQLiteCommand cmd, string name, DateTime? value)

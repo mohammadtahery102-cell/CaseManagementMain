@@ -13,5 +13,15 @@ namespace CaseManagement.Models
         public string Description { get; set; }
         public DateTime? CreatedAt { get; set; }
         public string CreatedBy { get; set; }
+
+        // ─── افزوده برای ماژول AssistanceReceiptIntegration (افزایشی) ────────
+        public int? ReceiptNo { get; set; }
+        public DateTime? PrintedAt { get; set; }
+        public string ProgramName { get; set; }
+        public string PickupLocation { get; set; }
+        public string CoordinatorPhone { get; set; }
+
+        // ─── افزوده برای بستهٔ مساعدتِ غیرنقدی (افزایشی) ─────────────────────
+        public int? PackageID { get; set; }
     }
 }

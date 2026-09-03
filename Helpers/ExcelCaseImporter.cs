@@ -1,4 +1,4 @@
-using CaseManagement.DAL;
+﻿using CaseManagement.DAL;
 using ClosedXML.Excel;
 using System;
 using System.Collections.Generic;
@@ -117,9 +117,9 @@ INSERT INTO TblCase
 (
     FormNo, Code, CaseNo, CaseDate,
     Zone, Province, District, RequestType, PriorityLevel,
-    HeadFullName, HeadFatherName, HeadSadat, Religion, HeadTazkiraNo,
+    HeadFullName, HeadFatherName, HeadSadat, Religion, HeadIdCardType, HeadTazkiraNo,
     HeadOriginalResidence, HeadCurrentResidence, RelationshipToFamily,
-    Phone, RelativePhone, CoveredByOrg, Job, Skill,
+    Phone, RelativePhone, CoveredByOrg, CoveredByOrgNames, Job, Skill,
     DisabilityDegree, DisabilityType, MigrationCardType, MaritalStatus,
     Surveyors, SurveyDate, LocationAddress, EducationLevel, ServiceStatus, UrgentSituation,
     PhotoPath, FamilyPhotoPath, CenterID, GlobalID
@@ -128,9 +128,9 @@ VALUES
 (
     @FormNo, @Code, @CaseNo, @CaseDate,
     @Zone, @Province, @District, @RequestType, @PriorityLevel,
-    @HeadFullName, @HeadFatherName, @HeadSadat, @Religion, @HeadTazkiraNo,
+    @HeadFullName, @HeadFatherName, @HeadSadat, @Religion, @HeadIdCardType, @HeadTazkiraNo,
     @HeadOriginalResidence, @HeadCurrentResidence, @RelationshipToFamily,
-    @Phone, @RelativePhone, @CoveredByOrg, @Job, @Skill,
+    @Phone, @RelativePhone, @CoveredByOrg, @CoveredByOrgNames, @Job, @Skill,
     @DisabilityDegree, @DisabilityType, @MigrationCardType, @MaritalStatus,
     @Surveyors, @SurveyDate, @LocationAddress, @EducationLevel, @ServiceStatus, @UrgentSituation,
     '', '', @CenterID,
@@ -147,18 +147,23 @@ SELECT last_insert_rowid();", con))
                 AddText(cmd, "@Province", ReadCell(sheet, columns, rowNumber, "Province", "ولایت"));
                 AddText(cmd, "@District", ReadCell(sheet, columns, rowNumber, "District", "ولسوالی"));
                 AddText(cmd, "@RequestType", ReadCell(sheet, columns, rowNumber, "RequestType", "نوع درخواست"));
-                AddText(cmd, "@PriorityLevel", ReadCell(sheet, columns, rowNumber, "PriorityLevel", "اولویت بندی", "اولویت‌بندی"));
+                // آموزش — عنوان‌های قدیمی عمداً کنارِ عنوان جدید نگه داشته شده‌اند:
+                // فایل‌های اکسلی که پیش از تغییر نام این دو فیلد ساخته شده‌اند
+                // باید همچنان بدون خطا وارد شوند.
+                AddText(cmd, "@PriorityLevel", ReadCell(sheet, columns, rowNumber, "PriorityLevel", "اولویت بندی اقتصادی", "اولویت‌بندی اقتصادی", "اولویت بندی", "اولویت‌بندی"));
                 AddText(cmd, "@HeadFullName", headFullName);
                 AddText(cmd, "@HeadFatherName", ReadCell(sheet, columns, rowNumber, "HeadFatherName", "نام پدر سرپرست"));
                 AddText(cmd, "@HeadSadat", ReadCell(sheet, columns, rowNumber, "HeadSadat", "سیادت سرپرست"));
                 AddText(cmd, "@Religion", ReadCell(sheet, columns, rowNumber, "Religion", "مذهب"));
+                AddText(cmd, "@HeadIdCardType", ReadCell(sheet, columns, rowNumber, "HeadIdCardType", "نوع تذکره سرپرست", "نوع تذکره"));
                 AddText(cmd, "@HeadTazkiraNo", ReadCell(sheet, columns, rowNumber, "HeadTazkiraNo", "شماره تذکره سرپرست"));
                 AddText(cmd, "@HeadOriginalResidence", ReadCell(sheet, columns, rowNumber, "HeadOriginalResidence", "سکونت اصلی"));
                 AddText(cmd, "@HeadCurrentResidence", ReadCell(sheet, columns, rowNumber, "HeadCurrentResidence", "سکونت فعلی"));
                 AddText(cmd, "@RelationshipToFamily", ReadCell(sheet, columns, rowNumber, "RelationshipToFamily", "نسبت با اعضا"));
                 AddText(cmd, "@Phone", ReadCell(sheet, columns, rowNumber, "Phone", "شماره تماس"));
                 AddText(cmd, "@RelativePhone", ReadCell(sheet, columns, rowNumber, "RelativePhone", "شماره تماس اقارب"));
-                AddText(cmd, "@CoveredByOrg", ReadCell(sheet, columns, rowNumber, "CoveredByOrg", "تحت پوشش"));
+                AddText(cmd, "@CoveredByOrg", ReadCell(sheet, columns, rowNumber, "CoveredByOrg", "تحت پوشش دیگر مؤسسات", "تحت پوشش"));
+                AddText(cmd, "@CoveredByOrgNames", ReadCell(sheet, columns, rowNumber, "CoveredByOrgNames", "اسامی مؤسسات تحت پوشش"));
                 AddText(cmd, "@Job", ReadCell(sheet, columns, rowNumber, "Job", "شغل"));
                 AddText(cmd, "@Skill", ReadCell(sheet, columns, rowNumber, "Skill", "مهارت"));
                 AddText(cmd, "@DisabilityDegree", ReadCell(sheet, columns, rowNumber, "DisabilityDegree", "درجه معلولیت"));
@@ -188,22 +193,12 @@ SELECT last_insert_rowid();", con))
             }
         }
 
+        // آموزش — بدنه به CaseNumbering منتقل شد (منطق واحد برای هر سه مسیرِ
+        // ساختِ شماره). حد پایینِ «شماره شروع پرونده» همان‌جا رعایت می‌شود، پس
+        // باگی که قبلاً اینجا رفع شده بود دیگر نمی‌تواند تکرار شود.
         private int GetNextFormNo(SQLiteConnection con)
         {
-            using (SQLiteCommand cmd = new SQLiteCommand("SELECT COALESCE(MAX(CAST(CASE WHEN FormNo GLOB '*[0-9]*' AND FormNo NOT GLOB '*[^0-9]*' THEN FormNo ELSE '0' END AS INTEGER)), 0) + 1 FROM TblCase", con))
-            {
-                int next = Convert.ToInt32(cmd.ExecuteScalar());
-
-                // آموزش — رفع باگ: FrmCase.GetNextFormNo این حد پایین را رعایت
-                // می‌کرد اما این نسخه (برای Import اکسل) رعایت نمی‌کرد؛ در
-                // نتیجه شماره فرمِ رکوردهای وارد شده از اکسل می‌توانست از
-                // "شماره شروع پرونده" تنظیم‌شده در بخش تنظیمات کمتر باشد.
-                int startCaseNo = SettingsHelper.GetInt(SettingsHelper.StartCaseNo, 0);
-                if (startCaseNo > next)
-                    next = startCaseNo;
-
-                return next;
-            }
+            return CaseManagement.Sync.CaseNumbering.GetNextFormNo(con, null);
         }
 
         private string ReadCell(IXLWorksheet sheet, Dictionary<string, int> columns, int rowNumber, params string[] names)
@@ -241,17 +236,14 @@ SELECT last_insert_rowid();", con))
             return DateTime.Today;
         }
 
+        // نگاشت‌ها در CaseDomain متمرکز شده‌اند (منبع واحد با فرم و سینک).
         private string NormalizeStatus(string value)
         {
             value = (value ?? "").Trim();
 
-            if (value == "درانتظار" || value == "در انتظار")
-                return "در انتظار تأیید";
-
-            if (value == "در حالت قطع")
-                return "قطع";
-
-            return string.IsNullOrWhiteSpace(value) ? "فعال" : value;
+            return string.IsNullOrWhiteSpace(value)
+                ? CaseDomain.StatusActive
+                : CaseDomain.NormalizeServiceStatus(value);
         }
 
         private void AddInt(SQLiteCommand cmd, string name, int value)

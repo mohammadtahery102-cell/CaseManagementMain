@@ -34,7 +34,9 @@ namespace CaseManagement
             MaximizeBox = false;
             MinimizeBox = true;
             try { Icon = CaseManagement.Helpers.LogoHelper.GetAppIcon(); } catch { }
-            WindowState = FormWindowState.Maximized;
+            // به درخواست کاربر: هیچ فرمی تمام‌صفحه باز نمی‌شود و اندازه‌اش ثابت است.
+            WindowState = FormWindowState.Normal;
+            CaseManagement.Helpers.UiTheme.MakeFixedSize(this, 1100, 700);
 
             reportViewer1.Dock = DockStyle.Fill;
             reportViewer1.ProcessingMode = ProcessingMode.Local;

@@ -6,3 +6,4 @@ packages/
 *.sqlite
 *.db
 Saves/
+TestResults/

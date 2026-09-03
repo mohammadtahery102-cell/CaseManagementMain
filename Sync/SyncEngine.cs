@@ -195,18 +195,12 @@ namespace CaseManagement.Sync
         // ─── درج یک سرپرست جدید (فقط ستون‌های موجود در جدول) ─────────────────
         // بزرگ‌ترین شماره فرمِ عددیِ موجود +۱ (با رعایت تنظیم StartCaseNo) —
         // هم‌منطق با FrmCase.GetNextFormNo، اما داخل همان تراکنش همگام‌سازی.
+        // آموزش — بدنهٔ این متد به CaseNumbering منتقل شد تا هر سه مسیرِ ساختِ
+        // شماره (فرم پرونده، همین موتور، ورودی اکسل) یک منطقِ واحد و
+        // آگاه‌از‌مرکز داشته باشند. امضا و رفتار برای مرکز اصلی تغییری نکرده.
         private int GetNextFormNo(SQLiteConnection con, SQLiteTransaction tr)
         {
-            int next = 1;
-            using (var cmd = new SQLiteCommand(
-                "SELECT COALESCE(MAX(CAST(CASE WHEN FormNo GLOB '*[0-9]*' AND FormNo NOT GLOB '*[^0-9]*' THEN FormNo ELSE '0' END AS INTEGER)), 0) + 1 FROM TblCase", con, tr))
-            {
-                object r = cmd.ExecuteScalar();
-                if (r != null && r != DBNull.Value) next = Convert.ToInt32(r);
-            }
-            int start = SettingsHelper.GetInt(SettingsHelper.StartCaseNo, 0);
-            if (start > next) next = start;
-            return next;
+            return CaseNumbering.GetNextFormNo(con, tr);
         }
 
         private int InsertCase(SQLiteConnection con, SQLiteTransaction tr,
@@ -366,7 +360,11 @@ namespace CaseManagement.Sync
             cmd.Parameters.AddWithValue(pn, Guid.NewGuid().ToString("N"));
         }
 
-        private string ResolveBackupFolder()
+        // آموزش — public شد تا FrmSyncWizard بتواند همان منطقِ مسیرِ بکاپِ
+        // پیش‌فرض را برای دکمه‌های مستقلِ عکس/سند هم استفاده کند (آن‌ها،
+        // برخلافِ SyncEngine.Apply، خودشان بکاپ نمی‌گیرند — نگاه کنید
+        // MediaSyncEngine.Apply که این کار را در خودش ندارد).
+        public static string ResolveBackupFolder()
         {
             string configured = SettingsHelper.Get(SettingsHelper.BackupPath);
             if (!string.IsNullOrWhiteSpace(configured)) return configured;

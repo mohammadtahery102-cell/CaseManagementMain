@@ -48,7 +48,10 @@ namespace CaseManagement.Helpers
                     : FormWindowState.Maximized;
             };
 
-            _btnMin = new WindowButton(WindowButtonKind.Minimize, backColor) { Dock = DockStyle.Left, Width = 46 };
+            // کوچک‌کردن در دسترس است (خواسته‌ی کاربر)؛ آنچه برداشته شده دکمه‌ی
+            // بیشینه/بازگردانی است تا پنجره در یک حالتِ ثابت بماند.
+            _btnMin = new WindowButton(WindowButtonKind.Minimize, backColor)
+            { Dock = DockStyle.Left, Width = 46 };
             _btnMin.Click += delegate { _owner.WindowState = FormWindowState.Minimized; };
 
             // ── نشان برنامه — سمت راست، کنارِ عنوان ──

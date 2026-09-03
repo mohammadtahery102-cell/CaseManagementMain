@@ -31,6 +31,9 @@ namespace CaseManagement.Helpers
         private readonly List<NavItem> _items = new List<NavItem>();
         private int _activeIndex = -1;
 
+        // گروهِ جاری که AddItem بعدی باید داخلش قرار بگیرد (برای آکاردئون).
+        private Panel _currentGroupPanel;
+
         public SidebarNav(string brandTitle, string brandSubtitle)
         {
             Dock = DockStyle.Right;
@@ -69,16 +72,26 @@ namespace CaseManagement.Helpers
             Controls.Add(brand);
         }
 
-        // عنوان گروه (مثل «اصلی»، «مالی و حسابداری» در طرح تصویری)
-        public void AddGroup(string title)
+        // عنوان گروه (مثل «اصلی»، «مالی و حسابداری» در طرح تصویری) — حالا
+        // یک سربرگِ آکاردئون است: کلیک روی آن، آیتم‌های زیرش را جمع/باز می‌کند.
+        // startExpanded=false برای گروه‌های پراستفاده‌کمتر (مثلاً «سازمانی» با
+        // ده آیتم) استفاده می‌شود تا در بازِ اول کمتر اسکرول لازم باشد؛ هیچ
+        // آیتمی حذف نمی‌شود، فقط پیش‌فرض جمع‌شده است و با یک کلیک باز می‌شود.
+        public void AddGroup(string title, bool startExpanded = true)
         {
-            Label lbl = new Label
+            Panel groupItems = new Panel
             {
-                Text = title, Dock = DockStyle.Top, Height = 26, BackColor = Color.Transparent,
-                Font = UiTheme.FontBold(UiTheme.SizeSmall - 2F), ForeColor = GroupText,
-                TextAlign = ContentAlignment.BottomRight, Padding = new Padding(0, 0, 8, 4)
+                Dock = DockStyle.Top, Height = 0, BackColor = Color.Transparent,
+                Visible = startExpanded
             };
-            AddToHost(lbl);
+
+            GroupHeader header = new GroupHeader(title) { Dock = DockStyle.Top, Expanded = startExpanded };
+            header.ExpandedChanged += delegate { groupItems.Visible = header.Expanded; };
+
+            AddToHost(header);
+            AddToHost(groupItems);
+
+            _currentGroupPanel = groupItems;
         }
 
         public int AddItem(string glyph, string text, EventHandler onClick)
@@ -91,7 +104,17 @@ namespace CaseManagement.Helpers
                 if (onClick != null) onClick(item, EventArgs.Empty);
             };
             _items.Add(item);
-            AddToHost(item);
+
+            if (_currentGroupPanel != null)
+            {
+                _currentGroupPanel.Controls.Add(item);
+                item.BringToFront();
+                _currentGroupPanel.Height += item.Height;
+            }
+            else
+            {
+                AddToHost(item);
+            }
             return index;
         }
 
@@ -170,10 +193,77 @@ namespace CaseManagement.Helpers
                     g.DrawString(_glyph, f, b, new RectangleF(Width - 40, 0, 30, Height), sf);
 
                 // متن، راست‌چین در فضای باقی‌مانده
-                using (Font f = _active ? UiTheme.FontBold(UiTheme.SizeBody) : UiTheme.Font(UiTheme.SizeBody))
+                using (Font f = _active ? UiTheme.FontBold(UiTheme.SizeBody + 1F) : UiTheme.Font(UiTheme.SizeBody + 1F))
                 using (Brush b = new SolidBrush(fg))
                 using (StringFormat sf = new StringFormat { Alignment = StringAlignment.Far, LineAlignment = StringAlignment.Center, FormatFlags = StringFormatFlags.NoWrap })
                     g.DrawString(Text, f, b, new RectangleF(10, 0, Width - 52, Height), sf);
+            }
+        }
+
+        // ── سربرگِ آکاردئونِ یک گروه (عنوان + فلش باز/بسته) ──
+        private class GroupHeader : Control
+        {
+            private readonly string _title;
+            private bool _expanded;
+            private bool _hover;
+
+            public event EventHandler ExpandedChanged;
+
+            public GroupHeader(string title)
+            {
+                _title = title;
+                SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint |
+                          ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+                Height = 32;
+                Cursor = Cursors.Hand;
+                BackColor = BackDark;
+            }
+
+            public bool Expanded
+            {
+                get { return _expanded; }
+                set
+                {
+                    if (_expanded == value) return;
+                    _expanded = value;
+                    Invalidate();
+                    if (ExpandedChanged != null) ExpandedChanged(this, EventArgs.Empty);
+                }
+            }
+
+            protected override void OnClick(EventArgs e)
+            {
+                Expanded = !Expanded;
+                base.OnClick(e);
+            }
+
+            protected override void OnMouseEnter(EventArgs e) { _hover = true; Invalidate(); base.OnMouseEnter(e); }
+            protected override void OnMouseLeave(EventArgs e) { _hover = false; Invalidate(); base.OnMouseLeave(e); }
+
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                Graphics g = e.Graphics;
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+                g.Clear(BackDark);
+
+                Color fg = _hover ? Color.White : GroupText;
+
+                // متنِ عنوانِ گروه، راست‌چین (شروع خواندن در RTL)
+                using (Font f = UiTheme.FontBold(UiTheme.SizeSmall))
+                using (Brush b = new SolidBrush(fg))
+                using (StringFormat sf = new StringFormat { Alignment = StringAlignment.Far, LineAlignment = StringAlignment.Center, FormatFlags = StringFormatFlags.NoWrap })
+                    g.DrawString(_title, f, b, new RectangleF(20, 0, Width - 28, Height), sf);
+
+                // فلشِ باز/بسته سمت چپ عنوان
+                using (Font f = UiTheme.Font(UiTheme.SizeSmall - 1F))
+                using (Brush b = new SolidBrush(fg))
+                using (StringFormat sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
+                    g.DrawString(_expanded ? "▾" : "◂", f, b, new RectangleF(0, 0, 18, Height), sf);
+
+                // خط جداکنندهٔ ظریف زیر سربرگ برای سلسله‌مراتب بصری بهتر
+                using (Pen p = new Pen(BackDarker))
+                    g.DrawLine(p, 4, Height - 1, Width - 4, Height - 1);
             }
         }
 

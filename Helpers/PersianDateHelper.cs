@@ -134,6 +134,33 @@ namespace CaseManagement.Helpers
             return ToPersianDateString(dt) + " " + dt.ToString("HH:mm:ss");
         }
 
+        // ─── نمایشِ امنِ تاریخ/ساعت ─────────────────────────────────────────
+        // آموزش — PersianCalendar فقط بازهٔ ۶۲۲ تا ۹۳۷۸ شمسی را می‌پذیرد و
+        // برای هر مقدارِ خارج از آن (مهم‌تر از همه DateTime.MinValue، که
+        // مقدارِ پیش‌فرضِ یک ستونِ NULL/پارس‌نشده است) استثنایِ
+        // «Specified time is not supported in this calendar» می‌دهد.
+        // متدهای بالا عمداً دست‌نخورده ماندند (رفتارِ موجود حفظ شود)؛ این
+        // متدِ تازه برای *نمایش* است، جایی که یک تاریخِ خراب هرگز نباید کلِ
+        // صفحه را بترکاند — به‌جای استثنا، متنِ جایگزین برمی‌گرداند.
+        public static string ToPersianDateTimeStringSafe(DateTime dt, string fallback = "—")
+        {
+            try
+            {
+                if (dt < _pc.MinSupportedDateTime || dt > _pc.MaxSupportedDateTime)
+                    return fallback;
+
+                // عمداً بدونِ dt.ToString(...) — چون آن هم از CurrentCulture
+                // (تقویمِ شمسی) استفاده می‌کند و می‌تواند دوباره بترکد.
+                return string.Format(
+                    "{0:D4}/{1:D2}/{2:D2} {3:D2}:{4:D2}",
+                    _pc.GetYear(dt), _pc.GetMonth(dt), _pc.GetDayOfMonth(dt), dt.Hour, dt.Minute);
+            }
+            catch
+            {
+                return fallback;
+            }
+        }
+
         public static CultureInfo GetPersianCulture()
         {
             CultureInfo ci = (CultureInfo)_fa.Clone();

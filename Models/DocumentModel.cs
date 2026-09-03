@@ -10,5 +10,7 @@ namespace CaseManagement.Models
         public string DocFilePath { get; set; }
         public string RelatedCaseRef { get; set; }
         public string DocDescription { get; set; }
+        public string DocCategory { get; set; }
+        public string DocTags { get; set; }
     }
 }

@@ -1,4 +1,4 @@
-using CaseManagement.DAL;
+﻿using CaseManagement.DAL;
 using CaseManagement.Helpers;
 using System;
 using System.Data;
@@ -63,8 +63,8 @@ namespace CaseManagement
             FormBorderStyle   = FormBorderStyle.None;
             MinimumSize       = Size;
             MaximumSize       = Size;
-            MaximizeBox       = false;
-            MinimizeBox       = true;
+            MaximizeBox       = false;   // صفحه‌ی ورود عمداً در اندازه‌ی ثابت قفل است
+            MinimizeBox       = true;    // کوچک‌کردن در دسترس است
             RightToLeft       = RightToLeft.Yes;
             RightToLeftLayout = false; // چیدمان دستی است؛ آینه‌ی هندسی لازم نیست
             BackColor         = CanvasTop;
@@ -138,7 +138,7 @@ namespace CaseManagement
             Label lblVersion = new Label
             {
                 Dock = DockStyle.Bottom, Height = ResponsiveLayout.Scale(20),
-                Text = "نسخه " + AppVersionText(),
+                Text = string.Format(Lang.T("نسخه {0}"), AppVersionText()),
                 Font = UiTheme.FontBold(8.5F), ForeColor = UiTheme.TextMuted,
                 TextAlign = ContentAlignment.MiddleCenter
             };
@@ -611,6 +611,11 @@ LIMIT  1", con))
                         {
                             if (!dr.Read())
                             {
+                                // ویژگی ۷ — ممیزی امنیتی: تلاش ورود با نام
+                                // کاربری ناموجود یا غیرفعال ثبت می‌شود.
+                                CaseManagement.Enterprise.SecurityAudit.LoginFailed(
+                                    username, "نام کاربری ناموجود یا غیرفعال");
+
                                 _lblMessage.Text = "نام کاربری یا رمز عبور اشتباه است.";
                                 return;
                             }
@@ -667,6 +672,10 @@ LIMIT  1", con))
                     if (lockoutUntil.HasValue && lockoutUntil.Value > DateTime.Now)
                     {
                         int minutesLeft = (int)Math.Ceiling((lockoutUntil.Value - DateTime.Now).TotalMinutes);
+
+                        CaseManagement.Enterprise.SecurityAudit.LoginFailed(
+                            username, "تلاش ورود در زمان قفل بودن حساب");
+
                         _lblMessage.Text = "حساب به‌دلیل تلاش‌های ناموفق پیاپی قفل شده. حدود " +
                             minutesLeft + " دقیقه دیگر دوباره امتحان کنید.";
                         return;
@@ -691,6 +700,19 @@ WHERE  UserID = @id", con))
                             updCmd.Parameters.AddWithValue("@id", dbUserId);
                             updCmd.ExecuteNonQuery();
                         }
+
+                        // رمز اشتباه — و در صورت رسیدن به سقف، قفل شدن حساب
+                        // به‌عنوان رویداد بحرانی ثبت می‌شود.
+                        if (shouldLock)
+                            CaseManagement.Enterprise.SecurityAudit.Log(
+                                CaseManagement.Enterprise.SecurityAudit.EventLoginFailed,
+                                CaseManagement.Enterprise.SecurityAudit.SeverityCritical,
+                                false,
+                                "حساب پس از " + newFailedCount + " تلاش ناموفق قفل شد",
+                                null, 0, username, dbUserId);
+                        else
+                            CaseManagement.Enterprise.SecurityAudit.LoginFailed(
+                                username, "رمز عبور اشتباه (تلاش " + newFailedCount + ")");
 
                         _lblMessage.Text = shouldLock
                             ? "به‌دلیل تلاش‌های ناموفق پیاپی، حساب برای " + LockoutMinutes + " دقیقه قفل شد."
@@ -737,6 +759,9 @@ WHERE  UserID = @id", con))
 
             // ─── ورود موفق — SignIn ثبت‌نام در SecurityContext ─────────────
             SecurityContext.SignIn(userId, username, role);
+
+            // ویژگی ۷ — ممیزی امنیتی: ورود موفق ثبت می‌شود.
+            CaseManagement.Enterprise.SecurityAudit.LoginSucceeded(userId, username, role);
 
             if (SecurityContext.IsSuperAdmin())
             {

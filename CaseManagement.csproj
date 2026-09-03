@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
@@ -95,6 +95,13 @@
     <Reference Include="ClosedXML, Version=0.105.0.0, Culture=neutral, PublicKeyToken=fd1eb21b62ae805b, processorArchitecture=MSIL">
       <HintPath>..\packages\ClosedXML.0.105.0\lib\netstandard2.0\ClosedXML.dll</HintPath>
     </Reference>
+    <!-- آموزش — به‌درخواستِ کاربر (بخش QR Code در طراحِ کارت): پیاده‌سازیِ
+         دستیِ QR (ریاضیاتِ Reed-Solomon) ریسکِ بالایی دارد و بدونِ اسکنرِ
+         واقعی قابلِ تأیید نیست؛ به‌جای آن از کتابخانه‌ی معتبر و MIT-licensed
+         QRCoder استفاده شد (build net40، سازگار با net472). -->
+    <Reference Include="QRCoder, Version=1.8.0.0, Culture=neutral, PublicKeyToken=c4ed5b9ae8358a28, processorArchitecture=MSIL">
+      <HintPath>..\packages\QRCoder.1.8.0\lib\net40\QRCoder.dll</HintPath>
+    </Reference>
     <Reference Include="ClosedXML.Parser, Version=1.0.0.0, Culture=neutral, PublicKeyToken=1d5f7376574c51ec, processorArchitecture=MSIL">
       <HintPath>..\packages\ClosedXML.Parser.2.0.0\lib\netstandard2.0\ClosedXML.Parser.dll</HintPath>
     </Reference>
@@ -132,6 +139,14 @@
     <Reference Include="Microsoft.ReportViewer.WinForms, Version=15.0.0.0, Culture=neutral, PublicKeyToken=89845dcd8080cc91, processorArchitecture=MSIL">
       <HintPath>..\packages\Microsoft.ReportingServices.ReportViewerControl.Winforms.150.1652.0\lib\net40\Microsoft.ReportViewer.WinForms.dll</HintPath>
     </Reference>
+    <!-- آموزش — رفعِ باگِ واقعیِ کشف‌شده با اجرای واقعیِ آزمون: پردازشِ RDLC
+         (چه در پیش‌نمایشِ تعاملی FrmCaseReport، چه در RdlcExportHelper) به این
+         اسمبلی نیاز دارد؛ بدونش با FileNotFoundException («Microsoft.SqlServer.Types,
+         Version=14.0.0.0») شکست می‌خورد. پوشه‌ی packages این نسخه را داشت ولی
+         هرگز به پروژه وصل نشده بود. -->
+    <Reference Include="Microsoft.SqlServer.Types, Version=14.0.0.0, Culture=neutral, PublicKeyToken=89845dcd8080cc91, processorArchitecture=MSIL">
+      <HintPath>..\packages\Microsoft.SqlServer.Types.14.0.314.76\lib\net40\Microsoft.SqlServer.Types.dll</HintPath>
+    </Reference>
     <Reference Include="RBush, Version=4.0.0.0, Culture=neutral, PublicKeyToken=c77e27b81f4d0187, processorArchitecture=MSIL">
       <HintPath>..\packages\RBush.Signed.4.0.0\lib\net47\RBush.dll</HintPath>
     </Reference>
@@ -151,6 +166,8 @@
       <HintPath>..\packages\System.Memory.4.5.5\lib\net461\System.Memory.dll</HintPath>
     </Reference>
     <Reference Include="System.Numerics" />
+    <Reference Include="System.IO.Compression" />
+    <Reference Include="System.IO.Compression.FileSystem" />
     <Reference Include="System.Numerics.Vectors, Version=4.1.4.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
       <HintPath>..\packages\System.Numerics.Vectors.4.5.0\lib\net46\System.Numerics.Vectors.dll</HintPath>
     </Reference>
@@ -166,12 +183,81 @@
     <Reference Include="System.Deployment" />
     <Reference Include="System.Drawing" />
     <Reference Include="System.Net.Http" />
+    <Reference Include="System.Security" />
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Xml" />
     <Reference Include="WindowsBase" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="AI\AiModels.cs" />
+    <Compile Include="AI\AiOrchestrator.cs" />
+    <Compile Include="AI\AiResultCard.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Include="AI\CaseReferenceResolver.cs" />
+    <Compile Include="AI\CaseSearchCore.cs" />
+    <Compile Include="AI\Handlers\CreateReminderHandler.cs" />
+    <Compile Include="AI\Handlers\NoRecentServiceHandler.cs" />
+    <Compile Include="AI\Handlers\SearchCaseHandler.cs" />
+    <Compile Include="AI\Handlers\SearchFamilyHandler.cs" />
+    <Compile Include="AI\PersianNluEngine.cs" />
+    <Compile Include="AI\PersianNormalizer.cs" />
+    <Compile Include="AI\ReminderDateParser.cs" />
+    <Compile Include="AI\SqlParam.cs" />
     <Compile Include="DAL\DatabaseHelper.cs" />
+    <Compile Include="DevCenter\DevCenterAccess.cs" />
+    <Compile Include="DevCenter\DevCenterHealthReport.cs" />
+    <Compile Include="DevCenter\DevCenterService.cs" />
+    <Compile Include="DevCenter\FrmDevCenter.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Enterprise\EntDb.cs" />
+    <Compile Include="Enterprise\EnterpriseInitializer.cs" />
+    <Compile Include="Enterprise\EnterpriseModels.cs" />
+    <Compile Include="Enterprise\EntPrompt.cs" />
+    <Compile Include="Enterprise\RuleEngine.cs" />
+    <Compile Include="Enterprise\WorkflowService.cs" />
+    <Compile Include="Enterprise\ApprovalService.cs" />
+    <Compile Include="Enterprise\TaskService.cs" />
+    <Compile Include="Enterprise\LockService.cs" />
+    <Compile Include="Enterprise\VersionService.cs" />
+    <Compile Include="Enterprise\SecurityAudit.cs" />
+    <Compile Include="Enterprise\ErrorLogger.cs" />
+    <Compile Include="Enterprise\PermissionService.cs" />
+    <Compile Include="Enterprise\ModuleService.cs" />
+    <Compile Include="Enterprise\FrmModules.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Enterprise\FrmPermissionMatrix.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Enterprise\FrmErrorLog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Enterprise\FrmSecurityAudit.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Enterprise\FrmVersions.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Enterprise\FrmLocks.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Enterprise\FrmRules.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Enterprise\FrmTasks.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Enterprise\FrmApprovals.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Enterprise\FrmWorkflowAdmin.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Enterprise\FrmWorkflowAction.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="DsFullCaseReport.xsd.cs">
       <DependentUpon>DsFullCaseReport.xsd.xsd</DependentUpon>
     </Compile>
@@ -192,24 +278,76 @@
     <Compile Include="FrmAdvancedSearch.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="FrmAiAssistant.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="FrmAssignMemberRole.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="FrmApplicant.cs">
       <SubType>Form</SubType>
     </Compile>
     <Compile Include="Accounting\AccAudit.cs" />
     <Compile Include="Accounting\AccountingRepo.cs" />
+    <Compile Include="Accounting\AccountingRuleException.cs" />
+    <Compile Include="Accounting\AccIntegrity.cs" />
+    <Compile Include="Accounting\AccRepair.cs" />
+    <Compile Include="Accounting\Money.cs" />
     <Compile Include="Accounting\AccReports.cs" />
+    <Compile Include="Accounting\AccTemplateExport.cs" />
+    <Compile Include="GuardianCardIntegration\CardDesigner\DemoCardData.cs" />
+    <Compile Include="GuardianCardIntegration\CardDesigner\CardFieldCatalog.cs" />
+    <Compile Include="GuardianCardIntegration\CardDesigner\TemplateHealthCheck.cs" />
+    <Compile Include="GuardianCardIntegration\CardDesigner\FieldCard.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Include="GuardianCardIntegration\CardDesigner\FrmPreviewRecordPicker.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="GuardianCardIntegration\CardDesigner\DesignerNav.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Include="GuardianCardIntegration\CardDesigner\DesignerSection.cs">
+      <SubType>Component</SubType>
+    </Compile>
     <Compile Include="GuardianCardIntegration\GuardianCardData.cs" />
     <Compile Include="GuardianCardIntegration\CaseCardRepository.cs" />
+    <Compile Include="GuardianCardIntegration\CardTemplateRepository.cs" />
+    <Compile Include="GuardianCardIntegration\FrmCardTemplateManager.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="GuardianCardIntegration\CardService.cs" />
     <Compile Include="GuardianCardIntegration\GuardianCardRenderer.cs" />
     <Compile Include="GuardianCardIntegration\Code128Barcode.cs" />
+    <Compile Include="GuardianCardIntegration\QrCodeHelper.cs" />
     <Compile Include="GuardianCardIntegration\FrmGuardianCardPreview.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="GuardianCardIntegration\FrmCardNoticesEdit.cs">
       <SubType>Form</SubType>
     </Compile>
     <Compile Include="GuardianCardIntegration\FrmGuardianCardBatchPrint.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="AssistanceReceiptIntegration\AssistanceReceiptData.cs" />
+    <Compile Include="AssistanceReceiptIntegration\AssistanceReceiptRepository.cs" />
+    <Compile Include="AssistanceReceiptIntegration\AssistanceReceiptService.cs" />
+    <Compile Include="AssistanceReceiptIntegration\AssistanceReceiptRenderer.cs" />
+    <Compile Include="AssistanceReceiptIntegration\FrmAssistanceReceiptSinglePrint.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="AssistanceReceiptIntegration\FrmAssistanceReceiptFilterPrint.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="AssistanceReceiptIntegration\AssistancePackage.cs" />
+    <Compile Include="AssistanceReceiptIntegration\AssistancePackageRepository.cs" />
+    <Compile Include="AssistanceReceiptIntegration\FrmAssistancePackageBatchPrint.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="Accounting\FrmAccounting.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Accounting\FrmAccountingRepair.cs">
       <SubType>Form</SubType>
     </Compile>
     <Compile Include="FrmCaseReport.cs">
@@ -227,6 +365,12 @@
     <Compile Include="FrmDocs.Designer.cs">
       <DependentUpon>FrmDocs.cs</DependentUpon>
     </Compile>
+    <Compile Include="FrmTransferLetter.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="FrmEmployees.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="FrmFamily.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -242,6 +386,9 @@
     <Compile Include="FrmLogin.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="FrmReportBuilder.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="FrmSettings.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -249,10 +396,17 @@
       <SubType>Form</SubType>
     </Compile>
     <Compile Include="Helpers\AfghanGeoData.cs" />
+    <Compile Include="Helpers\FormShortcuts.cs" />
+    <Compile Include="Helpers\AiInitializer.cs" />
     <Compile Include="Helpers\FileHelper.cs" />
+    <Compile Include="Helpers\FrmPasswordPrompt.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="Helpers\AccountingInitializer.cs" />
+    <Compile Include="Helpers\AdminInitializer.cs" />
     <Compile Include="Helpers\AuditLogger.cs" />
     <Compile Include="Helpers\AutoBackupService.cs" />
+    <Compile Include="Helpers\BackupEncryption.cs" />
     <Compile Include="Helpers\BackupHelper.cs" />
     <Compile Include="Helpers\CenterGuard.cs" />
     <Compile Include="Helpers\HadithProvider.cs" />
@@ -262,9 +416,34 @@
     <Compile Include="Helpers\ExcelCaseImporter.cs" />
     <Compile Include="Helpers\AccountingBackupHelper.cs" />
     <Compile Include="Helpers\FileCleanupHelper.cs" />
+    <Compile Include="Helpers\CaseDomain.cs" />
+    <Compile Include="Helpers\CaseGridColumns.cs" />
     <Compile Include="Helpers\GridReportExporter.cs" />
+    <Compile Include="Helpers\ReportDefinitions.cs" />
     <Compile Include="Helpers\LicenseInfo.cs" />
     <Compile Include="Helpers\LicenseManager.cs" />
+    <Compile Include="Sync\OfflineSyncInitializer.cs" />
+    <Compile Include="Sync\SyncOutboxService.cs" />
+    <Compile Include="Sync\CaseNumbering.cs" />
+    <Compile Include="Sync\SyncTransportModels.cs" />
+    <Compile Include="Sync\ISyncTransport.cs" />
+    <Compile Include="Sync\OfflineSyncTransport.cs" />
+    <Compile Include="Sync\HttpSyncTransport.cs" />
+    <Compile Include="Sync\HttpFileSyncTransport.cs" />
+    <Compile Include="Sync\SyncConflictStore.cs" />
+    <Compile Include="Sync\SyncBaselineStore.cs" />
+    <Compile Include="Sync\SyncApplier.cs" />
+    <Compile Include="Sync\SyncService.cs" />
+    <Compile Include="Sync\SyncFileService.cs" />
+    <Compile Include="Sync\BackgroundSyncManager.cs" />
+    <Compile Include="Sync\FrmServerConnection.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Sync\SyncConflictAnalyzer.cs" />
+    <Compile Include="Sync\SyncConflictResolver.cs" />
+    <Compile Include="Sync\FrmSyncConflicts.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="Sync\SyncModels.cs" />
     <Compile Include="Sync\IDataSyncProvider.cs" />
     <Compile Include="Sync\HtmlSyncProvider.cs" />
@@ -273,7 +452,15 @@
     <Compile Include="Sync\FrmSyncWizard.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="Sync\FrmSyncSimple.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Sync\FrmSyncHelp.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Sync\SyncCodeNormalizer.cs" />
     <Compile Include="Helpers\OpenXmlCaseExporter.cs" />
+    <Compile Include="Helpers\RdlcExportHelper.cs" />
     <Compile Include="Helpers\PasswordHelper.cs" />
     <Compile Include="Helpers\PersianDateHelper.cs" />
     <Compile Include="Helpers\PersianDatePicker.cs">
@@ -281,32 +468,113 @@
     </Compile>
     <Compile Include="Helpers\PrintHelper.cs" />
     <Compile Include="Helpers\LogoHelper.cs" />
+    <Compile Include="Helpers\IdCardHelper.cs" />
     <Compile Include="Helpers\LookupHelper.cs" />
     <Compile Include="Helpers\SecurityContext.cs" />
     <Compile Include="Helpers\SessionTimeoutMonitor.cs" />
+    <Compile Include="Helpers\ReportTemplateHelper.cs" />
+    <Compile Include="Helpers\TransferLetterExport.cs" />
+    <Compile Include="Helpers\DocxFormExport.cs" />
+    <Compile Include="Helpers\FrmDocxForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Helpers\FrmTemplatePicker.cs" />
+    <Compile Include="Helpers\FrmReportFilter.cs" />
+    <Compile Include="Helpers\ReportFilterCriteria.cs" />
     <Compile Include="Helpers\SettingsHelper.cs" />
     <Compile Include="Helpers\SqlHelpers.cs" />
     <Compile Include="Helpers\UiTheme.cs" />
-    <Compile Include="Helpers\ToggleSwitch.cs" />
-    <Compile Include="Helpers\PillTabStrip.cs" />
-    <Compile Include="Helpers\SettingsCardPanel.cs" />
-    <Compile Include="Helpers\ColorSwatchButton.cs" />
-    <Compile Include="Helpers\Sparkline.cs" />
-    <Compile Include="Helpers\StatCard.cs" />
-    <Compile Include="Helpers\SidebarNav.cs" />
-    <Compile Include="Helpers\DashboardCard.cs" />
+    <Compile Include="Helpers\ToggleSwitch.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Include="Helpers\PillTabStrip.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Include="Helpers\SettingsCardPanel.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Include="Helpers\ColorSwatchButton.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Include="Helpers\Sparkline.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Include="Helpers\StatCard.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Include="Helpers\SidebarNav.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Include="Helpers\DashboardCard.cs">
+      <SubType>Component</SubType>
+    </Compile>
     <Compile Include="Helpers\WindowChrome.cs" />
-    <Compile Include="Helpers\ModernTitleBar.cs" />
-    <Compile Include="Helpers\FieldBox.cs" />
+    <Compile Include="Helpers\ModernTitleBar.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Include="Helpers\FieldBox.cs">
+      <SubType>Component</SubType>
+    </Compile>
     <Compile Include="Helpers\ResponsiveLayout.cs" />
-    <Compile Include="Helpers\LoginHeroPanel.cs" />
-    <Compile Include="Helpers\SectionCard.cs" />
+    <Compile Include="Helpers\RtlCaptions.cs" />
+    <Compile Include="Helpers\ImageOrientationHelper.cs" />
+    <Compile Include="Helpers\DuplicateDetector.cs" />
+    <Compile Include="FrmDuplicates.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Helpers\DataQualityChecker.cs" />
+    <Compile Include="Helpers\PdfConversionHelper.cs" />
+    <Compile Include="FrmDataQualityReport.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="FrmCaseRelations.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="FrmBarcode.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="FrmArchive.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Sync\MediaModels.cs" />
+    <Compile Include="Sync\ValidationModels.cs" />
+    <Compile Include="Sync\PackageValidator.cs" />
+    <Compile Include="Sync\FrmValidationReport.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Sync\MediaScanner.cs" />
+    <Compile Include="Sync\MediaSyncEngine.cs" />
+    <Content Include="Languages\ps.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Languages\ar.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Languages\ur.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Languages\en.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Compile Include="Helpers\Lang.cs" />
+    <Compile Include="Helpers\LangData.cs" />
+    <Compile Include="Helpers\LanguageSweep.cs" />
+    <Compile Include="Helpers\LoginHeroPanel.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Include="Helpers\SectionCard.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Include="Helpers\GridPager.cs">
+      <SubType>Component</SubType>
+    </Compile>
     <Compile Include="Models\CaseModel.cs" />
     <Compile Include="Models\FamilyModel.cs" />
     <Compile Include="Models\DocumentModel.cs" />
     <Compile Include="Models\UserModel.cs" />
     <Compile Include="Models\AssistanceModel.cs" />
     <Compile Include="Program.cs" />
+    <Compile Include="SqlServerTypes\Loader.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <EmbeddedResource Include="FrmCase.resx">
       <DependentUpon>FrmCase.cs</DependentUpon>
@@ -322,6 +590,9 @@
     </EmbeddedResource>
     <EmbeddedResource Include="FrmFamily.resx">
       <DependentUpon>FrmFamily.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="GuardianCardIntegration\FrmCardTemplateManager.resx">
+      <DependentUpon>FrmCardTemplateManager.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="Properties\Resources.resx">
       <Generator>ResXFileCodeGenerator</Generator>
@@ -358,6 +629,41 @@
     <Content Include="Templates\FullCaseTemplate.docx">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <!-- قالب رسمی فورم های مالی؛ AccTemplateExport آن را از
+         Application.StartupPath\Templates\FinancialForms.xlsx می‌خواند. -->
+    <Content Include="Templates\FinancialForms.xlsx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <!-- قالب‌های فورم‌های رسمی (نامه انتقالی و…) عمداً در زیرپوشهٔ Forms
+         هستند تا ReportTemplateHelper آن‌ها را با «الگوی خروجی پرونده»
+         اشتباه نگیرد؛ آن متد فقط ریشهٔ Templates را می‌خواند. -->
+    <Content Include="Templates\Forms\نامه انتقالی.docx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Templates\Forms\وکالت موقت.docx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Templates\Forms\قرارداد خدمات راننده.docx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Templates\Forms\دریافت حقوق ماهانه.docx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Templates\Forms\درخواست رخصتی.docx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Templates\Forms\فورم شروع و ختم ماموریت.docx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Templates\Forms\فورم درخواست استخدام.docx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Templates\الگوی_شماره_1.docx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Templates\الگوی_شماره_2.docx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
     <!-- آموزش — جزوه‌ی آموزشی کامل کاربری؛ همان فایلی که دکمه‌ی «جزوه آموزشی»
          در داشبورد (FrmDashboard.OpenTrainingManual) از مسیر
          Application.StartupPath\Manual\TrainingManual.pdf باز می‌کند. -->
@@ -372,6 +678,21 @@
       <Link>WebView2Loader.dll</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <!-- آموزش — دی‌ال‌ال‌های بومیِ Microsoft.SqlServer.Types که پردازشِ RDLC به
+         آن‌ها نیاز دارد؛ SqlServerTypes\Loader.cs همین‌ها را در زمانِ اجرا (بر
+         اساسِ معماریِ فرآیند) با LoadLibrary بار می‌کند. */x86|x64/* -->
+    <Content Include="SqlServerTypes\x64\msvcr120.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="SqlServerTypes\x64\SqlServerSpatial140.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="SqlServerTypes\x86\msvcr120.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="SqlServerTypes\x86\SqlServerSpatial140.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
   <ItemGroup>
     <!-- آموزش — بسته فریزشدهٔ GuardianCard (فقط‌خواندنی، پوشه خواهر این پروژه)
@@ -382,12 +703,21 @@
       <Link>GuardianCard\%(RecursiveDir)%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <!-- آموزش — بستهٔ فریزشدهٔ AssistanceReceipt، دقیقاً همان الگوی GuardianCard
+         بالا (فقط منبع این یکی داخلِ خودِ پروژه در Templates\assistance-receipt
+         است، نه پوشهٔ خواهر). هیچ فایلی از آن توسط این پروژه ویرایش نمی‌شود. -->
+    <Content Include="Templates\assistance-receipt\**\*.*">
+      <Link>AssistanceReceipt\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
     <None Include="app.manifest" />
   </ItemGroup>
   <ItemGroup>
+    <Folder Include="AssistanceReceipt\docs\" />
+    <Folder Include="AssistanceReceipt\sample\" />
     <Folder Include="Forms\" />
   </ItemGroup>
   <ItemGroup>

@@ -200,5 +200,12 @@ namespace CaseManagement.Sync
     {
         public string GuardiansFilePath { get; set; }
         public string MembersFilePath { get; set; }
+
+        // ─── افزودنی: بسته‌ی کاملِ ورودی (یک پوشه) ───────────────────────────
+        // آموزش — این خاصیت کاملاً افزایشی است: اگر خالی بماند، همگام‌سازی
+        // دقیقاً مثل قبل با همان دو فایل کار می‌کند و هیچ رفتاری عوض نمی‌شود.
+        // اگر پر باشد، عکس‌ها و اسناد هم از زیرپوشه‌های Photos و Documents
+        // کشف می‌شوند. HtmlSyncProvider این خاصیت را نمی‌بیند و دست‌نخورده است.
+        public string PackageFolder { get; set; }
     }
 }

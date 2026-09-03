@@ -119,6 +119,12 @@ namespace CaseManagement
             btnDelete.Click += BtnDelete_Click;
             buttonFlow.Controls.Add(btnDelete);
 
+            // میان‌بُرها همین‌جا بسته می‌شوند چون این دکمه‌ها متغیرِ محلی‌اند.
+            Helpers.FormShortcuts.For(this)
+                .New(btnAdd)
+                .Delete(btnDelete)
+                .Bind(Keys.Control | Keys.T, "فعال / غیرفعال", btnToggle);
+
             topPanel.Controls.Add(buttonFlow);
             topPanel.Controls.Add(fieldsFlow);
 
@@ -207,7 +213,7 @@ namespace CaseManagement
         // ─── افزودن کاربر جدید ───────────────────────────────────────────────
         private void BtnAdd_Click(object sender, EventArgs e)
         {
-            if (!SecurityContext.IsAdmin())
+            if (!CaseManagement.Enterprise.PermissionService.Require("User.Manage"))
             {
                 UiTheme.ShowWarning(this, "مدیریت کاربران فقط برای مدیر مجاز است.");
                 return;
@@ -305,7 +311,7 @@ VALUES
         // ─── فعال/غیرفعال کردن کاربر ─────────────────────────────────────────
         private void BtnToggle_Click(object sender, EventArgs e)
         {
-            if (!SecurityContext.IsAdmin())
+            if (!CaseManagement.Enterprise.PermissionService.Require("User.Manage"))
             {
                 UiTheme.ShowWarning(this, "مدیریت کاربران فقط برای مدیر مجاز است.");
                 return;
@@ -361,7 +367,7 @@ WHERE  UserID = @UserID AND (@CID = 0 OR CenterID = @CID)", con))
         // ─── حذف کاربر ───────────────────────────────────────────────────────
         private void BtnDelete_Click(object sender, EventArgs e)
         {
-            if (!SecurityContext.IsAdmin())
+            if (!CaseManagement.Enterprise.PermissionService.Require("User.Manage"))
             {
                 UiTheme.ShowWarning(this, "مدیریت کاربران فقط برای مدیر مجاز است.");
                 return;
