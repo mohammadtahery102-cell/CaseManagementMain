@@ -49,6 +49,9 @@ namespace CaseManagement.GuardianCardIntegration
         // RenderDataAsync همیشه از همین استفاده می‌کند تا هم LoadCardAsync
         // هم مسیرِ «فقط برای این چاپ» یکسان رفتار کنند.
         private CardTemplateDesign _currentDesign;
+        // آموزش — «Full» (index.html، رفتارِ همیشگی) یا «Simple» (simple.html،
+        // قالبِ سادهٔ جدید)؛ نگاه کنید LoadCardAsync/RenderDataAsync.
+        private string _currentLayoutVariant = "Full";
 
         // آموزش — قالبِ اولیهٔ اختیاری: فقط از FrmCardTemplateManager (دکمهٔ
         // «پیش‌نمایش») استفاده می‌شود تا قالبِ در حالِ ویرایش، نه اولین قالبِ
@@ -101,7 +104,7 @@ namespace CaseManagement.GuardianCardIntegration
                     return;
                 }
 
-                using (var frm = new FrmCardNoticesEdit(_caseId, _currentData))
+                using (var frm = new FrmCardNoticesEdit(_caseId, _currentData, _currentLayoutVariant == "Simple"))
                 {
                     if (frm.ShowDialog(this) != DialogResult.OK) return;
 
@@ -215,7 +218,19 @@ namespace CaseManagement.GuardianCardIntegration
                 CardTemplate template = (templateIdx >= 0 && templateIdx < _templates.Count) ? _templates[templateIdx] : null;
                 _disabledFields.Clear();
                 _currentDesign = template != null ? template.Design : null;
-                if (template != null)
+                _currentLayoutVariant = template != null ? template.LayoutVariant : "Full";
+
+                if (template != null && _currentLayoutVariant == "Simple")
+                {
+                    // آموزش — قالبِ «ساده»: فیلدهای اختیاریِ آن کاملاً جداست
+                    // (ToggleableFieldsSimple)؛ Logo/Signature/Stamp/QRCode/
+                    // Barcode/Hologram روی این طرح اصلاً وجود ندارند، پس لمس
+                    // نمی‌شوند.
+                    foreach (string field in CardTemplateRepository.ToggleableFieldsSimple)
+                        if (!CardTemplateRepository.IsFieldEnabled(template, field))
+                            _disabledFields.Add(field);
+                }
+                else if (template != null)
                 {
                     CardTemplateRepository.ApplyTextFields(data, template);
                     // آموزش — Logo/Signature/Stamp باید در سطحِ *مسیرِ مبدأ*
@@ -236,6 +251,11 @@ namespace CaseManagement.GuardianCardIntegration
                     if (!template.Design.ShowBarcode) _disabledFields.Add("Barcode");
                     if (!template.Design.HologramEnabled) _disabledFields.Add("Hologram");
                 }
+
+                // آموزش — انتخابِ ماه‌های جدولِ پرداخت (برگهٔ دوم، مشترکِ هر
+                // دو قالب) — نگاه کنید CardTemplateRepository.FilterLedgerMonths.
+                if (template != null)
+                    CardTemplateRepository.FilterLedgerMonths(data, template.Design);
 
                 await RenderDataAsync(data);
             }
@@ -280,13 +300,18 @@ namespace CaseManagement.GuardianCardIntegration
                     signaturePath: _originalSignaturePath,
                     stampPath: _originalStampPath,
                     disabledFields: _disabledFields,
-                    design: _currentDesign);
+                    design: _currentDesign,
+                    layoutVariant: _currentLayoutVariant);
 
                 _webView.CoreWebView2.SetVirtualHostNameToFolderMapping(
                     GuardianCardRenderer.VirtualHostName, workingFolder,
                     CoreWebView2HostResourceAccessKind.Allow);
 
-                _webView.CoreWebView2.Navigate("https://" + GuardianCardRenderer.VirtualHostName + "/index.html");
+                // آموزش — قالبِ «ساده» به simple.html می‌رود (همان پوشهٔ کاری،
+                // چون StageAndPopulate کلِ بستهٔ GuardianCard از جمله
+                // simple.html/css/simple.css/js/simple.js را کپی می‌کند).
+                string page = _currentLayoutVariant == "Simple" ? "simple.html" : "index.html";
+                _webView.CoreWebView2.Navigate("https://" + GuardianCardRenderer.VirtualHostName + "/" + page);
                 _currentData = data;
                 SetStatus("کارت آماده شد — «" + data.GuardianName + "»");
             }

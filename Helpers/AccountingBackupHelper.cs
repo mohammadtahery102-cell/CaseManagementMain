@@ -2,6 +2,7 @@ using System;
 using System.Data;
 using System.Data.SQLite;
 using System.IO;
+using System.IO.Compression;
 using CaseManagement.DAL;
 
 namespace CaseManagement.Helpers
@@ -63,6 +64,15 @@ namespace CaseManagement.Helpers
         // ─── بازیابی: جایگزینی کامل (با بکاپ ایمنی خودکار قبل از شروع) ───────
         public static void ImportBackup(string backupFolder)
         {
+            ImportBackup(backupFolder, null);
+        }
+
+        // اورلودِ داخلی — safetyBackupPassword در صورت پر بودن، بکاپِ ایمنیِ
+        // خودکار را هم رمزنگاری می‌کند (مسیرِ فراخوانیِ ImportEncryptedBackup،
+        // که قبلاً رمز را از کاربر گرفته). null یعنی رفتارِ قدیمی (بکاپِ ایمنیِ
+        // رمزنگاری‌نشده) — برای فراخوان‌های موجودِ این متد بدون تغییر می‌ماند.
+        public static void ImportBackup(string backupFolder, string safetyBackupPassword)
+        {
             if (string.IsNullOrWhiteSpace(backupFolder))
                 throw new Exception("مسیر بکاپ خالی است.");
 
@@ -79,7 +89,11 @@ namespace CaseManagement.Helpers
             string safetyRoot = Path.Combine(
                 Path.GetDirectoryName(backupFolder) ?? backupFolder, "AccountingPreRestoreSafety");
             Directory.CreateDirectory(safetyRoot);
-            ExportBackup(safetyRoot);
+
+            if (string.IsNullOrEmpty(safetyBackupPassword))
+                ExportBackup(safetyRoot);
+            else
+                ExportEncryptedBackup(safetyRoot, safetyBackupPassword);
 
             // ۲) جایگزینی کامل داخل یک تراکنش
             using (SQLiteConnection con = new DatabaseHelper().GetConnection())
@@ -106,6 +120,68 @@ namespace CaseManagement.Helpers
                         throw;
                     }
                 }
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        // نسخهٔ رمزنگاری‌شده (نسخهٔ ۱٫۰ — Option D)، عیناً همان الگوی BackupHelper.
+        // ─────────────────────────────────────────────────────────────────────
+        public static string ExportEncryptedBackup(string parentFolder, string password)
+        {
+            string plainFolder = null;
+            string zipPath = null;
+
+            try
+            {
+                plainFolder = ExportBackup(parentFolder);
+                zipPath = plainFolder + ".zip";
+                string encryptedPath = plainFolder + BackupEncryption.EncryptedExtension;
+
+                ZipFile.CreateFromDirectory(plainFolder, zipPath, CompressionLevel.Optimal, false);
+                BackupEncryption.EncryptFile(zipPath, encryptedPath, password);
+
+                AuditLogger.Log("بکاپ رمزنگاری‌شده حسابداری", "AccountingBackup", 0, "", encryptedPath);
+                return encryptedPath;
+            }
+            catch (Exception ex)
+            {
+                AuditLogger.Log("خطا در بکاپ رمزنگاری‌شده حسابداری", "AccountingBackup", 0, "", ex.Message);
+                throw;
+            }
+            finally
+            {
+                if (plainFolder != null) BackupEncryption.TryDeleteDirectory(plainFolder);
+                if (zipPath != null) BackupEncryption.TryDelete(zipPath);
+            }
+        }
+
+        public static void ImportEncryptedBackup(string encryptedFilePath, string password)
+        {
+            if (string.IsNullOrWhiteSpace(encryptedFilePath) || !File.Exists(encryptedFilePath))
+                throw new Exception("فایل بکاپ رمزنگاری‌شدهٔ حسابداری پیدا نشد.");
+
+            string tempZip = Path.Combine(Path.GetTempPath(), "CMAccRestore_" + Guid.NewGuid().ToString("N") + ".zip");
+            string tempFolder = Path.Combine(Path.GetTempPath(), "CMAccRestore_" + Guid.NewGuid().ToString("N"));
+
+            try
+            {
+                BackupEncryption.DecryptFile(encryptedFilePath, tempZip, password);
+                ZipFile.ExtractToDirectory(tempZip, tempFolder);
+
+                // رمزِ همین بازیابی برای بکاپِ ایمنیِ داخلی هم استفاده می‌شود —
+                // بدونِ این، آن بکاپِ خودکار به‌صورتِ متنِ‌ساده روی دیسک می‌ماند.
+                ImportBackup(tempFolder, password);
+                AuditLogger.Log("بازیابیِ بکاپ رمزنگاری‌شدهٔ حسابداری", "AccountingBackup", 0, "", encryptedFilePath);
+            }
+            catch (Exception ex)
+            {
+                AuditLogger.Log("خطا در بازیابیِ بکاپ رمزنگاری‌شدهٔ حسابداری", "AccountingBackup", 0, "", ex.Message);
+                throw;
+            }
+            finally
+            {
+                BackupEncryption.TryDelete(tempZip);
+                BackupEncryption.TryDeleteDirectory(tempFolder);
             }
         }
 

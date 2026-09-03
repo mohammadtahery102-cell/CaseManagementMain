@@ -435,7 +435,7 @@ ORDER BY ApplicantID DESC", con))
 
         private void SaveApplicant()
         {
-            if (!SecurityContext.CanEdit())
+            if (!CaseManagement.Enterprise.PermissionService.Require("Applicant.Edit"))
             {
                 UiTheme.ShowWarning(this, "کاربر فقط مشاهده اجازه ثبت متقاضی ندارد.");
                 return;
@@ -445,6 +445,22 @@ ORDER BY ApplicantID DESC", con))
                 UiTheme.ShowWarning(this, "نام متقاضی را وارد کنید.");
                 _txtFullName.Focus();
                 return;
+            }
+
+            // آموزش — هشدارِ تذکرهٔ تکراری، همان الگویِ FrmCase/FrmFamily: بررسیِ
+            // نرم پیش از هر عملیاتِ فایل/دیتابیس، تا کاربری که انصراف می‌دهد
+            // اثری از خود باقی نگذارد.
+            string tazkiraAuditNote = null;
+            List<string> tazkiraMatches = DuplicateDetector.FindByTazkira(_txtTazkira.Text.Trim(), "TblApplicant", _currentId);
+            if (tazkiraMatches.Count > 0)
+            {
+                if (!UiTheme.ShowConfirm(this,
+                    "این شماره تذکره قبلاً برای موارد زیر ثبت شده است:\n\n" +
+                    string.Join("\n", tazkiraMatches) +
+                    "\n\nآیا مطمئن هستید که می‌خواهید ادامه دهید؟", "احتمال ثبت تکراری"))
+                    return;
+
+                tazkiraAuditNote = "تذکره " + _txtTazkira.Text.Trim() + " => " + string.Join(" | ", tazkiraMatches);
             }
 
             // مسیر ذخیره‌ی سند در همین مرحله‌ی تأیید پرسیده می‌شود (درخواست
@@ -491,6 +507,9 @@ WHERE ApplicantID = @ID AND (@CID = 0 OR CenterID = @CID)", con))
                         }
                     }
                 }
+                if (tazkiraAuditNote != null)
+                    AuditLogger.Log("هشدار تذکره تکراری - تأیید کاربر", "TblApplicant", _currentId, "", tazkiraAuditNote);
+
                 UiTheme.ShowSuccess(this, "متقاضی ذخیره شد.");
                 LoadApplicants();
                 ClearForm();
@@ -522,7 +541,7 @@ WHERE ApplicantID = @ID AND (@CID = 0 OR CenterID = @CID)", con))
 
         private void DeleteApplicant()
         {
-            if (!SecurityContext.CanDelete())
+            if (!CaseManagement.Enterprise.PermissionService.Require("Applicant.Delete"))
             {
                 UiTheme.ShowWarning(this, "حذف فقط برای مدیر مجاز است.");
                 return;

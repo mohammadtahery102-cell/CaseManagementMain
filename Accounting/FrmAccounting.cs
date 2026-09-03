@@ -590,9 +590,23 @@ namespace CaseManagement.Accounting
             btnDelete.Size = new Size(160, 38); btnDelete.Margin = new Padding(4, 0, 4, 0);
             btnDelete.Click += delegate { DeleteSelectedTxn(); };
 
+            // «قرارداد ترانسپورت» — سندِ اداریِ خدماتِ راننده. اگر تراکنشی در
+            // جدول انتخاب شده باشد، قرارداد به آن پیوند می‌خورد (AdmDriverContract.TxnID)
+            // و نسخهٔ امضاشده هم می‌تواند روی همان تراکنش آپلود شود. هیچ ستون
+            // یا جدولِ مالی‌ای تغییر نمی‌کند.
+            // «سند روی قالب رسمی» — همان تراکنش، روی شیت «سند پرداخت وجه».
+            // دکمهٔ «چاپ فاکتور» بالا دست‌نخورده می‌ماند؛ این یک مسیر موازی است.
+            var btnVoucherTpl = UiTheme.CreateSecondaryButton("سند روی قالب رسمی", "📄");
+            btnVoucherTpl.Size = new Size(175, 38); btnVoucherTpl.Margin = new Padding(4, 0, 4, 0);
+            btnVoucherTpl.Click += delegate { ExportSelectedVoucherTemplate(); };
+
+            var btnContract = UiTheme.CreateSecondaryButton("قرارداد ترانسپورت", "🚚");
+            btnContract.Size = new Size(175, 38); btnContract.Margin = new Padding(4, 0, 4, 0);
+            btnContract.Click += delegate { ShowDriverContractForm(); };
+
             _btnSaveTxn = btnSave;
 
-            foreach (Button b in new[] { btnSave, btnNew, btnVoucher, btnEdit, btnDelete })
+            foreach (Button b in new[] { btnSave, btnNew, btnVoucher, btnVoucherTpl, btnEdit, btnDelete, btnContract })
             {
                 Button bb = b;
                 bb.SizeChanged += delegate { UiTheme.RoundCorners(bb, 10); };
@@ -755,7 +769,7 @@ namespace CaseManagement.Accounting
 
         private void BeginReviseSelectedTxn()
         {
-            if (!SecurityContext.CanEdit()) { UiTheme.ShowWarning(this, "کاربر فقط مشاهده اجازه اصلاح ندارد."); return; }
+            if (!CaseManagement.Enterprise.PermissionService.Require("Accounting.Edit")) { UiTheme.ShowWarning(this, "کاربر فقط مشاهده اجازه اصلاح ندارد."); return; }
             if (_gridTxn.CurrentRow == null || !_gridTxn.Columns.Contains("TxnID"))
             { UiTheme.ShowWarning(this, "ابتدا یک تراکنش را از جدول انتخاب کنید."); return; }
 
@@ -844,7 +858,7 @@ namespace CaseManagement.Accounting
 
         private void SaveTransaction()
         {
-            if (!SecurityContext.CanEdit()) { UiTheme.ShowWarning(this, "کاربر فقط مشاهده اجازه ثبت ندارد."); return; }
+            if (!CaseManagement.Enterprise.PermissionService.Require("Accounting.Edit")) { UiTheme.ShowWarning(this, "کاربر فقط مشاهده اجازه ثبت ندارد."); return; }
             double amount = (double)_txnAmount.Value;
             if (amount <= 0) { UiTheme.ShowWarning(this, "مبلغ معتبر وارد کنید."); _txnAmount.Focus(); return; }
 
@@ -973,7 +987,7 @@ namespace CaseManagement.Accounting
         // پرسشِ حسابرس که «چرا این سند باطل شد؟» پاسخی ندارد.
         private void DeleteSelectedTxn()
         {
-            if (!SecurityContext.CanDelete()) { UiTheme.ShowWarning(this, "ابطال سند فقط برای مدیر مجاز است."); return; }
+            if (!CaseManagement.Enterprise.PermissionService.Require("Accounting.Reverse")) { UiTheme.ShowWarning(this, "ابطال سند فقط برای مدیر مجاز است."); return; }
             if (_gridTxn.CurrentRow == null || !_gridTxn.Columns.Contains("TxnID")) { UiTheme.ShowWarning(this, "ابتدا یک تراکنش را انتخاب کنید."); return; }
             object idv = _gridTxn.CurrentRow.Cells["TxnID"].Value;
             if (idv == null || idv == DBNull.Value) return;
@@ -1225,6 +1239,9 @@ namespace CaseManagement.Accounting
 
         private void CloseSelectedPeriod()
         {
+            if (!CaseManagement.Enterprise.PermissionService.Require("Accounting.ClosePeriod"))
+            { UiTheme.ShowWarning(this, "بستن دوره مالی فقط برای مدیر سیستم مجاز است."); return; }
+
             if (_editingPeriodId == 0) { UiTheme.ShowWarning(this, "ابتدا یک دوره را از جدول انتخاب کنید."); return; }
             double closing = _repo.GetPeriodClosing(_editingPeriodId);
             if (!UiTheme.ShowConfirm(this, "با بستن دوره دیگر قابل ویرایش نیست.\nمانده پایان دوره: " + closing.ToString("N0") + " افغانی\nادامه می‌دهید؟", "بستن دوره")) return;
@@ -1625,9 +1642,14 @@ namespace CaseManagement.Accounting
             var btnDelete = UiTheme.CreateButton("حذف", "✕", UiTheme.Danger); btnDelete.SetBounds(230, 6, 100, 34); btnDelete.Click += delegate { DeleteSelectedSalary(); };
             var btnVoucherSa = UiTheme.CreateButton("چاپ فیش حقوق", "🧾", UiTheme.Primary); btnVoucherSa.SetBounds(340, 6, 150, 34);
             btnVoucherSa.Click += delegate { PrintSelectedSalaryVoucher(); };
+            // «فورم دریافت حقوق ماهانه» — فورمِ رسمیِ Word که کارمند هنگام
+            // گرفتن معاش امضاء می‌کند. جدا از «فیش حقوق» چاپیِ موجود است و آن
+            // را دست نمی‌زند.
+            var btnSalaryReceipt = UiTheme.CreateSecondaryButton("فورم دریافت حقوق", "📄"); btnSalaryReceipt.SetBounds(498, 6, 170, 34);
+            btnSalaryReceipt.Click += delegate { ExportSalaryReceiptForm(); };
             _lblSalaryTotal = new Label { AutoSize = false, Font = UiTheme.FontBold(11F), ForeColor = UiTheme.PrimaryDark, TextAlign = ContentAlignment.MiddleRight };
-            _lblSalaryTotal.SetBounds(500, 6, 500, 34);
-            btnBar.Controls.Add(btnSave); btnBar.Controls.Add(btnNew); btnBar.Controls.Add(btnDelete); btnBar.Controls.Add(btnVoucherSa); btnBar.Controls.Add(_lblSalaryTotal);
+            _lblSalaryTotal.SetBounds(678, 6, 400, 34);
+            btnBar.Controls.Add(btnSave); btnBar.Controls.Add(btnNew); btnBar.Controls.Add(btnDelete); btnBar.Controls.Add(btnVoucherSa); btnBar.Controls.Add(btnSalaryReceipt); btnBar.Controls.Add(_lblSalaryTotal);
 
             _gridSalary = NewGrid();
             _gridSalary.CellDoubleClick += delegate (object s, DataGridViewCellEventArgs e) { if (e.RowIndex >= 0) PrintSelectedSalaryVoucher(); };
@@ -1700,6 +1722,189 @@ namespace CaseManagement.Accounting
             if (idv == null || idv == DBNull.Value) return;
             try { new AccReports(_repo).PrintSalaryVoucher(this, Convert.ToInt32(idv)); }
             catch (Exception ex) { UiTheme.ShowError(this, "خطا در ساخت فیش: " + ex.Message); }
+        }
+
+        // ─── فورم رسمیِ «دریافت حقوق ماهانه» (Word / PDF) ────────────────────
+        // مقادیر از ردیفِ انتخاب‌شدهٔ جدولِ حقوق خوانده می‌شوند. «نام پدر» و
+        // «ولایت» در AccSalary وجود ندارند، پس خالی می‌آیند و کاربر خودش
+        // پرشان می‌کند — به‌جای حدس زدن.
+        private void ExportSalaryReceiptForm()
+        {
+            if (_gridSalary.CurrentRow == null || !_gridSalary.Columns.Contains("SalaryID"))
+            { UiTheme.ShowWarning(this, "ابتدا یک ردیف حقوق را از جدول انتخاب کنید."); return; }
+
+            var row = _gridSalary.CurrentRow;
+            string name = CellText(row, "نام");
+            string position = CellText(row, "سمت");
+            string amount = CellText(row, "مبلغ");
+
+            int? period = ComboIntValue(_saPeriod);
+            string periodTitle = period.HasValue ? _repo.GetPeriodTitle(period.Value) : "";
+
+            var fields = new System.Collections.Generic.List<Helpers.FrmDocxForm.FieldDef>
+            {
+                Helpers.FrmDocxForm.FieldDef.Text("شماره مسلسل", "SerialNo", CellText(row, "SalaryID")),
+                Helpers.FrmDocxForm.FieldDef.Text("نام / نام خانوادگی", "EmployeeName", name, true),
+                Helpers.FrmDocxForm.FieldDef.Text("نام پدر", "FatherName"),
+                Helpers.FrmDocxForm.FieldDef.Text("وظیفه", "Position", position),
+                Helpers.FrmDocxForm.FieldDef.Text("ولایت / ولسوالی", "Province"),
+                Helpers.FrmDocxForm.FieldDef.Text("بابت برج", "Month", periodTitle),
+                Helpers.FrmDocxForm.FieldDef.Text("مبلغ دریافتی", "Amount", amount),
+                Helpers.FrmDocxForm.FieldDef.Text("تاریخ", "Date",
+                    Helpers.PersianDateHelper.ToPersianDateString(DateTime.Now))
+            };
+
+            using (var frm = new Helpers.FrmDocxForm("فورم دریافت حقوق کارمند",
+                       Helpers.DocxFormExport.TplSalaryReceipt, fields,
+                       "دریافت حقوق - " + name))
+            {
+                frm.Require("EmployeeName", "Amount");
+                frm.ShowDialog(this);
+            }
+        }
+
+        // ─── سند پرداخت وجه روی قالب رسمی اکسل ───────────────────────────────
+        private void ExportSelectedVoucherTemplate()
+        {
+            if (_gridTxn.CurrentRow == null || !_gridTxn.Columns.Contains("TxnID"))
+            { UiTheme.ShowWarning(this, "ابتدا یک تراکنش را از جدول انتخاب کنید."); return; }
+
+            object idv = _gridTxn.CurrentRow.Cells["TxnID"].Value;
+            if (idv == null || idv == DBNull.Value) return;
+
+            if (!AccTemplateExport.TemplateExists)
+            {
+                UiTheme.ShowError(this, "فایل قالب رسمی پیدا نشد:\n" + AccTemplateExport.TemplatePath);
+                return;
+            }
+
+            using (var sfd = new SaveFileDialog
+            {
+                Filter = "فایل اکسل|*.xlsx",
+                FileName = "سند پرداخت وجه - " + CellText(_gridTxn.CurrentRow, "شماره سند") + ".xlsx"
+            })
+            {
+                if (sfd.ShowDialog(this) != DialogResult.OK) return;
+                try
+                {
+                    new AccReports(_repo).ExportVoucherTemplate(sfd.FileName, Convert.ToInt32(idv));
+                    UiTheme.ShowSuccess(this, "سند روی قالب رسمی ذخیره شد:\n" + sfd.FileName);
+                }
+                catch (Exception ex) { UiTheme.ShowError(this, "خطا در ساخت سند روی قالب: " + ex.Message); }
+            }
+        }
+
+        // ─── قرارداد خدمات ترانسپورت (Word / PDF) ────────────────────────────
+        // تراکنشِ انتخاب‌شده اختیاری است: اگر ردیفی انتخاب شده باشد، شمارهٔ
+        // سند و طرف حساب از آن پیش‌پر می‌شوند و قرارداد به همان تراکنش پیوند
+        // می‌خورد؛ اگر نه، کاربر خودش وارد می‌کند.
+        private void ShowDriverContractForm()
+        {
+            int? txnId = null;
+            string partyName = "", docNo = "";
+
+            if (_gridTxn.CurrentRow != null && _gridTxn.Columns.Contains("TxnID"))
+            {
+                object idv = _gridTxn.CurrentRow.Cells["TxnID"].Value;
+                if (idv != null && idv != DBNull.Value) txnId = Convert.ToInt32(idv);
+                partyName = CellText(_gridTxn.CurrentRow, "طرف حساب");
+                docNo = CellText(_gridTxn.CurrentRow, "شماره سند");
+            }
+
+            var fields = new System.Collections.Generic.List<Helpers.FrmDocxForm.FieldDef>
+            {
+                Helpers.FrmDocxForm.FieldDef.Section("قرارداد"),
+                Helpers.FrmDocxForm.FieldDef.Text("شماره قرارداد", "ContractNo", docNo),
+                Helpers.FrmDocxForm.FieldDef.Text("طرف حساب", "PartyName", partyName),
+
+                Helpers.FrmDocxForm.FieldDef.Section("راننده و موتر"),
+                Helpers.FrmDocxForm.FieldDef.Text("نام راننده", "DriverName"),
+                Helpers.FrmDocxForm.FieldDef.Text("شماره تماس", "DriverPhone"),
+                Helpers.FrmDocxForm.FieldDef.Text("مودل موتر", "CarModel"),
+                Helpers.FrmDocxForm.FieldDef.Text("شماره پلیت", "PlateNo"),
+
+                Helpers.FrmDocxForm.FieldDef.Section("شرایط"),
+                Helpers.FrmDocxForm.FieldDef.Text("مناطق", "Areas"),
+                Helpers.FrmDocxForm.FieldDef.Choice("نوع قرارداد", "FuelType",
+                    new[] { "با سوخت", "بدون سوخت" }),
+                Helpers.FrmDocxForm.FieldDef.Text("از تاریخ", "FromDate",
+                    Helpers.PersianDateHelper.ToPersianDateString(DateTime.Now)),
+                Helpers.FrmDocxForm.FieldDef.Text("تا تاریخ", "ToDate"),
+                Helpers.FrmDocxForm.FieldDef.Text("دستمزد روزانه (افغانی)", "DailyWage"),
+                Helpers.FrmDocxForm.FieldDef.Text("محل خدمات اضافی", "ExtraPlace"),
+                Helpers.FrmDocxForm.FieldDef.Text("مبلغ توافق‌شدهٔ اضافی", "ExtraAmount")
+            };
+
+            using (var frm = new Helpers.FrmDocxForm("قرارداد خدمات ترانسپورت",
+                       Helpers.DocxFormExport.TplDriverContract, fields, "قرارداد ترانسپورت"))
+            {
+                frm.Require("DriverName", "ContractNo");
+
+                // قرارداد فقط یک‌بار در هر نشست ثبت می‌شود، حتی اگر کاربر هم
+                // Word و هم PDF بگیرد.
+                bool saved = false;
+                frm.OnExported = delegate (string path)
+                {
+                    if (saved) return;
+                    saved = SaveDriverContract(frm, txnId, path);
+                };
+
+                frm.ShowDialog(this);
+            }
+        }
+
+        // ثبتِ قرارداد در AdmDriverContract. اگر ثبت نشد، فایلِ ساخته‌شده در
+        // دستِ کاربر است و نباید کل عملیات شکست‌خورده به‌نظر برسد — ولی
+        // بی‌صدا هم نمی‌ماند.
+        private bool SaveDriverContract(IWin32Window owner, int? txnId, string filePath)
+        {
+            try
+            {
+                var db = new CaseManagement.DAL.DatabaseHelper();
+                double wage;
+                if (!double.TryParse(TokenOf(owner, "DailyWage"), out wage)) wage = 0;
+
+                db.ExecuteNonQuery(@"
+INSERT INTO AdmDriverContract
+    (ContractNo, DriverName, DriverPhone, CarModel, PlateNo, PartyName, Areas, FuelType,
+     FromDate, ToDate, DailyWage, ExtraPlace, ExtraAmount, TxnID, FilePath, CenterID, CreatedBy)
+VALUES
+    (@no, @dn, @dp, @cm, @pl, @pa, @ar, @ft, @fd, @td, @dw, @ep, @ea, @txn, @fp, @cid, @by)",
+                    Prm("@no", TokenOf(owner, "ContractNo")), Prm("@dn", TokenOf(owner, "DriverName")),
+                    Prm("@dp", TokenOf(owner, "DriverPhone")), Prm("@cm", TokenOf(owner, "CarModel")),
+                    Prm("@pl", TokenOf(owner, "PlateNo")), Prm("@pa", TokenOf(owner, "PartyName")),
+                    Prm("@ar", TokenOf(owner, "Areas")), Prm("@ft", TokenOf(owner, "FuelType")),
+                    Prm("@fd", TokenOf(owner, "FromDate")), Prm("@td", TokenOf(owner, "ToDate")),
+                    Prm("@dw", wage), Prm("@ep", TokenOf(owner, "ExtraPlace")),
+                    Prm("@ea", TokenOf(owner, "ExtraAmount")),
+                    Prm("@txn", (object)txnId ?? DBNull.Value), Prm("@fp", filePath),
+                    Prm("@cid", SecurityContext.CurrentCenterId), Prm("@by", SecurityContext.Username));
+                return true;
+            }
+            catch (Exception ex)
+            {
+                UiTheme.ShowWarning(this, "قرارداد ساخته شد، اما ثبت آن در دیتابیس انجام نشد:" +
+                                          Environment.NewLine + ex.Message);
+                return false;
+            }
+        }
+
+        private static string TokenOf(IWin32Window owner, string token)
+        {
+            var frm = owner as Helpers.FrmDocxForm;
+            return frm == null ? "" : frm.ValueOf(token);
+        }
+
+        private static System.Data.SQLite.SQLiteParameter Prm(string name, object value)
+        {
+            return new System.Data.SQLite.SQLiteParameter(name, value ?? DBNull.Value);
+        }
+
+        private static string CellText(DataGridViewRow row, string column)
+        {
+            if (!row.DataGridView.Columns.Contains(column)) return "";
+            object v = row.Cells[column].Value;
+            return v == null || v == DBNull.Value ? "" : Convert.ToString(v);
         }
 
         private void LoadSalaries()
@@ -1898,13 +2103,16 @@ namespace CaseManagement.Accounting
 
         private void AddReportButton(FlowLayoutPanel flow, string title, EventHandler onClick)
         {
-            var card = new Panel { Width = 260, Height = 110, Margin = new Padding(10), BackColor = UiTheme.CardBack, BorderStyle = BorderStyle.FixedSingle };
+            var card = new Panel { Width = 260, Height = 140, Margin = new Padding(10), BackColor = UiTheme.CardBack, BorderStyle = BorderStyle.FixedSingle };
             var lbl = new Label { Text = title, AutoSize = false, Dock = DockStyle.Top, Height = 44, TextAlign = ContentAlignment.MiddleCenter, Font = UiTheme.FontBold(10.5F), ForeColor = UiTheme.TextDark };
             var btnPrint = UiTheme.CreateButton("پیش‌نمایش/چاپ/PDF", "🖨", UiTheme.Primary); btnPrint.SetBounds(10, 50, 240, 26); btnPrint.Click += onClick;
             var btnExcel = UiTheme.CreateSecondaryButton("خروجی اکسل", "📊"); btnExcel.SetBounds(10, 80, 240, 26);
             btnExcel.Tag = title;
             btnExcel.Click += delegate { RunReportExcel(title); };
-            card.Controls.Add(lbl); card.Controls.Add(btnPrint); card.Controls.Add(btnExcel);
+            var btnTpl = UiTheme.CreateSecondaryButton("خروجی روی قالب رسمی", "📄"); btnTpl.SetBounds(10, 110, 240, 26);
+            btnTpl.Tag = title;
+            btnTpl.Click += delegate { RunReportTemplate(title); };
+            card.Controls.Add(lbl); card.Controls.Add(btnPrint); card.Controls.Add(btnExcel); card.Controls.Add(btnTpl);
             flow.Controls.Add(card);
         }
 
@@ -1936,6 +2144,39 @@ namespace CaseManagement.Accounting
                 }
             }
             catch (Exception ex) { UiTheme.ShowError(this, "خطا در تولید گزارش: " + ex.Message); }
+        }
+
+        // خروجی روی «قالب رسمی» (Templates\FinancialForms.xlsx).
+        // فعلاً فقط گزارش ۱ قالب دارد؛ بقیه به‌تدریج اضافه می‌شوند.
+        private void RunReportTemplate(string title)
+        {
+            // قالب رسمی فقط برای گزارش‌هایی وجود دارد که شیت متناظر دارند:
+            // ۱ صورت حساب کلی · ۲ تفکیک شهریه و هزینه ها · ۴ حقوق.
+            // گزارش‌های ۳ و ۵ تا ۸ در فایل قالب شیتی ندارند.
+            bool hasTemplate = title.StartsWith("۱") || title.StartsWith("۲") || title.StartsWith("۴");
+            if (!hasTemplate)
+            {
+                UiTheme.ShowWarning(this, "برای این گزارش هنوز قالب رسمی تعریف نشده است.\nفعلاً «خروجی اکسل» را استفاده کنید.");
+                return;
+            }
+            if (!AccTemplateExport.TemplateExists)
+            {
+                UiTheme.ShowError(this, "فایل قالب رسمی پیدا نشد:\n" + AccTemplateExport.TemplatePath);
+                return;
+            }
+            using (var sfd = new SaveFileDialog { Filter = "فایل اکسل|*.xlsx", FileName = title.Replace("/", "-") + " - قالب رسمی.xlsx" })
+            {
+                if (sfd.ShowDialog(this) != DialogResult.OK) return;
+                try
+                {
+                    var reports = new AccReports(_repo);
+                    if (title.StartsWith("۲")) reports.ExportSplitStatementTemplate(sfd.FileName, SelectedReportPeriod);
+                    else if (title.StartsWith("۴")) reports.ExportSalaryStatementTemplate(sfd.FileName, SelectedReportPeriod);
+                    else reports.ExportGeneralStatementTemplate(sfd.FileName, SelectedReportPeriod);
+                    UiTheme.ShowSuccess(this, "فایل اکسل روی قالب رسمی ذخیره شد:\n" + sfd.FileName);
+                }
+                catch (Exception ex) { UiTheme.ShowError(this, "خطا در ساخت اکسل روی قالب: " + ex.Message); }
+            }
         }
 
         private void RunReportExcel(string title)
@@ -2074,7 +2315,7 @@ namespace CaseManagement.Accounting
         // ممکن است به هر مرکزی تعلق داشته باشند (یا اصلاً مرکز نداشته باشند).
         private void OpenRepairTool()
         {
-            if (!SecurityContext.IsSuperAdmin())
+            if (!CaseManagement.Enterprise.PermissionService.Require("Accounting.Repair"))
             { UiTheme.ShowWarning(this, "اصلاح داده‌های تاریخی حسابداری فقط برای مدیر کل مجاز است."); return; }
 
             using (var frm = new FrmAccountingRepair(_repo))
@@ -2227,8 +2468,15 @@ namespace CaseManagement.Accounting
             btnImport.SetBounds(224, 10, 210, 36);
             btnImport.Click += delegate { ImportAccountingBackup(); };
 
+            // آموزش — نسخهٔ ۱٫۰: مسیرِ جدا برای بازیابیِ بکاپ‌های حسابداریِ
+            // ساخته‌شده پیش از این ارتقا (پوشهٔ رمزنگاری‌نشده).
+            var btnImportLegacy = UiTheme.CreateSecondaryButton("بازیابی بکاپ قدیمی", "⇧");
+            btnImportLegacy.SetBounds(444, 10, 180, 36);
+            btnImportLegacy.Click += delegate { ImportAccountingBackupLegacy(); };
+
             btnBar.Controls.Add(btnExport);
             btnBar.Controls.Add(btnImport);
+            btnBar.Controls.Add(btnImportLegacy);
 
             _accBackupOutput = new TextBox
             {
@@ -2250,16 +2498,23 @@ namespace CaseManagement.Accounting
 
         private void ExportAccountingBackup()
         {
-            if (!SecurityContext.IsSuperAdmin())
+            if (!CaseManagement.Enterprise.PermissionService.Require("Accounting.Backup"))
             { UiTheme.ShowWarning(this, "بکاپ‌گیری حسابداری فقط برای مدیر کل مجاز است."); return; }
 
             using (var fbd = new FolderBrowserDialog { Description = "پوشه‌ای برای ذخیره‌ی بکاپ حسابداری انتخاب کنید" })
             {
                 if (fbd.ShowDialog(this) != DialogResult.OK) return;
+
+                string password;
+                if (!FrmPasswordPrompt.TryPrompt(this, "رمزِ بکاپ حسابداری",
+                        "این رمز برای رمزنگاریِ بکاپ استفاده می‌شود. بدونِ آن، بازیابی ممکن نیست.",
+                        requireConfirmation: true, password: out password))
+                    return;
+
                 try
                 {
-                    string path = AccountingBackupHelper.ExportBackup(fbd.SelectedPath);
-                    AppendAccBackupOutput("بکاپ حسابداری با موفقیت ساخته شد: " + path);
+                    string path = AccountingBackupHelper.ExportEncryptedBackup(fbd.SelectedPath, password);
+                    AppendAccBackupOutput("بکاپ رمزنگاری‌شدهٔ حسابداری با موفقیت ساخته شد: " + path);
                     UiTheme.ShowSuccess(this, "بکاپ حسابداری ذخیره شد:" + Environment.NewLine + path);
                 }
                 catch (Exception ex)
@@ -2272,10 +2527,55 @@ namespace CaseManagement.Accounting
 
         private void ImportAccountingBackup()
         {
-            if (!SecurityContext.IsSuperAdmin())
+            if (!CaseManagement.Enterprise.PermissionService.Require("Accounting.Backup"))
             { UiTheme.ShowWarning(this, "بازیابی حسابداری فقط برای مدیر کل مجاز است."); return; }
 
-            using (var fbd = new FolderBrowserDialog { Description = "پوشه‌ی بکاپ حسابداری را انتخاب کنید" })
+            using (var ofd = new OpenFileDialog
+            {
+                Title = "فایل بکاپ رمزنگاری‌شدهٔ حسابداری را انتخاب کنید",
+                Filter = "بکاپ رمزنگاری‌شده (*" + BackupEncryption.EncryptedExtension + ")|*" + BackupEncryption.EncryptedExtension
+            })
+            {
+                if (ofd.ShowDialog(this) != DialogResult.OK) return;
+
+                if (!UiTheme.ShowConfirm(this,
+                    "با بازیابی، تمام داده‌های فعلیِ حسابداری (همه‌ی مراکز) با محتوای این بکاپ جایگزین می‌شود.\n" +
+                    "قبل از شروع، یک بکاپ ایمنیِ خودکار از وضعیت فعلی گرفته می‌شود.\n" +
+                    "آیا مطمئن هستید؟", "تأیید بازیابی حسابداری"))
+                    return;
+
+                string password;
+                if (!FrmPasswordPrompt.TryPrompt(this, "رمزِ بکاپ حسابداری", "رمزِ عبورِ همین فایلِ بکاپ را وارد کنید.",
+                        requireConfirmation: false, password: out password))
+                    return;
+
+                try
+                {
+                    AccountingBackupHelper.ImportEncryptedBackup(ofd.FileName, password);
+                    AppendAccBackupOutput("بازیابی حسابداری با موفقیت انجام شد از: " + ofd.FileName);
+                    UiTheme.ShowSuccess(this, "بازیابی حسابداری با موفقیت انجام شد.\nبرای بارگذاری اطلاعات تازه، پنجره حسابداری را ببندید و دوباره باز کنید.");
+                }
+                catch (BackupEncryption.IntegrityException ex)
+                {
+                    AppendAccBackupOutput("رمز اشتباه یا فایل خراب/دستکاری‌شده: " + ex.Message);
+                    UiTheme.ShowWarning(this, "رمز عبور اشتباه است یا فایلِ بکاپ خراب/دستکاری‌شده — هیچ داده‌ای تغییر نکرد.");
+                }
+                catch (Exception ex)
+                {
+                    AppendAccBackupOutput("خطا در بازیابی: " + ex.Message);
+                    UiTheme.ShowError(this, "خطا در بازیابی حسابداری: " + ex.Message);
+                }
+            }
+        }
+
+        // آموزش — نسخهٔ ۱٫۰: بازیابیِ بکاپ‌های حسابداریِ ساخته‌شده پیش از این
+        // ارتقا (پوشهٔ رمزنگاری‌نشده) — عیناً همان کدِ قدیمی، بدونِ تغییر.
+        private void ImportAccountingBackupLegacy()
+        {
+            if (!CaseManagement.Enterprise.PermissionService.Require("Accounting.Backup"))
+            { UiTheme.ShowWarning(this, "بازیابی حسابداری فقط برای مدیر کل مجاز است."); return; }
+
+            using (var fbd = new FolderBrowserDialog { Description = "پوشه‌ی بکاپ قدیمیِ (رمزنگاری‌نشدهٔ) حسابداری را انتخاب کنید" })
             {
                 if (fbd.ShowDialog(this) != DialogResult.OK) return;
 
@@ -2288,7 +2588,7 @@ namespace CaseManagement.Accounting
                 try
                 {
                     AccountingBackupHelper.ImportBackup(fbd.SelectedPath);
-                    AppendAccBackupOutput("بازیابی حسابداری با موفقیت انجام شد از: " + fbd.SelectedPath);
+                    AppendAccBackupOutput("بازیابی حسابداری (قدیمی) با موفقیت انجام شد از: " + fbd.SelectedPath);
                     UiTheme.ShowSuccess(this, "بازیابی حسابداری با موفقیت انجام شد.\nبرای بارگذاری اطلاعات تازه، پنجره حسابداری را ببندید و دوباره باز کنید.");
                 }
                 catch (Exception ex)

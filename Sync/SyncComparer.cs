@@ -119,7 +119,7 @@ namespace CaseManagement.Sync
 
         // ─── طبقه‌بندی یک عضو خانواده ────────────────────────────────────────
         private void ClassifyMember(SyncRecord rec, Dictionary<string, int> codeToCasId,
-            HashSet<string> newCodes, Dictionary<int, Dictionary<string, ExistingRow>> existingMembers)
+            HashSet<string> newCodes, Dictionary<int, FamilyMembers> existingMembers)
         {
             if (string.IsNullOrWhiteSpace(rec.PublicCode))
             {
@@ -156,23 +156,68 @@ namespace CaseManagement.Sync
 
             rec.ParentCasId = casId;
 
-            Dictionary<string, ExistingRow> familyMembers;
+            FamilyMembers familyMembers;
             if (!existingMembers.TryGetValue(casId, out familyMembers))
             {
                 rec.Action = SyncAction.New;
                 return;
             }
 
+            // ─── تطبیقِ عضوِ موجود، چهار لایه (از دقیق به بردبار) ─────────────
+            // آموزش — چرا بیش از یک لایه لازم است: دادهٔ واقعیِ موجود با فایل
+            // در سه چیز اختلاف دارد و هرکدام به‌تنهایی باعثِ «عضوِ تکراری» می‌شد:
+            //   ۱) تذکرهٔ ذخیره‌شده خالی/غیرعددی بوده و حالا شمارهٔ واقعی آمده
+            //      → کلیدِ «N:…» در برابرِ «T:…» (لایهٔ ۲ حل می‌کند)
+            //   ۲) تاریخ تولدِ ذخیره‌شده گاهی یک سال با فایل فرق دارد
+            //      → لایهٔ ۳ (نام + نام پدر، بدون تاریخ)
+            //   ۳) نامِ ذخیره‌شده کاراکترِ خراب «?» دارد («عز?زگل»)
+            //      → لایهٔ ۴ (مقایسهٔ بردبار، فقط داخلِ همین خانواده)
             ExistingRow member;
-            if (!familyMembers.TryGetValue(rec.MemberKey ?? "", out member))
+            if (!familyMembers.ByKey.TryGetValue(rec.MemberKey ?? "", out member) &&
+                !familyMembers.ByKey.TryGetValue(HtmlSyncProvider.ComputeMemberNameKey(rec.SourceValues), out member) &&
+                !familyMembers.ByKey.TryGetValue(HtmlSyncProvider.ComputeMemberNameOnlyKey(rec.SourceValues), out member))
             {
-                rec.Action = SyncAction.New;
-                return;
+                member = MatchTolerant(rec, familyMembers);
+                if (member == null)
+                {
+                    rec.Action = SyncAction.New;
+                    return;
+                }
             }
 
             rec.ExistingDbId = member.Id;
             rec.Changes = BuildChanges(rec.SourceValues, member.Values);
             rec.Action = rec.Changes.Count > 0 ? SyncAction.Update : SyncAction.Unchanged;
+        }
+
+        // ─── لایهٔ ۴: مقایسهٔ بردبارِ نام داخلِ همان خانواده ───────────────────
+        // فقط وقتی صدا زده می‌شود که هر سه کلیدِ دقیق شکست خورده باشند. برای
+        // پرهیز از تطبیقِ اشتباه، اگر بیش از یک نامزد پیدا شود هیچ‌کدام
+        // انتخاب نمی‌شوند (رکورد «جدید» می‌ماند تا کاربر خودش تصمیم بگیرد).
+        private static ExistingRow MatchTolerant(SyncRecord rec, FamilyMembers family)
+        {
+            string name = rec.SourceValues.ContainsKey("MemberName") ? rec.SourceValues["MemberName"] : "";
+            string father = rec.SourceValues.ContainsKey("MemberFatherName") ? rec.SourceValues["MemberFatherName"] : "";
+            if (string.IsNullOrWhiteSpace(name)) return null;
+
+            ExistingRow found = null;
+            foreach (ExistingRow row in family.All)
+            {
+                if (row.Claimed) continue;   // قبلاً به عضوِ دیگری از همین فایل نسبت داده شده
+
+                string rowName = row.Values.ContainsKey("MemberName") ? row.Values["MemberName"] : "";
+                string rowFather = row.Values.ContainsKey("MemberFatherName") ? row.Values["MemberFatherName"] : "";
+
+                if (!HtmlSyncProvider.NamesMatchTolerant(name, rowName)) continue;
+                if (!string.IsNullOrWhiteSpace(father) && !string.IsNullOrWhiteSpace(rowFather) &&
+                    !HtmlSyncProvider.NamesMatchTolerant(father, rowFather)) continue;
+
+                if (found != null) return null;   // مبهم → دست نزن
+                found = row;
+            }
+
+            if (found != null) found.Claimed = true;
+            return found;
         }
 
         // ─── ساخت فهرست تغییرات فیلدی بین منبع و دیتابیس ─────────────────────
@@ -252,10 +297,10 @@ namespace CaseManagement.Sync
         }
 
         // اعضای موجود گروه‌بندی‌شده بر اساس CasID → (memberKey → row).
-        private Dictionary<int, Dictionary<string, ExistingRow>> LoadExistingMembers(
+        private Dictionary<int, FamilyMembers> LoadExistingMembers(
             IEnumerable<int> caseIds, List<string> fields)
         {
-            var result = new Dictionary<int, Dictionary<string, ExistingRow>>();
+            var result = new Dictionary<int, FamilyMembers>();
             var idList = caseIds.Distinct().ToList();
             if (idList.Count == 0) return result;
 
@@ -287,19 +332,23 @@ namespace CaseManagement.Sync
                         foreach (string c in cols)
                             vals[c] = dr[c] == DBNull.Value ? "" : dr[c].ToString();
 
-                        string memberKey = HtmlSyncProvider.ComputeMemberKey(vals);
-
-                        Dictionary<string, ExistingRow> family;
+                        FamilyMembers family;
                         if (!result.TryGetValue(casId, out family))
                         {
-                            family = new Dictionary<string, ExistingRow>(StringComparer.Ordinal);
+                            family = new FamilyMembers();
                             result[casId] = family;
                         }
 
                         var row = new ExistingRow { Id = Convert.ToInt32(dr["FamID"]) };
                         row.Values = vals;
-                        if (!family.ContainsKey(memberKey))
-                            family[memberKey] = row;
+                        family.All.Add(row);
+
+                        // هر رکورد زیرِ هر سه کلید نمایه می‌شود تا رکوردِ تازهٔ فایل
+                        // از هر کدام که ساخت، همین ردیف را پیدا کند (نگاه کنید
+                        // آموزشِ چهار لایهٔ تطبیق در ClassifyMember).
+                        Index(family.ByKey, HtmlSyncProvider.ComputeMemberKey(vals), row);
+                        Index(family.ByKey, HtmlSyncProvider.ComputeMemberNameKey(vals), row);
+                        Index(family.ByKey, HtmlSyncProvider.ComputeMemberNameOnlyKey(vals), row);
                     }
                 }
             }
@@ -359,11 +408,29 @@ namespace CaseManagement.Sync
                 progress.Report(new SyncProgress { Phase = phase, Current = current, Total = total });
         }
 
+        private static void Index(Dictionary<string, ExistingRow> map, string key, ExistingRow row)
+        {
+            if (string.IsNullOrEmpty(key)) return;
+            if (!map.ContainsKey(key)) map[key] = row;   // اولین برنده (قطعی)
+        }
+
         private sealed class ExistingRow
         {
             public int Id;
+            // آیا لایهٔ بردبار قبلاً این ردیف را به عضوِ دیگری نسبت داده؟ (تا دو
+            // عضوِ فایل به یک ردیفِ دیتابیس نچسبند)
+            public bool Claimed;
             public Dictionary<string, string> Values =
                 new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        // نمایهٔ اعضای یک خانواده: هم جست‌وجوی کلیدی (سریع) و هم فهرستِ کامل
+        // برای لایهٔ بردبار.
+        private sealed class FamilyMembers
+        {
+            public readonly Dictionary<string, ExistingRow> ByKey =
+                new Dictionary<string, ExistingRow>(StringComparer.Ordinal);
+            public readonly List<ExistingRow> All = new List<ExistingRow>();
         }
     }
 }

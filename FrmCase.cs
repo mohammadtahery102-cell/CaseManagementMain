@@ -79,6 +79,7 @@ namespace CaseManagement
         public FrmCase()
         {
             InitializeComponent();
+            IdCardHelper.Attach(cmbHeadIdCardType, txtHeadTazkiraNo);
             ApplyCustomTheme();
             AttachShortcuts();
         }
@@ -175,6 +176,12 @@ namespace CaseManagement
             btnGuardianCard.TabStop = false;
             btnGuardianCard.Click += delegate
             {
+                if (!CaseManagement.Enterprise.PermissionService.Require("GuardianCard.Print"))
+                {
+                    Msg.Show("کاربر اجازه چاپ کارت شناسایی را ندارد.");
+                    return;
+                }
+
                 if (currentCaseId == 0)
                 {
                     Msg.Show("اول پرونده را ذخیره یا جستجو کن");
@@ -195,13 +202,124 @@ namespace CaseManagement
                     frm.ShowDialog(this);
             };
 
+            // آموزش — «نامهٔ انتقالی» دقیقاً هم‌الگوی دو دکمه‌ی بالا اضافه
+            // می‌شود: پویا، کنار دکمه‌های خروجی، بدون دست‌زدن به Designer.
+            // فرمِ آن مسیر خودش را دارد و هیچ‌یک از خروجی‌های Word/PDF/Excel
+            // پرونده را لمس نمی‌کند.
+            Button btnTransferLetter = UiTheme.CreateSecondaryButton("نامهٔ انتقالی", "✉");
+            btnTransferLetter.Size = new Size(140, 32);
+            btnTransferLetter.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
+            btnTransferLetter.Margin = new Padding(3, 3, 3, 3);
+            btnTransferLetter.TabStop = false;
+            btnTransferLetter.Click += delegate
+            {
+                if (currentCaseId == 0)
+                {
+                    Msg.Show("اول پرونده را ذخیره یا جستجو کن");
+                    return;
+                }
+                using (var frm = new FrmTransferLetter(currentCaseId))
+                    frm.ShowDialog(this);
+            };
+
+            // «ورقهٔ وکالت موقت» — سرپرستِ همین پرونده، وکیلِ موقتش را
+            // معرفی می‌کند. داده‌اش (نام سرپرست، نام پدر، تذکره، کد عمومی،
+            // تعداد ایتام) همه در TblCase/TblFamily است، پس جای درستش همین
+            // فورمِ پرونده است نه فورمِ متقاضیان.
+            Button btnProxy = UiTheme.CreateSecondaryButton("وکالت موقت", "✍");
+            btnProxy.Size = new Size(130, 32);
+            btnProxy.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
+            btnProxy.Margin = new Padding(3, 3, 3, 3);
+            btnProxy.TabStop = false;
+            btnProxy.Click += delegate
+            {
+                if (currentCaseId == 0)
+                {
+                    Msg.Show("اول پرونده را ذخیره یا جستجو کن");
+                    return;
+                }
+                ShowGuardianProxyForm();
+            };
+
             Control parent = btnExportExcel.Parent;
             if (parent != null)
             {
                 parent.Controls.Add(btnGuardianCard);
-                parent.Controls.SetChildIndex(btnGuardianCard, parent.Controls.IndexOf(btnExportExcel) + 1);
+                // آموزش — لنگر از btnExportExcel به btnBatchExport منتقل شد.
+                // با ترتیبِ تازهٔ نوارِ پایین (پی‌دی‌اف، اکسل، چاپ، خروجی جمعی)
+                // لنگرِ قبلی این چهار دکمه را وسطِ گروهِ خروجی‌ها می‌نشاند و
+                // «چاپ» و «خروجی جمعی» را به خطِ دوم می‌راند.
+                parent.Controls.SetChildIndex(btnGuardianCard, parent.Controls.IndexOf(btnBatchExport) + 1);
                 parent.Controls.Add(btnGuardianCardBatch);
                 parent.Controls.SetChildIndex(btnGuardianCardBatch, parent.Controls.IndexOf(btnGuardianCard) + 1);
+                parent.Controls.Add(btnTransferLetter);
+                parent.Controls.SetChildIndex(btnTransferLetter, parent.Controls.IndexOf(btnGuardianCardBatch) + 1);
+                parent.Controls.Add(btnProxy);
+                parent.Controls.SetChildIndex(btnProxy, parent.Controls.IndexOf(btnTransferLetter) + 1);
+            }
+        }
+
+        // ─── ورقهٔ وکالت موقت سرپرستی ایتام ──────────────────────────────────
+        // خانه‌های سرپرست از همین پروندهٔ باز پر می‌شوند؛ مشخصاتِ وکیل موقت و
+        // بازهٔ اعتبار را کاربر وارد می‌کند. متن ورقه هیچ جدولی در دیتابیس
+        // ندارد و لازم هم ندارد: سندی است که چاپ، امضاء و در اسناد پرونده
+        // بایگانی می‌شود.
+        private void ShowGuardianProxyForm()
+        {
+            string code = txtCode.Text.Trim();
+
+            object orphanCount = 0;
+            try
+            {
+                orphanCount = new DAL.DatabaseHelper().ExecuteScalar(
+                    "SELECT COUNT(*) FROM TblFamily WHERE CasID = @id AND COALESCE(MemberRole,'') = 'یتیم'",
+                    new System.Data.SQLite.SQLiteParameter("@id", currentCaseId));
+            }
+            catch { }
+
+            var fields = new System.Collections.Generic.List<Helpers.FrmDocxForm.FieldDef>
+            {
+                Helpers.FrmDocxForm.FieldDef.Section("سرپرست  (از پروندهٔ باز)"),
+                Helpers.FrmDocxForm.FieldDef.Text("نام سرپرست", "GuardianName", txtHeadFullName.Text.Trim(), true),
+                Helpers.FrmDocxForm.FieldDef.Text("نام پدر", "GuardianFather", txtHeadFatherName.Text.Trim(), true),
+                Helpers.FrmDocxForm.FieldDef.Text("شماره تذکره", "GuardianTazkira", txtHeadTazkiraNo.Text.Trim(), true),
+                Helpers.FrmDocxForm.FieldDef.Text("نوع تذکره", "GuardianTazkiraType", cmbHeadIdCardType.Text.Trim()),
+                Helpers.FrmDocxForm.FieldDef.Text("کد اختصاصی / عمومی", "Code", code, true),
+                Helpers.FrmDocxForm.FieldDef.Text("تعداد ایتام تحت سرپرستی", "OrphanCount", Convert.ToString(orphanCount)),
+
+                Helpers.FrmDocxForm.FieldDef.Section("وکیل موقت"),
+                Helpers.FrmDocxForm.FieldDef.Text("نام وکیل موقت", "ProxyName"),
+                Helpers.FrmDocxForm.FieldDef.Text("نام پدر وکیل", "ProxyFather"),
+                Helpers.FrmDocxForm.FieldDef.Text("شماره تذکره وکیل", "ProxyTazkira"),
+
+                Helpers.FrmDocxForm.FieldDef.Section("مدت و دلیل"),
+                Helpers.FrmDocxForm.FieldDef.Choice("دلیل", "Reason",
+                    new[] { "سفر", "بیماری", "کهولت سن", "سایر" }),
+                Helpers.FrmDocxForm.FieldDef.Text("از تاریخ", "FromDate",
+                    Helpers.PersianDateHelper.ToPersianDateString(DateTime.Now)),
+                Helpers.FrmDocxForm.FieldDef.Text("الی تاریخ  (تاریخ انقضا)", "ToDate"),
+                Helpers.FrmDocxForm.FieldDef.Text("تاریخ تنظیم", "IssueDate",
+                    Helpers.PersianDateHelper.ToPersianDateString(DateTime.Now))
+            };
+
+            using (var frm = new Helpers.FrmDocxForm("ورقهٔ وکالت موقت سرپرستی ایتام",
+                       Helpers.DocxFormExport.TplGuardianProxy, fields,
+                       "وکالت موقت - " + (code.Length > 0 ? code : txtHeadFullName.Text.Trim())))
+            {
+                frm.Require("ProxyName", "ToDate");
+                frm.ExtraButtonText = "ثبت سند امضاشده";
+
+                int caseIdForAttach = currentCaseId;
+                string codeForAttach = code;
+                frm.OnExtraButton = delegate (string lastPath)
+                {
+                    Helpers.FrmDocxForm.AttachToCase(frm, new DAL.DatabaseHelper(),
+                        caseIdForAttach, codeForAttach, "وکالت موقت",
+                        "ورقهٔ وکالت موقت سرپرستی ایتام",
+                        string.IsNullOrWhiteSpace(lastPath) ? "" : System.IO.Path.GetDirectoryName(lastPath));
+                };
+
+                frm.ShowDialog(this);
             }
         }
 
@@ -460,6 +578,13 @@ namespace CaseManagement
                 txtCoveredByOrgNames.Text = "";
         }
 
+        // آموزش — چرا مقدارِ ناشناخته به کشویی *افزوده* می‌شود و روی خانهٔ صفر
+        // نمی‌افتد: رفتار قبلی (SelectedIndex = 0) وضعیتِ واقعیِ پرونده را بی‌صدا
+        // با اولین آیتمِ فهرست جایگزین می‌کرد و با اولین ذخیره، همان مقدارِ غلط
+        // در دیتابیس می‌نشست. تا وقتی خانهٔ صفر «فعال» بود این خطا بی‌ضرر به‌نظر
+        // می‌رسید، ولی حالا خانهٔ صفر «متقاضی» است — یعنی یک پروندهٔ فعال می‌توانست
+        // به «متقاضی» برگردد. نمایشِ مقدارِ واقعی همیشه از حدس زدن امن‌تر است:
+        // کاربر خودش می‌بیند و در صورت نیاز تصحیح می‌کند.
         private void SetComboBoxText(ComboBox comboBox, string value)
         {
             value = NormalizeServiceStatus(value);
@@ -467,8 +592,18 @@ namespace CaseManagement
             int index = comboBox.FindStringExact(value);
 
             if (index >= 0)
+            {
                 comboBox.SelectedIndex = index;
-            else if (comboBox.Items.Count > 0)
+                return;
+            }
+
+            if (!string.IsNullOrEmpty(value))
+            {
+                comboBox.SelectedIndex = comboBox.Items.Add(value);
+                return;
+            }
+
+            if (comboBox.Items.Count > 0)
                 comboBox.SelectedIndex = 0;
         }
 
@@ -767,6 +902,7 @@ namespace CaseManagement
             txtHeadSadat.Text = "";
             txtReligion.Text = "";
             txtHeadTazkiraNo.Text = "";
+            cmbHeadIdCardType.Text = "";
             txtHeadOriginalResidence.Text = "";
             txtHeadCurrentResidence.Text = "";
             txtRelationshipToFamily.Text = "";
@@ -865,6 +1001,22 @@ namespace CaseManagement
                 Msg.Show("دلیل تعلیق را از لیست انتخاب کنید");
                 txtSuspensionReason.Focus();
                 return false;
+            }
+
+            // ─── اعتبارسنجی تذکره، وابسته به نوع انتخاب‌شده ───────────────────
+            // قاعده کاملاً در IdCardHelper است تا با فرم اعضای خانواده یکی بماند.
+            if (txtHeadTazkiraNo.Text.Trim().Length > 0)
+            {
+                string idCardError;
+                if (!IdCardHelper.IsValid(cmbHeadIdCardType.Text, txtHeadTazkiraNo.Text, out idCardError))
+                {
+                    Msg.Show(idCardError);
+                    if (string.IsNullOrWhiteSpace(cmbHeadIdCardType.Text))
+                        cmbHeadIdCardType.Focus();
+                    else
+                        txtHeadTazkiraNo.Focus();
+                    return false;
+                }
             }
 
             return true;
@@ -998,6 +1150,7 @@ namespace CaseManagement
             AddStringParameter(cmd, "@HeadSadat", txtHeadSadat.Text.Trim());
             AddStringParameter(cmd, "@Religion", txtReligion.Text.Trim());
             AddStringParameter(cmd, "@HeadTazkiraNo", txtHeadTazkiraNo.Text.Trim());
+            AddStringParameter(cmd, "@HeadIdCardType", cmbHeadIdCardType.Text.Trim());
             AddStringParameter(cmd, "@HeadOriginalResidence", txtHeadOriginalResidence.Text.Trim());
             AddStringParameter(cmd, "@HeadCurrentResidence", txtHeadCurrentResidence.Text.Trim());
             AddStringParameter(cmd, "@RelationshipToFamily", txtRelationshipToFamily.Text.Trim());
@@ -1214,35 +1367,100 @@ namespace CaseManagement
         // می‌شود. جستجو (btnSearch/dgvCases_CellClick از طریق LoadCaseByCode/
         // LoadCaseById) مستقل از این گرید مستقیماً از دیتابیس می‌خواند، پس
         // هیچ پرونده‌ای برای جستجو غیرقابل‌دسترس نمی‌شود.
-        private const int MaxGridRows = 200;
+        // آموزش — خواستهٔ صریحِ کاربر (بندِ GRID DATA REQUIREMENT): گرید هرگز
+        // صدها ردیف را یک‌جا بار نکند؛ فقط ۱۰ پروندهٔ آخر بر اساسِ «شمارهٔ فرم»
+        // نزولی نشان داده شود. سقفِ قدیمیِ MaxGridRows=200 جایش را به
+        // GridPageSize + LIMIT/OFFSET داد؛ بقیهٔ پرونده‌ها از راهِ نوارِ
+        // صفحه‌بندیِ زیرِ گرید در دسترس می‌مانند (وگرنه دسترسی قطع می‌شد).
+        //
+        // آموزش — چرا CAST: ستون FormNo متنی است، پس مرتب‌سازیِ متنی «۹» را
+        // بعد از «۱۰» می‌گذارد. CAST به عدد، «جدیدترین شمارهٔ فرم» را واقعاً
+        // اول می‌آورد. CasID به‌عنوان مرتب‌سازیِ دوم می‌ماند تا ترتیب برای
+        // فرم‌های بی‌شماره/تکراری قطعی و پایدار باشد (وگرنه صفحه‌بندی با
+        // OFFSET می‌تواند یک ردیف را دو بار یا هرگز نشان ندهد).
+        private const int GridPageSize = 10;
 
+        private int _gridPage;        // شمارهٔ صفحهٔ جاری، از صفر
+        private int _gridTotalRows;   // تعداد کلِ ردیف‌های منطبق با فیلترهای فعلی
+
+        // مقادیرِ نوارِ جستجوی سریع که آخرین بار اعمال شده‌اند. نگه‌داشتنشان لازم
+        // است چون با رفتن به صفحهٔ بعد باید همان جستجو دوباره اجرا شود.
+        private string _qsCode = "", _qsHead = "", _qsTazkira = "", _qsPhone = "";
+
+        // شرطِ مشترکِ هر دو کوئری (شمارش و صفحه). یک‌جا نوشته شده تا شمارشِ کل
+        // و ردیف‌های نمایش‌داده‌شده هرگز از هم واگرا نشوند.
+        private string BuildCasesWhere()
+        {
+            return @"
+                    WHERE (@Code = '' OR " + CaseSearchTypeColumns[0] + @" LIKE '%' || @Code || '%')
+                      AND (@Head = '' OR " + CaseSearchTypeColumns[1] + @" LIKE '%' || @Head || '%')
+                      AND (@Tazkira = '' OR " + CaseSearchTypeColumns[2] + @" LIKE '%' || @Tazkira || '%')
+                      AND (@Phone = '' OR " + CaseSearchTypeColumns[3] + @" LIKE '%' || @Phone || '%')
+                      AND (@CID = 0 OR CenterID = @CID)
+                      AND (@ServiceStatus = '' OR ServiceStatus = @ServiceStatus)
+                      AND (@Prov = '' OR Province = @Prov)
+                      AND (@Dist = '' OR District LIKE '%' || @Dist || '%')";
+        }
+
+        private void BindCasesParameters(SQLiteCommand cmd)
+        {
+            AddStringParameter(cmd, "@Code", _qsCode);
+            AddStringParameter(cmd, "@Head", _qsHead);
+            AddStringParameter(cmd, "@Tazkira", _qsTazkira);
+            AddStringParameter(cmd, "@Phone", _qsPhone);
+            cmd.Parameters.AddWithValue("@CID", Helpers.SecurityContext.CenterFilterId);
+            // فیلترِ وضعیت خدمات از داشبورد می‌آید؛ کنترلش از چیدمان حذف شد اما
+            // خودش (و این مسیر) دست‌نخورده باقی مانده است.
+            AddStringParameter(cmd, "@ServiceStatus", GetSelectedServiceStatusFilter());
+            AddStringParameter(cmd, "@Prov", _incomingFilterProvince);
+            AddStringParameter(cmd, "@Dist", _incomingFilterDistrict);
+        }
+
+        // بارگذاریِ پیش‌فرضِ گرید: بدونِ جستجو، از صفحهٔ اول.
         private void LoadCases()
+        {
+            _qsCode = _qsHead = _qsTazkira = _qsPhone = "";
+            _gridPage = 0;
+            RunCasesQuery();
+        }
+
+        // اجرای واقعیِ کوئری برای صفحهٔ جاری. تنها نقطه‌ای که گرید پر می‌شود.
+        private void RunCasesQuery()
         {
             try
             {
                 using (var con = db.GetConnection())
-            using (var cmd = new SQLiteCommand(@"
-                    SELECT CasID, FormNo, Code, CaseNo, HeadFullName, Phone, ServiceStatus, CaseDate, PhotoPath,
-                           HeadFatherName, HeadTazkiraNo, HeadCurrentResidence, Province, District
-                    FROM TblCase
-                    WHERE (@ServiceStatus = '' OR ServiceStatus = @ServiceStatus)
-                      AND (@CID = 0 OR CenterID = @CID)
-                      AND (@Prov = '' OR Province = @Prov)
-                      AND (@Dist = '' OR District LIKE '%' || @Dist || '%')
-                    ORDER BY CasID DESC
-                    LIMIT " + MaxGridRows, con))
                 {
-                    AddStringParameter(cmd, "@ServiceStatus", GetSelectedServiceStatusFilter());
-                    cmd.Parameters.AddWithValue("@CID", Helpers.SecurityContext.CenterFilterId);
-                    AddStringParameter(cmd, "@Prov", _incomingFilterProvince);
-                    AddStringParameter(cmd, "@Dist", _incomingFilterDistrict);
-
                     con.Open();
-                    using (var reader = cmd.ExecuteReader())
+
+                    using (var counter = new SQLiteCommand(
+                        "SELECT COUNT(*) FROM TblCase " + BuildCasesWhere(), con))
                     {
-                        DataTable dt = new DataTable();
-                        dt.Load(reader);
-                        dgvCases.DataSource = dt;
+                        BindCasesParameters(counter);
+                        _gridTotalRows = Convert.ToInt32(counter.ExecuteScalar());
+                    }
+
+                    int lastPage = _gridTotalRows <= 0 ? 0 : (_gridTotalRows - 1) / GridPageSize;
+                    if (_gridPage > lastPage) _gridPage = lastPage;
+                    if (_gridPage < 0) _gridPage = 0;
+
+                    using (var cmd = new SQLiteCommand(@"
+                    SELECT CasID, FormNo, Code, CaseNo, HeadFullName, Phone, ServiceStatus, CaseDate, PhotoPath,
+                           HeadFatherName, HeadTazkiraNo, HeadCurrentResidence, Province, District, RequestType
+                    FROM TblCase " + BuildCasesWhere() + @"
+                    ORDER BY CAST(FormNo AS INTEGER) DESC, CasID DESC
+                    LIMIT @Take OFFSET @Skip", con))
+                    {
+                        BindCasesParameters(cmd);
+                        cmd.Parameters.AddWithValue("@Take", GridPageSize);
+                        cmd.Parameters.AddWithValue("@Skip", _gridPage * GridPageSize);
+
+                        using (var reader = cmd.ExecuteReader())
+                        {
+                            DataTable dt = new DataTable();
+                            dt.Load(reader);
+                            dgvCases.DataSource = dt;
+                        }
                     }
                 }
 
@@ -1250,6 +1468,7 @@ namespace CaseManagement
                 // فقط وقتی ستون عکس انتخاب شده باشد کاری می‌کند (خودش بررسی
                 // می‌کند)، پس برای بقیه‌ی حالت‌ها هزینه‌ای ندارد.
                 LoadCaseThumbnails();
+                UpdatePagerUi();
             }
             catch (Exception ex)
             {
@@ -1257,17 +1476,39 @@ namespace CaseManagement
             }
         }
 
-        // آموزش — جستجوی نوار بالای گرید: برخلافِ LoadCases (که فقط ۲۰۰ پرونده‌ی
-        // آخر را می‌آورد)، این متد مستقیماً کل جدول را بر اساسِ ستونِ انتخابی
-        // جستجو می‌کند (نه فقط ۲۰۰ ردیفِ نمایش‌داده‌شده)، اما برای امنیت
-        // چندمرکزی همچنان با CenterID فیلتر می‌شود و نتیجه هم برای حفظِ
-        // کارایی به همان سقفِ MaxGridRows محدود است.
-        // آموزش — فاز A2: قبلاً این متد فقط یک ستون (انتخاب‌شده از یک کمبو) را
-        // با یک مقدار جستجو می‌کرد. حالا نوار جستجوی سریع بالای فرم چهار فیلد
-        // هم‌زمان دارد (کد پرونده/نام سرپرست/شماره تذکره/شماره تماس)؛ هرکدام
-        // که پر باشد با AND به بقیه اضافه می‌شود، دقیقاً روی همان ستون‌های
-        // CaseSearchTypeColumns (بدون هیچ ستون/کوئری جدید). فیلترِ داشبورد
-        // (ServiceStatus/Province/District) و سقفِ MaxGridRows دست‌نخورده ماندند.
+        // ─── نوارِ صفحه‌بندی ───────────────────────────────────────────────────
+        private void UpdatePagerUi()
+        {
+            if (lblGridPage == null || lblGridTotal == null) return;
+
+            int pageCount = _gridTotalRows <= 0 ? 1 : (_gridTotalRows + GridPageSize - 1) / GridPageSize;
+            lblGridPage.Text  = (_gridPage + 1) + " / " + pageCount;
+            lblGridTotal.Text = "تعداد کل: " + _gridTotalRows.ToString("N0");
+
+            btnGridFirst.Enabled = btnGridPrev.Enabled = _gridPage > 0;
+            btnGridNext.Enabled  = btnGridLast.Enabled = _gridPage < pageCount - 1;
+        }
+
+        private void GoToGridPage(int page)
+        {
+            int pageCount = _gridTotalRows <= 0 ? 1 : (_gridTotalRows + GridPageSize - 1) / GridPageSize;
+            if (page < 0) page = 0;
+            if (page > pageCount - 1) page = pageCount - 1;
+            if (page == _gridPage) return;
+
+            _gridPage = page;
+            RunCasesQuery();
+        }
+
+        private void btnGridFirst_Click(object sender, EventArgs e) { GoToGridPage(0); }
+        private void btnGridPrev_Click(object sender, EventArgs e)  { GoToGridPage(_gridPage - 1); }
+        private void btnGridNext_Click(object sender, EventArgs e)  { GoToGridPage(_gridPage + 1); }
+        private void btnGridLast_Click(object sender, EventArgs e)  { GoToGridPage(int.MaxValue); }
+
+        // آموزش — جستجوی نوارِ بالای فرم: چهار فیلد (کد پرونده/نام سرپرست/
+        // شمارهٔ تذکره/شمارهٔ تماس)؛ هرکدام که پر باشد با AND اضافه می‌شود،
+        // دقیقاً روی همان ستون‌های CaseSearchTypeColumns. تنها تفاوت با قبل این
+        // است که نتیجه هم صفحه‌بندی می‌شود، نه اینکه تا ۲۰۰ ردیف یک‌جا بیاید.
         private void SearchCasesGrid()
         {
             string code    = txtQsCode.Text.Trim();
@@ -1282,55 +1523,15 @@ namespace CaseManagement
                 return;
             }
 
-            try
-            {
-                using (var con = db.GetConnection())
-                using (var cmd = new SQLiteCommand(@"
-                    SELECT CasID, FormNo, Code, CaseNo, HeadFullName, Phone, ServiceStatus, CaseDate, PhotoPath,
-                           HeadFatherName, HeadTazkiraNo, HeadCurrentResidence, Province, District
-                    FROM TblCase
-                    WHERE (@Code = '' OR " + CaseSearchTypeColumns[0] + @" LIKE '%' || @Code || '%')
-                      AND (@Head = '' OR " + CaseSearchTypeColumns[1] + @" LIKE '%' || @Head || '%')
-                      AND (@Tazkira = '' OR " + CaseSearchTypeColumns[2] + @" LIKE '%' || @Tazkira || '%')
-                      AND (@Phone = '' OR " + CaseSearchTypeColumns[3] + @" LIKE '%' || @Phone || '%')
-                      AND (@CID = 0 OR CenterID = @CID)
-                      AND (@ServiceStatus = '' OR ServiceStatus = @ServiceStatus)
-                      AND (@Prov = '' OR Province = @Prov)
-                      AND (@Dist = '' OR District LIKE '%' || @Dist || '%')
-                    ORDER BY CasID DESC
-                    LIMIT " + MaxGridRows, con))
-                {
-                    AddStringParameter(cmd, "@Code", code);
-                    AddStringParameter(cmd, "@Head", head);
-                    AddStringParameter(cmd, "@Tazkira", tazkira);
-                    AddStringParameter(cmd, "@Phone", phone);
-                    cmd.Parameters.AddWithValue("@CID", Helpers.SecurityContext.CenterFilterId);
-                    // آموزش — رفعِ درخواستِ کاربر: وقتی فرم با فیلترِ داشبورد
-                    // (ولایت/ولسوالی/وضعیت) باز شده، جستجو هم باید همان
-                    // محدوده را در نظر بگیرد، نه کلِ دیتابیس را.
-                    AddStringParameter(cmd, "@ServiceStatus", GetSelectedServiceStatusFilter());
-                    AddStringParameter(cmd, "@Prov", _incomingFilterProvince);
-                    AddStringParameter(cmd, "@Dist", _incomingFilterDistrict);
-
-                    con.Open();
-                    using (var reader = cmd.ExecuteReader())
-                    {
-                        DataTable dt = new DataTable();
-                        dt.Load(reader);
-                        dgvCases.DataSource = dt;
-                    }
-                }
-
-                ConfigureCasesGrid();
-                LoadCaseThumbnails();
-            }
-            catch (Exception ex)
-            {
-                Msg.Show("خطا در جستجو: " + ex.Message);
-            }
+            _qsCode    = code;
+            _qsHead    = head;
+            _qsTazkira = tazkira;
+            _qsPhone   = phone;
+            _gridPage  = 0;
+            RunCasesQuery();
         }
 
-        // بازگشت گرید به حالتِ پیش‌فرض (۲۰۰ پرونده‌ی آخر) — همان LoadCases موجود.
+        // بازگشت گرید به حالتِ پیش‌فرض (۱۰ پروندهٔ آخر، صفحهٔ اول) — همان LoadCases.
         private void ClearCaseSearchGrid()
         {
             txtQsCode.Text = "";
@@ -1444,7 +1645,22 @@ namespace CaseManagement
             dgvCases.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
             // با عکس، ردیف بلندتر لازم است تا thumbnail بریده نشود.
             dgvCases.RowTemplate.Height = wantsPhoto ? 46 : 32;
-            dgvCases.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
+
+            // آموزش — با شش ستون در ستونِ باریکِ سمت چپ، حالتِ Fill عرض را
+            // مساوی پخش می‌کرد و عنوان‌ها بریده می‌شدند («کد اختصاصی» → «کد»).
+            // دو کار این را حل می‌کند بدون اینکه اسکرولِ افقی لازم شود:
+            //   ۱) عنوان‌ها اجازهٔ شکستنِ خط دارند و ارتفاعِ سرستون خودکار
+            //      می‌شود، پس عنوانِ دوکلمه‌ای در دو خط کامل دیده می‌شود.
+            //   ۲) ستونِ عکس فقط به‌اندازهٔ خودِ thumbnail وزن می‌گیرد، نه یک
+            //      ششمِ عرض؛ فضای آزادشده به ستون‌های متنی می‌رسد.
+            dgvCases.ColumnHeadersDefaultCellStyle.WrapMode = DataGridViewTriState.True;
+            dgvCases.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+
+            foreach (DataGridViewColumn column in dgvCases.Columns)
+            {
+                if (!column.Visible) continue;
+                column.FillWeight = column is DataGridViewImageColumn ? 46f : 100f;
+            }
         }
 
         // آخرین ترکیبِ ستونی که روی گرید اعمال شده. برای اینکه تغییرِ تنظیمات
@@ -1645,7 +1861,7 @@ namespace CaseManagement
 
         private void btnSave_Click(object sender, EventArgs e)
         {
-            if (!SecurityContext.CanEdit())
+            if (!CaseManagement.Enterprise.PermissionService.Require("Case.Edit"))
             {
                 Msg.Show("کاربر فقط مشاهده اجازه ثبت پرونده ندارد.");
                 return;
@@ -1688,6 +1904,23 @@ namespace CaseManagement
                     return;
                 }
 
+                // آموزش — هشدارِ تذکرهٔ تکراری: بررسیِ نرم، نه مانعِ قطعی. اگر
+                // همین شماره در پرونده/خانواده/متقاضیِ دیگری هم ثبت شده باشد،
+                // کاربر باید صراحتاً تأیید کند تا ثبت ادامه یابد؛ دلیلِ لغو
+                // شدن با هیچ ردی ثبت نمی‌شود چون هنوز رکوردی ساخته نشده است.
+                string tazkiraAuditNote = null;
+                List<string> tazkiraMatches = DuplicateDetector.FindByTazkira(txtHeadTazkiraNo.Text.Trim(), "TblCase", 0);
+                if (tazkiraMatches.Count > 0)
+                {
+                    if (!UiTheme.ShowConfirm(this,
+                        "این شماره تذکره قبلاً برای موارد زیر ثبت شده است:\n\n" +
+                        string.Join("\n", tazkiraMatches) +
+                        "\n\nآیا مطمئن هستید که می‌خواهید ادامه دهید؟", "احتمال ثبت تکراری"))
+                        return;
+
+                    tazkiraAuditNote = "تذکره " + txtHeadTazkiraNo.Text.Trim() + " => " + string.Join(" | ", tazkiraMatches);
+                }
+
                 SaveSelectedPhotos();
 
                 using (SQLiteConnection con = db.GetConnection())
@@ -1696,7 +1929,7 @@ namespace CaseManagement
                     (
                         FormNo, Code, CaseNo, CaseDate,
                         Zone, Province, District, RequestType, PriorityLevel,
-                        HeadFullName, HeadFatherName, HeadSadat, Religion, HeadTazkiraNo,
+                        HeadFullName, HeadFatherName, HeadSadat, Religion, HeadTazkiraNo, HeadIdCardType,
                         HeadOriginalResidence, HeadCurrentResidence, RelationshipToFamily,
                         Phone, RelativePhone, CoveredByOrg, CoveredByOrgNames, Job, Skill,
                         DisabilityDegree, DisabilityType, MigrationCardType, MaritalStatus,
@@ -1707,7 +1940,7 @@ namespace CaseManagement
                     (
                         @FormNo, @Code, @CaseNo, @CaseDate,
                         @Zone, @Province, @District, @RequestType, @PriorityLevel,
-                        @HeadFullName, @HeadFatherName, @HeadSadat, @Religion, @HeadTazkiraNo,
+                        @HeadFullName, @HeadFatherName, @HeadSadat, @Religion, @HeadTazkiraNo, @HeadIdCardType,
                         @HeadOriginalResidence, @HeadCurrentResidence, @RelationshipToFamily,
                         @Phone, @RelativePhone, @CoveredByOrg, @CoveredByOrgNames, @Job, @Skill,
                         @DisabilityDegree, @DisabilityType, @MigrationCardType, @MaritalStatus,
@@ -1744,6 +1977,28 @@ namespace CaseManagement
                 AuditLogger.RecordStatusChange(currentCaseId, "", NormalizeServiceStatus(txtServiceStatus.Text),
                     txtSuspensionReason.Text.Trim(), txtStopReason.Text.Trim());
 
+                if (tazkiraAuditNote != null)
+                    AuditLogger.Log("هشدار تذکره تکراری - تأیید کاربر", "TblCase", currentCaseId, "", tazkiraAuditNote);
+
+                // آموزش — تاریخچهٔ کاملِ رکورد: AuditLogger فقط هفت فیلدِ منتخب را
+                // ثبت می‌کند (BuildCurrentCaseAuditText)، پس تغییرِ باقیِ فیلدهای
+                // پرونده هیچ ردی نداشت. VersionService یک «عکس فوریِ کاملِ ردیف»
+                // در EntRecordVersion نگه می‌دارد و فیلدهای تغییرکرده را خودش
+                // نسبت به نسخهٔ قبل حساب می‌کند. زیرساخت از قبل موجود بود ولی به
+                // هیچ مسیر ذخیره‌ای وصل نشده بود. خطای این متد هرگز بالا نمی‌آید
+                // (داخل خودش catch دارد)، پس ذخیرهٔ پرونده تحت تأثیر قرار نمی‌گیرد.
+                CaseManagement.Enterprise.VersionService.Capture("TblCase", currentCaseId,
+                    CaseManagement.Enterprise.VersionService.OperationInsert);
+
+                // آموزش — رفعِ یک شکافِ جدی در همگام‌سازی: SyncService فقط از صفِ
+                // SyncOutbox می‌خواند (GetPending) و هیچ مسیرِ پویشیِ جایگزینی
+                // ندارد. این فرم — برخلافِ FrmFamily/FrmDocs/FrmFinance — هیچ‌وقت
+                // چیزی در صف ثبت نمی‌کرد، یعنی پروندهٔ تازه‌ثبت‌شده به سرور
+                // نمی‌رسید مگر اتفاقی کسی برایش کمکِ مالی ثبت می‌کرد
+                // (تنها جایی که TblCase در صف ثبت می‌شد: FrmFinance).
+                CaseManagement.Sync.SyncOutboxService.Capture("TblCase", currentCaseId,
+                    CaseManagement.Sync.OfflineSyncInitializer.OperationCreate);
+
                 Msg.Show("اطلاعات با موفقیت ذخیره شد");
                 LoadCases();
                 SyncMembersTab();
@@ -1765,7 +2020,7 @@ namespace CaseManagement
         // متد، بدون تغییر) می‌رسد.
         private void btnEdit_Click(object sender, EventArgs e)
         {
-            if (!SecurityContext.CanEdit())
+            if (!CaseManagement.Enterprise.PermissionService.Require("Case.Edit"))
             {
                 Msg.Show("کاربر فقط مشاهده اجازه ویرایش پرونده ندارد.");
                 return;
@@ -1777,7 +2032,9 @@ namespace CaseManagement
                 return;
             }
 
-            SetCaseEditMode(true);
+            if (!SetCaseEditMode(true))
+                return;
+
             EnsureEditableTabVisible();
         }
 
@@ -1802,6 +2059,20 @@ namespace CaseManagement
                     return false;
                 }
 
+                // آموزش — هشدارِ تذکرهٔ تکراری، همان الگویِ مسیرِ ثبتِ رکوردِ جدید.
+                string tazkiraAuditNote = null;
+                List<string> tazkiraMatches = DuplicateDetector.FindByTazkira(txtHeadTazkiraNo.Text.Trim(), "TblCase", currentCaseId);
+                if (tazkiraMatches.Count > 0)
+                {
+                    if (!UiTheme.ShowConfirm(this,
+                        "این شماره تذکره قبلاً برای موارد زیر ثبت شده است:\n\n" +
+                        string.Join("\n", tazkiraMatches) +
+                        "\n\nآیا مطمئن هستید که می‌خواهید ادامه دهید؟", "احتمال ثبت تکراری"))
+                        return false;
+
+                    tazkiraAuditNote = "تذکره " + txtHeadTazkiraNo.Text.Trim() + " => " + string.Join(" | ", tazkiraMatches);
+                }
+
                 SaveSelectedPhotos();
 
                 using (SQLiteConnection con = db.GetConnection())
@@ -1820,6 +2091,7 @@ namespace CaseManagement
                         HeadSadat = @HeadSadat,
                         Religion = @Religion,
                         HeadTazkiraNo = @HeadTazkiraNo,
+                        HeadIdCardType = @HeadIdCardType,
                         HeadOriginalResidence = @HeadOriginalResidence,
                         HeadCurrentResidence = @HeadCurrentResidence,
                         RelationshipToFamily = @RelationshipToFamily,
@@ -1874,8 +2146,20 @@ namespace CaseManagement
                 selectedFamilyPhotoSource = "";
 
                 AuditLogger.Log("ویرایش", "TblCase", currentCaseId, oldValue, BuildCurrentCaseAuditText());
+                if (tazkiraAuditNote != null)
+                    AuditLogger.Log("هشدار تذکره تکراری - تأیید کاربر", "TblCase", currentCaseId, "", tazkiraAuditNote);
                 AuditLogger.RecordStatusChange(currentCaseId, oldStatus, NormalizeServiceStatus(txtServiceStatus.Text),
                     txtSuspensionReason.Text.Trim(), txtStopReason.Text.Trim());
+
+                // تاریخچهٔ کاملِ رکورد — توضیح در مسیر ثبت (SaveNewCase) آمده است.
+                // اگر ویرایش هیچ فیلدی را عوض نکرده باشد، VersionService خودش
+                // نسخهٔ تکراری نمی‌سازد.
+                CaseManagement.Enterprise.VersionService.Capture("TblCase", currentCaseId,
+                    CaseManagement.Enterprise.VersionService.OperationUpdate);
+
+                // صفِ همگام‌سازی — توضیح در مسیر ثبت آمده است.
+                CaseManagement.Sync.SyncOutboxService.Capture("TblCase", currentCaseId,
+                    CaseManagement.Sync.OfflineSyncInitializer.OperationUpdate);
 
                 Msg.Show("اطلاعات ویرایش شد");
                 LoadCases();
@@ -1905,7 +2189,7 @@ namespace CaseManagement
                 return;
             }
 
-            if (!SecurityContext.CanDelete())
+            if (!CaseManagement.Enterprise.PermissionService.Require("Case.Delete"))
             {
                 Msg.Show("حذف پرونده فقط برای مدیر سیستم مجاز است.");
                 return;
@@ -1920,6 +2204,18 @@ namespace CaseManagement
                 CenterGuard.EnsureCaseAccess(db, currentCaseId);
 
                 string oldValue = GetCaseAuditTextFromDb(currentCaseId);
+                // آموزش — حذف دومرحله‌ای: بعد از DELETE دیگر ردیفی نیست تا محتوایش
+                // خوانده شود، پس عکسِ فوری «قبل» از حذف گرفته می‌شود؛ ولی نسخهٔ
+                // «حذف» فقط «بعد» از حذفِ موفق ثبت می‌گردد تا اگر حذف انجام نشد،
+                // نسخهٔ نادرست در تاریخچه نماند.
+                string deletedSnapshot = CaseManagement.Enterprise.VersionService
+                    .ReadSnapshotText("TblCase", currentCaseId);
+
+                // هویتِ رکورد برای صفِ همگام‌سازی هم پیش از DELETE برداشته می‌شود
+                // (بعد از حذف GlobalID خواندنی نیست)؛ ثبتِ نهایی فقط پس از حذفِ
+                // موفق — همان الگوی FrmArchive و FrmSettings.
+                var pendingDelete =
+                    CaseManagement.Sync.SyncOutboxService.PrepareDelete("TblCase", currentCaseId);
                 int deletedCaseId = currentCaseId;
                 List<string> filePathsToDelete = mode == DeleteMode.AppAndFiles
                     ? CollectCaseFilePaths(currentCaseId)
@@ -1956,6 +2252,11 @@ namespace CaseManagement
                     mode == DeleteMode.AppAndFiles ? "حذف کامل" : "حذف (فقط نرم‌افزار)",
                     "TblCase", deletedCaseId, oldValue, "");
 
+                CaseManagement.Enterprise.VersionService.CaptureDeleted(
+                    "TblCase", deletedCaseId, deletedSnapshot);
+
+                CaseManagement.Sync.SyncOutboxService.CommitDelete(pendingDelete);
+
                 Msg.Show("رکورد حذف شد");
                 LoadCases();
                 ClearForm();
@@ -1969,6 +2270,22 @@ namespace CaseManagement
             {
                 Msg.Show("خطا در حذف: " + ex.Message);
             }
+        }
+
+        // ─── تاریخچهٔ تغییراتِ همین پرونده ──────────────────────────────────
+        // آموزش: FrmVersions از قبل سازندهٔ (entityName, entityId) را داشت ولی
+        // هیچ فرمی از آن استفاده نمی‌کرد — فقط حالتِ «همهٔ رکوردها» از داشبورد
+        // باز می‌شد. این دکمه همان پنجره را روی پروندهٔ جاری فیلتر می‌کند.
+        private void btnHistory_Click(object sender, EventArgs e)
+        {
+            if (currentCaseId == 0)
+            {
+                Msg.Show("اول رکورد را انتخاب کن");
+                return;
+            }
+
+            using (var frm = new CaseManagement.Enterprise.FrmVersions("TblCase", currentCaseId))
+                frm.ShowDialog(this);
         }
 
         private enum DeleteMode { Cancel, AppOnly, AppAndFiles }
@@ -2164,6 +2481,9 @@ WHERE CasID = @CasID", con))
             txtHeadFatherName.Text = GetDbString(dr, "HeadFatherName");
             txtHeadSadat.Text = GetDbString(dr, "HeadSadat");
             txtReligion.Text = GetDbString(dr, "Religion");
+            // ترتیب مهم است: اول نوع تذکره، بعد شماره — چون IdCardHelper.Attach
+            // با تغییر نوع، شماره را دوباره قالب‌بندی می‌کند (همان قاعده‌ی FrmFamily).
+            cmbHeadIdCardType.Text = GetDbString(dr, "HeadIdCardType");
             txtHeadTazkiraNo.Text = GetDbString(dr, "HeadTazkiraNo");
             txtHeadOriginalResidence.Text = GetDbString(dr, "HeadOriginalResidence");
             txtHeadCurrentResidence.Text = GetDbString(dr, "HeadCurrentResidence");
@@ -2454,8 +2774,38 @@ WHERE CasID = @CasID", con))
         //     قفل نمی‌توانست پروندهٔ بعدی را پیدا کند).
         private bool _caseEditMode = false;
 
-        private void SetCaseEditMode(bool editable)
+        // ─── ویژگی ۵ (فعال‌سازی) — قفل رکورد برای جلوگیری از ویرایش هم‌زمان ───
+        private int _caseLockId = 0;
+        private System.Windows.Forms.Timer _caseLockHeartbeat;
+
+        // خروجی: false یعنی رکورد توسط کاربر دیگری قفل است و حالتِ ویرایش
+        // باز نشد؛ فراخوان (btnEdit_Click) باید متوقف شود.
+        private bool SetCaseEditMode(bool editable)
         {
+            if (editable)
+            {
+                // پروندهٔ تازه (currentCaseId == 0) هنوز چیزی برای قفل کردن
+                // ندارد؛ TryAcquire خودش این حالت را بدونِ قفلِ واقعی موفق
+                // برمی‌گرداند.
+                CaseManagement.Enterprise.LockResult lockResult =
+                    CaseManagement.Enterprise.LockService.TryAcquire("TblCase", currentCaseId);
+
+                if (!lockResult.Acquired)
+                {
+                    Msg.Show(lockResult.DeniedMessage);
+                    return false;
+                }
+
+                _caseLockId = lockResult.LockID;
+                StartCaseLockHeartbeat();
+            }
+            else if (_caseLockId > 0)
+            {
+                CaseManagement.Enterprise.LockService.Release(_caseLockId);
+                _caseLockId = 0;
+                StopCaseLockHeartbeat();
+            }
+
             _caseEditMode = editable;
 
             ApplyReadOnlyToFieldBoxes(grpHead, !editable);
@@ -2486,6 +2836,49 @@ WHERE CasID = @CasID", con))
             // شماره فرم همیشه اتومات/قفل است — مستقل از حالتِ ویرایش.
             txtFormNo.ReadOnly = true;
             txtFormNo.TabStop = false;
+
+            return true;
+        }
+
+        // تمدیدِ دوره‌ای قفل تا وقتی فرم در حالتِ ویرایش باز است — وگرنه یک
+        // ویرایشِ طولانی بعد از ۱۵ دقیقه (پیش‌فرض LockMinutes) بی‌صدا منقضی
+        // می‌شد و کاربر دیگری می‌توانست هم‌زمان قفل بگیرد.
+        private void StartCaseLockHeartbeat()
+        {
+            if (_caseLockHeartbeat == null)
+            {
+                _caseLockHeartbeat = new System.Windows.Forms.Timer();
+                _caseLockHeartbeat.Interval = 5 * 60 * 1000; // ۵ دقیقه
+                _caseLockHeartbeat.Tick += delegate
+                {
+                    CaseManagement.Enterprise.LockService.Heartbeat(_caseLockId);
+                };
+            }
+
+            _caseLockHeartbeat.Start();
+        }
+
+        private void StopCaseLockHeartbeat()
+        {
+            if (_caseLockHeartbeat != null)
+                _caseLockHeartbeat.Stop();
+        }
+
+        // آموزش — دفاعِ آخر: اگر کاربر با دکمهٔ × پنجره را ببندد (نه از مسیرِ
+        // معمولِ SetCaseEditMode(false))، قفل باید همین‌جا آزاد شود. اگر این
+        // مرحله هم انجام نشود، ExpiresAt/PurgeExpired موجود در LockService
+        // بازیابیِ خودکار در برابرِ خرابی/بستنِ ناگهانی را تضمین می‌کند.
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            if (_caseLockId > 0)
+            {
+                CaseManagement.Enterprise.LockService.Release(_caseLockId);
+                _caseLockId = 0;
+            }
+
+            StopCaseLockHeartbeat();
+
+            base.OnFormClosing(e);
         }
 
         private static void ApplyReadOnlyToFieldBoxes(Control parent, bool readOnly)
@@ -2532,13 +2925,39 @@ WHERE CasID = @CasID", con))
                 ? "—"
                 : province + (district == "" ? "" : " / " + district);
 
+            // آموزش — هفت فیلدِ زیر فقط بازتابِ خواندنیِ همان کنترل‌های موجودِ
+            // فرم‌اند (هیچ کوئری/ستونِ تازه‌ای ندارند)؛ ترتیبِ ردیف‌هایشان در
+            // Designer طبق بندِ DETAIL SECTION درخواست چیده شده است.
+            txtSummaryProvince.Text  = TextOrDash(province);
+            txtSummaryDistrict.Text  = TextOrDash(district);
+            txtSummaryVillage.Text   = TextOrDash(txtHeadCurrentResidence.Text);
+            txtSummaryPhone.Text     = TextOrDash(txtPhone.Text);
+            txtSummaryTazkira.Text   = TextOrDash(txtHeadTazkiraNo.Text);
+            // «آمر مسئول» در دیتابیس ستونِ اختصاصی ندارد؛ نزدیک‌ترین دادهٔ موجود
+            // همان «سروی‌کنندگان» (Surveyors) است که مسئولِ ثبتِ پرونده را
+            // نگه می‌دارد. این نگاشت در گزارشِ ممیزی هم صریح ذکر شده است.
+            txtSummaryOfficer.Text   = TextOrDash(txtSurveyors.Text);
+
+            string startDate = Helpers.PersianDateHelper.ToPersianDateString(dtpCaseDate.Value);
+            txtSummaryStartDate.Text = TextOrDash(startDate);
+
             LoadImageToPictureBox(savedHeadPhotoPath, picSummaryPhoto);
+
+            // کارتِ «وضعیت خدمات» در ستونِ چپ — همان سه مقدارِ بالا، بدونِ
+            // کوئریِ اضافه.
+            UpdateServiceStatusCard(startDate);
 
             if (currentCaseId == 0)
             {
                 txtSummaryMemberCount.Text = "—";
                 txtSummaryLastAssistance.Text = "—";
                 txtSummaryLastChange.Text = "—";
+                lblStatMembers.Text  = "—";
+                lblStatLastAid.Text  = "—";
+                lblStatTotalAid.Text = "—";
+                lblStatDocs.Text     = "—";
+                lblStatVisits.Text   = "—";
+                lblSvcChangeValue.Text = "—";
                 return;
             }
 
@@ -2551,7 +2970,9 @@ WHERE CasID = @CasID", con))
                     using (var cmd = new SQLiteCommand("SELECT COUNT(*) FROM TblFamily WHERE CasID = @CasID", con))
                     {
                         AddIntParameter(cmd, "@CasID", currentCaseId);
-                        txtSummaryMemberCount.Text = Convert.ToInt32(cmd.ExecuteScalar()).ToString();
+                        int members = Convert.ToInt32(cmd.ExecuteScalar());
+                        txtSummaryMemberCount.Text = members.ToString();
+                        lblStatMembers.Text = members.ToString("N0");
                     }
 
                     using (var cmd = new SQLiteCommand(
@@ -2560,10 +2981,42 @@ WHERE CasID = @CasID", con))
                         AddIntParameter(cmd, "@CasID", currentCaseId);
                         using (var dr = cmd.ExecuteReader())
                         {
-                            txtSummaryLastAssistance.Text = dr.Read()
-                                ? GetDbString(dr, "AssistanceDate") + " — " + Convert.ToDecimal(dr["Amount"]).ToString("N0")
-                                : "—";
+                            if (dr.Read())
+                            {
+                                decimal amount = Convert.ToDecimal(dr["Amount"]);
+                                txtSummaryLastAssistance.Text =
+                                    GetDbString(dr, "AssistanceDate") + " — " + amount.ToString("N0");
+                                lblStatLastAid.Text = amount.ToString("N0");
+                            }
+                            else
+                            {
+                                txtSummaryLastAssistance.Text = "—";
+                                lblStatLastAid.Text = "0";
+                            }
                         }
+                    }
+
+                    // آموزش — دو عددِ زیر (مجموعِ کمک‌ها و تعدادِ مراجعات) از
+                    // همان TblAssistance می‌آیند؛ «مراجعه» یعنی هر ردیفِ کمکِ
+                    // ثبت‌شده برای این پرونده. جدول یا مفهومِ تازه‌ای ساخته نشد.
+                    using (var cmd = new SQLiteCommand(
+                        "SELECT COUNT(*), IFNULL(SUM(Amount), 0) FROM TblAssistance WHERE CasID = @CasID", con))
+                    {
+                        AddIntParameter(cmd, "@CasID", currentCaseId);
+                        using (var dr = cmd.ExecuteReader())
+                        {
+                            if (dr.Read())
+                            {
+                                lblStatVisits.Text   = Convert.ToInt32(dr.GetValue(0)).ToString("N0");
+                                lblStatTotalAid.Text = Convert.ToDecimal(dr.GetValue(1)).ToString("N0");
+                            }
+                        }
+                    }
+
+                    using (var cmd = new SQLiteCommand("SELECT COUNT(*) FROM TblDocs WHERE CasID = @CasID", con))
+                    {
+                        AddIntParameter(cmd, "@CasID", currentCaseId);
+                        lblStatDocs.Text = Convert.ToInt32(cmd.ExecuteScalar()).ToString("N0");
                     }
 
                     using (var cmd = new SQLiteCommand(
@@ -2571,7 +3024,9 @@ WHERE CasID = @CasID", con))
                     {
                         AddIntParameter(cmd, "@CasID", currentCaseId);
                         object result = cmd.ExecuteScalar();
-                        txtSummaryLastChange.Text = (result == null || result == DBNull.Value) ? "—" : result.ToString();
+                        string lastChange = (result == null || result == DBNull.Value) ? "—" : result.ToString();
+                        txtSummaryLastChange.Text = lastChange;
+                        lblSvcChangeValue.Text = lastChange;
                     }
                 }
             }
@@ -2579,6 +3034,44 @@ WHERE CasID = @CasID", con))
             {
                 Msg.Show("خطا در بارگذاری خلاصهٔ پرونده: " + ex.Message);
             }
+        }
+
+        // کارتِ «وضعیت خدمات» بالای گرید. رنگِ نشان از خودِ وضعیت می‌آید تا
+        // کاربر بدونِ خواندنِ متن هم حالِ پرونده را ببیند — همان سه رنگی که
+        // UiTheme از قبل برای موفق/هشدار/خطا تعریف کرده است.
+        private void UpdateServiceStatusCard(string startDate)
+        {
+            if (lblSvcBadge == null) return;
+
+            string status = txtServiceStatus.Text.Trim();
+            lblSvcBadge.Text = status == "" ? "—" : status;
+
+            // آموزش — رنگ از واژگانِ رسمیِ CaseDomain می‌آید، نه از حدسِ
+            // زیررشته‌ای. با حدسِ قبلی «متقاضی» (وضعیتِ پیش‌فرضِ پروندهٔ نو)
+            // قرمزِ خطا می‌گرفت، در حالی‌که یک مرحلهٔ عادیِ پیش از فعال‌شدن است.
+            if (status == "")
+            {
+                lblSvcBadge.ForeColor = Helpers.UiTheme.TextMuted;
+                lblSvcBadge.BackColor = Helpers.UiTheme.Background;
+            }
+            else if (status == Helpers.CaseDomain.StatusActive)
+            {
+                lblSvcBadge.ForeColor = Helpers.UiTheme.Success;
+                lblSvcBadge.BackColor = Helpers.UiTheme.SuccessLight;
+            }
+            else if (Array.IndexOf(Helpers.CaseDomain.TerminatedStatuses, status) >= 0)
+            {
+                lblSvcBadge.ForeColor = Helpers.UiTheme.Danger;
+                lblSvcBadge.BackColor = Helpers.UiTheme.DangerLight;
+            }
+            else
+            {
+                // متقاضی / در حال بررسی / در انتظار تایید و هر مقدارِ ناشناخته
+                lblSvcBadge.ForeColor = Helpers.UiTheme.Warning;
+                lblSvcBadge.BackColor = Helpers.UiTheme.WarningLight;
+            }
+
+            lblSvcStartValue.Text = string.IsNullOrWhiteSpace(startDate) ? "—" : startDate;
         }
 
         // فقط وقتی کاربر واقعاً روی تب «اعضاء خانواده» می‌رود صدا زده می‌شود
@@ -2598,6 +3091,8 @@ WHERE CasID = @CasID", con))
             {
                 _embeddedFamily = new FrmFamily();
                 _embeddedFamily.IsEmbedded = true;
+                // پیمایشِ پرونده‌ها از داخلِ خودِ تب (دکمه‌های «پروندهٔ قبلی/بعدی»)
+                _embeddedFamily.CaseNavigator = NavigateAdjacentCase;
                 _embeddedFamily.CurrentCaseId = currentCaseId;
                 _embeddedFamily.CurrentCaseCode = txtCode.Text.Trim();
                 _embeddedFamily.TopLevel = false;
@@ -2635,6 +3130,8 @@ WHERE CasID = @CasID", con))
             {
                 _embeddedDocs = new FrmDocs();
                 _embeddedDocs.IsEmbedded = true;
+                // همان دکمه‌های «پروندهٔ قبلی/بعدی» که تبِ اعضاء دارد
+                _embeddedDocs.CaseNavigator = NavigateAdjacentCase;
                 _embeddedDocs.CurrentCaseId = currentCaseId;
                 _embeddedDocs.CurrentCaseCode = txtCode.Text.Trim();
                 _embeddedDocs.TopLevel = false;
@@ -2654,6 +3151,85 @@ WHERE CasID = @CasID", con))
             lblDocsPlaceholder.Visible = false;
         }
 
+        // آموزش — درخواستِ کاربر: تب‌های «اعضاء خانواده» و «اسناد» باید دکمهٔ
+        // «پروندهٔ قبلی/بعدی» داشته باشند که نظر به شمارهٔ فرم بالا/پایین برود
+        // و پرونده‌های دیگر را نشان دهد. آن دو فرم embedded هیچ راهی برای
+        // بارگذاریِ پرونده ندارند (و نباید داشته باشند — منطقِ پرونده فقط
+        // این‌جاست)، پس FrmCase همین متد را به‌صورت یک delegate در اختیارشان
+        // می‌گذارد و خودش تنها مالکِ بارگذاری باقی می‌ماند.
+        //
+        // direction: ۱ = شمارهٔ فرمِ بزرگ‌تر (بعدی)، ۱- = کوچک‌تر (قبلی).
+        // مرتب‌سازی روی CAST(FormNo AS INTEGER) است تا «۱۰» بعد از «۹» بیاید
+        // نه بعد از «۱»؛ CasID فقط شکنندهٔ تساوی است (شماره‌های غیرعددی همگی
+        // ۰ می‌شوند و بدون آن ترتیبشان قطعی نبود). فیلترِ @CID دقیقاً همان
+        // فیلترِ چندمرکزیِ LoadCaseByQuery است تا این مسیر هم پروندهٔ مرکزِ
+        // دیگر را نشان ندهد.
+        private bool NavigateAdjacentCase(int direction)
+        {
+            if (currentCaseId == 0)
+                return false;
+
+            // در حالتِ ویرایش، پرش به پروندهٔ دیگر تغییراتِ ذخیره‌نشده را
+            // بی‌صدا دور می‌ریخت؛ پس اول باید ذخیره/انصراف شود.
+            //
+            // آموزش — رفعِ باگِ گزارش‌شدهٔ کاربر «دکمهٔ قبلی/بعدی هنگ می‌کند»:
+            // این پیام از داخلِ کلیکِ دکمهٔ روی تبِ اعضاء/اسناد صدا زده می‌شود
+            // (یک فرمِ embedded، نه FrmCase مستقیماً). Msg.Show بدونِ owner
+            // (همان الگویی که ده‌ها جای دیگرِ این فایل دارند) دیالوگ را بدونِ
+            // مالکِ صریح باز می‌کند؛ در این مسیرِ خاص (کلیک از فرمِ فرزندِ
+            // جاسازی‌شده) دیالوگ گاهی پشتِ پنجرهٔ اصلی گم می‌شد و کاربر فکر
+            // می‌کرد برنامه فریز کرده، چون در واقع منتظرِ بستنِ دیالوگِ نامرئی
+            // بود. owner=this (خودِ FrmCase) دیالوگ را قطعاً روی پنجرهٔ اصلی و
+            // در پیش‌زمینه نگه می‌دارد.
+            if (_caseEditMode)
+            {
+                Msg.Show(this, "اول تغییرات پرونده را ذخیره یا لغو کنید", "",
+                    MessageBoxButtons.OK, MessageBoxIcon.None);
+                return false;
+            }
+
+            int currentFormNo;
+
+            if (!int.TryParse(txtFormNo.Text.Trim(), out currentFormNo))
+                currentFormNo = 0;
+
+            bool forward = direction >= 0;
+
+            string comparison = forward
+                ? "(CAST(FormNo AS INTEGER) > @FormNo OR (CAST(FormNo AS INTEGER) = @FormNo AND CasID > @CasID))"
+                : "(CAST(FormNo AS INTEGER) < @FormNo OR (CAST(FormNo AS INTEGER) = @FormNo AND CasID < @CasID))";
+
+            string order = forward ? "ASC" : "DESC";
+
+            int targetCaseId;
+
+            using (SQLiteConnection con = db.GetConnection())
+            using (SQLiteCommand cmd = new SQLiteCommand(
+                "SELECT CasID FROM TblCase WHERE (@CID = 0 OR CenterID = @CID) AND " + comparison +
+                " ORDER BY CAST(FormNo AS INTEGER) " + order + ", CasID " + order + " LIMIT 1", con))
+            {
+                AddIntParameter(cmd, "@FormNo", currentFormNo);
+                AddIntParameter(cmd, "@CasID", currentCaseId);
+                cmd.Parameters.AddWithValue("@CID", SecurityContext.CenterFilterId);
+                con.Open();
+
+                object result = cmd.ExecuteScalar();
+
+                if (result == null || result == DBNull.Value)
+                {
+                    Msg.Show(this, forward ? "پروندهٔ بعدی وجود ندارد" : "پروندهٔ قبلی وجود ندارد", "",
+                        MessageBoxButtons.OK, MessageBoxIcon.None);
+                    return false;
+                }
+
+                targetCaseId = Convert.ToInt32(result);
+            }
+
+            // LoadCaseById خودش SyncMembersTab را صدا می‌زند، و چون تبِ اعضاء/
+            // اسناد همین الان دیده می‌شود، همان‌جا RefreshForCase اجرا می‌شود.
+            return LoadCaseById(targetCaseId);
+        }
+
         private void tabsCase_SelectedIndexChanged(object sender, EventArgs e)
         {
             if (tabsCase.SelectedTab == tabMembersHost.Parent)
@@ -2662,6 +3238,57 @@ WHERE CasID = @CasID", con))
                 EnsureDocsEmbedded();
 
             UpdateWorkspaceWidth();
+            UpdateCaseActionsVisibility();
+        }
+
+        // آموزش — رفعِ ریشه‌ایِ گزارشِ کاربر «دکمه‌ها برای اسناد و اعضاء جداست».
+        // قبلاً دو راهکارِ مسکّن اعمال شده بود: تغییرِ نامِ دکمه‌های embedded
+        // (FrmFamily/FrmDocs → «عضو جدید»/«ذخیره سند»...) و افزودنِ برچسبِ
+        // «پرونده:» به نوارِ پایین. هر دو ابهام را کم کردند ولی برنداشتند، چون
+        // مسئله نامِ دکمه‌ها نبود: روی تبِ اعضاء/اسناد **دو نوارِ فرمان با
+        // فعل‌های یکسان** (جدید/ذخیره/ویرایش/حذف) هم‌زمان دیده می‌شدند و کاربر
+        // مجبور بود متن بخواند تا بفهمد کدام روی پرونده کار می‌کند.
+        //
+        // شاهدِ اینکه این دکمه‌ها روی آن دو تب واقعاً بی‌معنا هستند، خودِ کدِ
+        // موجود است: EnsureEditableTabVisible اگر کاربر روی این تب‌ها «جدید»/
+        // «ویرایش» بزند، او را خودکار به تبِ «مشخصات کلی سرپرست» پرت می‌کند.
+        // یعنی سیستم از قبل می‌دانست این فرمان‌ها اینجا قابلِ اجرا نیستند.
+        //
+        // نسخهٔ اول این رفع، گروهِ «پرونده:» را با Visible=false کاملاً پنهان
+        // می‌کرد. به‌درخواستِ کاربر، رفتار به «خیره/غیرفعال» تغییر کرد: دکمه‌ها
+        // در جای خودشان می‌مانند ولی کم‌رنگ/غیرقابل‌کلیک می‌شوند — چیدمانِ
+        // نوار پایین هیچ‌وقت نمی‌پرد و همچنان روشن است که این چهار فرمان روی
+        // این دو تب موقتاً کار نمی‌کنند. عمداً Enabled (نه رنگِ دستی) تغییر
+        // می‌کند: چون دکمه‌ها FlatStyle=Flat هستند، WinForms خودش موقعِ
+        // Enabled=false ظاهرِ استانداردِ خیره/کم‌رنگ را می‌کشد (بدونِ کدِ رنگِ
+        // اضافه) — همان الگویی که Label هم برای برچسبِ «پرونده:» دارد.
+        //   • جستجو/تاریخچه و کلِ گروهِ «خروجی‌ها:» دست‌نخورده و فعال می‌مانند،
+        //     چون روی خودِ پرونده کار می‌کنند و در هر تبی معنا دارند.
+        //   • EnsureEditableTabVisible دست‌نخورده می‌ماند (شبکهٔ ایمنی).
+        //   • Enabled=false خودکار میان‌برهای صفحه‌کلید (Ctrl+N/E/D) را هم
+        //     روی این دو تب غیرفعال می‌کند — FormShortcuts از قبل Enabled را
+        //     چک می‌کند، پس نیازی به تغییرِ جداگانه نبود.
+        //
+        // ⚠ btnSave طبق قاعدهٔ همیشگیِ SetCaseEditMode فقط در حالتِ ویرایش
+        // فعال است؛ پس با برگشتن به تب‌های دیگر، به‌جای «همیشه فعال»، دقیقاً
+        // همان وضعیتِ فعلیِ _caseEditMode بازگردانده می‌شود — وگرنه خروج از تبِ
+        // اعضاء می‌توانست دکمهٔ ذخیره را در حالتِ غیرِویرایش هم فعال کند.
+        private void UpdateCaseActionsVisibility()
+        {
+            if (tabsCase == null || tabMembersHost == null || tabDocsHost == null)
+                return;
+
+            bool onChildEntityTab =
+                tabsCase.SelectedTab == tabMembersHost.Parent ||
+                tabsCase.SelectedTab == tabDocsHost.Parent;
+
+            bool enable = !onChildEntityTab;
+
+            if (lblCaseSection != null) lblCaseSection.Enabled = enable;
+            if (btnNew    != null) btnNew.Enabled    = enable;
+            if (btnEdit   != null) btnEdit.Enabled   = enable;
+            if (btnDelete != null) btnDelete.Enabled = enable;
+            if (btnSave   != null) btnSave.Enabled    = enable && _caseEditMode;
         }
 
         // آموزش — رفعِ «تب اعضاء کوچک شده»: تب‌های اعضاء و اسناد فرم‌های کاملی
@@ -2805,6 +3432,12 @@ WHERE CasID = @CasID", con))
 
         private void btnPrint_Click(object sender, EventArgs e)
         {
+            if (!CaseManagement.Enterprise.PermissionService.Require("Case.Print"))
+            {
+                Msg.Show("کاربر اجازه چاپ پرونده را ندارد.");
+                return;
+            }
+
             if (currentCaseId == 0)
             {
                 Msg.Show("اول پرونده را ذخیره یا از لیست انتخاب کن");
@@ -2849,6 +3482,12 @@ WHERE CasID = @CasID", con))
 
         private void btnExportWord_Click(object sender, EventArgs e)
         {
+            if (!CaseManagement.Enterprise.PermissionService.Require("Case.Export"))
+            {
+                Msg.Show("کاربر اجازه خروجی‌گیری از پرونده را ندارد.");
+                return;
+            }
+
             if (currentCaseId == 0)
             {
                 Msg.Show("اول پرونده را ذخیره یا از لیست انتخاب کن");
@@ -2912,6 +3551,12 @@ WHERE CasID = @CasID", con))
 
         private void btnExportPdf_Click(object sender, EventArgs e)
         {
+            if (!CaseManagement.Enterprise.PermissionService.Require("Case.Export"))
+            {
+                Msg.Show("کاربر اجازه خروجی‌گیری از پرونده را ندارد.");
+                return;
+            }
+
             if (currentCaseId == 0)
             {
                 Msg.Show("اول پرونده را ذخیره یا از لیست انتخاب کن");

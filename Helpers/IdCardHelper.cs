@@ -1,5 +1,6 @@
 using System;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Windows.Forms;
 
 namespace CaseManagement.Helpers
@@ -214,6 +215,72 @@ namespace CaseManagement.Helpers
                 }
             }
             return formatted.Length;
+        }
+
+        // ─── تشخیص نوع از روی الگوی دقیقِ شماره — فقط برای واردات خودکار (HTML Sync) ──
+        // آموزش — این متد عمداً برخلاف قاعده‌ی بالای همین کلاس («نوع از روی شماره
+        // تشخیص داده نمی‌شود، چون شکننده است») عمل می‌کند: در فایل HTML سامانه‌ی
+        // مرکزی هیچ ستون «نوع تذکره»ی قابل‌اتکایی وجود ندارد، پس تنها راهِ پر کردن
+        // این فیلد، تطبیق با الگوی دقیقِ شماره‌ی الکترونیکی است (نه صرفاً تعداد
+        // رقم — به‌درخواستِ صریحِ کاربر). نتیجه در Wizard سینک پیش از اعمال
+        // قابل‌بازبینی/رد است، پس ریسکِ «تشخیصِ اشتباه» با بازبینی دستی کاربر
+        // پوشش داده می‌شود. این متد نباید در فرم‌های ورود دستی (FrmCase/FrmFamily)
+        // استفاده شود؛ اعتبارسنجیِ ورودِ دستی همچنان طبق IsValid/FormatElectronic
+        // بالا (قالبِ 0000-0000-00000) بدون تغییر باقی می‌ماند.
+        //
+        // ─── الگوهای پذیرفته‌شده‌ی شماره‌ی الکترونیکی ─────────────────────────
+        // آموزش — چرا دو الگو: مشخصاتِ اولیه فقط #####-####-#### (۵-۴-۴) بود، اما
+        // بررسیِ دادهٔ واقعیِ مؤسسه نشان داد در خروجیِ سامانهٔ مرکزی هیچ شماره‌ای
+        // با آن الگو وجود ندارد و همهٔ تذکره‌های الکترونیکی به‌صورت
+        // ####-####-##### (۴-۴-۵، مثل 1403-0900-80585) نوشته می‌شوند — گروهِ
+        // چهاررقمیِ اول سالِ صدور است. با قاعدهٔ تک‌الگویی، هیچ رکوردی هرگز
+        // «الکترونیکی» نمی‌شد. پس هر دو گروه‌بندیِ ۱۳ رقمیِ خط‌تیره‌دار پذیرفته
+        // می‌شود (تصمیمِ صریحِ کاربر). شماره‌ی بدونِ خط تیره همچنان «کاغذی» است.
+        // این با قالبِ ورودِ دستی (بالا) یکی نیست؛ آن عمداً دست‌نخورده می‌ماند.
+        private static readonly Regex[] ElectronicImportPatterns =
+        {
+            new Regex(@"^\d{5}-\d{4}-\d{4}$", RegexOptions.Compiled),   // ۵-۴-۴
+            new Regex(@"^\d{4}-\d{4}-\d{5}$", RegexOptions.Compiled),   // ۴-۴-۵ (دادهٔ واقعی)
+        };
+
+        // کاراکترهای نامرئی/جهت‌دهِ رایج در خروجی HTML (نیم‌فاصله، فاصله‌ی صفر،
+        // علامت‌های راست‌به‌چپ/چپ‌به‌راست، BOM، فاصله‌ی سخت) — فقط برای تشخیصِ
+        // الگو حذف می‌شوند؛ رشته‌ی ذخیره‌شده در دیتابیس هرگز از این متد خارج
+        // نمی‌آید و دست‌نخورده می‌ماند.
+        private static readonly char[] HiddenChars =
+            { '‌', '​', '‎', '‏', '﻿', ' ' };
+
+        // نرمال‌سازیِ یک نسخه‌ی موقت از رشته (فقط برای آزمایشِ الگو): یکسان‌سازیِ
+        // ارقامِ فارسی/عربی، حذفِ کاراکترهای نامرئی، یکسان‌سازیِ انواع خط‌تیره
+        // (–—‐‑−) به «-»، و حذفِ فاصله‌ی اطرافِ خط‌تیره.
+        private static string NormalizeForDetection(string raw)
+        {
+            if (string.IsNullOrEmpty(raw)) return "";
+
+            var sb = new StringBuilder(raw.Length);
+            foreach (char c in raw)
+            {
+                if (Array.IndexOf(HiddenChars, c) >= 0) continue;
+                if (c >= '0' && c <= '9') { sb.Append(c); continue; }
+                if (c >= 0x06F0 && c <= 0x06F9) { sb.Append((char)('0' + (c - 0x06F0))); continue; } // فارسی
+                if (c >= 0x0660 && c <= 0x0669) { sb.Append((char)('0' + (c - 0x0660))); continue; } // عربی
+                if (c == '‐' || c == '‑' || c == '‒' || c == '–' ||
+                    c == '—' || c == '−') { sb.Append('-'); continue; }               // انواع خط‌تیره
+                sb.Append(c);
+            }
+
+            return Regex.Replace(sb.ToString(), @"\s*-\s*", "-").Trim();
+        }
+
+        public static string InferTypeFromNumber(string rawNumber)
+        {
+            if (string.IsNullOrWhiteSpace(rawNumber)) return null; // شماره خالی → نوع تعیین نمی‌شود
+
+            string normalized = NormalizeForDetection(rawNumber);
+            foreach (Regex pattern in ElectronicImportPatterns)
+                if (pattern.IsMatch(normalized)) return Electronic;
+
+            return Paper;
         }
 
         // ─── دسته‌بندی SQL برای آمار/گزارش‌ها ────────────────────────────────

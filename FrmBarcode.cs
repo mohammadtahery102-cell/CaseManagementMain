@@ -142,6 +142,12 @@ namespace CaseManagement
 
         private void btnPrint_Click(object sender, EventArgs e)
         {
+            if (!CaseManagement.Enterprise.PermissionService.Require("Barcode.Print"))
+            {
+                Msg.Show("کاربر اجازه چاپ بارکد را ندارد.");
+                return;
+            }
+
             if (currentBarcode == null)
             {
                 Msg.Show("اول یک بارکد تولید کنید");

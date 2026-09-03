@@ -49,7 +49,7 @@ namespace CaseManagement.Sync
                 return report;
             }
 
-            if (!SecurityContext.CanEdit())
+            if (!CaseManagement.Enterprise.PermissionService.Require("Sync.Execute"))
             {
                 report.ErrorMessage = "کاربر با دسترسیِ فقط-مشاهده اجازه‌ی ورود عکس و سند ندارد.";
                 report.FinishedAt = DateTime.Now;

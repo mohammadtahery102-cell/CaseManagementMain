@@ -56,9 +56,26 @@ namespace CaseManagement
         // جز FrmFamily_Load (زیر) — رفتار حالت مستقل/مودال کاملاً دست‌نخورده می‌ماند.
         public bool IsEmbedded { get; set; } = false;
 
+        // آموزش — پیمایشِ پرونده از داخلِ همین تب (درخواستِ کاربر: «دکمهٔ بعدی
+        // و قبلی که نظر به شمارهٔ فرم پرونده بالا و پایین برود»). این فرم
+        // نباید خودش پرونده بارگذاری کند (منطقِ پرونده فقط در FrmCase است)، پس
+        // FrmCase موقعِ جاسازی این delegate را می‌دهد: ورودی ۱+/۱- و خروجی
+        // «آیا پروندهٔ دیگری پیدا و بارگذاری شد». در حالتِ مستقل/مودال null
+        // می‌ماند و نوارِ دکمه‌ها اصلاً نمایش داده نمی‌شود.
+        public Func<int, bool> CaseNavigator { get; set; }
+
         private int currentFamilyId = 0;
         private string storedMemberPhotoPath = "";
         private string pendingSourcePhotoPath = "";
+
+        // ─── ویژگی ۵ (فعال‌سازی) — قفل رکورد ────────────────────────────────
+        // آموزش: برخلافِ FrmCase که یک حالتِ صریحِ «ویرایش» دارد، اینجا فیلدها
+        // همیشه قابلِ تایپ‌اند و بارگذاریِ یک عضو (LoadMemberToForm) همان لحظه‌ای
+        // است که ریسکِ هم‌پوشانیِ ویرایش شروع می‌شود؛ پس قفل همان‌جا گرفته
+        // می‌شود، نه در دکمه‌ی «ویرایش».
+        private int  _familyLockId = 0;
+        private bool _familyLockedByOther = false;
+        private System.Windows.Forms.Timer _familyLockHeartbeat;
 
         public FrmFamily()
         {
@@ -95,6 +112,20 @@ namespace CaseManagement
             // Sweep دوباره اعمال می‌شود.
             lblHeadInfo.ForeColor = Color.White;
 
+            // آموزش — ApplySweep هر Panel را سفید می‌کند؛ نوارِ سرِ فرم و
+            // میزبانِ دکمه‌های پیمایش باید سرمه‌ای بمانند (وگرنه دکمه‌های آبی
+            // روی زمینهٔ سفید وسطِ نوارِ تیره یک لکهٔ سفید می‌سازند).
+            headBarPanel.BackColor = UiTheme.PrimaryDark;
+            panCaseNav.BackColor   = UiTheme.PrimaryDark;
+
+            foreach (Button navBtn in new[] { btnPrevCase, btnNextCase })
+            {
+                navBtn.BackColor = UiTheme.Primary;
+                navBtn.ForeColor = Color.White;
+                navBtn.FlatAppearance.MouseOverBackColor = ControlPaint.Light(UiTheme.Primary, 0.18f);
+                navBtn.FlatAppearance.MouseDownBackColor = ControlPaint.Dark(UiTheme.Primary, 0.08f);
+            }
+
             btnDelete.BackColor = UiTheme.Danger;
             btnDelete.FlatAppearance.MouseOverBackColor = ControlPaint.Light(UiTheme.Danger, 0.18f);
             btnDelete.FlatAppearance.MouseDownBackColor = ControlPaint.Dark(UiTheme.Danger, 0.08f);
@@ -128,6 +159,10 @@ namespace CaseManagement
                 btnSave.Text   = "✔   ذخیره عضو";
                 btnEdit.Text   = "ویرایش عضو";
                 btnDelete.Text = "✕   حذف عضو";
+
+                // دکمه‌های «پروندهٔ قبلی/بعدی» فقط وقتی معنا دارند که FrmCase
+                // میزبان باشد و delegate پیمایش را داده باشد.
+                panCaseNav.Visible = CaseNavigator != null;
             }
 
             Text = "اعضای خانواده" +
@@ -155,6 +190,22 @@ namespace CaseManagement
         // می‌زند. دقیقاً همان مراحلِ انتهای FrmFamily_Load را تکرار می‌کند
         // (بدون LoadLookupCombos/ConfigureGrid چون آن‌ها یک‌بار در Load کافی‌اند
         // و LookupHelper خودش cache شده است).
+        // آموزش — دو دکمهٔ پیمایش. خودشان هیچ کوئری‌ای نمی‌زنند؛ فقط delegate
+        // را صدا می‌زنند. اگر پرونده‌ای پیدا شود، FrmCase بارگذاری می‌کند و
+        // خودش RefreshForCase همین فرم را صدا می‌زند (SyncMembersTab)، پس
+        // این‌جا کاری برای به‌روزرسانی لازم نیست.
+        private void btnPrevCase_Click(object sender, EventArgs e)
+        {
+            if (CaseNavigator != null)
+                CaseNavigator(-1);
+        }
+
+        private void btnNextCase_Click(object sender, EventArgs e)
+        {
+            if (CaseNavigator != null)
+                CaseNavigator(1);
+        }
+
         public void RefreshForCase(int caseId, string caseCode)
         {
             CurrentCaseId = caseId;
@@ -377,6 +428,7 @@ namespace CaseManagement
 
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
+            ReleaseFamilyLock();
             ClearPicture(picMemberPhoto);
             DisposeAllThumbnails();
             base.OnFormClosed(e);
@@ -393,8 +445,58 @@ namespace CaseManagement
             UiTheme.ApplyPersianDateColumns(dgvFamily, "BirthDate");
         }
 
+        // قفلِ عضوِ جاری را آزاد و تایمرِ تمدید را متوقف می‌کند — قبل از
+        // بارگذاریِ عضوی دیگر، پاک‌کردنِ فرم، یا بستنِ فرم صدا زده می‌شود.
+        private void ReleaseFamilyLock()
+        {
+            if (_familyLockId > 0)
+            {
+                CaseManagement.Enterprise.LockService.Release(_familyLockId);
+                _familyLockId = 0;
+            }
+
+            _familyLockedByOther = false;
+
+            if (_familyLockHeartbeat != null)
+                _familyLockHeartbeat.Stop();
+        }
+
+        // تلاش برای قفل کردنِ عضوِ تازه‌بارگذاری‌شده. اگر توسط کاربر دیگری
+        // قفل باشد، داده همچنان برای مشاهده نمایش داده می‌شود (فقط هشدار داده
+        // می‌شود)؛ خودِ ذخیره (btnEdit_Click) با پرچمِ _familyLockedByOther
+        // مسدود می‌شود.
+        private void TryLockFamilyMember(int famId)
+        {
+            if (famId <= 0) return;
+
+            CaseManagement.Enterprise.LockResult lockResult =
+                CaseManagement.Enterprise.LockService.TryAcquire("TblFamily", famId);
+
+            if (!lockResult.Acquired)
+            {
+                _familyLockedByOther = true;
+                Msg.Show(lockResult.DeniedMessage);
+                return;
+            }
+
+            _familyLockId = lockResult.LockID;
+
+            if (_familyLockHeartbeat == null)
+            {
+                _familyLockHeartbeat = new System.Windows.Forms.Timer();
+                _familyLockHeartbeat.Interval = 5 * 60 * 1000; // ۵ دقیقه
+                _familyLockHeartbeat.Tick += delegate
+                {
+                    CaseManagement.Enterprise.LockService.Heartbeat(_familyLockId);
+                };
+            }
+
+            _familyLockHeartbeat.Start();
+        }
+
         private void ClearForm()
         {
+            ReleaseFamilyLock();
             currentFamilyId = 0;
             storedMemberPhotoPath = "";
             pendingSourcePhotoPath = "";
@@ -931,7 +1033,7 @@ namespace CaseManagement
 
         private void btnSave_Click(object sender, EventArgs e)
         {
-            if (!SecurityContext.CanEdit())
+            if (!CaseManagement.Enterprise.PermissionService.Require("Family.Edit"))
             {
                 Msg.Show("کاربر فقط مشاهده اجازه ثبت عضو خانواده ندارد.");
                 return;
@@ -948,9 +1050,25 @@ namespace CaseManagement
 
             string savedPhotoPath = "";
             bool copiedNewPhoto = false;
+            string tazkiraAuditNote = null;
 
             try
             {
+                // آموزش — هشدارِ تذکرهٔ تکراری: بررسیِ نرم، نه مانعِ قطعی. همان
+                // الگویی که در FrmCase استفاده شده — کاربر باید صراحتاً تأیید
+                // کند تا ثبت ادامه یابد.
+                List<string> tazkiraMatches = DuplicateDetector.FindByTazkira(txtMemberTazkiraNo.Text.Trim(), "TblFamily", 0);
+                if (tazkiraMatches.Count > 0)
+                {
+                    if (!UiTheme.ShowConfirm(this,
+                        "این شماره تذکره قبلاً برای موارد زیر ثبت شده است:\n\n" +
+                        string.Join("\n", tazkiraMatches) +
+                        "\n\nآیا مطمئن هستید که می‌خواهید ادامه دهید؟", "احتمال ثبت تکراری"))
+                        return;
+
+                    tazkiraAuditNote = "تذکره " + txtMemberTazkiraNo.Text.Trim() + " => " + string.Join(" | ", tazkiraMatches);
+                }
+
                 if (!string.IsNullOrWhiteSpace(pendingSourcePhotoPath))
                 {
                     savedPhotoPath = SavePendingPhotoToCaseFolder();
@@ -998,12 +1116,19 @@ namespace CaseManagement
                 }
 
                 AuditLogger.Log("ثبت", "TblFamily", currentFamilyId, "", BuildFamilyAuditText(savedPhotoPath));
+                if (tazkiraAuditNote != null)
+                    AuditLogger.Log("هشدار تذکره تکراری - تأیید کاربر", "TblFamily", currentFamilyId, "", tazkiraAuditNote);
                 AuditLogger.RecordFamilyStatusChange(currentFamilyId, "", cmbServiceStatus.Text,
                     txtSuspensionReason.Text.Trim(), txtStopReason.Text.Trim());
 
                 // صفِ همگام‌سازی — همان الگوی فرم پرونده.
                 CaseManagement.Sync.SyncOutboxService.Capture("TblFamily", currentFamilyId,
                     CaseManagement.Sync.OfflineSyncInitializer.OperationCreate);
+
+                // تاریخچهٔ کاملِ رکورد — BuildFamilyAuditText فقط پنج فیلد را ثبت
+                // می‌کند؛ این عکسِ فوری همهٔ ستون‌های عضو را نگه می‌دارد.
+                CaseManagement.Enterprise.VersionService.Capture("TblFamily", currentFamilyId,
+                    CaseManagement.Enterprise.VersionService.OperationInsert);
 
                 Msg.Show("عضو خانواده ذخیره شد");
                 LoadFamilyMembers();
@@ -1020,7 +1145,7 @@ namespace CaseManagement
 
         private void btnEdit_Click(object sender, EventArgs e)
         {
-            if (!SecurityContext.CanEdit())
+            if (!CaseManagement.Enterprise.PermissionService.Require("Family.Edit"))
             {
                 Msg.Show("کاربر فقط مشاهده اجازه ویرایش عضو خانواده ندارد.");
                 return;
@@ -1032,12 +1157,19 @@ namespace CaseManagement
                 return;
             }
 
+            if (_familyLockedByOther)
+            {
+                Msg.Show("این عضو هم‌اکنون توسط کاربر دیگری در حال ویرایش است. لطفاً بعداً تلاش کنید.");
+                return;
+            }
+
             if (!ValidateForm())
                 return;
 
             string oldPhotoPath = "";
             string finalPhotoPath = "";
             string newlyCopiedPhotoPath = "";
+            string tazkiraAuditNote = null;
 
             try
             {
@@ -1051,6 +1183,19 @@ namespace CaseManagement
                     LoadFamilyMembers();
                     ClearForm();
                     return;
+                }
+
+                // آموزش — هشدارِ تذکرهٔ تکراری، همان الگویِ مسیرِ ثبتِ رکوردِ جدید.
+                List<string> tazkiraMatches = DuplicateDetector.FindByTazkira(txtMemberTazkiraNo.Text.Trim(), "TblFamily", currentFamilyId);
+                if (tazkiraMatches.Count > 0)
+                {
+                    if (!UiTheme.ShowConfirm(this,
+                        "این شماره تذکره قبلاً برای موارد زیر ثبت شده است:\n\n" +
+                        string.Join("\n", tazkiraMatches) +
+                        "\n\nآیا مطمئن هستید که می‌خواهید ادامه دهید؟", "احتمال ثبت تکراری"))
+                        return;
+
+                    tazkiraAuditNote = "تذکره " + txtMemberTazkiraNo.Text.Trim() + " => " + string.Join(" | ", tazkiraMatches);
                 }
 
                 finalPhotoPath = oldPhotoPath;
@@ -1134,6 +1279,8 @@ namespace CaseManagement
                     DeleteStoredPhotoSafely(oldPhotoPath);
 
                 AuditLogger.Log("ویرایش", "TblFamily", currentFamilyId, oldAuditText, BuildFamilyAuditText(finalPhotoPath));
+                if (tazkiraAuditNote != null)
+                    AuditLogger.Log("هشدار تذکره تکراری - تأیید کاربر", "TblFamily", currentFamilyId, "", tazkiraAuditNote);
                 AuditLogger.RecordFamilyStatusChange(currentFamilyId, oldStatus, cmbServiceStatus.Text,
                     txtSuspensionReason.Text.Trim(), txtStopReason.Text.Trim());
                 // آموزش — به‌درخواست کاربر (تاریخچهٔ ممیزی نقش عضو، بخش ۱۲):
@@ -1144,6 +1291,10 @@ namespace CaseManagement
 
                 CaseManagement.Sync.SyncOutboxService.Capture("TblFamily", currentFamilyId,
                     CaseManagement.Sync.OfflineSyncInitializer.OperationUpdate);
+
+                // تاریخچهٔ کاملِ رکورد — توضیح در مسیر ثبت آمده است.
+                CaseManagement.Enterprise.VersionService.Capture("TblFamily", currentFamilyId,
+                    CaseManagement.Enterprise.VersionService.OperationUpdate);
 
                 Msg.Show("عضو خانواده ویرایش شد");
                 LoadFamilyMembers();
@@ -1158,9 +1309,23 @@ namespace CaseManagement
             }
         }
 
+        // ─── تاریخچهٔ تغییراتِ همین عضو ─────────────────────────────────────
+        // هم‌الگوی btnHistory_Click در فرم پرونده.
+        private void btnHistory_Click(object sender, EventArgs e)
+        {
+            if (currentFamilyId == 0)
+            {
+                Msg.Show("اول عضو خانواده را انتخاب کن");
+                return;
+            }
+
+            using (var frm = new CaseManagement.Enterprise.FrmVersions("TblFamily", currentFamilyId))
+                frm.ShowDialog(this);
+        }
+
         private void btnDelete_Click(object sender, EventArgs e)
         {
-            if (!SecurityContext.CanDelete())
+            if (!CaseManagement.Enterprise.PermissionService.Require("Family.Delete"))
             {
                 Msg.Show("حذف عضو خانواده فقط برای مدیر سیستم مجاز است.");
                 return;
@@ -1191,6 +1356,11 @@ namespace CaseManagement
             // می‌شود.
             var pendingDelete =
                 CaseManagement.Sync.SyncOutboxService.PrepareDelete("TblFamily", currentFamilyId);
+
+            // به همان دلیلِ بالا، عکسِ فوریِ کاملِ رکورد هم پیش از تراکنشِ حذف
+            // برداشته می‌شود؛ ثبتِ نسخهٔ «حذف» فقط پس از حذفِ موفق انجام می‌گیرد.
+            string deletedSnapshot = CaseManagement.Enterprise.VersionService
+                .ReadSnapshotText("TblFamily", currentFamilyId);
 
             try
             {
@@ -1253,6 +1423,9 @@ namespace CaseManagement
                 // حذف واقعاً انجام شد (مسیرهای ناموفق پیش‌تر return کرده‌اند).
                 CaseManagement.Sync.SyncOutboxService.CommitDelete(pendingDelete);
 
+                CaseManagement.Enterprise.VersionService.CaptureDeleted(
+                    "TblFamily", deletedFamilyId, deletedSnapshot);
+
                 Msg.Show("عضو خانواده حذف شد");
                 LoadFamilyMembers();
                 ClearForm();
@@ -1281,6 +1454,12 @@ namespace CaseManagement
 
         private void btnPrint_Click(object sender, EventArgs e)
         {
+            if (!CaseManagement.Enterprise.PermissionService.Require("Family.Print"))
+            {
+                Msg.Show("کاربر اجازه چاپ فهرست اعضای خانواده را ندارد.");
+                return;
+            }
+
             DataTable table = dgvFamily.DataSource as DataTable;
             if (table == null || table.Rows.Count == 0)
             {
@@ -1371,6 +1550,8 @@ namespace CaseManagement
 
         private void LoadMemberToForm(int famId)
         {
+            ReleaseFamilyLock();
+
             try
             {
                 using (SQLiteConnection con = db.GetConnection())
@@ -1469,6 +1650,8 @@ namespace CaseManagement
                             ClearPicture(picMemberPhoto);
                     }
                 }
+
+                TryLockFamilyMember(currentFamilyId);
             }
             catch (Exception ex)
             {

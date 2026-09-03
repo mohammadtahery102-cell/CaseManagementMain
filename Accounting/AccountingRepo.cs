@@ -113,6 +113,18 @@ WHERE PeriodID=@id AND Status='باز' AND (@cid = 0 OR CenterID = @cid)",
             return v != null && v.ToString() == "باز";
         }
 
+        // برای ابزار اصلاح تاریخی (AccRepair): برخلاف IsPeriodOpen (که شناسه‌ی
+        // دوره را می‌گیرد)، این متد جدول/رکورد را می‌گیرد و از طریق پیوند به
+        // AccPeriod، دوره‌ی *فعلیِ همان رکورد* را بررسی می‌کند. رکورد بدون دوره
+        // همیشه «باز» درنظر گرفته می‌شود (همان قاعده‌ی GetRecordState/EnsureMutable).
+        public bool IsRecordPeriodOpen(string table, string idColumn, int id)
+        {
+            object status = _db.ExecuteScalar(
+                "SELECT p.Status FROM " + table + " t LEFT JOIN AccPeriod p ON p.PeriodID = t.PeriodID WHERE t." + idColumn + " = @id",
+                P("@id", id));
+            return status == null || status.ToString() != "بسته";
+        }
+
         public double GetPeriodOpening(int id)
         {
             object v = _db.ExecuteScalar("SELECT OpeningBalance FROM AccPeriod WHERE PeriodID=@id AND (@cid = 0 OR CenterID = @cid)", P("@id", id), P("@cid", Cid));

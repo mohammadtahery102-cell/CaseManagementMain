@@ -171,6 +171,53 @@ namespace CaseManagement.Helpers
             assistance.Columns.Add(new ReportColumn("ServiceStatus", "وضعیت خدمات", "c.ServiceStatus", ReportColumnType.Text));
             list.Add(assistance);
 
+            // آموزش — دو منبعِ تازه: تا امروز گزارش‌ساز فقط «وضعیتِ فعلی» را
+            // می‌دید و هیچ راهی برای گزارش‌گیری از «چه چیزی کِی و توسطِ چه کسی
+            // عوض شد» نبود (مثلاً: همهٔ پرونده‌هایی که برج گذشته قطع شدند، یا
+            // کارِ یک کاربرِ مشخص). هر دو منبع از همان زیرساختِ موجودِ فیلتر و
+            // گروه‌بندی استفاده می‌کنند و JOIN به TblCase دارند تا فیلترِ مرکز و
+            // بایگانی مثلِ بقیهٔ منابع اعمال شود.
+            var caseHistory = new ReportSource
+            {
+                Key = "CaseHistory", DisplayName = "تاریخچه وضعیت پرونده",
+                FromClause = "TblCaseStatusHistory sh JOIN TblCase c ON c.CasID = sh.CasID",
+                CenterColumn = "c.CenterID",
+                ArchivedColumn = "c.IsArchived"
+            };
+            caseHistory.Columns.Add(new ReportColumn("CaseCode", "کد پرونده", "c.Code", ReportColumnType.Text));
+            caseHistory.Columns.Add(new ReportColumn("HeadFullName", "نام سرپرست", "c.HeadFullName", ReportColumnType.Text));
+            caseHistory.Columns.Add(new ReportColumn("Province", "ولایت", "c.Province", ReportColumnType.Text));
+            caseHistory.Columns.Add(new ReportColumn("District", "ولسوالی", "c.District", ReportColumnType.Text));
+            caseHistory.Columns.Add(new ReportColumn("OldStatus", "وضعیت قبلی", "sh.OldStatus", ReportColumnType.Text));
+            caseHistory.Columns.Add(new ReportColumn("NewStatus", "وضعیت جدید", "sh.NewStatus", ReportColumnType.Text));
+            caseHistory.Columns.Add(new ReportColumn("ChangeType", "نوع تغییر", "sh.ChangeType", ReportColumnType.Text));
+            caseHistory.Columns.Add(new ReportColumn("Reason", "دلیل", "sh.Reason", ReportColumnType.Text));
+            caseHistory.Columns.Add(new ReportColumn("Notes", "یادداشت", "sh.Notes", ReportColumnType.Text));
+            caseHistory.Columns.Add(new ReportColumn("ChangedAt", "تاریخ تغییر", "sh.ChangedAt", ReportColumnType.Date));
+            caseHistory.Columns.Add(new ReportColumn("ChangedBy", "تغییر توسط", "sh.ChangedBy", ReportColumnType.Text));
+            list.Add(caseHistory);
+
+            var familyHistory = new ReportSource
+            {
+                Key = "FamilyHistory", DisplayName = "تاریخچه وضعیت اعضا",
+                FromClause = "TblFamilyStatusHistory fh " +
+                             "JOIN TblFamily f ON f.FamID = fh.FamID " +
+                             "JOIN TblCase   c ON c.CasID = f.CasID",
+                CenterColumn = "c.CenterID",
+                ArchivedColumn = "c.IsArchived"
+            };
+            familyHistory.Columns.Add(new ReportColumn("CaseCode", "کد پرونده", "c.Code", ReportColumnType.Text));
+            familyHistory.Columns.Add(new ReportColumn("HeadFullName", "نام سرپرست", "c.HeadFullName", ReportColumnType.Text));
+            familyHistory.Columns.Add(new ReportColumn("MemberName", "نام عضو", "f.MemberName", ReportColumnType.Text));
+            familyHistory.Columns.Add(new ReportColumn("OldValue", "مقدار قبلی", "fh.OldValue", ReportColumnType.Text));
+            familyHistory.Columns.Add(new ReportColumn("NewValue", "مقدار جدید", "fh.NewValue", ReportColumnType.Text));
+            familyHistory.Columns.Add(new ReportColumn("ChangeType", "نوع تغییر", "fh.ChangeType", ReportColumnType.Text));
+            familyHistory.Columns.Add(new ReportColumn("Reason", "دلیل", "fh.Reason", ReportColumnType.Text));
+            familyHistory.Columns.Add(new ReportColumn("Notes", "یادداشت", "fh.Notes", ReportColumnType.Text));
+            familyHistory.Columns.Add(new ReportColumn("ChangedAt", "تاریخ تغییر", "fh.ChangedAt", ReportColumnType.Date));
+            familyHistory.Columns.Add(new ReportColumn("ChangedBy", "تغییر توسط", "fh.ChangedBy", ReportColumnType.Text));
+            list.Add(familyHistory);
+
             return list;
         }
 

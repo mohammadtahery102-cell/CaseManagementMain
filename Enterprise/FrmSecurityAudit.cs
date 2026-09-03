@@ -21,6 +21,14 @@ namespace CaseManagement.Enterprise
 
         public FrmSecurityAudit()
         {
+            // دفاع لایه‌ای: حتی اگر این فرم مستقیم ساخته شود، بدون مجوز
+            // «مشاهده ممیزی امنیتی» بلافاصله بسته می‌شود.
+            if (!PermissionService.Require("Security.View"))
+            {
+                Load += delegate { Close(); };
+                return;
+            }
+
             BuildUi();
             LoadEvents();
         }

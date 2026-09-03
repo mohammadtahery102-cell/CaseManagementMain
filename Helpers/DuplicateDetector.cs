@@ -84,6 +84,96 @@ namespace CaseManagement.Helpers
                 .ToList();
         }
 
+        // ─────────────────────────────────────────────────────────────────────
+        // بررسیِ لحظه‌ی ذخیره: «آیا این شماره تذکره از قبل، در پرونده/خانواده/
+        // متقاضیِ دیگری ثبت شده؟» — برخلافِ Detect() که یک گزارشِ دسته‌ای
+        // همه‌باهمه است، این متد فقط یک مقدار را در سه جدول جست‌وجو می‌کند و
+        // برای فراخوانی از دکمه‌ی «ذخیره» ساخته شده. نتیجه فقط فهرستی از
+        // موارد مشابه برای نمایش به کاربر است؛ خودِ فرم تصمیم می‌گیرد ذخیره
+        // را متوقف کند یا با تأیید کاربر ادامه دهد — هشدار نرم است، نه مانعِ
+        // قطعیِ دیتابیس (مثلِ UNIQUE)، چون تذکرهٔ خالی/تکراریِ واقعی (دوقلو،
+        // تذکرهٔ تعویض‌شده) باید هنوز قابلِ ثبت باشد.
+        //
+        // فیلترِ مرکز دقیقاً مثلِ بقیه‌ی برنامه بر پایه‌ی CenterFilterId است
+        // (صفر = مدیر کل در حالتِ «همه مراکز»)؛ رفتارِ تازه‌ای اختراع نشده،
+        // همان قاعده‌ای که Load() بالا هم استفاده می‌کند.
+        //
+        // excludeTable/excludeId رکوردِ خودِ فرم را از نتیجه کنار می‌گذارد تا
+        // ویرایشِ یک رکورد، خودش را «تکراری با خودش» گزارش نکند.
+        // ─────────────────────────────────────────────────────────────────────
+        public static List<string> FindByTazkira(string tazkira, string excludeTable, int excludeId)
+        {
+            var results = new List<string>();
+
+            string normalized = NormalizeIdentifier(tazkira);
+            if (string.IsNullOrEmpty(normalized)) return results;
+
+            int cid = SecurityContext.CenterFilterId;
+            var db = new DatabaseHelper();
+
+            using (SQLiteConnection con = db.GetConnection())
+            {
+                con.Open();
+
+                // ─ پرونده‌ها ─
+                using (var cmd = new SQLiteCommand(@"
+SELECT CasID, COALESCE(Code,'') AS Code, COALESCE(HeadFullName,'') AS Nm, COALESCE(HeadTazkiraNo,'') AS Tz
+FROM TblCase
+WHERE HeadTazkiraNo IS NOT NULL AND HeadTazkiraNo <> '' AND (@cid = 0 OR CenterID = @cid) AND IsArchived = 0", con))
+                {
+                    cmd.Parameters.AddWithValue("@cid", cid);
+                    using (SQLiteDataReader rd = cmd.ExecuteReader())
+                    {
+                        while (rd.Read())
+                        {
+                            if (excludeTable == "TblCase" && Convert.ToInt32(rd["CasID"]) == excludeId) continue;
+                            if (NormalizeIdentifier(rd["Tz"].ToString()) == normalized)
+                                results.Add("پرونده — کد " + rd["Code"] + " — " + rd["Nm"]);
+                        }
+                    }
+                }
+
+                // ─ اعضای خانواده (پیوند به پرونده فقط برای کد/فیلترِ مرکز) ─
+                using (var cmd = new SQLiteCommand(@"
+SELECT f.FamID, COALESCE(f.MemberName,'') AS Nm, COALESCE(f.MemberTazkiraNo,'') AS Tz, COALESCE(c.Code,'') AS CaseCode
+FROM TblFamily f
+JOIN TblCase c ON c.CasID = f.CasID
+WHERE f.MemberTazkiraNo IS NOT NULL AND f.MemberTazkiraNo <> '' AND (@cid = 0 OR c.CenterID = @cid) AND c.IsArchived = 0", con))
+                {
+                    cmd.Parameters.AddWithValue("@cid", cid);
+                    using (SQLiteDataReader rd = cmd.ExecuteReader())
+                    {
+                        while (rd.Read())
+                        {
+                            if (excludeTable == "TblFamily" && Convert.ToInt32(rd["FamID"]) == excludeId) continue;
+                            if (NormalizeIdentifier(rd["Tz"].ToString()) == normalized)
+                                results.Add("عضو خانواده — " + rd["Nm"] + " (پرونده " + rd["CaseCode"] + ")");
+                        }
+                    }
+                }
+
+                // ─ متقاضیان ─
+                using (var cmd = new SQLiteCommand(@"
+SELECT ApplicantID, COALESCE(FullName,'') AS Nm, COALESCE(TazkiraNo,'') AS Tz
+FROM TblApplicant
+WHERE TazkiraNo IS NOT NULL AND TazkiraNo <> '' AND (@cid = 0 OR CenterID = @cid)", con))
+                {
+                    cmd.Parameters.AddWithValue("@cid", cid);
+                    using (SQLiteDataReader rd = cmd.ExecuteReader())
+                    {
+                        while (rd.Read())
+                        {
+                            if (excludeTable == "TblApplicant" && Convert.ToInt32(rd["ApplicantID"]) == excludeId) continue;
+                            if (NormalizeIdentifier(rd["Tz"].ToString()) == normalized)
+                                results.Add("متقاضی — " + rd["Nm"]);
+                        }
+                    }
+                }
+            }
+
+            return results;
+        }
+
         // ─── خواندن از دیتابیس (فقط SELECT) ─────────────────────────────────
         private List<CaseRow> Load()
         {

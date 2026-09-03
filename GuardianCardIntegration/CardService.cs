@@ -57,7 +57,11 @@ namespace CaseManagement.GuardianCardIntegration
                 // مشخصاتِ سرپرست (نام/پدر/تذکره/کد/تعداد ایتام) و بارکد همچنان
                 // فقط از دیتابیس می‌آیند و قابل ویرایش دستی نیستند.
                 OrganizationName = CardText(SettingsHelper.Card_OrgName, SettingsHelper.Get(SettingsHelper.OrgName)),
-                BranchName = SecurityContext.CurrentCenterName,
+                // آموزش — به‌درخواستِ کاربر: این خط (زیرِ نامِ سازمان) باید
+                // ولایتِ همین پرونده را نشان دهد، نه نامِ مرکز. اگر پرونده
+                // ولایت ثبت‌شده نداشته باشد، مثلِ قبل به نامِ مرکز برمی‌گردیم
+                // تا خط هرگز خالی نماند.
+                BranchName = !string.IsNullOrWhiteSpace(c.Province) ? c.Province : SecurityContext.CurrentCenterName,
                 BranchCode = SecurityContext.CurrentCenterCode,
                 // شماره فرم پرونده (اتومات/یکتا/غیرقابل ویرایش) همان شماره
                 // مسلسل کارت است — هیچ شماره جدیدی اختراع نمی‌شود.
@@ -67,6 +71,7 @@ namespace CaseManagement.GuardianCardIntegration
                 GuardianName = c.HeadFullName,
                 FatherName = c.HeadFatherName,
                 NationalID = c.HeadTazkiraNo,
+                RequestType = c.RequestType,
                 // آموزش — به‌درخواست کاربر: تا نقشِ همه‌ی اعضای این پرونده
                 // بازبینی نشده، به‌جای عددِ (بالقوه گمراه‌کننده‌ی) صفر، پیام
                 // صریح «نیاز به تعیین نقش» چاپ می‌شود (نگاه کنید
@@ -142,7 +147,29 @@ namespace CaseManagement.GuardianCardIntegration
                           : CardText(SettingsHelper.Card_Notice5, "کوشش شود پول کمک ایتام برای خود آنها (خوراک و پوشاک) مصرف گردد."),
                 SignatureLabel = CardText(SettingsHelper.Card_SignatureLabel, "امضای مسئول دفتر"),
                 LegalLine = !string.IsNullOrWhiteSpace(c.CardLegalLine) ? c.CardLegalLine
-                          : CardText(SettingsHelper.Card_LegalLine, "این کارت شخصی و غیرقابل انتقال است.")
+                          : CardText(SettingsHelper.Card_LegalLine, "این کارت شخصی و غیرقابل انتقال است."),
+
+                // آموزش — فقط برای قالبِ «ساده» (simple.html)؛ نگاه کنید
+                // GuardianCardData.CaseNo/FamilyPhoto/SimpleNotes/Orphans.
+                // SimpleNotes از همان CardNotice1 می‌آید (بدونِ ستونِ جدید در
+                // دیتابیس)، دقیقاً طبقِ تصمیمِ تأییدشده.
+                CaseNo = c.CaseNo,
+                FamilyPhoto = c.FamilyPhotoPath,
+                SimpleNotes = c.CardNotice1,
+                RelationshipToFamily = c.RelationshipToFamily,
+                Orphans = _repo.GetOrphans(caseId),
+
+                // آموزش — پیش‌فرض‌ها دقیقاً همان متنِ ثابتی است که قبلاً در
+                // خودِ index.html نوشته شده بود؛ نصب‌های موجود بدونِ override
+                // دقیقاً همان کارتِ قبلی را می‌بینند. override واقعی (اگر
+                // قالب تنظیم کرده باشد) در GuardianCardRenderer.ApplyTextOverrides
+                // اعمال می‌شود.
+                Besmellah = "بسمه‌تعالی",
+                MottoArabic = "الله فی الایتام",
+                MottoTranslation = "(خدا را در رابطه با ایتام در نظر بگیرید) — حضرت علی",
+                Kicker = "کارت شناسایی سرپرست ایتام",
+                ComplaintMessage = "در صورت داشتن هرگونه شکایت، با شماره‌های فوق تماس حاصل فرمائید.",
+                FoundCardMessage = "در صورت پیدا کردن کارت، لطفاً آن را به آدرس یادشده ارسال یا با شماره‌های تماس اطلاع دهید."
             };
 
             // آموزش — به‌جای اختراع تاریخچه پرداخت جعلی: در این نسخه از پروژه
@@ -161,7 +188,10 @@ namespace CaseManagement.GuardianCardIntegration
                     PaymentDate = "",
                     MonthlyAmount = "",
                     OfficerSignature = "",
-                    RecipientSignature = ""
+                    RecipientSignature = "",
+                    Eidi = "",
+                    Fuel = "",
+                    Iftar = ""
                 });
             }
 

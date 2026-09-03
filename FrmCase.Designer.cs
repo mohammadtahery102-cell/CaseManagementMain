@@ -1,4 +1,4 @@
-namespace CaseManagement
+﻿namespace CaseManagement
 {
     partial class FrmCase
     {
@@ -32,6 +32,7 @@ namespace CaseManagement
             this.btnEdit = new System.Windows.Forms.Button();
             this.btnDelete = new System.Windows.Forms.Button();
             this.btnSearch = new System.Windows.Forms.Button();
+            this.btnHistory = new System.Windows.Forms.Button();
             this.dgvCases = new System.Windows.Forms.DataGridView();
             this.txtPhotoPath = new System.Windows.Forms.TextBox();
             this.dtpCaseDate = new CaseManagement.Helpers.PersianDatePicker();
@@ -94,6 +95,8 @@ namespace CaseManagement
             this.txtHeadSadat = new System.Windows.Forms.ComboBox();
             this.txtReligion = new System.Windows.Forms.ComboBox();
             this.txtHeadTazkiraNo = new System.Windows.Forms.TextBox();
+            this.lblHeadIdCardType = new System.Windows.Forms.Label();
+            this.cmbHeadIdCardType = new System.Windows.Forms.ComboBox();
             this.txtHeadOriginalResidence = new System.Windows.Forms.TextBox();
             this.label4 = new System.Windows.Forms.Label();
             this.label5 = new System.Windows.Forms.Label();
@@ -215,12 +218,18 @@ namespace CaseManagement
             // جایگزین: شبکه‌ی FieldBox (برچسبِ بالا + ورودیِ گردگوشه) داخل یک
             // کارت — همان الگویی که در فرم اعضای خانواده آزموده شد.
             // نام کنترل‌ها، رویدادها و منطق دست‌نخورده‌اند.
+            // ─── نوع تذکره سرپرست (بخش ۳) ────────────────────────────────────
+            // همان منبع مقادیر که FrmFamily برای عضو استفاده می‌کند، تا
+            // اعتبارسنجی و آمار در هر دو فرم دقیقاً یکی بماند.
+            CaseManagement.Helpers.IdCardHelper.FillCombo(this.cmbHeadIdCardType);
+
             var gridHead = MkCaseFieldGrid();
             AddCaseField(gridHead, this.label6,  "نام سرپرست و تخلص",   this.txtHeadFullName);
             AddCaseField(gridHead, this.label7,  "نام پدر سرپرست",      this.txtHeadFatherName);
             AddCaseField(gridHead, this.label8,  "سیادت سرپرست",        this.txtHeadSadat);
             AddCaseField(gridHead, this.label9,  "مذهب",                this.txtReligion);
             AddCaseField(gridHead, this.label10, "شماره تذکره سرپرست",  this.txtHeadTazkiraNo);
+            AddCaseField(gridHead, this.lblHeadIdCardType, "نوع تذکره سرپرست", this.cmbHeadIdCardType);
             AddCaseField(gridHead, this.label11, "سکونت اصلی سرپرست",   this.txtHeadOriginalResidence);
             AddCaseField(gridHead, this.label12, "سکونت فعلی سرپرست",   this.txtHeadCurrentResidence);
             AddCaseField(gridHead, this.label13, "نسبت با سایر اعضا",   this.txtRelationshipToFamily);
@@ -367,11 +376,26 @@ namespace CaseManagement
             this.txtSummaryMemberCount    = new System.Windows.Forms.TextBox();
             this.txtSummaryLastAssistance = new System.Windows.Forms.TextBox();
             this.txtSummaryLastChange     = new System.Windows.Forms.TextBox();
+            // آموزش — هفت فیلدِ زیر تازه‌اند اما هیچ دادهٔ تازه‌ای نمی‌آورند:
+            // مقدارشان در UpdateCaseSummaryTab از همان کنترل‌های موجودِ فرم
+            // (txtProvince/txtDistrict/txtHeadCurrentResidence/dtpCaseDate/
+            // txtPhone/txtHeadTazkiraNo/txtSurveyors) کپی می‌شود. دلیلِ افزودن،
+            // ردیف‌بندیِ خواسته‌شده در بخشِ DETAIL SECTION درخواست است.
+            this.txtSummaryProvince       = new System.Windows.Forms.TextBox();
+            this.txtSummaryDistrict       = new System.Windows.Forms.TextBox();
+            this.txtSummaryVillage        = new System.Windows.Forms.TextBox();
+            this.txtSummaryStartDate      = new System.Windows.Forms.TextBox();
+            this.txtSummaryPhone          = new System.Windows.Forms.TextBox();
+            this.txtSummaryTazkira        = new System.Windows.Forms.TextBox();
+            this.txtSummaryOfficer        = new System.Windows.Forms.TextBox();
             foreach (System.Windows.Forms.TextBox sBox in new[]
             {
                 this.txtSummaryCode, this.txtSummaryHeadName, this.txtSummaryRequestType,
                 this.txtSummaryServiceStatus, this.txtSummaryLocation, this.txtSummaryMemberCount,
-                this.txtSummaryLastAssistance, this.txtSummaryLastChange
+                this.txtSummaryLastAssistance, this.txtSummaryLastChange,
+                this.txtSummaryProvince, this.txtSummaryDistrict, this.txtSummaryVillage,
+                this.txtSummaryStartDate, this.txtSummaryPhone, this.txtSummaryTazkira,
+                this.txtSummaryOfficer
             })
             {
                 sBox.ReadOnly = true;
@@ -380,46 +404,92 @@ namespace CaseManagement
             }
 
             var gridSummary = MkCaseFieldGrid();
-            System.Windows.Forms.Label lblSumCode = new System.Windows.Forms.Label();
-            System.Windows.Forms.Label lblSumHead = new System.Windows.Forms.Label();
-            System.Windows.Forms.Label lblSumReq  = new System.Windows.Forms.Label();
-            System.Windows.Forms.Label lblSumSvc  = new System.Windows.Forms.Label();
-            System.Windows.Forms.Label lblSumLoc  = new System.Windows.Forms.Label();
-            System.Windows.Forms.Label lblSumCnt  = new System.Windows.Forms.Label();
-            System.Windows.Forms.Label lblSumLast = new System.Windows.Forms.Label();
-            System.Windows.Forms.Label lblSumChg  = new System.Windows.Forms.Label();
-            AddCaseField(gridSummary, lblSumCode, "کد اختصاصی",             this.txtSummaryCode);
-            AddCaseField(gridSummary, lblSumHead, "نام سرپرست",             this.txtSummaryHeadName);
-            AddCaseField(gridSummary, lblSumReq,  "نوع پرونده",             this.txtSummaryRequestType);
-            AddCaseField(gridSummary, lblSumSvc,  "وضعیت خدمات",            this.txtSummaryServiceStatus);
-            AddCaseField(gridSummary, lblSumLoc,  "موقعیت (ولایت/ولسوالی)", this.txtSummaryLocation);
-            AddCaseField(gridSummary, lblSumCnt,  "تعداد اعضای خانواده",    this.txtSummaryMemberCount);
-            AddCaseField(gridSummary, lblSumLast, "آخرین کمک",              this.txtSummaryLastAssistance);
-            AddCaseField(gridSummary, lblSumChg,  "آخرین تغییر",            this.txtSummaryLastChange);
+            System.Windows.Forms.Label lblSumCode  = new System.Windows.Forms.Label();
+            System.Windows.Forms.Label lblSumHead  = new System.Windows.Forms.Label();
+            System.Windows.Forms.Label lblSumReq   = new System.Windows.Forms.Label();
+            System.Windows.Forms.Label lblSumProv  = new System.Windows.Forms.Label();
+            System.Windows.Forms.Label lblSumDist  = new System.Windows.Forms.Label();
+            System.Windows.Forms.Label lblSumVill  = new System.Windows.Forms.Label();
+            System.Windows.Forms.Label lblSumSvc   = new System.Windows.Forms.Label();
+            System.Windows.Forms.Label lblSumStart = new System.Windows.Forms.Label();
+            System.Windows.Forms.Label lblSumChg   = new System.Windows.Forms.Label();
+            System.Windows.Forms.Label lblSumPhone = new System.Windows.Forms.Label();
+            System.Windows.Forms.Label lblSumTazk  = new System.Windows.Forms.Label();
+            System.Windows.Forms.Label lblSumLast  = new System.Windows.Forms.Label();
+            System.Windows.Forms.Label lblSumLoc   = new System.Windows.Forms.Label();
+            System.Windows.Forms.Label lblSumCnt   = new System.Windows.Forms.Label();
+            System.Windows.Forms.Label lblSumOff   = new System.Windows.Forms.Label();
+            // ترتیبِ افزودن = ترتیبِ خواسته‌شده در DETAIL SECTION (سه ستون در هر
+            // ردیف؛ چون شبکه RTL است، اولین فیلدِ هر ردیف سمت راست می‌نشیند).
+            AddCaseField(gridSummary, lblSumCode,  "کد اختصاصی",             this.txtSummaryCode);
+            AddCaseField(gridSummary, lblSumHead,  "نام سرپرست",             this.txtSummaryHeadName);
+            AddCaseField(gridSummary, lblSumReq,   "نوع پرونده",             this.txtSummaryRequestType);
+            AddCaseField(gridSummary, lblSumProv,  "ولایت",                  this.txtSummaryProvince);
+            AddCaseField(gridSummary, lblSumDist,  "ولسوالی",                this.txtSummaryDistrict);
+            AddCaseField(gridSummary, lblSumVill,  "قریه / محل سکونت",       this.txtSummaryVillage);
+            AddCaseField(gridSummary, lblSumSvc,   "وضعیت خدمات",            this.txtSummaryServiceStatus);
+            AddCaseField(gridSummary, lblSumStart, "تاریخ شروع خدمات",       this.txtSummaryStartDate);
+            AddCaseField(gridSummary, lblSumChg,   "آخرین تغییر",            this.txtSummaryLastChange);
+            AddCaseField(gridSummary, lblSumPhone, "شماره تماس",             this.txtSummaryPhone);
+            AddCaseField(gridSummary, lblSumTazk,  "شماره تذکره",            this.txtSummaryTazkira);
+            AddCaseField(gridSummary, lblSumLast,  "آخرین کمک",              this.txtSummaryLastAssistance);
+            AddCaseField(gridSummary, lblSumLoc,   "موقعیت (ولایت/ولسوالی)", this.txtSummaryLocation);
+            AddCaseField(gridSummary, lblSumCnt,   "تعداد اعضای خانواده",    this.txtSummaryMemberCount);
+            AddCaseField(gridSummary, lblSumOff,   "آمر مسئول",              this.txtSummaryOfficer);
 
             this.picSummaryPhoto = new System.Windows.Forms.PictureBox();
-            this.picSummaryPhoto.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.picSummaryPhoto.BorderStyle = System.Windows.Forms.BorderStyle.None;
             this.picSummaryPhoto.SizeMode = System.Windows.Forms.PictureBoxSizeMode.Zoom;
+            this.picSummaryPhoto.BackColor = CaseManagement.Helpers.UiTheme.Background;
             this.picSummaryPhoto.TabStop = false;
-            this.picSummaryPhoto.Size = new System.Drawing.Size(110, 110);
-            this.picSummaryPhoto.Dock = System.Windows.Forms.DockStyle.Right;
+            this.picSummaryPhoto.Dock = System.Windows.Forms.DockStyle.Fill;
 
-            System.Windows.Forms.Panel summaryPhotoRow = new System.Windows.Forms.Panel();
-            summaryPhotoRow.Dock = System.Windows.Forms.DockStyle.Top;
-            summaryPhotoRow.Height = 130;
-            summaryPhotoRow.Padding = new System.Windows.Forms.Padding(18, 10, 18, 0);
-            summaryPhotoRow.Controls.Add(this.picSummaryPhoto);
+            System.Windows.Forms.Panel summaryPhotoBody = new System.Windows.Forms.Panel();
+            summaryPhotoBody.BackColor = System.Drawing.Color.Transparent;
+            summaryPhotoBody.Controls.Add(this.picSummaryPhoto);
+
+            // ─── ردیفِ کارت‌های آماریِ بالای تبِ خلاصه ─────────────────────────
+            // آموزش — هر پنج عدد از جدول‌های موجود می‌آید و هیچ‌کدام آمارِ تازه
+            // نیست: تعداد اعضاء و آخرین کمک از قبل در همین تب بودند؛ سه عددِ
+            // دیگر (مجموع کمک‌ها، تعداد اسناد، تعداد مراجعات) با سه کوئریِ سبکِ
+            // COUNT/SUM روی همان TblAssistance و TblDocs محاسبه می‌شوند.
+            this.lblStatMembers  = new System.Windows.Forms.Label();
+            this.lblStatLastAid  = new System.Windows.Forms.Label();
+            this.lblStatTotalAid = new System.Windows.Forms.Label();
+            this.lblStatDocs     = new System.Windows.Forms.Label();
+            this.lblStatVisits   = new System.Windows.Forms.Label();
+
+            System.Windows.Forms.TableLayoutPanel statsRow = new System.Windows.Forms.TableLayoutPanel();
+            statsRow.Name = "summaryStatsRow";
+            statsRow.Dock = System.Windows.Forms.DockStyle.Top;
+            statsRow.Height = 132;
+            statsRow.ColumnCount = 6;
+            statsRow.RowCount = 1;
+            statsRow.BackColor = System.Drawing.Color.Transparent;
+            statsRow.Padding = new System.Windows.Forms.Padding(14, 8, 14, 4);
+            for (int statCol = 0; statCol < 6; statCol++)
+                statsRow.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(
+                    System.Windows.Forms.SizeType.Percent, 100F / 6F));
+            statsRow.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
+            // ستونِ ۰ در چیدمانِ راست‌به‌چپ سمتِ راست می‌نشیند، پس ترتیبِ زیر
+            // دقیقاً همان ترتیبِ تصویرِ مرجع را می‌سازد.
+            statsRow.Controls.Add(MkLeftCard("عکس سرپرست", summaryPhotoBody), 0, 0);
+            statsRow.Controls.Add(MkSummaryStat("تعداد مراجعات", this.lblStatVisits,   "بار",   CaseManagement.Helpers.UiTheme.Warning),      1, 0);
+            statsRow.Controls.Add(MkSummaryStat("تعداد اسناد",   this.lblStatDocs,     "فایل",  CaseManagement.Helpers.UiTheme.PrimaryLight), 2, 0);
+            statsRow.Controls.Add(MkSummaryStat("مجموع کمک‌ها",  this.lblStatTotalAid, "افغانی", CaseManagement.Helpers.UiTheme.Primary),     3, 0);
+            statsRow.Controls.Add(MkSummaryStat("آخرین کمک دریافتی", this.lblStatLastAid, "افغانی", CaseManagement.Helpers.UiTheme.Success),  4, 0);
+            statsRow.Controls.Add(MkSummaryStat("تعداد اعضای خانواده", this.lblStatMembers, "نفر", CaseManagement.Helpers.UiTheme.TextDark),  5, 0);
 
             System.Windows.Forms.Panel summaryHost = new System.Windows.Forms.Panel();
             summaryHost.Dock = System.Windows.Forms.DockStyle.Top;
             summaryHost.AutoSize = true;
             summaryHost.AutoSizeMode = System.Windows.Forms.AutoSizeMode.GrowAndShrink;
             summaryHost.BackColor = System.Drawing.Color.Transparent;
-            // ترتیبِ افزودنِ عمدی: gridSummary اول، summaryPhotoRow دوم — طبق
-            // همان قاعده‌ی اثبات‌شده‌ی این فایل (کنترلی که آخر اضافه شود،
-            // بالاترین جا را در Dock=Top می‌گیرد)، پس عکس بالای فیلدها می‌نشیند.
+            // ترتیبِ افزودنِ عمدی: gridSummary اول، statsRow دوم — طبق همان
+            // قاعده‌ی اثبات‌شده‌ی این فایل (کنترلی که آخر اضافه شود، بالاترین جا
+            // را در Dock=Top می‌گیرد)، پس کارت‌های آماری بالای فیلدها می‌نشینند.
             summaryHost.Controls.Add(gridSummary);
-            summaryHost.Controls.Add(summaryPhotoRow);
+            summaryHost.Controls.Add(statsRow);
 
             var cardSummary = MkCaseCard("خلاصه پرونده", summaryHost, new System.Windows.Forms.GroupBox());
 
@@ -518,63 +588,106 @@ namespace CaseManagement
             this.grpPhysical.TabIndex = 1;
             this.grpCase.TabIndex = 2;
 
-            // ═══ سمت چپ: عکس‌ها (بالا) + فیلتر + گرید ═════════════════════════
-            this.picPhoto.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.picPhoto.Dock = System.Windows.Forms.DockStyle.Fill;
+            // ═══ سمت چپ: کارت‌های بالا + گرید + صفحه‌بندی ═══════════════════
+            // آموزش — طبق دو بند صریحِ درخواست کاربر:
+            //   ۱) کارتِ «عکس سرپرست» از ستونِ چپ حذف شد؛ فقط «عکس جمعی
+            //      خانواده» + «وضعیت خدمات» می‌مانند.
+            //   ۲) کلِ ردیفِ فیلترهای بالای گرید حذف شد؛ گرید بلافاصله زیرِ
+            //      بخشِ عکس شروع می‌شود.
+            // ولی خودِ کنترل‌ها حذف *نشدند*: کدِ FrmCase.cs در ده‌ها نقطه با
+            // picPhoto/btnBrowsePhoto (بارگذاری، پاک‌کردن و ذخیرهٔ عکسِ سرپرست)
+            // و با cmbServiceStatusFilter (فیلترِ ورودی از داشبورد) کار می‌کند.
+            // پس داخل یک میزبانِ نامرئی نگه داشته می‌شوند تا رفتارِ برنامه
+            // ذره‌ای عوض نشود و فقط از دیدِ کاربر خارج شوند.
             this.picPhoto.SizeMode = System.Windows.Forms.PictureBoxSizeMode.StretchImage;
             this.picPhoto.TabStop = false;
+            this.picPhoto.Size = new System.Drawing.Size(2, 2);
             this.btnBrowsePhoto.Text = "عکس پرسنلی";
-            this.btnBrowsePhoto.Dock = System.Windows.Forms.DockStyle.Bottom;
-            this.btnBrowsePhoto.Height = 34;
+            this.btnBrowsePhoto.Size = new System.Drawing.Size(2, 2);
             this.btnBrowsePhoto.Click += new System.EventHandler(this.btnBrowsePhoto_Click);
+            this.lblServiceStatusFilter.Text = "فیلتر وضعیت خدمات";
+            this.lblServiceStatusFilter.Size = new System.Drawing.Size(2, 2);
+            this.cmbServiceStatusFilter.Size = new System.Drawing.Size(2, 2);
 
-            System.Windows.Forms.Panel personalPhotoCell = new System.Windows.Forms.Panel();
-            personalPhotoCell.Dock = System.Windows.Forms.DockStyle.Fill;
-            personalPhotoCell.Padding = new System.Windows.Forms.Padding(4);
-            personalPhotoCell.Controls.Add(this.picPhoto);
-            personalPhotoCell.Controls.Add(this.btnBrowsePhoto);
+            System.Windows.Forms.Panel hiddenCaseControls = new System.Windows.Forms.Panel();
+            hiddenCaseControls.Name = "hiddenCaseControls";
+            hiddenCaseControls.Size = new System.Drawing.Size(2, 2);
+            hiddenCaseControls.Location = new System.Drawing.Point(-4000, -4000);
+            hiddenCaseControls.Visible = false;
+            hiddenCaseControls.TabStop = false;
+            hiddenCaseControls.Controls.Add(this.picPhoto);
+            hiddenCaseControls.Controls.Add(this.btnBrowsePhoto);
+            hiddenCaseControls.Controls.Add(this.lblServiceStatusFilter);
+            hiddenCaseControls.Controls.Add(this.cmbServiceStatusFilter);
 
-            this.picFamilyPhoto.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            // ── کارت ۱: عکس جمعی خانواده ─────────────────────────────────────
+            this.picFamilyPhoto.BorderStyle = System.Windows.Forms.BorderStyle.None;
             this.picFamilyPhoto.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.picFamilyPhoto.SizeMode = System.Windows.Forms.PictureBoxSizeMode.StretchImage;
+            this.picFamilyPhoto.SizeMode = System.Windows.Forms.PictureBoxSizeMode.Zoom;
+            this.picFamilyPhoto.BackColor = CaseManagement.Helpers.UiTheme.Background;
             this.picFamilyPhoto.TabStop = false;
             this.btnBrowseFamilyPhoto.Text = "عکس جمعی";
             this.btnBrowseFamilyPhoto.Dock = System.Windows.Forms.DockStyle.Bottom;
-            this.btnBrowseFamilyPhoto.Height = 34;
+            this.btnBrowseFamilyPhoto.Height = LeftCardButtonHeight;
+            this.btnBrowseFamilyPhoto.Font = CaseManagement.Helpers.UiTheme.FontBold(CaseManagement.Helpers.UiTheme.SizeSmall);
+            this.btnBrowseFamilyPhoto.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.btnBrowseFamilyPhoto.FlatAppearance.BorderSize = 0;
+            this.btnBrowseFamilyPhoto.BackColor = CaseManagement.Helpers.UiTheme.Primary;
+            this.btnBrowseFamilyPhoto.ForeColor = System.Drawing.Color.White;
             this.btnBrowseFamilyPhoto.Click += new System.EventHandler(this.btnBrowseFamilyPhoto_Click);
 
-            System.Windows.Forms.Panel familyPhotoCell = new System.Windows.Forms.Panel();
-            familyPhotoCell.Dock = System.Windows.Forms.DockStyle.Fill;
-            familyPhotoCell.Padding = new System.Windows.Forms.Padding(4);
-            familyPhotoCell.Controls.Add(this.picFamilyPhoto);
-            familyPhotoCell.Controls.Add(this.btnBrowseFamilyPhoto);
+            System.Windows.Forms.Panel familyPhotoBody = new System.Windows.Forms.Panel();
+            familyPhotoBody.BackColor = System.Drawing.Color.Transparent;
+            familyPhotoBody.Controls.Add(this.picFamilyPhoto);
+            familyPhotoBody.Controls.Add(this.btnBrowseFamilyPhoto);
 
+            // ── کارت ۲: وضعیت خدمات ──────────────────────────────────────────
+            // آموزش — هیچ دادهٔ تازه‌ای اینجا ساخته نمی‌شود: هر سه مقدار از
+            // همان کنترل‌های موجودِ فرم (txtServiceStatus، dtpCaseDate) و همان
+            // کوئریِ «آخرین تغییر»ِ تبِ خلاصه می‌آیند.
+            this.lblSvcBadge = new System.Windows.Forms.Label();
+            this.lblSvcBadge.Name = "lblSvcBadge";
+            this.lblSvcBadge.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.lblSvcBadge.Text = "—";
+            this.lblSvcBadge.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
+            this.lblSvcBadge.Font = CaseManagement.Helpers.UiTheme.FontBold(CaseManagement.Helpers.UiTheme.SizeSmall);
+            this.lblSvcBadge.ForeColor = CaseManagement.Helpers.UiTheme.Success;
+            this.lblSvcBadge.BackColor = CaseManagement.Helpers.UiTheme.SuccessLight;
+            this.lblSvcBadge.Margin = new System.Windows.Forms.Padding(0, 0, 0, 8);
+
+            this.lblSvcStartValue  = MkLeftCardValue();
+            this.lblSvcChangeValue = MkLeftCardValue();
+
+            System.Windows.Forms.TableLayoutPanel statusBody = new System.Windows.Forms.TableLayoutPanel();
+            statusBody.ColumnCount = 1;
+            statusBody.RowCount = 5;
+            statusBody.BackColor = System.Drawing.Color.Transparent;
+            statusBody.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 100F));
+            statusBody.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 34F));
+            statusBody.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 18F));
+            statusBody.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 22F));
+            statusBody.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 18F));
+            statusBody.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
+            statusBody.Controls.Add(this.lblSvcBadge,                       0, 0);
+            statusBody.Controls.Add(MkLeftCardCaption("تاریخ شروع"),        0, 1);
+            statusBody.Controls.Add(this.lblSvcStartValue,                  0, 2);
+            statusBody.Controls.Add(MkLeftCardCaption("آخرین تغییر"),       0, 3);
+            statusBody.Controls.Add(this.lblSvcChangeValue,                 0, 4);
+
+            // هر دو کارت در یک ردیفِ دوستونه — پس ارتفاع و حاشیهٔ یکسان دارند
+            // (خواستهٔ «کارت‌ها هم‌ارتفاع و با فاصلهٔ یکنواخت»).
             System.Windows.Forms.TableLayoutPanel photoBar = new System.Windows.Forms.TableLayoutPanel();
             photoBar.Dock = System.Windows.Forms.DockStyle.Top;
-            photoBar.Height = 190;
+            photoBar.Height = LeftCardsRowHeight;
             photoBar.ColumnCount = 2;
             photoBar.RowCount = 1;
-            photoBar.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 40F));
-            photoBar.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 60F));
-            photoBar.Controls.Add(personalPhotoCell, 0, 0);
-            photoBar.Controls.Add(familyPhotoCell, 1, 0);
-
-            this.lblServiceStatusFilter.Text = "فیلتر وضعیت خدمات";
-            this.lblServiceStatusFilter.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
-            this.lblServiceStatusFilter.Dock = System.Windows.Forms.DockStyle.Right;
-            this.lblServiceStatusFilter.Width = 150;
-            this.cmbServiceStatusFilter.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.cmbServiceStatusFilter.Margin = new System.Windows.Forms.Padding(0);
-
-            System.Windows.Forms.Panel filterBar = new System.Windows.Forms.Panel();
-            filterBar.Dock = System.Windows.Forms.DockStyle.Top;
-            filterBar.Height = 40;
-            filterBar.Padding = new System.Windows.Forms.Padding(4, 6, 4, 4);
-            System.Windows.Forms.Panel filterInner = new System.Windows.Forms.Panel();
-            filterInner.Dock = System.Windows.Forms.DockStyle.Fill;
-            filterInner.Controls.Add(this.cmbServiceStatusFilter);
-            filterInner.Controls.Add(this.lblServiceStatusFilter);
-            filterBar.Controls.Add(filterInner);
+            photoBar.BackColor = System.Drawing.Color.Transparent;
+            photoBar.Padding = new System.Windows.Forms.Padding(LeftGutter - 6, LeftGutter - 6, LeftGutter - 6, 0);
+            photoBar.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 58F));
+            photoBar.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 42F));
+            photoBar.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
+            photoBar.Controls.Add(MkLeftCard("عکس جمعی خانواده", familyPhotoBody), 0, 0);
+            photoBar.Controls.Add(MkLeftCard("وضعیت خدمات", statusBody), 1, 0);
 
             this.dgvCases.AllowUserToAddRows = false;
             this.dgvCases.AllowUserToDeleteRows = false;
@@ -582,21 +695,88 @@ namespace CaseManagement
             this.dgvCases.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.AutoSize;
             this.dgvCases.MultiSelect = false;
             this.dgvCases.ReadOnly = true;
-            this.dgvCases.RowHeadersWidth = 51;
+            // آموزش — انحرافِ آگاهانه از تصویرِ مرجع: در تصویر، گرید
+            // ستونِ شمارهٔ ردیف ندارد؛ اما این برنامه شمارهٔ ردیف را خودش
+            // در همین سرآیند رسم می‌کند (DgvCases_RowPostPaint) و پنهان‌کردنش یعنی
+            // حذفِ یک قابلیتِ موجود — که درخواست نشده بود. پس سرآیند می‌ماند
+            // و فقط از ۵۱ به ۳۴ پیکسل باریک می‌شود تا شش ستونِ داده راحت جا
+            // شوند و اسکرولِ افقی لازم نشود.
+            this.dgvCases.RowHeadersVisible = true;
+            this.dgvCases.RowHeadersWidth = 34;
+            this.dgvCases.RowHeadersWidthSizeMode = System.Windows.Forms.DataGridViewRowHeadersWidthSizeMode.DisableResizing;
             this.dgvCases.RowTemplate.Height = 24;
+            this.dgvCases.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
             this.dgvCases.SelectionMode = System.Windows.Forms.DataGridViewSelectionMode.FullRowSelect;
             this.dgvCases.CellClick += new System.Windows.Forms.DataGridViewCellEventHandler(this.dgvCases_CellClick);
 
             System.Windows.Forms.Panel gridWrap = new System.Windows.Forms.Panel();
             gridWrap.Dock = System.Windows.Forms.DockStyle.Fill;
-            gridWrap.Padding = new System.Windows.Forms.Padding(6);
+            gridWrap.BackColor = System.Drawing.Color.Transparent;
+            gridWrap.Padding = new System.Windows.Forms.Padding(LeftGutter, LeftGutter, LeftGutter, 0);
             gridWrap.Controls.Add(this.dgvCases);
+
+            // ── نوار صفحه‌بندی زیرِ گرید ──────────────────────────────────────
+            // آموزش — خواستهٔ «۱۰ رکوردِ آخر» بدونِ صفحه‌بندی یعنی دسترسیِ کاربر
+            // به بقیهٔ پرونده‌ها قطع می‌شد؛ پس همان کوئریِ موجود با LIMIT/OFFSET
+            // صفحه‌بندی شد (منطق در FrmCase.cs). هیچ جدول/کوئریِ تازه‌ای نیست.
+            this.btnGridFirst = MkPagerButton("اول");
+            this.btnGridPrev  = MkPagerButton("قبلی");
+            this.btnGridNext  = MkPagerButton("بعدی");
+            this.btnGridLast  = MkPagerButton("آخر");
+            this.btnGridFirst.Click += new System.EventHandler(this.btnGridFirst_Click);
+            this.btnGridPrev.Click  += new System.EventHandler(this.btnGridPrev_Click);
+            this.btnGridNext.Click  += new System.EventHandler(this.btnGridNext_Click);
+            this.btnGridLast.Click  += new System.EventHandler(this.btnGridLast_Click);
+
+            this.lblGridPage = new System.Windows.Forms.Label();
+            this.lblGridPage.Name = "lblGridPage";
+            this.lblGridPage.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.lblGridPage.Text = "۱ / ۱";
+            this.lblGridPage.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
+            this.lblGridPage.Font = CaseManagement.Helpers.UiTheme.FontBold(CaseManagement.Helpers.UiTheme.SizeSmall);
+            this.lblGridPage.ForeColor = CaseManagement.Helpers.UiTheme.TextDark;
+            this.lblGridPage.Margin = new System.Windows.Forms.Padding(3);
+
+            this.lblGridTotal = new System.Windows.Forms.Label();
+            this.lblGridTotal.Name = "lblGridTotal";
+            this.lblGridTotal.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.lblGridTotal.Text = "تعداد کل: 0";
+            this.lblGridTotal.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            this.lblGridTotal.Font = CaseManagement.Helpers.UiTheme.Font(CaseManagement.Helpers.UiTheme.SizeSmall);
+            this.lblGridTotal.ForeColor = CaseManagement.Helpers.UiTheme.TextMuted;
+            this.lblGridTotal.Margin = new System.Windows.Forms.Padding(3);
+
+            System.Windows.Forms.TableLayoutPanel pagerBar = new System.Windows.Forms.TableLayoutPanel();
+            pagerBar.Name = "pagerBar";
+            pagerBar.Dock = System.Windows.Forms.DockStyle.Bottom;
+            pagerBar.Height = PagerBarHeight;
+            pagerBar.BackColor = System.Drawing.Color.Transparent;
+            pagerBar.Padding = new System.Windows.Forms.Padding(LeftGutter, 4, LeftGutter, LeftGutter);
+            pagerBar.ColumnCount = 6;
+            pagerBar.RowCount = 1;
+            pagerBar.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, PagerButtonWidth));
+            pagerBar.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, PagerButtonWidth));
+            pagerBar.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 74F));
+            pagerBar.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, PagerButtonWidth));
+            pagerBar.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, PagerButtonWidth));
+            pagerBar.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 100F));
+            pagerBar.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
+            pagerBar.Controls.Add(this.btnGridFirst, 0, 0);
+            pagerBar.Controls.Add(this.btnGridPrev,  1, 0);
+            pagerBar.Controls.Add(this.lblGridPage,  2, 0);
+            pagerBar.Controls.Add(this.btnGridNext,  3, 0);
+            pagerBar.Controls.Add(this.btnGridLast,  4, 0);
+            pagerBar.Controls.Add(this.lblGridTotal, 5, 0);
 
             System.Windows.Forms.Panel leftPanel = new System.Windows.Forms.Panel();
             leftPanel.Dock = System.Windows.Forms.DockStyle.Fill;
+            leftPanel.BackColor = System.Drawing.Color.Transparent;
+            // ترتیبِ افزودن مهم است: در Dock، کنترلی که دیرتر اضافه شود لبهٔ
+            // بیرونی‌تر را می‌گیرد — پس اول Fill، بعد Bottom، بعد Top.
             leftPanel.Controls.Add(gridWrap);
-            leftPanel.Controls.Add(filterBar);
+            leftPanel.Controls.Add(pagerBar);
             leftPanel.Controls.Add(photoBar);
+            leftPanel.Controls.Add(hiddenCaseControls);
 
             // ═══ نوار ابزار بالا: دو میانبر سریع (بند ۵) ══════════════════════
             // آموزش — به درخواست کاربر: نام «اعضای فامیل» به «اعضاء خانواده»
@@ -615,6 +795,14 @@ namespace CaseManagement
             this.btnDocs.BackColor = CaseManagement.Helpers.UiTheme.PrimaryLight;
             toolbar.Controls.Add(this.btnFamily);
             toolbar.Controls.Add(this.btnDocs);
+            // آموزش — به درخواست کاربر: این دو میانبرِ آبی/سبزِ بالای جدول
+            // حذفِ بصری شدند. از وقتی «اعضاء خانواده» و «اسناد پرونده» تبِ
+            // داخلِ همین فرم شده‌اند، این دکمه‌ها فقط همان تب را انتخاب
+            // می‌کردند؛ یعنی یک ردیفِ کاملِ گزینهٔ تکراری. خودِ کنترل‌ها حذف
+            // *نشدند* (btnFamily_Click/btnDocs_Click و تنظیمِ TabStop در
+            // FrmCase.cs به آن‌ها ارجاع دارند) — دقیقاً همان الگوی
+            // hiddenCaseControls: نوار پنهان می‌شود و ارتفاعِ ردیفش صفر.
+            toolbar.Visible = false;
 
             // ═══ نوار پایین: عملیات + خروجی‌ها همه در یک ردیف پیوسته ══════════
             // آموزش — به درخواست کاربر: قبلاً «عملیات» و «خروجی‌ها» دو ردیف
@@ -646,10 +834,13 @@ namespace CaseManagement
             StyleBtn(this.btnEdit, "ویرایش", 82, 32); this.btnEdit.Click += new System.EventHandler(this.btnEdit_Click);
             StyleBtn(this.btnDelete, "حذف", 82, 32); this.btnDelete.Click += new System.EventHandler(this.btnDelete_Click);
             StyleBtn(this.btnSearch, "جستجو", 82, 32); this.btnSearch.Click += new System.EventHandler(this.btnSearch_Click);
+            // آموزش — تا امروز تاریخچهٔ تغییراتِ یک پروندهٔ مشخص از هیچ‌جای برنامه
+            // قابل دیدن نبود؛ تنها دسترسی، گریدِ کلیِ ممیزی در داشبورد بود.
+            StyleBtn(this.btnHistory, "تاریخچه", 82, 32); this.btnHistory.Click += new System.EventHandler(this.btnHistory_Click);
             this.lblExportSection.Text = "خروجی‌ها:"; this.lblExportSection.AutoSize = false; this.lblExportSection.Size = new System.Drawing.Size(60, 32); this.lblExportSection.TextAlign = System.Drawing.ContentAlignment.MiddleRight; this.lblExportSection.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
             StyleBtn(this.btnPrint, "چاپ", 74, 32); this.btnPrint.Click += new System.EventHandler(this.btnPrint_Click);
             StyleBtn(this.btnExportWord, "ورد", 62, 32); this.btnExportWord.Click += new System.EventHandler(this.btnExportWord_Click);
-            StyleBtn(this.btnExportPdf, "پی دی اف", 78, 32); this.btnExportPdf.Click += new System.EventHandler(this.btnExportPdf_Click);
+            StyleBtn(this.btnExportPdf, "پی دی اف", 100, 32); this.btnExportPdf.Click += new System.EventHandler(this.btnExportPdf_Click);
             StyleBtn(this.btnExportExcel, "اکسل", 62, 32); this.btnExportExcel.Click += new System.EventHandler(this.btnExportExcel_Click);
             StyleBtn(this.btnBatchExport, "خروجی جمعی", 104, 32); this.btnBatchExport.Click += new System.EventHandler(this.btnBatchExport_Click);
             StyleBtn(this.btnChooseStorageFolder, "محل ذخیره", 96, 32); this.btnChooseStorageFolder.Click += new System.EventHandler(this.btnChooseStorageFolder_Click);
@@ -669,12 +860,17 @@ namespace CaseManagement
             bottomActionsRow.Controls.Add(this.btnEdit);
             bottomActionsRow.Controls.Add(this.btnDelete);
             bottomActionsRow.Controls.Add(this.btnSearch);
+            bottomActionsRow.Controls.Add(this.btnHistory);
             bottomActionsRow.Controls.Add(this.lblExportSection);
-            bottomActionsRow.Controls.Add(this.btnPrint);
-            bottomActionsRow.Controls.Add(this.btnExportWord);
+            // آموزش — ترتیب طبق تصویرِ مرجع (از راست به چپ): پی‌دی‌اف، اکسل،
+            // چاپ، خروجی جمعی. «ورد» و «محل ذخیره» در تصویر نیستند ولی حذف
+            // نشدند (کارِ موجودِ کاربر را نمی‌شکنیم) و به انتهای همان ردیف
+            // منتقل شدند تا ترتیبِ خواسته‌شده به‌هم نخورد.
             bottomActionsRow.Controls.Add(this.btnExportPdf);
             bottomActionsRow.Controls.Add(this.btnExportExcel);
+            bottomActionsRow.Controls.Add(this.btnPrint);
             bottomActionsRow.Controls.Add(this.btnBatchExport);
+            bottomActionsRow.Controls.Add(this.btnExportWord);
             bottomActionsRow.Controls.Add(this.btnChooseStorageFolder);
 
             System.Windows.Forms.TableLayoutPanel bottomBar = new System.Windows.Forms.TableLayoutPanel();
@@ -725,9 +921,12 @@ namespace CaseManagement
             caseQuickSearchBar.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 25F));
             caseQuickSearchBar.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 25F));
             caseQuickSearchBar.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 25F));
-            caseQuickSearchBar.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 100F));
-            caseQuickSearchBar.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 96F));
-            caseQuickSearchBar.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 120F));
+            // آموزش — این سه عرض بعد از بازرسیِ تصویری بزرگ شدند: با ۹۶ و ۱۲۰
+            // پیکسل، متنِ «پاک‌سازی» و «جستجوی پیشرفته» روی آیکونشان می‌افتاد و
+            // به خطِ دوم می‌شکست (خواستهٔ «No clipped labels»).
+            caseQuickSearchBar.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 110F));
+            caseQuickSearchBar.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 130F));
+            caseQuickSearchBar.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 168F));
             caseQuickSearchBar.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
 
             caseQuickSearchBar.Controls.Add(MkQuickSearchField("کد اختصاصی",   this.txtQsCode),     0, 0);
@@ -747,7 +946,11 @@ namespace CaseManagement
             rootLayout.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 38F));
             // ردیف نوار جستجوی سریع (فاز A2) — بالاترین ردیف، همیشه ثابت.
             rootLayout.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 76F));
-            rootLayout.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 50F));
+            // ردیفِ نوار میانبر (toolbar) — بعد از حذفِ بصریِ دکمه‌های «اعضاء
+            // خانواده»/«اسناد»، این نوار Visible=false است، پس ارتفاعش صفر شد
+            // تا نوارِ خالی بالای فیلدها باقی نماند. خودِ ردیف و ایندکس‌های
+            // بعدی (fieldsPanel=2، bottomBar=3) دست‌نخورده می‌مانند.
+            rootLayout.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 0F));
             rootLayout.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
             // ردیف نوار دکمه‌ها — ارتفاع اولیه برای دو خط دکمه؛ کدِ فرم
             // (AdjustBottomBarHeight) آن را با تعداد خطوطِ واقعی تنظیم می‌کند تا
@@ -802,8 +1005,13 @@ namespace CaseManagement
             this.Controls.Add(rootLayout);
             // تمام‌صفحه‌ی خودکار (درخواست کاربر). حداقلِ اندازه و بیشینه‌سازی در
             // FrmCase_Load اعمال می‌شود — آن‌جا اندازه‌ی واقعی صفحه در دسترس است.
-            this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.Sizable;
-            this.MaximizeBox = true;
+            // آموزش — بندِ FORM SIZE درخواست: پنجره نه بیشینه شود و نه با
+            // کشیدنِ لبه تغییرِ اندازه بدهد؛ فقط کوچک‌کردن (Minimize) باز
+            // بماند. قفلِ MinimumSize/MaximumSize در UiTheme.MakeFixedSize
+            // (که FrmCase_Load صدایش می‌زند) اعمال می‌شود؛ اینجا هم همان
+            // مقادیر صریح نوشته شد تا خودِ Designer هم همین را نشان دهد.
+            this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedSingle;
+            this.MaximizeBox = false;
             this.MinimizeBox = true;
             this.Name = "FrmCase";
             this.RightToLeft = System.Windows.Forms.RightToLeft.Yes;
@@ -1021,11 +1229,173 @@ namespace CaseManagement
             this.txtDistrict.Items.AddRange(CaseManagement.Helpers.AfghanGeoData.GetDistricts(province));
         }
 
+
+        // ─── ثابت‌های چیدمانِ ستونِ چپ ────────────────────────────────────────
+        // آموزش — خواستهٔ «فاصله‌ها و حاشیه‌ها همه‌جا یکنواخت»: به‌جای پخش‌کردنِ
+        // عددهای جادویی در بدنهٔ InitializeComponent، هر فاصله یک نامِ واحد
+        // دارد. تغییرِ یک عدد اینجا کلِ ستون را هماهنگ جابه‌جا می‌کند.
+        private const int LeftGutter           = 8;    // حاشیهٔ بیرونیِ ستونِ چپ
+        // آموزش — بعد از بازرسیِ تصویری از ۱۹۶ به ۱۶۸ کم شد: روی نمایشگرِ
+        // ۷۶۸ پیکسلی، ۱۹۶ پیکسل آن‌قدر از ارتفاعِ ستون را می‌گرفت که از ۱۰
+        // ردیفِ گرید فقط شش‌تا دیده می‌شد.
+        private const int LeftCardsRowHeight   = 168;  // ارتفاعِ ردیفِ دو کارتِ بالا
+        private const int LeftCardButtonHeight = 30;   // ارتفاعِ دکمهٔ داخلِ کارت
+        private const int PagerBarHeight       = 44;   // ارتفاعِ نوارِ صفحه‌بندی
+        private const float PagerButtonWidth   = 58F;  // عرضِ هر دکمهٔ صفحه‌بندی
+
+        // کارتِ کوچکِ ستونِ چپ: عنوانِ بالا + بدنه. همان زبانِ بصریِ SectionCard
+        // که تب‌های سمت راست هم از آن استفاده می‌کنند، در ابعادِ فشرده‌تر — تا
+        // دو طرفِ فرم یک‌دست دیده شوند.
+        private static CaseManagement.Helpers.SectionCard MkLeftCard(
+            string title, System.Windows.Forms.Control body)
+        {
+            var header = new System.Windows.Forms.Label();
+            header.Dock = System.Windows.Forms.DockStyle.Top;
+            header.Height = 24;
+            header.Text = title;
+            header.Font = CaseManagement.Helpers.UiTheme.FontBold(CaseManagement.Helpers.UiTheme.SizeSmall);
+            header.ForeColor = CaseManagement.Helpers.UiTheme.TextDark;
+            header.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
+            header.BackColor = System.Drawing.Color.Transparent;
+
+            body.Dock = System.Windows.Forms.DockStyle.Fill;
+
+            var card = new CaseManagement.Helpers.SectionCard();
+            card.Dock = System.Windows.Forms.DockStyle.Fill;
+            card.Margin = new System.Windows.Forms.Padding(6);
+            card.Padding = new System.Windows.Forms.Padding(10, 6, 10, 10);
+            card.Controls.Add(body);
+            card.Controls.Add(header);
+            return card;
+        }
+
+        // برچسبِ ریزِ «عنوانِ فیلد» داخلِ کارتِ وضعیت خدمات.
+        private static System.Windows.Forms.Label MkLeftCardCaption(string text)
+        {
+            var lbl = new System.Windows.Forms.Label();
+            lbl.Dock = System.Windows.Forms.DockStyle.Fill;
+            lbl.Text = text;
+            lbl.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
+            lbl.Font = CaseManagement.Helpers.UiTheme.Font(CaseManagement.Helpers.UiTheme.SizeSmall - 1F);
+            lbl.ForeColor = CaseManagement.Helpers.UiTheme.TextMuted;
+            lbl.BackColor = System.Drawing.Color.Transparent;
+            lbl.Margin = new System.Windows.Forms.Padding(0);
+            return lbl;
+        }
+
+        // برچسبِ «مقدار» داخلِ کارتِ وضعیت خدمات — مقدارش را FrmCase.cs پر می‌کند.
+        private static System.Windows.Forms.Label MkLeftCardValue()
+        {
+            var lbl = new System.Windows.Forms.Label();
+            lbl.Dock = System.Windows.Forms.DockStyle.Fill;
+            lbl.Text = "—";
+            lbl.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
+            lbl.Font = CaseManagement.Helpers.UiTheme.FontBold(CaseManagement.Helpers.UiTheme.SizeSmall);
+            lbl.ForeColor = CaseManagement.Helpers.UiTheme.TextDark;
+            lbl.BackColor = System.Drawing.Color.Transparent;
+            lbl.Margin = new System.Windows.Forms.Padding(0);
+            return lbl;
+        }
+
+        // دکمهٔ نوارِ صفحه‌بندی — همهٔ پنج دکمه از یک جا می‌آیند تا ارتفاع،
+        // فونت و حاشیه‌شان قطعاً یکسان باشد.
+        private static System.Windows.Forms.Button MkPagerButton(string text)
+        {
+            var btn = new System.Windows.Forms.Button();
+            btn.Text = text;
+            btn.Dock = System.Windows.Forms.DockStyle.Fill;
+            btn.Margin = new System.Windows.Forms.Padding(3);
+            btn.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            btn.FlatAppearance.BorderColor = CaseManagement.Helpers.UiTheme.Border;
+            btn.FlatAppearance.BorderSize = 1;
+            btn.BackColor = CaseManagement.Helpers.UiTheme.CardBack;
+            btn.ForeColor = CaseManagement.Helpers.UiTheme.TextDark;
+            btn.Font = CaseManagement.Helpers.UiTheme.Font(CaseManagement.Helpers.UiTheme.SizeSmall);
+            btn.TabStop = false;
+            return btn;
+        }
+
+        // ─── کارتِ آماریِ تبِ «خلاصه پرونده» ──────────────────────────────────
+        // آموزش — عمداً از Helpers.StatCard استفاده *نشد*: آن کارت یک Sparkline
+        // (نمودارِ خطی) در پایین خود دارد و خواستهٔ صریحِ کاربر «هیچ نموداری
+        // اضافه نشود» بود. این کارت فقط سه چیز دارد: عنوان، عددِ درشت، واحد —
+        // دقیقاً همان چیزی که در تصویرِ مرجع دیده می‌شود.
+        private static CaseManagement.Helpers.SectionCard MkSummaryStat(
+            string title, System.Windows.Forms.Label valueLabel, string unit,
+            System.Drawing.Color valueColor)
+        {
+            var lblTitle = new System.Windows.Forms.Label();
+            lblTitle.Dock = System.Windows.Forms.DockStyle.Top;
+            lblTitle.Height = 20;
+            lblTitle.Text = title;
+            lblTitle.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
+            lblTitle.Font = CaseManagement.Helpers.UiTheme.Font(CaseManagement.Helpers.UiTheme.SizeSmall - 1F);
+            lblTitle.ForeColor = CaseManagement.Helpers.UiTheme.TextMuted;
+            lblTitle.BackColor = System.Drawing.Color.Transparent;
+
+            var lblUnit = new System.Windows.Forms.Label();
+            lblUnit.Dock = System.Windows.Forms.DockStyle.Bottom;
+            lblUnit.Height = 18;
+            lblUnit.Text = unit;
+            lblUnit.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
+            lblUnit.Font = CaseManagement.Helpers.UiTheme.Font(CaseManagement.Helpers.UiTheme.SizeSmall - 1.5F);
+            lblUnit.ForeColor = CaseManagement.Helpers.UiTheme.TextMuted;
+            lblUnit.BackColor = System.Drawing.Color.Transparent;
+
+            valueLabel.Dock = System.Windows.Forms.DockStyle.Fill;
+            valueLabel.Text = "—";
+            valueLabel.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
+            valueLabel.Font = CaseManagement.Helpers.UiTheme.FontBold(16F);
+            valueLabel.ForeColor = valueColor;
+            valueLabel.BackColor = System.Drawing.Color.Transparent;
+            valueLabel.AutoSize = false;
+
+            var card = new CaseManagement.Helpers.SectionCard();
+            card.Dock = System.Windows.Forms.DockStyle.Fill;
+            card.Margin = new System.Windows.Forms.Padding(SummaryStatGap);
+            card.Padding = new System.Windows.Forms.Padding(6, 8, 6, 6);
+            card.Controls.Add(valueLabel);
+            card.Controls.Add(lblUnit);
+            card.Controls.Add(lblTitle);
+            return card;
+        }
+
+        // فاصلهٔ یکنواختِ بینِ کارت‌های آماری — همان عددِ حاشیهٔ کارت‌های چپ.
+        private const int SummaryStatGap = 5;
+
         #endregion
+        // ─── کنترل‌های تازهٔ چیدمان (فاز بازسازیِ ظاهرِ FrmCase) ─────────────
+        // کارتِ «وضعیت خدمات» در ستونِ چپ
+        private System.Windows.Forms.Label lblSvcBadge;
+        private System.Windows.Forms.Label lblSvcStartValue;
+        private System.Windows.Forms.Label lblSvcChangeValue;
+        // نوارِ صفحه‌بندیِ زیرِ گرید
+        private System.Windows.Forms.Button btnGridFirst;
+        private System.Windows.Forms.Button btnGridPrev;
+        private System.Windows.Forms.Button btnGridNext;
+        private System.Windows.Forms.Button btnGridLast;
+        private System.Windows.Forms.Label lblGridPage;
+        private System.Windows.Forms.Label lblGridTotal;
+        // کارت‌های آماریِ تبِ «خلاصه پرونده»
+        private System.Windows.Forms.Label lblStatMembers;
+        private System.Windows.Forms.Label lblStatLastAid;
+        private System.Windows.Forms.Label lblStatTotalAid;
+        private System.Windows.Forms.Label lblStatDocs;
+        private System.Windows.Forms.Label lblStatVisits;
+        // فیلدهای تازهٔ خواندنیِ تبِ خلاصه (مقادیرشان از همان کنترل‌های موجود
+        // کپی می‌شوند — هیچ ستون/جدولِ تازه‌ای در کار نیست)
+        private System.Windows.Forms.TextBox txtSummaryProvince;
+        private System.Windows.Forms.TextBox txtSummaryDistrict;
+        private System.Windows.Forms.TextBox txtSummaryVillage;
+        private System.Windows.Forms.TextBox txtSummaryStartDate;
+        private System.Windows.Forms.TextBox txtSummaryPhone;
+        private System.Windows.Forms.TextBox txtSummaryTazkira;
+        private System.Windows.Forms.TextBox txtSummaryOfficer;
         private System.Windows.Forms.Button btnSave;
         private System.Windows.Forms.Button btnNew;
         private System.Windows.Forms.Button btnEdit;
         private System.Windows.Forms.Button btnDelete;
+        private System.Windows.Forms.Button btnHistory;
         private System.Windows.Forms.Button btnSearch;
         private System.Windows.Forms.DataGridView dgvCases;
         private System.Windows.Forms.TextBox txtPhotoPath;
@@ -1103,6 +1473,8 @@ namespace CaseManagement
         private System.Windows.Forms.ComboBox txtHeadSadat;
         private System.Windows.Forms.ComboBox txtReligion;
         private System.Windows.Forms.TextBox txtHeadTazkiraNo;
+        private System.Windows.Forms.Label lblHeadIdCardType;
+        private System.Windows.Forms.ComboBox cmbHeadIdCardType;
         private System.Windows.Forms.TextBox txtHeadOriginalResidence;
         private System.Windows.Forms.Label label4;
         private System.Windows.Forms.Label label5;

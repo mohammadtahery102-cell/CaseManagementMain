@@ -41,6 +41,12 @@ namespace CaseManagement.Accounting
             public float[] ColumnWeights;
             public List<string[]> Rows = new List<string[]>();
             public HashSet<int> BoldRows = new HashSet<int>();
+
+            // مقادیر خام برای «خروجی روی قالب رسمی». مسیرهای چاپ و اکسلِ
+            // فعلی از این‌ها استفاده نمی‌کنند؛ فقط ExportGeneralStatementTemplate.
+            public string PeriodTitleRaw;
+            public double NumOpening, NumReceived, NumDollar, NumRate, NumTotalPaid;
+            public List<KeyValuePair<string, double>> ExpenseLines = new List<KeyValuePair<string, double>>();
         }
 
         private void Print(IWin32Window owner, ReportModel model)
@@ -678,7 +684,30 @@ namespace CaseManagement.Accounting
                 AddIfNonZero(model, r["عنوان"].ToString(), Convert.ToDouble(r["مبلغ"]));
             model.BoldRows.Add(model.Rows.Count);
             model.Rows.Add(new[] { "جمع کل", SecurityContext.CenterDisplay, N(totalPayment) });
+
+            // مقادیر خام (بدون قالب‌بندی) برای خروجی روی قالب رسمی
+            model.PeriodTitleRaw = periodTitle;
+            model.NumOpening = opening;
+            model.NumReceived = income;
+            model.NumDollar = dollarSum;
+            model.NumRate = rate;
+            model.NumTotalPaid = totalPayment;
+            AddExpenseLine(model, "شهریه", stipend);
+            AddExpenseLine(model, "حقوق پرسنل", salary);
+            foreach (DataRow r in catSummary.Rows)
+                AddExpenseLine(model, r["عنوان"].ToString(), Convert.ToDouble(r["مبلغ"]));
+            // باقیمانده‌ی پرداخت‌هایی که در دسته‌بندی هزینه نیامده‌اند تا جمعِ
+            // جدولِ قالب دقیقاً برابر «مجموع پرداختی و مصارف» شود.
+            double listedExpense = 0;
+            foreach (var kv in model.ExpenseLines) listedExpense += kv.Value;
+            AddExpenseLine(model, "سایر پرداخت ها", totalPayment - listedExpense);
             return model;
+        }
+
+        private void AddExpenseLine(ReportModel model, string title, double amount)
+        {
+            if (amount == 0) return;
+            model.ExpenseLines.Add(new KeyValuePair<string, double>(title, amount));
         }
 
         private void AddIfNonZero(ReportModel model, string title, double amount)
@@ -706,6 +735,144 @@ namespace CaseManagement.Accounting
                 WriteTable(ws, model.SummaryRows.Count + 6, model.ColumnHeaders, model.Rows, model.BoldRows);
                 wb.SaveAs(path);
             }
+        }
+
+        // خروجی همان گزارش، اما روی «قالب رسمی» مؤسسه
+        // (Templates\FinancialForms.xlsx). متد بالا دست‌نخورده می‌ماند.
+        public void ExportGeneralStatementTemplate(string path, int? periodId)
+        {
+            var model = BuildGeneralStatement(periodId);
+            var data = new AccTemplateExport.GeneralStatementData
+            {
+                OrgName = _repo.GetSetting("OrgName"),
+                HeaderText = _repo.GetSetting("HeaderText"),
+                Center = SecurityContext.CenterDisplay,
+                PreparedBy = SecurityContext.Username,
+                PeriodTitle = model.PeriodTitleRaw,
+                Dollar = model.NumDollar,
+                Rate = model.NumRate,
+                Received = model.NumReceived,
+                Opening = model.NumOpening,
+                TotalPaid = model.NumTotalPaid,
+                Expenses = model.ExpenseLines
+            };
+            AccTemplateExport.WriteGeneralStatement(path, data);
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // خروجی‌های «روی قالب رسمی» — مسیرهای موازیِ چاپ و اکسلِ موجود
+        // ═══════════════════════════════════════════════════════════════════
+
+        // سند پرداخت وجه، از روی یک تراکنش. PrintVoucher دست‌نخورده می‌ماند.
+        public void ExportVoucherTemplate(string path, int txnId)
+        {
+            DataRow row = _repo.GetTransactionById(txnId);
+            if (row == null) throw new Exception("سند پیدا نشد.");
+
+            double amount = Convert.ToDouble(row["Amount"]);
+            bool income = row["Direction"].ToString() == "دریافت";
+
+            var d = new AccTemplateExport.VoucherData
+            {
+                OrgName = _repo.GetSetting("OrgName"),
+                HeaderText = _repo.GetSetting("HeaderText"),
+                Center = SecurityContext.CenterDisplay,
+                DocNo = GetStr(row, "DocNo"),
+                Date = GetStr(row, "TxnDate"),
+                Account = GetStr(row, "CategoryName"),
+                PayType = income ? "دریافت" : "پرداخت",
+                TransferNo = "",
+                Subject = GetStr(row, "Description"),
+                Currency = "افغانی",
+                ItemDesc = string.IsNullOrWhiteSpace(GetStr(row, "Description"))
+                           ? GetStr(row, "CategoryName") : GetStr(row, "Description"),
+                ItemNote = GetStr(row, "FundName"),
+                Amount = amount,
+                AmountWords = NumberToPersianWords((long)Math.Round(amount)) + " افغانی",
+                Receiver = GetStr(row, "PartyName"),
+                ReceiverTazkira = "",
+                ReceiverPhone = "",
+                Attachments = ""
+            };
+
+            AccTemplateExport.WriteVoucher(path, d);
+        }
+
+        // گزارش ۴ روی شیت «حقوق».
+        //
+        // آموزش — ستون «نوع پرداخت»: AccSalary چنین ستونی ندارد، ولی جدولِ
+        // خلاصه و آزمونِ توازنِ خودِ قالب روی همین ستون کار می‌کنند. اگر خالی
+        // بماند، خلاصه صفر می‌شود و قالب «اختلاف» نشان می‌دهد — یعنی سندی که
+        // امضاء می‌شود، خودش را نقض می‌کند. پس نوع از متنِ «توضیح» استنتاج
+        // می‌شود و هرچه شناخته نشد در «سایر» می‌نشیند؛ «سایر» یک ردیفِ رسمیِ
+        // خودِ همان جدولِ خلاصه است، پس جمع همیشه برابر درمی‌آید و هیچ عددی
+        // جعل نمی‌شود.
+        public void ExportSalaryStatementTemplate(string path, int? periodId)
+        {
+            var d = new AccTemplateExport.SalarySheetData
+            {
+                OrgName = _repo.GetSetting("OrgName"),
+                HeaderText = _repo.GetSetting("HeaderText"),
+                Center = SecurityContext.CenterDisplay,
+                Date = PersianDateHelper.ToPersianDateString(DateTime.Now),
+                PeriodTitle = periodId.HasValue ? _repo.GetPeriodTitle(periodId.Value) : "همه دوره‌ها"
+            };
+
+            DataTable dt = _repo.GetSalaries(periodId);
+            foreach (DataRow r in dt.Rows)
+            {
+                string note = r["توضیح"] == DBNull.Value ? "" : r["توضیح"].ToString();
+                d.Rows.Add(new AccTemplateExport.SalaryRow
+                {
+                    Name = r["نام"].ToString(),
+                    Position = r["سمت"] == DBNull.Value ? "" : r["سمت"].ToString(),
+                    PayType = ClassifyPayType(note),
+                    Note = note,
+                    Amount = Convert.ToDouble(r["مبلغ"]),
+                    Status = ""
+                });
+            }
+
+            AccTemplateExport.WriteSalarySheet(path, d);
+        }
+
+        // چهار نوعِ رسمیِ جدولِ خلاصهٔ قالب، به‌علاوهٔ «سایر» به‌عنوان سطلِ
+        // پیش‌فرض. هیچ حدسی زده نمی‌شود: یا واژه در متن هست، یا «سایر».
+        private static string ClassifyPayType(string note)
+        {
+            if (string.IsNullOrWhiteSpace(note)) return "سایر";
+            if (note.IndexOf("حق الماموریت", StringComparison.Ordinal) >= 0 ||
+                note.IndexOf("حق‌الماموریت", StringComparison.Ordinal) >= 0) return "حق الماموریت";
+            if (note.IndexOf("حق الزحمه", StringComparison.Ordinal) >= 0 ||
+                note.IndexOf("حق‌الزحمه", StringComparison.Ordinal) >= 0) return "حق الزحمه";
+            if (note.IndexOf("اضافه کاری", StringComparison.Ordinal) >= 0 ||
+                note.IndexOf("اضافه‌کاری", StringComparison.Ordinal) >= 0) return "اضافه کاری";
+            if (note.IndexOf("معاش", StringComparison.Ordinal) >= 0) return "معاش";
+            return "سایر";
+        }
+
+        // شیت «تفکیک شهریه و هزینه ها». فقط پرداختی‌ها از دفتر خوانده می‌شوند؛
+        // دریافتیِ تفکیک‌شده در دیتابیس وجود ندارد و AccTemplateExport آن
+        // خانه‌ها را «—» می‌گذارد.
+        public void ExportSplitStatementTemplate(string path, int? periodId)
+        {
+            double stipend = SumStipendTotal(periodId);
+            double salary = _repo.SumSalary(periodId);
+            double expense = _repo.SumExpenseItems(periodId);
+            double payTxn = _repo.SumTransactions(periodId, "پرداخت", null);
+
+            var d = new AccTemplateExport.SplitData
+            {
+                OrgName = _repo.GetSetting("OrgName"),
+                HeaderText = _repo.GetSetting("HeaderText"),
+                Center = SecurityContext.CenterDisplay,
+                Date = PersianDateHelper.ToPersianDateString(DateTime.Now),
+                PeriodTitle = periodId.HasValue ? _repo.GetPeriodTitle(periodId.Value) : "همه دوره‌ها",
+                StipendPaid = stipend,
+                OtherPaid = salary + expense + payTxn
+            };
+
+            AccTemplateExport.WriteSplitStatement(path, d);
         }
 
         // ═══════════════════════════════════════════════════════════════════

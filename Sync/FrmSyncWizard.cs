@@ -1397,7 +1397,7 @@ namespace CaseManagement.Sync
         private async Task RunSync()
         {
             // رعایت قوانین کاربران: کاربر «فقط مشاهده» (Viewer) اجازه‌ی نوشتن ندارد.
-            if (!SecurityContext.CanEdit())
+            if (!CaseManagement.Enterprise.PermissionService.Require("Sync.Execute"))
             {
                 UiTheme.ShowWarning(this, "کاربر فقط‌مشاهده اجازه‌ی همگام‌سازی (ثبت/ویرایش) ندارد.");
                 ShowStep(5);

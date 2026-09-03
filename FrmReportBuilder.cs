@@ -285,6 +285,12 @@ namespace CaseManagement
 
         private void RunReport()
         {
+            if (!CaseManagement.Enterprise.PermissionService.Require("Report.Run"))
+            {
+                Msg.Show("کاربر اجازه اجرای گزارش‌ساز را ندارد.");
+                return;
+            }
+
             try
             {
                 ReportDefinition def = BuildDefinitionFromUi();
@@ -466,6 +472,12 @@ VALUES (@Name, @Source, @Cols, @Filters, @Group, @Sort, @Desc, @By)", con))
         // ─── خروجی ──────────────────────────────────────────────────────────
         private void ExportExcel()
         {
+            if (!CaseManagement.Enterprise.PermissionService.Require("Report.Export"))
+            {
+                Msg.Show("کاربر اجازه خروجی گزارش‌ساز را ندارد.");
+                return;
+            }
+
             if (_resultTable == null || _resultTable.Rows.Count == 0)
             {
                 Msg.Show("ابتدا گزارش را اجرا کنید");

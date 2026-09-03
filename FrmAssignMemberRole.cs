@@ -315,7 +315,7 @@ LIMIT @MaxRows", con))
 
         private void ApplyChanges()
         {
-            if (!SecurityContext.CanEdit())
+            if (!CaseManagement.Enterprise.PermissionService.Require("Family.Edit"))
             {
                 Msg.Show("کاربر فقط مشاهده اجازه ثبت تغییرات ندارد.");
                 return;

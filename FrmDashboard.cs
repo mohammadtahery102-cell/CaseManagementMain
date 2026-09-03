@@ -71,7 +71,10 @@ namespace CaseManagement
         // ─── بازطراحی ظاهری داشبورد (طبق عکس نمونه کاربر) ────────────────────
         private TabControl _tabs;
         private SidebarNav _sidebar;
-        private StatCard _cardTotal, _cardActive, _cardWaiting, _cardStopped, _cardStoppedTemp, _cardFamily;
+        // تعداد کارت‌های خلاصه — شبکه‌ی summaryPanel از روی همین ساخته می‌شود.
+        private const int SummaryCardCount = 13;
+
+        private StatCard _cardTotal, _cardInProgress, _cardActive, _cardWaiting, _cardStopped, _cardStoppedTemp, _cardFamily;
         // کارت‌های آماری تکمیلی (اسناد/مراکز/کمک مالی).
         private StatCard _cardDocuments, _cardCenters, _cardFinance;
         // آمار نوع تذکره (الکترونیکی / کاغذی / بدون تذکره).
@@ -125,10 +128,19 @@ namespace CaseManagement
             _sidebar.AddItem(IconFont.People, "اعضای خانواده", delegate { SelectTabByTitle("اعضای خانواده"); });
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleApplicants, IconFont.Contact, "متقاضیان", delegate { using (var frm = new FrmApplicant()) frm.ShowDialog(this); RefreshAll(); });
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleSearch, IconFont.Search, "جستجوی پیشرفته", delegate { using (var frm = new FrmAdvancedSearch()) frm.ShowDialog(this); });
+            _sidebar.AddItem(IconFont.Search, "دستیار هوشمند", delegate { using (var frm = new FrmAiAssistant()) frm.ShowDialog(this); RefreshAll(); });
 
             _sidebar.AddGroup("مالی و حسابداری", startExpanded: false);
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleFinance, IconFont.Money, "مالی", delegate { using (var frm = new FrmFinance()) frm.ShowDialog(this); RefreshAll(); });
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleAccounting, IconFont.Calculator, "حسابداری ایتام", delegate { using (var frm = new CaseManagement.Accounting.FrmAccounting()) frm.ShowDialog(this); });
+
+            // ماژول اداری و کارمندان — رخصتی، ماموریت، درخواست استخدام.
+            // آموزش — چرا AddItem و نه AddModuleNav: AddModuleNav به یک
+            // شناسهٔ ماژول در ModuleService نیاز دارد و افزودن شناسهٔ تازه
+            // یعنی دست‌زدن به کلاسِ موجودِ مجوزها. این ماژول فعلاً بدون
+            // کنترلِ مجوزِ اختصاصی باز می‌شود، مثل «اعضای خانواده».
+            _sidebar.AddGroup("اداری و کارمندان", startExpanded: false);
+            _sidebar.AddItem(IconFont.People, "کارمندان و فورم‌ها", delegate { using (var frm = new FrmEmployees()) frm.ShowDialog(this); });
 
             _sidebar.AddGroup("داده و گزارش", startExpanded: false);
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleSync, IconFont.Sync, "همگام‌سازی", delegate { using (var frm = new CaseManagement.Sync.FrmSyncSimple()) frm.ShowDialog(this); RefreshAll(); });
@@ -195,8 +207,10 @@ namespace CaseManagement
             toolButtons.Controls.Add(CreateToolButton("پرونده‌ها", "▤", delegate { using (var frm = new FrmCase(_filterProvince, _filterDistrict, _filterServiceStatus)) frm.ShowDialog(this); RefreshAll(); }));
             toolButtons.Controls.Add(CreateToolButton("متقاضیان", "✎", delegate { using (var frm = new FrmApplicant()) frm.ShowDialog(this); RefreshAll(); }));
             toolButtons.Controls.Add(CreateToolButton("جستجوی پیشرفته", "⌕", delegate { using (var frm = new FrmAdvancedSearch()) frm.ShowDialog(this); }));
+            toolButtons.Controls.Add(CreateToolButton("دستیار هوشمند", "🤖", delegate { using (var frm = new FrmAiAssistant()) frm.ShowDialog(this); RefreshAll(); }));
             toolButtons.Controls.Add(CreateToolButton("مالی", "$", delegate { using (var frm = new FrmFinance()) frm.ShowDialog(this); RefreshAll(); }));
             toolButtons.Controls.Add(CreateToolButton("حسابداری ایتام", "💰", delegate { using (var frm = new CaseManagement.Accounting.FrmAccounting()) frm.ShowDialog(this); }));
+            toolButtons.Controls.Add(CreateToolButton("کارمندان", "👥", delegate { using (var frm = new FrmEmployees()) frm.ShowDialog(this); }));
             toolButtons.Controls.Add(CreateToolButton("همگام‌سازی", "🔄", delegate { using (var frm = new CaseManagement.Sync.FrmSyncSimple()) frm.ShowDialog(this); RefreshAll(); }));
             toolButtons.Controls.Add(CreateToolButton("تنظیمات", "⚙", OpenSettings));
             toolButtons.Controls.Add(CreateToolButton("جزوه آموزشی", "📘", OpenTrainingManual));
@@ -666,7 +680,9 @@ namespace CaseManagement
             int SummaryRows = SettingsHelper.GetInt(SettingsHelper.DashboardSummaryRows, 2);
             if (SummaryRows < 2) SummaryRows = 2;
             if (SummaryRows > 4) SummaryRows = 4;
-            int SummaryCols = (int)Math.Ceiling(12.0 / SummaryRows);
+            // باید با تعدادِ عناصرِ آرایه‌ی summaryCards پایین‌تر یکی بماند،
+            // وگرنه یا کارتِ آخر جا نمی‌شود یا خانه‌ی خالی می‌ماند.
+            int SummaryCols = (int)Math.Ceiling(SummaryCardCount / (double)SummaryRows);
 
             summaryPanel = new TableLayoutPanel();
             summaryPanel.Dock = DockStyle.Top;
@@ -686,6 +702,11 @@ namespace CaseManagement
             // واحدِ «پرونده»)؛ فقط جایی واحد نگه داشته شده که واقعاً اطلاعِ
             // تازه می‌دهد (نفر/افغانی).
             _cardTotal   = MakeStatCard("کل پرونده‌ها", "", IconFont.Folder,   "#A855F7", "#FAF5FF");
+            // آموزش — کارتِ «در جریان»: با گسترشِ وضعیت خدمات به شش مقدار، دو
+            // وضعیتِ «متقاضی» و «در حال بررسی» در هیچ کارتی شمرده نمی‌شدند. چون
+            // عددِ وسطِ دونات «کل پرونده‌ها» را نشان می‌دهد، قاچ‌ها با آن جمع
+            // نمی‌شدند و کاربر این ناهمخوانی را می‌دید.
+            _cardInProgress = MakeStatCard("در جریان",  "", IconFont.Clock,    "#6366F1", "#EEF2FF");
             _cardActive  = MakeStatCard("فعال",          "", IconFont.Check,    "#22C55E", "#F0FDF4");
             _cardWaiting = MakeStatCard("در انتظار تایید","", IconFont.Clock,   "#F59E0B", "#FFFBEB");
             _cardStopped = MakeStatCard("قطع شده‌ها",     "", IconFont.Cancel,   "#EF4444", "#FEF2F2");
@@ -707,7 +728,8 @@ namespace CaseManagement
             // عملاً از راست چیده می‌شوند — مثل قبل).
             StatCard[] summaryCards =
             {
-                _cardTotal, _cardActive, _cardWaiting, _cardStopped, _cardStoppedTemp, _cardFamily, _cardDocuments,
+                _cardTotal, _cardInProgress, _cardActive, _cardWaiting, _cardStopped, _cardStoppedTemp,
+                _cardFamily, _cardDocuments,
                 _cardCenters, _cardFinance, _cardIdElectronic, _cardIdPaper, _cardIdNone
             };
 
@@ -1603,6 +1625,7 @@ SELECT * FROM (
              ELSE CAST((julianday('now') - julianday(f.BirthDate)) / 365.25 AS INTEGER) END AS [سن],
         f.BirthDate               AS [تاریخ تولد],
         f.MemberTazkiraNo         AS [شماره تذکره],
+        f.MemberIdCardType        AS [نوع تذکره],
         f.MemberSadat             AS [سیادت],
         f.Religion                AS [مذهب],
         f.MaritalStatus           AS [وضعیت تأهل],
@@ -1708,6 +1731,7 @@ SELECT
     CASE WHEN f.BirthDate IS NULL THEN NULL
          ELSE CAST((julianday('now') - julianday(f.BirthDate)) / 365.25 AS INTEGER) END AS [سن],
     f.MemberTazkiraNo         AS [شماره تذکره],
+    f.MemberIdCardType        AS [نوع تذکره],
     f.PhysicalStatus          AS [وضعیت جسمی],
     f.HasDisability           AS [نوع معلولیت],
     f.MemberDisabilityDegree  AS [درجه معلولیت],
@@ -1829,6 +1853,7 @@ SELECT
          ELSE CAST((julianday('now') - julianday(f.BirthDate)) / 365.25 AS INTEGER) END AS [سن],
     f.BirthDate               AS [تاریخ تولد],
     f.MemberTazkiraNo         AS [شماره تذکره],
+    f.MemberIdCardType        AS [نوع تذکره],
     f.MemberSadat             AS [سیادت],
     f.Religion                AS [مذهب],
     f.MaritalStatus           AS [وضعیت تأهل],
@@ -2336,7 +2361,7 @@ WHERE (@CID = 0 OR CenterID = @CID)" + CaseFilterSqlNoStatus("") + @"", con))
             // می‌ماند (این باگ واقعاً رخ داد و با دامپِ درخت کنترل‌ها پیدا شد).
             int cid = SecurityContext.CenterFilterId;
 
-            int total = 0, active = 0, waiting = 0, stopped = 0, stoppedTemp = 0, family = 0;
+            int total = 0, inProgress = 0, active = 0, waiting = 0, stopped = 0, stoppedTemp = 0, family = 0;
             int docCount = 0, centerCount = 0;
             decimal financeTotal = 0m;
 
@@ -2354,6 +2379,7 @@ SELECT
     (SELECT COALESCE(SUM(a.Amount), 0) FROM TblAssistance a
       JOIN TblCase c ON c.CasID = a.CasID
       WHERE (@CID=0 OR c.CenterID=@CID)" + CaseFilterSqlNoStatus("c") + @")                          AS FinanceTotal,
+    SUM(CASE WHEN ServiceStatus IN (" + CaseDomain.SqlValueList(CaseDomain.InProgressStatuses) + @") THEN 1 ELSE 0 END) AS InProgress,
     SUM(CASE WHEN ServiceStatus = 'فعال' THEN 1 ELSE 0 END)       AS Active,
     SUM(CASE WHEN ServiceStatus = 'در انتظار تایید' THEN 1 ELSE 0 END)  AS Waiting,
     SUM(CASE WHEN ServiceStatus = 'قطع' THEN 1 ELSE 0 END)        AS Stopped,
@@ -2374,6 +2400,7 @@ WHERE (@CID = 0 OR CenterID = @CID)" + CaseFilterSqlNoStatus("") + @"", con))
                         docCount = Convert.ToInt32(dr["DocCount"]);
                         centerCount = Convert.ToInt32(dr["CenterCount"]);
                         financeTotal = dr["FinanceTotal"] == DBNull.Value ? 0m : Convert.ToDecimal(dr["FinanceTotal"]);
+                        inProgress = dr["InProgress"] == DBNull.Value ? 0 : Convert.ToInt32(dr["InProgress"]);
                         active = dr["Active"] == DBNull.Value ? 0 : Convert.ToInt32(dr["Active"]);
                         waiting = dr["Waiting"] == DBNull.Value ? 0 : Convert.ToInt32(dr["Waiting"]);
                         stopped = dr["Stopped"] == DBNull.Value ? 0 : Convert.ToInt32(dr["Stopped"]);
@@ -2387,6 +2414,7 @@ WHERE (@CID = 0 OR CenterID = @CID)" + CaseFilterSqlNoStatus("") + @"", con))
             // BuildSummaryTab فقط مقدارشان به‌روز می‌شود. این هم سریع‌تر است و
             // هم باعث پرش/سوسوی چشمی هنگام تازه‌سازی نمی‌شود.
             _cardTotal.SetValue(total);
+            _cardInProgress.SetValue(inProgress);
             _cardActive.SetValue(active);
             _cardWaiting.SetValue(waiting);
             _cardStopped.SetValue(stopped);
@@ -2409,6 +2437,9 @@ WHERE (@CID = 0 OR CenterID = @CID)" + CaseFilterSqlNoStatus("") + @"", con))
             DataTable chartData = new DataTable();
             chartData.Columns.Add("Title");
             chartData.Columns.Add("Count", typeof(int));
+            // پنج قاچ = هر شش وضعیت («در جریان» دو تای اول را با هم دارد)، پس
+            // مجموعِ قاچ‌ها دقیقاً برابرِ عددِ وسطِ دونات (کل پرونده‌ها) است.
+            chartData.Rows.Add("در جریان", inProgress);
             chartData.Rows.Add("فعال", active);
             chartData.Rows.Add("در انتظار تایید", waiting);
             chartData.Rows.Add("قطع", stopped);
@@ -2447,11 +2478,12 @@ WHERE (@CID = 0 OR CenterID = @CID)" + CaseFilterSqlNoStatus("") + @"", con))
         {
             int cid = SecurityContext.CenterFilterId;
 
-            var totals   = new List<double>();
-            var actives  = new List<double>();
-            var waitings = new List<double>();
-            var stops    = new List<double>();
-            var families = new List<double>();
+            var totals     = new List<double>();
+            var inProgress = new List<double>();
+            var actives    = new List<double>();
+            var waitings   = new List<double>();
+            var stops      = new List<double>();
+            var families   = new List<double>();
 
             try
             {
@@ -2464,6 +2496,7 @@ WHERE (@CID = 0 OR CenterID = @CID)" + CaseFilterSqlNoStatus("") + @"", con))
 SELECT * FROM (
   SELECT strftime('%Y-%m', CaseDate) AS Period,
          COUNT(1) AS Total,
+         SUM(CASE WHEN ServiceStatus IN (" + CaseDomain.SqlValueList(CaseDomain.InProgressStatuses) + @") THEN 1 ELSE 0 END) AS InProgress,
          SUM(CASE WHEN ServiceStatus = 'فعال' THEN 1 ELSE 0 END) AS Active,
          SUM(CASE WHEN ServiceStatus = 'در انتظار تایید' THEN 1 ELSE 0 END) AS Waiting,
          SUM(CASE WHEN ServiceStatus IN ('قطع','قطع موقت') THEN 1 ELSE 0 END) AS Stopped
@@ -2476,6 +2509,7 @@ SELECT * FROM (
                 foreach (DataRow r in byMonth.Rows)
                 {
                     totals.Add(Convert.ToDouble(r["Total"]));
+                    inProgress.Add(r["InProgress"] == DBNull.Value ? 0 : Convert.ToDouble(r["InProgress"]));
                     actives.Add(r["Active"] == DBNull.Value ? 0 : Convert.ToDouble(r["Active"]));
                     waitings.Add(r["Waiting"] == DBNull.Value ? 0 : Convert.ToDouble(r["Waiting"]));
                     stops.Add(r["Stopped"] == DBNull.Value ? 0 : Convert.ToDouble(r["Stopped"]));
@@ -2496,6 +2530,7 @@ SELECT * FROM (
             catch { /* نمودار کوچک تزئینی است؛ خطایش نباید داشبورد را متوقف کند */ }
 
             _cardTotal.SetTrend(totals.ToArray());
+            _cardInProgress.SetTrend(inProgress.ToArray());
             _cardActive.SetTrend(actives.ToArray());
             _cardWaiting.SetTrend(waitings.ToArray());
             _cardStopped.SetTrend(stops.ToArray());

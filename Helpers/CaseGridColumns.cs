@@ -31,15 +31,22 @@ namespace CaseManagement.Helpers
 
     public static class CaseGridColumns
     {
-        // ستونِ همیشگی — نه در فهرست انتخاب است و نه در سقفِ چهارتایی حساب می‌شود.
+        // ستونِ همیشگی — نه در فهرست انتخاب است و نه در سقفِ انتخاب حساب می‌شود.
         public const string FixedColumn = "Code";
         public const string FixedColumnTitle = "کد اختصاصی";
 
-        public const int MaxSelectable = 4;
+        // آموزش — سقف از ۴ به ۵ رفت چون چیدمانِ خواسته‌شدهٔ گرید (تصویرِ
+        // مرجعِ FrmCase) شش ستون دارد: «کد اختصاصی»ِ ثابت + پنج ستونِ انتخابی
+        // (نام سرپرست، نوع پرونده، ولسوالی، شماره تذکره، عکس). با سقفِ ۴،
+        // یکی از این‌ها همیشه از قلم می‌افتاد.
+        public const int MaxSelectable = 5;
 
         public static readonly List<CaseGridColumn> Available = new List<CaseGridColumn>
         {
             new CaseGridColumn("HeadFullName",         "نام سرپرست",        "HeadFullName",         false),
+            // «نوع پرونده» تا امروز در کاتالوگ نبود، پس اصلاً قابلِ انتخاب نبود؛
+            // ستونِ TblCase.RequestType از قبل وجود داشت و در فرم هم پر می‌شود.
+            new CaseGridColumn("RequestType",          "نوع پرونده",        "RequestType",          false),
             new CaseGridColumn("HeadFatherName",       "نام پدر سرپرست",    "HeadFatherName",       false),
             new CaseGridColumn("HeadTazkiraNo",        "شماره تذکره",       "HeadTazkiraNo",        false),
             new CaseGridColumn("Phone",                "شماره تماس",        "Phone",                false),
@@ -49,10 +56,14 @@ namespace CaseManagement.Helpers
             new CaseGridColumn("District",             "ولسوالی",           "District",             false)
         };
 
-        // پیش‌فرض = همان چیزی که کاربر خواست: نام سرپرست، نام پدر، شماره تذکره، عکس.
+        // پیش‌فرض = دقیقاً ستون‌های تصویرِ مرجعِ FrmCase. ترتیب مهم است:
+        // ConfigureCasesGrid ستونِ ثابت را در جایگاهِ ۰ می‌گذارد و بقیه را به
+        // همین ترتیب پشتِ آن، و چون گرید راست‌به‌چپ است جایگاهِ ۰ سمتِ راست
+        // می‌نشیند. نتیجه از راست به چپ:
+        //   کد اختصاصی │ نام سرپرست │ نوع پرونده │ ولسوالی │ شماره تذکره │ عکس
         public static readonly string[] DefaultKeys =
         {
-            "HeadFullName", "HeadFatherName", "HeadTazkiraNo", "Photo"
+            "HeadFullName", "RequestType", "District", "HeadTazkiraNo", "Photo"
         };
 
         public static CaseGridColumn Find(string key)

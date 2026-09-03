@@ -505,7 +505,7 @@ FROM AccPeriod ORDER BY Year DESC, Month DESC");
                 throw new AccountingRuleException("ثبت «دلیل اصلاح» اجباری است؛ بدون دلیل، اصلاح انجام نمی‌شود.");
 
             // اصلاح داده‌ی مالیِ تاریخی یک عملیات مدیریتی است.
-            if (!SecurityContext.IsSuperAdmin())
+            if (!CaseManagement.Enterprise.PermissionService.Require("Accounting.Repair"))
                 throw new AccountingRuleException("اصلاح داده‌های تاریخی حسابداری فقط برای مدیر کل مجاز است.");
 
             switch (item.Kind)
@@ -530,6 +530,11 @@ FROM AccPeriod ORDER BY Year DESC, Month DESC");
             if (Convert.ToInt32(exists) == 0)
                 throw new AccountingRuleException("دوره مالی انتخاب‌شده وجود ندارد.");
 
+            // دوره‌ی مقصد نباید «بسته» باشد — وگرنه یک رکورد بدون بررسی/تأیید
+            // مستقیم وارد دفتر یک دوره‌ی قبلاً بسته‌شده می‌شود.
+            if (!_repo.IsPeriodOpen(periodId))
+                throw new AccountingRuleException("دوره مالی مقصد «بسته» است؛ تخصیص رکورد به دوره‌ی بسته مجاز نیست.");
+
             // نگهبان خوش‌بینانه: «AND PeriodID IS NULL» یعنی اگر در این فاصله
             // کسی دوره را ست کرده باشد، اصلاح انجام نمی‌شود.
             int affected = _db.ExecuteNonQuery(
@@ -550,6 +555,11 @@ FROM AccPeriod ORDER BY Year DESC, Month DESC");
             if (!item.SuggestedCenterId.HasValue)
                 throw new AccountingRuleException("مرکز مقصد انتخاب نشده است.");
 
+            // دوره‌ی فعلیِ خودِ رکورد نباید «بسته» باشد — این ابزار هم مثل هر
+            // مسیر ویرایش دیگر باید همین قاعده را رعایت کند.
+            if (!_repo.IsRecordPeriodOpen(item.Table, item.IdColumn, item.RecordId))
+                throw new AccountingRuleException("دوره مالی این رکورد «بسته» است؛ از طریق ابزار اصلاح هم قابل تغییر نیست.");
+
             int centerId = item.SuggestedCenterId.Value;
 
             int affected = _db.ExecuteNonQuery(
@@ -568,6 +578,10 @@ FROM AccPeriod ORDER BY Year DESC, Month DESC");
         {
             if (string.IsNullOrWhiteSpace(item.SuggestedDate))
                 throw new AccountingRuleException("تاریخ اصلاح‌شده وارد نشده است.");
+
+            // دوره‌ی فعلیِ خودِ رکورد نباید «بسته» باشد — همان قاعده‌ی بالا.
+            if (!_repo.IsRecordPeriodOpen(item.Table, item.IdColumn, item.RecordId))
+                throw new AccountingRuleException("دوره مالی این رکورد «بسته» است؛ از طریق ابزار اصلاح هم قابل تغییر نیست.");
 
             string newDate = item.SuggestedDate.Trim();
 

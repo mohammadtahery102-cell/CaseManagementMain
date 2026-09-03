@@ -309,6 +309,12 @@ CREATE TABLE IF NOT EXISTS TblReminder (
     CreatedAt  TEXT NOT NULL DEFAULT (datetime('now'))
 );");
 
+                // دستیار هوشمند — فاز ۱ (افزایشی؛ ستون‌های موجود دست‌نخورده‌اند).
+                // CreatedByAI: مشخص می‌کند یادآوری با دستور زبان طبیعی ساخته شده.
+                // SourceQueryText: عبارت خام کاربر، برای حسابرسی/اعتماد.
+                EnsureColumn(con, "TblReminder", "CreatedByAI",     "INTEGER NOT NULL DEFAULT 0");
+                EnsureColumn(con, "TblReminder", "SourceQueryText", "TEXT NULL");
+
                 // ─── TblApplicant (فرم متقاضی/درخواستی — به درخواست کاربر) ────
                 // یادداشت اولیه متقاضی که بعداً می‌تواند به پرونده کامل تبدیل شود.
                 ExecuteNonQuery(con, @"
@@ -657,6 +663,53 @@ CREATE TABLE IF NOT EXISTS TblCardTemplate (
                 // طراحِ بصری) قاطی نشود؛ NULL برای قالب‌های موجود = «رفتارِ
                 // پیش‌فرضِ فعلی» (بدونِ override).
                 EnsureColumn(con, "TblCardTemplate", "DesignJson", "TEXT NULL");
+                // آموزش — قالبِ «ساده»: یک طرحِ HTML کاملاً متفاوت (فیلدهای
+                // دیگر، بدونِ لیستِ آزادِ فیلد) به‌جای طرحِ ثابتِ کاملِ فعلی.
+                // 'Full' = رفتارِ همیشگی (index.html)، 'Simple' = simple.html.
+                // پیش‌فرضِ 'Full' یعنی قالب‌های موجود دست‌نخورده می‌مانند.
+                EnsureColumn(con, "TblCardTemplate", "LayoutVariant", "TEXT NOT NULL DEFAULT 'Full'");
+
+                // ─── مدیریتِ حرفه‌ایِ قالب (Phase 2) — نوع/توضیح/وضعیت/سازنده/
+                //     ویرایش‌کننده. همه Additive؛ پیش‌فرض‌ها دقیقاً رفتارِ
+                //     فعلی را حفظ می‌کنند (IsActive=1 یعنی هیچ قالبِ موجودی
+                //     غیرفعال نمی‌شود؛ بقیه NULL = «نامعلوم»، صادقانه برایِ
+                //     رکوردهایِ قدیمی‌ای که این ستون‌ها را نداشتند).
+                EnsureColumn(con, "TblCardTemplate", "TemplateType", "TEXT NULL");
+                EnsureColumn(con, "TblCardTemplate", "Description", "TEXT NULL");
+                EnsureColumn(con, "TblCardTemplate", "IsActive", "INTEGER NOT NULL DEFAULT 1");
+                EnsureColumn(con, "TblCardTemplate", "CreatedBy", "TEXT NULL");
+                EnsureColumn(con, "TblCardTemplate", "ModifiedAt", "TEXT NULL");
+                EnsureColumn(con, "TblCardTemplate", "ModifiedBy", "TEXT NULL");
+                // آموزش — پروفایلِ چاپ: این فاز فقط «PVC» (رفتارِ امروزیِ
+                // print.css، بدونِ تغییر) پیاده‌سازی شده؛ ستون برایِ توسعهٔ
+                // آیندهٔ A4/چندکارتی از هم‌اکنون آماده است، بدونِ اینکه چیزی
+                // در پایپ‌لاینِ رندر/چاپ عوض شود.
+                EnsureColumn(con, "TblCardTemplate", "PrintProfile", "TEXT NOT NULL DEFAULT 'PVC'");
+
+                // ─── تاریخچهٔ نسخه‌هایِ قالبِ کارت (Phase 2) — هم‌الگویِ
+                //     TblFamilyRoleHistory: هر Save یک Snapshot کاملِ تازه
+                //     اضافه می‌کند، هیچ نسخهٔ قبلی هرگز حذف/بازنویسی نمی‌شود.
+                ExecuteNonQuery(con, @"
+CREATE TABLE IF NOT EXISTS TblCardTemplateVersion (
+    VersionID         INTEGER PRIMARY KEY AUTOINCREMENT,
+    TemplateID        INTEGER NOT NULL,
+    VersionNumber     INTEGER NOT NULL,
+    Name              TEXT NOT NULL,
+    FieldsJson        TEXT NOT NULL,
+    DesignJson        TEXT NULL,
+    LayoutVariant     TEXT NOT NULL,
+    TemplateType      TEXT NULL,
+    Description       TEXT NULL,
+    ChangedByUserID   INTEGER NULL,
+    ChangedByUsername TEXT NULL,
+    ChangedAt         TEXT NOT NULL DEFAULT (datetime('now')),
+    ChangeNote        TEXT NULL,
+    CONSTRAINT FK_CardTemplateVersion_Template FOREIGN KEY (TemplateID)
+        REFERENCES TblCardTemplate (TemplateID) ON DELETE CASCADE
+);");
+                ExecuteNonQuery(con,
+                    "CREATE INDEX IF NOT EXISTS IX_TblCardTemplateVersion_TemplateID ON TblCardTemplateVersion(TemplateID, VersionNumber);");
+
                 // قالبِ پیش‌فرض فقط اگر جدول کاملاً خالی است ساخته می‌شود —
                 // نصب‌های موجود بدون هیچ قالبی دقیقاً همان کارتِ کامل قبلی را
                 // می‌گیرند (همه‌ی فیلدهای اختیاری روشن).
@@ -903,9 +956,16 @@ CREATE TABLE IF NOT EXISTS TblApplicantStatusHistory (
                 // استفاده شد چون IGNORE برای رکوردهای از قبل موجود (مثلاً «مهاجر» که
                 // در فهرست قدیمی هم بود) SortOrder را دست‌نخورده می‌گذاشت و ترتیب
                 // نمایش کشویی را به‌هم می‌ریخت.
+                //
+                // IsActive هم بازگردانده می‌شود: مقداری که در این فهرستِ مرجع هست،
+                // طبق تعریف یک مقدارِ معتبرِ سامانه است و نباید غیرفعال بماند.
+                // بدون این، یک بار غیرفعال‌کردن از صفحهٔ تنظیمات برای همیشه باقی
+                // می‌ماند و LookupHelper (که WHERE IsActive = 1 دارد) آن مقدار را
+                // هرگز برنمی‌گرداند — همان زنجیره‌ای که کشویی وضعیت خدمات را ناقص
+                // می‌کرد و باعث می‌شد پرونده‌ها بی‌صدا به خانهٔ صفر بیفتند.
                 using (var cmd = new SQLiteCommand(@"
 INSERT INTO TblLookup (Category, Value, SortOrder) VALUES (@Cat, @Val, @Ord)
-ON CONFLICT(Category, Value) DO UPDATE SET SortOrder = @Ord", con))
+ON CONFLICT(Category, Value) DO UPDATE SET SortOrder = @Ord, IsActive = 1", con))
                 {
                     cmd.Parameters.AddWithValue("@Cat", category);
                     cmd.Parameters.AddWithValue("@Val", correctValues[i]);
@@ -1376,10 +1436,7 @@ WHERE GlobalID IS NULL;", tableName));
 
             // نگاشتِ مقادیرِ قدیمی در همان INSERT انجام می‌شود، وگرنه ردیف‌های
             // قدیمی قیدِ جدید را نقض می‌کنند و کل مهاجرت شکست می‌خورد.
-            string statusExpr = "ServiceStatus";
-            foreach (var pair in CaseDomain.LegacyServiceStatusMap)
-                statusExpr = "CASE WHEN ServiceStatus = '" + pair.Key + "' THEN '" + pair.Value +
-                             "' ELSE " + statusExpr + " END";
+            string statusExpr = LegacyServiceStatusExpression();
 
             var selectCols = new List<string>();
             foreach (string c in columns)
@@ -1451,6 +1508,26 @@ WHERE GlobalID IS NULL;", tableName));
             return createSql.Substring(0, start)
                  + CaseDomain.ServiceStatusCheckSql
                  + createSql.Substring(end + 1);
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        // عبارتِ SQL که ستون ServiceStatus را حین کپی به مقادیرِ استاندارد
+        // نگاشت می‌کند. هر دو مسیرِ بازسازیِ TblCase از همین یک تابع استفاده
+        // می‌کنند تا هیچ‌کدام از نگاشت‌های CaseDomain جا نماند.
+        //
+        // ⚠ چرا اشتراکی شد: مسیرِ قدیمی (MigrateServiceStatusRebuild) نگاشتِ
+        // خودش را داشت و «در انتظار» را به املای همزه‌دار تبدیل می‌کرد. وقتی
+        // قید به فهرست استاندارد (بدون همزه) به‌روز شد، آن نگاشت مقداری تولید
+        // می‌کرد که خودِ قید نمی‌پذیرفت و کلِ مهاجرت روی دیتابیس‌های قدیمی
+        // شکست می‌خورد.
+        // ─────────────────────────────────────────────────────────────────────
+        private static string LegacyServiceStatusExpression()
+        {
+            string expr = "ServiceStatus";
+            foreach (var pair in CaseDomain.LegacyServiceStatusMap)
+                expr = "CASE WHEN ServiceStatus = '" + pair.Key + "' THEN '" + pair.Value +
+                       "' ELSE " + expr + " END";
+            return expr;
         }
 
         private static string ReplaceFirst(string text, string search, string replace)
@@ -1568,8 +1645,7 @@ CREATE TABLE TblCase (
     UpdatedAt             TEXT NULL,
     CONSTRAINT UQ_TblCase_Code   UNIQUE (Code),
     CONSTRAINT UQ_TblCase_FormNo UNIQUE (FormNo),
-    CONSTRAINT CK_TblCase_ServiceStatus
-        CHECK (ServiceStatus IN ('قطع', 'قطع موقت', 'در انتظار تأیید', 'فعال'))
+    " + CaseDomain.ServiceStatusCheckSql + @"
 );");
 
                     ExecuteNonQuery(con, tr, @"
@@ -1590,7 +1666,7 @@ SELECT
     RelationshipToFamily, RelativePhone, CoveredByOrg, Job, Skill,
     DisabilityDegree, DisabilityType, MigrationCardType, MaritalStatus,
     Surveyors, SurveyDate, LocationAddress, EducationLevel,
-    CASE WHEN ServiceStatus = 'در انتظار' THEN 'در انتظار تأیید' ELSE ServiceStatus END,
+    " + LegacyServiceStatusExpression() + @",
     NULL,
     UrgentSituation, Zone, Province, GlobalID, CenterID, CreatedAt, UpdatedAt
 FROM TblCase_old;");

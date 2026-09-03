@@ -72,6 +72,8 @@ namespace CaseManagement
         private NumericUpDown _numBackupRetention;
         private Label _lblBackupStatus;
         private TextBox _txtBackupOutput;
+        private TextBox _txtAutoBackupPassword;
+        private Label _lblAutoBackupPasswordStatus;
 
         // ─── اعلان‌ها ───────────────────────────────────────────────────────
         private CheckBox _chkNotifyBackupMissing;
@@ -245,14 +247,14 @@ namespace CaseManagement
             // کل سیستم را تحت تأثیر قرار می‌دهند (همه مراکز)، پس فقط SuperAdmin
             // این دو تب را می‌بیند؛ Admin مرکز (نه SuperAdmin) اصلاً این
             // امکانات را نمی‌بیند، نه فقط دکمه‌هایش غیرفعال باشد.
-            if (SecurityContext.IsSuperAdmin())
+            if (CaseManagement.Enterprise.PermissionService.HasPermission("Center.Manage"))
                 addPage("مراکز", tabCenters);
 
             addPage("شماره‌گذاری", tabNumbering);
             addPage("فایل‌ها", tabPaths);
             addPage("امنیت", tabSecurity);
 
-            if (SecurityContext.IsSuperAdmin())
+            if (CaseManagement.Enterprise.PermissionService.HasPermission("Backup.Create"))
                 addPage("پشتیبان‌گیری", tabBackup);
 
             addPage("اعلان‌ها", tabNotify);
@@ -671,6 +673,11 @@ LIMIT " + MaxDeleteGridRows, con))
                         var pendingDelete =
                             CaseManagement.Sync.SyncOutboxService.PrepareDelete("TblCase", t.Key);
 
+                        // عکسِ فوریِ کاملِ رکورد پیش از حذف؛ ثبتِ نسخه فقط در
+                        // صورتِ حذفِ واقعی (affected > 0) انجام می‌شود.
+                        string deletedSnapshot = CaseManagement.Enterprise.VersionService
+                            .ReadSnapshotText("TblCase", t.Key);
+
                         int affected;
                         using (var cmd = new SQLiteCommand(
                             "DELETE FROM TblCase WHERE CasID = @Id AND (@CID = 0 OR CenterID = @CID)", con))
@@ -693,6 +700,9 @@ LIMIT " + MaxDeleteGridRows, con))
 
                         AuditLogger.Log("حذف پرونده", "TblCase", t.Key, "Code=" + t.Value,
                             complete ? "کامل (با پوشه)" : "فقط دیتابیس");
+
+                        CaseManagement.Enterprise.VersionService.CaptureDeleted(
+                            "TblCase", t.Key, deletedSnapshot);
                         deleted++;
                     }
                     catch (Exception ex)
@@ -1600,7 +1610,7 @@ ORDER BY CenterCode", con))
 
         private void BtnCenterAdd_Click(object sender, EventArgs e)
         {
-            if (!SecurityContext.IsSuperAdmin())
+            if (!CaseManagement.Enterprise.PermissionService.Require("Center.Manage"))
             {
                 UiTheme.ShowWarning(this, "مدیریت مراکز فقط برای مدیر کل (SuperAdmin) مجاز است.");
                 return;
@@ -1638,7 +1648,7 @@ VALUES (@Code, @Name, @Province, @Address, @Phone, @Manager, @Email, @Logo, @Col
 
         private void BtnCenterUpdate_Click(object sender, EventArgs e)
         {
-            if (!SecurityContext.IsSuperAdmin())
+            if (!CaseManagement.Enterprise.PermissionService.Require("Center.Manage"))
             {
                 UiTheme.ShowWarning(this, "مدیریت مراکز فقط برای مدیر کل (SuperAdmin) مجاز است.");
                 return;
@@ -1694,7 +1704,7 @@ WHERE CenterID = @ID", con))
 
         private void BtnCenterToggle_Click(object sender, EventArgs e)
         {
-            if (!SecurityContext.IsSuperAdmin())
+            if (!CaseManagement.Enterprise.PermissionService.Require("Center.Manage"))
             {
                 UiTheme.ShowWarning(this, "مدیریت مراکز فقط برای مدیر کل (SuperAdmin) مجاز است.");
                 return;
@@ -1718,7 +1728,7 @@ WHERE CenterID = @ID", con))
         // از یتیم‌شدن داده، اینجا صراحتاً مسدود می‌شود تا مدیر خودش تصمیم بگیرد).
         private void BtnCenterDelete_Click(object sender, EventArgs e)
         {
-            if (!SecurityContext.IsSuperAdmin())
+            if (!CaseManagement.Enterprise.PermissionService.Require("Center.Manage"))
             {
                 UiTheme.ShowWarning(this, "مدیریت مراکز فقط برای مدیر کل (SuperAdmin) مجاز است.");
                 return;
@@ -1916,6 +1926,33 @@ ORDER BY SortOrder, Value", con))
             return false;
         }
 
+        // ─────────────────────────────────────────────────────────────────────
+        // نگهبانِ حذف و فعال/غیرفعال کردن.
+        //
+        // چرا جدا از IsLookupValueAllowed: آن متد می‌پرسد «آیا این *مقدار* مجاز
+        // است؟» و برای مقادیرِ درست true برمی‌گرداند. اما برای حذف/غیرفعال‌سازی
+        // دقیقاً همان مقادیرِ درست‌اند که نباید دست بخورند؛ پس اینجا کلِ دسته
+        // قفل می‌شود.
+        //
+        // ⚠ باگی که این جلویش را می‌گیرد: غیرفعال‌کردنِ «فعال» باعث می‌شد
+        // LookupHelper.GetValues (که WHERE IsActive = 1 دارد) دیگر آن را
+        // برنگرداند. بعد در فرم پرونده، SetComboBoxText مقدارِ ذخیره‌شده را
+        // در کشویی پیدا نمی‌کرد و بی‌صدا روی خانهٔ صفر — یعنی «متقاضی» —
+        // می‌افتاد؛ یعنی هر پروندهٔ فعالی که باز و ذخیره می‌شد به «متقاضی»
+        // تبدیل می‌شد، بدون هیچ پیامی.
+        // ─────────────────────────────────────────────────────────────────────
+        private bool IsLookupCategoryEditable(string category)
+        {
+            if (!string.Equals(category, CaseDomain.CatServiceStatus, StringComparison.Ordinal))
+                return true;
+
+            UiTheme.ShowWarning(this,
+                "«وضعیت خدمات» فهرست ثابتِ سامانه است؛ مقادیر آن قابل حذف یا غیرفعال‌سازی نیستند.\r\n\r\n" +
+                "این فهرست با قید دیتابیس (CHECK) و فرم پرونده هماهنگ است و حذف یک مقدار، " +
+                "پرونده‌های موجود با همان وضعیت را بلاتکلیف می‌گذارد.");
+            return false;
+        }
+
         private void BtnLookupAdd_Click(object sender, EventArgs e)
         {
             string cat = _cmbCategory?.Text;
@@ -1986,6 +2023,7 @@ ORDER BY SortOrder, Value", con))
         private void BtnLookupDelete_Click(object sender, EventArgs e)
         {
             if (_gridLookup.CurrentRow == null || !_gridLookup.Columns.Contains("LookupID")) return;
+            if (!IsLookupCategoryEditable(_cmbCategory?.Text)) return;
             if (!UiTheme.ShowConfirm(this,
                 "این مقدار کاملاً حذف شود؟\nاگر ممکن است قبلاً در رکوردی استفاده شده باشد، به‌جای حذف از «فعال/غیرفعال» استفاده کنید.",
                 "حذف")) return;
@@ -2007,6 +2045,7 @@ ORDER BY SortOrder, Value", con))
         private void BtnLookupToggle_Click(object sender, EventArgs e)
         {
             if (_gridLookup.CurrentRow == null || !_gridLookup.Columns.Contains("LookupID")) return;
+            if (!IsLookupCategoryEditable(_cmbCategory?.Text)) return;
             int id = Convert.ToInt32(_gridLookup.CurrentRow.Cells["LookupID"].Value);
             using (SQLiteConnection con = _db.GetConnection())
             using (SQLiteCommand cmd = new SQLiteCommand(
@@ -2252,7 +2291,7 @@ ORDER BY SortOrder, Value", con))
 
         // ─── ستون‌های گرید لیست پرونده‌ها (درخواست کاربر) ─────────────────────
         // «کد اختصاصی» همیشه نمایش داده می‌شود و در فهرست نیست؛ کاربر علاوه بر
-        // آن حداکثر چهار ستون انتخاب می‌کند. سقف همان‌جا هنگام تیک‌زدن اعمال
+        // آن حداکثر MaxSelectable ستون انتخاب می‌کند. سقف همان‌جا هنگام تیک‌زدن اعمال
         // می‌شود (نه هنگام ذخیره) تا بازخورد فوری باشد.
         private Panel BuildCaseGridColumnsPanel()
         {
@@ -2827,7 +2866,7 @@ WHERE UserID = @ID", con))
         // ══════════════════════════════════════════════════════════════════
         private void BuildBackupTab(Panel tab)
         {
-            Panel topPanel = new Panel { Dock = DockStyle.Top, Height = 170, BackColor = UiTheme.CardBack, Padding = new Padding(14) };
+            Panel topPanel = new Panel { Dock = DockStyle.Top, Height = 250, BackColor = UiTheme.CardBack, Padding = new Padding(14) };
             FlowLayoutPanel topFlow = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = true };
 
             Panel scheduleField = new Panel { Width = 260, Height = 90, Margin = new Padding(6, 4, 6, 4) };
@@ -2860,6 +2899,34 @@ WHERE UserID = @ID", con))
             };
             topFlow.Controls.Add(_lblBackupStatus);
 
+            // ─── نسخهٔ ۱٫۰ (Option D) — رمزِ بکاپِ خودکار ───────────────────────
+            // آموزش: بکاپِ خودکار بدونِ حضورِ کاربر اجرا می‌شود، پس رمز باید از
+            // پیش تنظیم شده باشد (نگهداری‌شده با DPAPI، نه متنِ‌ساده). بدونِ آن،
+            // AutoBackupService عمداً هیچ بکاپی نمی‌سازد (به‌جای بازگشت به
+            // رمزنگاری‌نشده).
+            topFlow.Controls.Add(new Label
+            {
+                Text = "رمزِ بکاپِ خودکار — بدونِ این رمز، بکاپِ خودکار اجرا نمی‌شود",
+                AutoSize = false, Width = 400, Height = 26, TextAlign = ContentAlignment.MiddleRight,
+                Font = UiTheme.FontBold(UiTheme.SizeSmall), Margin = new Padding(6, 16, 6, 4)
+            });
+
+            _txtAutoBackupPassword = new TextBox { Width = 200, PasswordChar = '*', Margin = new Padding(6, 16, 6, 4) };
+            topFlow.Controls.Add(_txtAutoBackupPassword);
+
+            Button btnSaveAutoPw = UiTheme.CreateButton("ذخیرهٔ رمز", "✔", UiTheme.Success);
+            btnSaveAutoPw.Size = new Size(120, 34);
+            btnSaveAutoPw.Margin = new Padding(6, 12, 6, 4);
+            btnSaveAutoPw.Click += BtnSaveAutoBackupPassword_Click;
+            topFlow.Controls.Add(btnSaveAutoPw);
+
+            _lblAutoBackupPasswordStatus = new Label
+            {
+                AutoSize = false, Width = 880, Height = 22, Font = UiTheme.Font(UiTheme.SizeSmall),
+                TextAlign = ContentAlignment.MiddleRight, Margin = new Padding(6, 4, 6, 4)
+            };
+            topFlow.Controls.Add(_lblAutoBackupPasswordStatus);
+
             topPanel.Controls.Add(topFlow);
 
             FlowLayoutPanel actionFlow = new FlowLayoutPanel
@@ -2876,6 +2943,14 @@ WHERE UserID = @ID", con))
             btnRestore.Size = new Size(200, 38);
             btnRestore.Click += BtnRestoreBackup_Click;
             actionFlow.Controls.Add(btnRestore);
+
+            // آموزش — نسخهٔ ۱٫۰: بکاپِ تازه همیشه رمزنگاری‌شده است، ولی
+            // بکاپ‌های ساخته‌شده پیش از این ارتقا هنوز پوشهٔ رمزنگاری‌نشده‌اند؛
+            // این دکمهٔ جدا، مسیرِ قدیمی را کاملاً دست‌نخورده نگه می‌دارد.
+            Button btnRestoreLegacy = UiTheme.CreateSecondaryButton("بازیابی Backup قدیمی (رمزنگاری‌نشده)", "⬇");
+            btnRestoreLegacy.Size = new Size(230, 38);
+            btnRestoreLegacy.Click += BtnRestoreLegacyBackup_Click;
+            actionFlow.Controls.Add(btnRestoreLegacy);
 
             Button btnVerify = UiTheme.CreateSecondaryButton("بررسی صحت یک Backup", "✔");
             btnVerify.Size = new Size(180, 38);
@@ -2907,6 +2982,45 @@ WHERE UserID = @ID", con))
 
             string lastBackup = SettingsHelper.Get(SettingsHelper.LastBackupDate, "");
             _lblBackupStatus.Text = string.Format(Lang.T("آخرین Backup: {0}"), string.IsNullOrEmpty(lastBackup) ? Lang.T("هنوز گرفته نشده") : lastBackup);
+
+            UpdateAutoBackupPasswordStatus();
+        }
+
+        private void UpdateAutoBackupPasswordStatus()
+        {
+            bool configured = AutoBackupService.IsAutoBackupPasswordConfigured();
+            _lblAutoBackupPasswordStatus.Text = configured
+                ? "وضعیت: رمزِ بکاپِ خودکار تنظیم شده — بکاپِ خودکار فعال است."
+                : "وضعیت: رمزِ بکاپِ خودکار تنظیم نشده — بکاپِ خودکار غیرفعال است.";
+            _lblAutoBackupPasswordStatus.ForeColor = configured ? UiTheme.Success : UiTheme.Danger;
+        }
+
+        private void BtnSaveAutoBackupPassword_Click(object sender, EventArgs e)
+        {
+            if (!CaseManagement.Enterprise.PermissionService.Require("Backup.Create"))
+            {
+                UiTheme.ShowWarning(this, "تنظیمِ رمزِ بکاپِ خودکار فقط برای مدیر کل (SuperAdmin) مجاز است.");
+                return;
+            }
+
+            string pwd = _txtAutoBackupPassword.Text;
+            if (string.IsNullOrEmpty(pwd))
+            {
+                UiTheme.ShowWarning(this, "رمز عبور را وارد کنید.");
+                return;
+            }
+
+            int minLength = SettingsHelper.GetInt(SettingsHelper.MinPasswordLength, 6);
+            if (pwd.Length < minLength)
+            {
+                UiTheme.ShowWarning(this, "رمز عبور باید حداقل " + minLength + " کاراکتر باشد.");
+                return;
+            }
+
+            AutoBackupService.SetAutoBackupPassword(pwd);
+            _txtAutoBackupPassword.Text = "";
+            AppendBackupOutput("رمزِ بکاپِ خودکار ذخیره شد.");
+            UpdateAutoBackupPasswordStatus();
         }
 
         private void BtnSaveBackupSettings_Click(object sender, EventArgs e)
@@ -2924,7 +3038,7 @@ WHERE UserID = @ID", con))
 
         private void BtnBackupNow_Click(object sender, EventArgs e)
         {
-            if (!SecurityContext.IsSuperAdmin())
+            if (!CaseManagement.Enterprise.PermissionService.Require("Backup.Create"))
             {
                 UiTheme.ShowWarning(this, "Backup کامل دیتابیس (شامل داده همه مراکز) فقط برای مدیر کل (SuperAdmin) مجاز است.");
                 return;
@@ -2934,12 +3048,18 @@ WHERE UserID = @ID", con))
             {
                 if (fbd.ShowDialog(this) != DialogResult.OK) return;
 
+                string password;
+                if (!FrmPasswordPrompt.TryPrompt(this, "رمزِ بکاپ",
+                        "این رمز برای رمزنگاریِ بکاپ استفاده می‌شود. بدونِ آن، بازیابی ممکن نیست — آن را جایی امن نگه دارید.",
+                        requireConfirmation: true, password: out password))
+                    return;
+
                 try
                 {
                     BackupHelper helper = new BackupHelper();
-                    string path = helper.ExportBackup(fbd.SelectedPath);
+                    string path = helper.ExportEncryptedBackup(fbd.SelectedPath, password);
                     SettingsHelper.Set(SettingsHelper.LastBackupDate, DateTime.Today.ToString("yyyy-MM-dd"));
-                    AppendBackupOutput("Backup با موفقیت ساخته شد: " + path);
+                    AppendBackupOutput("Backup رمزنگاری‌شده با موفقیت ساخته شد: " + path);
                     LoadBackupSettings();
                 }
                 catch (Exception ex)
@@ -2951,13 +3071,60 @@ WHERE UserID = @ID", con))
 
         private void BtnRestoreBackup_Click(object sender, EventArgs e)
         {
-            if (!SecurityContext.IsSuperAdmin())
+            if (!CaseManagement.Enterprise.PermissionService.Require("Backup.Restore"))
             {
                 UiTheme.ShowWarning(this, "Restore کامل دیتابیس (شامل داده همه مراکز) فقط برای مدیر کل (SuperAdmin) مجاز است.");
                 return;
             }
 
-            using (FolderBrowserDialog fbd = new FolderBrowserDialog { Description = "پوشه Backup را انتخاب کنید" })
+            using (OpenFileDialog ofd = new OpenFileDialog
+            {
+                Title = "فایل Backup رمزنگاری‌شده را انتخاب کنید",
+                Filter = "بکاپ رمزنگاری‌شده (*" + BackupEncryption.EncryptedExtension + ")|*" + BackupEncryption.EncryptedExtension
+            })
+            {
+                if (ofd.ShowDialog(this) != DialogResult.OK) return;
+
+                if (!UiTheme.ShowConfirm(this,
+                    "بارگذاری Backup ممکن است داده‌های موجود را جایگزین یا ادغام کند.\nادامه می‌دهید؟",
+                    "بارگذاری Backup"))
+                    return;
+
+                string password;
+                if (!FrmPasswordPrompt.TryPrompt(this, "رمزِ بکاپ", "رمزِ عبورِ همین فایلِ بکاپ را وارد کنید.",
+                        requireConfirmation: false, password: out password))
+                    return;
+
+                try
+                {
+                    BackupHelper helper = new BackupHelper();
+                    BackupHelper.ImportResult res = helper.ImportEncryptedBackup(ofd.FileName, password);
+                    SettingsHelper.Set(SettingsHelper.LastRestoreDate, DateTime.Today.ToString("yyyy-MM-dd"));
+                    AppendBackupOutput("Restore انجام شد — جدید: " + res.CasesInserted + "، تکراری/رد شده: " + res.CasesSkipped);
+                }
+                catch (BackupEncryption.IntegrityException ex)
+                {
+                    AppendBackupOutput("رمز اشتباه یا فایل خراب/دستکاری‌شده: " + ex.Message);
+                    UiTheme.ShowWarning(this, "رمز عبور اشتباه است یا فایلِ بکاپ خراب/دستکاری‌شده — هیچ داده‌ای تغییر نکرد.");
+                }
+                catch (Exception ex)
+                {
+                    AppendBackupOutput("خطا در Restore: " + ex.Message);
+                }
+            }
+        }
+
+        // آموزش — نسخهٔ ۱٫۰: مسیرِ بازیابیِ بکاپ‌های ساخته‌شده پیش از این ارتقا
+        // (پوشهٔ رمزنگاری‌نشده) — عیناً همان کدِ قدیمی، بدونِ تغییر.
+        private void BtnRestoreLegacyBackup_Click(object sender, EventArgs e)
+        {
+            if (!CaseManagement.Enterprise.PermissionService.Require("Backup.Restore"))
+            {
+                UiTheme.ShowWarning(this, "Restore کامل دیتابیس (شامل داده همه مراکز) فقط برای مدیر کل (SuperAdmin) مجاز است.");
+                return;
+            }
+
+            using (FolderBrowserDialog fbd = new FolderBrowserDialog { Description = "پوشهٔ Backup قدیمی (رمزنگاری‌نشده) را انتخاب کنید" })
             {
                 if (fbd.ShowDialog(this) != DialogResult.OK) return;
 
@@ -2971,7 +3138,7 @@ WHERE UserID = @ID", con))
                     BackupHelper helper = new BackupHelper();
                     BackupHelper.ImportResult res = helper.ImportBackup(fbd.SelectedPath);
                     SettingsHelper.Set(SettingsHelper.LastRestoreDate, DateTime.Today.ToString("yyyy-MM-dd"));
-                    AppendBackupOutput("Restore انجام شد — جدید: " + res.CasesInserted + "، تکراری/رد شده: " + res.CasesSkipped);
+                    AppendBackupOutput("Restore (قدیمی) انجام شد — جدید: " + res.CasesInserted + "، تکراری/رد شده: " + res.CasesSkipped);
                 }
                 catch (Exception ex)
                 {
@@ -2980,29 +3147,35 @@ WHERE UserID = @ID", con))
             }
         }
 
-        // بررسی صحت Backup بدون تغییر دیتابیس فعلی — فقط فایل XML بکاپ را در
-        // یک DataSet موقت می‌خواند و تعداد ردیف هر جدول را گزارش می‌دهد.
+        // بررسی صحت/رمزِ یک Backup رمزنگاری‌شده بدون تغییر دیتابیس فعلی —
+        // فقط بکاپ رمزگشایی و در یک DataSet موقت خوانده می‌شود.
         private void BtnVerifyBackup_Click(object sender, EventArgs e)
         {
-            using (FolderBrowserDialog fbd = new FolderBrowserDialog { Description = "پوشه Backup را برای بررسی انتخاب کنید" })
+            using (OpenFileDialog ofd = new OpenFileDialog
             {
-                if (fbd.ShowDialog(this) != DialogResult.OK) return;
+                Title = "فایل Backup را برای بررسی انتخاب کنید",
+                Filter = "بکاپ رمزنگاری‌شده (*" + BackupEncryption.EncryptedExtension + ")|*" + BackupEncryption.EncryptedExtension
+            })
+            {
+                if (ofd.ShowDialog(this) != DialogResult.OK) return;
+
+                string password;
+                if (!FrmPasswordPrompt.TryPrompt(this, "رمزِ بکاپ", "رمزِ عبورِ همین فایلِ بکاپ را وارد کنید.",
+                        requireConfirmation: false, password: out password))
+                    return;
 
                 try
                 {
-                    string xmlPath = System.IO.Path.Combine(fbd.SelectedPath, "CaseManagementBackup.xml");
-                    if (!System.IO.File.Exists(xmlPath))
-                    {
-                        AppendBackupOutput("نامعتبر: فایل CaseManagementBackup.xml در این پوشه پیدا نشد.");
-                        return;
-                    }
-
-                    DataSet ds = new DataSet();
-                    ds.ReadXml(xmlPath);
+                    BackupHelper helper = new BackupHelper();
+                    DataSet ds = helper.VerifyEncryptedBackup(ofd.FileName, password);
 
                     AppendBackupOutput("Backup معتبر است. جدول‌های موجود:");
                     foreach (DataTable t in ds.Tables)
                         AppendBackupOutput("  " + t.TableName + ": " + t.Rows.Count + " رکورد");
+                }
+                catch (BackupEncryption.IntegrityException ex)
+                {
+                    AppendBackupOutput("نامعتبر: " + ex.Message);
                 }
                 catch (Exception ex)
                 {

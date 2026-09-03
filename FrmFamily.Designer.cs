@@ -20,6 +20,7 @@ namespace CaseManagement
             this.btnNew                 = new System.Windows.Forms.Button();
             this.btnDelete              = new System.Windows.Forms.Button();
             this.btnEdit                = new System.Windows.Forms.Button();
+            this.btnHistory             = new System.Windows.Forms.Button();
             this.btnSave                = new System.Windows.Forms.Button();
             this.btnPrint               = new System.Windows.Forms.Button();
             this.btnFamilyCard          = new System.Windows.Forms.Button();
@@ -153,6 +154,37 @@ namespace CaseManagement
             this.lblHeadInfo.AutoEllipsis = true;
             this.lblHeadInfo.Text      = "سرپرست: —";
 
+            // ─── پیمایشِ پرونده‌ها از داخلِ همین تب (درخواستِ کاربر) ──────────
+            // آموزش — «پنجرهٔ اعضاء خانواده و اسناد دکمهٔ بعدی و قبلی داشته
+            // باشد که نظر به شماره فرم پرونده بالا و پایین برود». خودِ این فرم
+            // هیچ دسترسی‌ای به بارگذاریِ پرونده ندارد؛ FrmCase یک delegate
+            // (CaseNavigator) می‌دهد و این دو دکمه فقط آن را صدا می‌زنند. در
+            // حالتِ مستقل/مودال (بدون FrmCase) این نوار پنهان می‌ماند.
+            this.btnPrevCase = new System.Windows.Forms.Button();
+            this.btnNextCase = new System.Windows.Forms.Button();
+            SetCaseNavButton(this.btnPrevCase, "btnPrevCase", "◀  پروندهٔ قبلی", this.btnPrevCase_Click);
+            SetCaseNavButton(this.btnNextCase, "btnNextCase", "پروندهٔ بعدی  ▶", this.btnNextCase_Click);
+
+            this.panCaseNav = new System.Windows.Forms.FlowLayoutPanel();
+            this.panCaseNav.Name          = "panCaseNav";
+            this.panCaseNav.Dock          = System.Windows.Forms.DockStyle.Left;
+            this.panCaseNav.Width         = 300;
+            this.panCaseNav.FlowDirection = System.Windows.Forms.FlowDirection.LeftToRight;
+            this.panCaseNav.WrapContents  = false;
+            this.panCaseNav.Padding       = new System.Windows.Forms.Padding(6, 4, 6, 4);
+            this.panCaseNav.BackColor     = CaseManagement.Helpers.UiTheme.PrimaryDark;
+            this.panCaseNav.Visible       = false; // فقط در حالتِ embedded روشن می‌شود
+            this.panCaseNav.Controls.Add(this.btnPrevCase);
+            this.panCaseNav.Controls.Add(this.btnNextCase);
+
+            var headBar = new System.Windows.Forms.Panel();
+            headBar.Name      = "headBar";
+            headBar.Dock      = System.Windows.Forms.DockStyle.Fill;
+            headBar.BackColor = CaseManagement.Helpers.UiTheme.PrimaryDark;
+            headBar.Controls.Add(this.lblHeadInfo);
+            headBar.Controls.Add(this.panCaseNav);
+            this.headBarPanel = headBar;
+
             // ═══════════════════════════════════════════════════════════════════
             // تب ۱: مشخصات کلی — دو ستونه، برچسبِ بالای فیلد (طبق طرح مرجع)
             // آموزش — هیچ فیلدی حذف/جابه‌جا نشده؛ فقط سبکِ چیدمان از «برچسبِ
@@ -187,9 +219,25 @@ namespace CaseManagement
             this.fieldStopReason.Visible = false;
 
             var tabGeneral = new System.Windows.Forms.TabPage("مشخصات کلی");
-            tabGeneral.BackColor = CaseManagement.Helpers.UiTheme.CardBack;
+            tabGeneral.BackColor  = CaseManagement.Helpers.UiTheme.CardBack;
+            // آموزش — درخواستِ کاربر: «تب اعضاء خانواده باید دقیقاً مثل بخش
+            // سرپرست باشد». تفاوتِ بصری این دو، نه فیلدها بود (هر دو از همان
+            // FieldBox استفاده می‌کنند) بلکه *قاب*شان: در FrmCase هر تب یک
+            // پانلِ اسکرولِ پدینگ‌دار دارد و محتوایش داخل یک SectionCard سفیدِ
+            // گردگوشه با سربرگِ عنوان می‌نشیند (MkCaseTab/MkCaseCard). همان دو
+            // پوسته این‌جا هم اضافه شد — هیچ فیلد/کنترلی جابه‌جا یا حذف نشد،
+            // فقط والدشان یک کارت شد.
+            // آموزش — رفعِ گزارشِ کاربر «فقط یک قسمتِ کوچک از تبِ اعضاء دیده
+            // می‌شود»: این تب ۱۲ فیلد دارد و tlpGeneral (Dock=Top، AutoSize)
+            // هیچ محدودیتی روی ارتفاعش ندارد. وقتی FrmFamily داخلِ تبِ
+            // «اعضاء خانواده»ی FrmCase جاسازی می‌شود، ارتفاعِ در دسترس از
+            // حالتِ مستقل/مودالِ همین فرم کمتر است، پس بخشی از فیلدها زیرِ
+            // لبهٔ تب می‌افتاد و بدونِ اسکرول قابلِ دیدن نبود. الگوی حلِ همین
+            // مشکل از قبل روی تبِ «مشخصات تحصیلی» (پایین‌تر) پیاده شده بود؛
+            // همان AutoScroll اینجا هم تکرار می‌شود — هیچ فیلدی جابه‌جا/حذف
+            // نشد، فقط سرریز به‌جای قطع‌شدن، قابلِ اسکرول می‌شود.
             tabGeneral.Padding   = System.Windows.Forms.Padding.Empty;
-            tabGeneral.Controls.Add(tlpGeneral);
+            tabGeneral.Controls.Add(MkTabScroller(MkSectionCard("مشخصات کلی", tlpGeneral)));
 
             // ═══════════════════════════════════════════════════════════════════
             // تب ۲: مشخصات جسمی — ۴ ردیف استاندارد + عنوان + textarea پر
@@ -216,16 +264,33 @@ namespace CaseManagement
             boxDisabilityDetails.Height = 150;
 
             var physicalHost = new System.Windows.Forms.Panel();
-            physicalHost.Dock    = System.Windows.Forms.DockStyle.Fill;
+            // آموزش — از Fill به Top تغییر کرد چون حالا داخلِ کارتِ AutoSize
+            // می‌نشیند و کنترلِ Fill در چنین کارتی ارتفاع صفر می‌گیرد. ارتفاع
+            // = ارتفاعِ خودِ کادرِ توضیحات (۱۵۰) + پدینگِ بالا/پایین (۴+۱۴).
+            physicalHost.Dock    = System.Windows.Forms.DockStyle.Top;
+            physicalHost.Height  = 168;
             physicalHost.Padding = new System.Windows.Forms.Padding(18, 4, 18, 14);
             physicalHost.BackColor = System.Drawing.Color.Transparent;
             physicalHost.Controls.Add(boxDisabilityDetails);
 
+            // میزبانِ محتوای این تب: شبکهٔ فیلدها بالا، کادرِ شرحِ معلولیت پایین.
+            // ترتیبِ افزودن عمدی است (همان قاعدهٔ Dock=Top در FrmCase): کنترلی
+            // که آخر اضافه شود بالاتر می‌نشیند.
+            var physicalContent = new System.Windows.Forms.Panel();
+            physicalContent.Dock         = System.Windows.Forms.DockStyle.Top;
+            physicalContent.AutoSize     = true;
+            physicalContent.AutoSizeMode = System.Windows.Forms.AutoSizeMode.GrowAndShrink;
+            physicalContent.BackColor    = System.Drawing.Color.Transparent;
+            physicalContent.Controls.Add(physicalHost);
+            physicalContent.Controls.Add(tlpPhysical);
+
             var tabPhysical = new System.Windows.Forms.TabPage("مشخصات جسمی");
-            tabPhysical.BackColor = CaseManagement.Helpers.UiTheme.CardBack;
+            tabPhysical.BackColor  = CaseManagement.Helpers.UiTheme.CardBack;
+            // آموزش — همان دلیلِ tabGeneral (بالاتر): هم‌سو با الگوی تبِ
+            // «مشخصات تحصیلی»، این تب هم AutoScroll می‌گیرد تا در ارتفاعِ
+            // فشردهٔ حالتِ embedded، «شرح تفصیلی معلولیت» زیرِ لبه گم نشود.
             tabPhysical.Padding   = System.Windows.Forms.Padding.Empty;
-            tabPhysical.Controls.Add(physicalHost);
-            tabPhysical.Controls.Add(tlpPhysical);
+            tabPhysical.Controls.Add(MkTabScroller(MkSectionCard("مشخصات جسمی", physicalContent)));
 
             // ═══════════════════════════════════════════════════════════════════
             // تب ۳: مشخصات تحصیلی — ۱۵ ردیف، AutoScroll، Dock=Top+AutoSize
@@ -253,9 +318,8 @@ namespace CaseManagement
 
             var tabEdu = new System.Windows.Forms.TabPage("مشخصات تحصیلی");
             tabEdu.BackColor  = CaseManagement.Helpers.UiTheme.CardBack;
-            tabEdu.AutoScroll = true;
             tabEdu.Padding    = System.Windows.Forms.Padding.Empty;
-            tabEdu.Controls.Add(tlpEdu);
+            tabEdu.Controls.Add(MkTabScroller(MkSectionCard("مشخصات تحصیلی", tlpEdu)));
 
             // کنترل‌های مخفی که توسط منطق .cs استفاده می‌شوند
             this.txtOfficialStatus.Name    = "txtOfficialStatus";
@@ -378,6 +442,8 @@ namespace CaseManagement
             SetBtn(this.btnSave,   "btnSave",   "✔   ذخیره",  this.btnSave_Click);
             SetBtn(this.btnEdit,   "btnEdit",   "ویرایش",      this.btnEdit_Click);
             SetBtn(this.btnDelete, "btnDelete", "✕   حذف",     this.btnDelete_Click);
+            // تاریخچهٔ تغییراتِ همین عضو — هم‌الگوی دکمهٔ «تاریخچه» در فرم پرونده.
+            SetBtn(this.btnHistory,"btnHistory","تاریخچه",     this.btnHistory_Click);
             SetBtn(this.btnPrint,  "btnPrint",  "چاپ فهرست",   this.btnPrint_Click);
             SetBtn(this.btnFamilyCard, "btnFamilyCard", "چاپ کارت خانواده", this.btnFamilyCard_Click);
 
@@ -385,6 +451,7 @@ namespace CaseManagement
             PaintBtn(this.btnSave,   CaseManagement.Helpers.UiTheme.Success, true);
             PaintBtn(this.btnEdit,   CaseManagement.Helpers.UiTheme.PrimaryLight, true);
             PaintBtn(this.btnDelete, CaseManagement.Helpers.UiTheme.Danger, true);
+            PaintBtn(this.btnHistory, System.Drawing.Color.White, false);
             PaintBtn(this.btnPrint,  System.Drawing.Color.White, false);
             PaintBtn(this.btnFamilyCard, System.Drawing.Color.White, false);
 
@@ -399,6 +466,7 @@ namespace CaseManagement
             mainActions.Controls.Add(this.btnSave);
             mainActions.Controls.Add(this.btnEdit);
             mainActions.Controls.Add(this.btnDelete);
+            mainActions.Controls.Add(this.btnHistory);
 
             var secondaryActions = new System.Windows.Forms.FlowLayoutPanel();
             secondaryActions.Name          = "secondaryActions";
@@ -432,8 +500,8 @@ namespace CaseManagement
             rootLayout.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent,  100F));
             rootLayout.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute,  60F));
 
-            rootLayout.Controls.Add(this.lblHeadInfo, 0, 0);
-            rootLayout.SetColumnSpan(this.lblHeadInfo, 2);
+            rootLayout.Controls.Add(headBar, 0, 0);
+            rootLayout.SetColumnSpan(headBar, 2);
             rootLayout.Controls.Add(fieldsPanel, 0, 1);
             rootLayout.Controls.Add(rightPanel,  1, 1);
             rootLayout.Controls.Add(buttonBar,   0, 2);
@@ -527,6 +595,84 @@ namespace CaseManagement
             box.Dock = System.Windows.Forms.DockStyle.Top;
             grid.Controls.Add(box);
             return box;
+        }
+
+        // ─── قابِ تب‌ها: همان دو پوسته‌ای که FrmCase دارد ────────────────────
+        // آموزش — این دو متد عمداً کپیِ رفتارِ MkCaseTab/MkCaseCard در
+        // FrmCase.Designer.cs هستند (نه ارجاع به آن‌ها، چون آن‌ها private و
+        // مخصوصِ آن فرم‌اند و طبق قواعدِ پروژه نباید امضای فایلِ دیگری عوض
+        // شود). نتیجه: تبِ «اعضاء خانواده» دقیقاً همان کارتِ سفیدِ گردگوشه،
+        // همان سربرگ، همان پدینگ و همان اسکرول را می‌گیرد که بخشِ سرپرست دارد.
+        private static System.Windows.Forms.Panel MkTabScroller(System.Windows.Forms.Control card)
+        {
+            FieldsScrollPanel scroller = new FieldsScrollPanel();
+            scroller.Dock      = System.Windows.Forms.DockStyle.Fill;
+            scroller.AutoScroll = true;
+            scroller.Padding   = new System.Windows.Forms.Padding(10, 10, 10, 10);
+            scroller.BackColor = System.Drawing.Color.Transparent;
+            scroller.Controls.Add(card);
+            return scroller;
+        }
+
+        private static CaseManagement.Helpers.SectionCard MkSectionCard(
+            string title, System.Windows.Forms.Control content)
+        {
+            content.Dock = System.Windows.Forms.DockStyle.Top;
+
+            var header = new System.Windows.Forms.Label();
+            header.Dock      = System.Windows.Forms.DockStyle.Top;
+            header.Height    = 40;
+            header.Text      = title;
+            header.Font      = CaseManagement.Helpers.UiTheme.FontBold(CaseManagement.Helpers.UiTheme.SizeMedium);
+            header.ForeColor = CaseManagement.Helpers.UiTheme.TextDark;
+            header.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            header.Padding   = new System.Windows.Forms.Padding(0, 0, 18, 0);
+            header.BackColor = System.Drawing.Color.Transparent;
+
+            var card = new CaseManagement.Helpers.SectionCard();
+            card.Dock         = System.Windows.Forms.DockStyle.Top;
+            card.AutoSize     = true;
+            card.AutoSizeMode = System.Windows.Forms.AutoSizeMode.GrowAndShrink;
+            card.Margin       = new System.Windows.Forms.Padding(0, 0, 0, 12);
+            card.Padding      = new System.Windows.Forms.Padding(2, 2, 2, 10);
+            card.Controls.Add(content);
+            card.Controls.Add(header);
+            return card;
+        }
+
+        // همان الگوی FieldsScrollPanel در FrmCase.Designer.cs — معاف‌کردنِ پنل
+        // از ارثِ WS_EX_LAYOUTRTL تا اسکرول‌بار سمتِ راستِ واقعی بماند.
+        private class FieldsScrollPanel : System.Windows.Forms.Panel
+        {
+            protected override System.Windows.Forms.CreateParams CreateParams
+            {
+                get
+                {
+                    const int WS_EX_NOINHERITLAYOUT = 0x00100000;
+                    System.Windows.Forms.CreateParams cp = base.CreateParams;
+                    cp.ExStyle |= WS_EX_NOINHERITLAYOUT;
+                    return cp;
+                }
+            }
+        }
+
+        // دکمهٔ «پروندهٔ قبلی/بعدی» روی نوارِ سرمه‌ایِ بالای فرم.
+        private static void SetCaseNavButton(System.Windows.Forms.Button btn, string name,
+            string text, System.EventHandler onClick)
+        {
+            btn.Name      = name;
+            btn.Text      = text;
+            btn.Size      = new System.Drawing.Size(140, 30);
+            btn.Margin    = new System.Windows.Forms.Padding(3, 1, 3, 1);
+            btn.Font      = CaseManagement.Helpers.UiTheme.FontBold(CaseManagement.Helpers.UiTheme.SizeSmall);
+            btn.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            btn.FlatAppearance.BorderSize = 0;
+            btn.BackColor = CaseManagement.Helpers.UiTheme.Primary;
+            btn.ForeColor = System.Drawing.Color.White;
+            btn.UseVisualStyleBackColor = false;
+            btn.Cursor    = System.Windows.Forms.Cursors.Hand;
+            btn.TabStop   = false;
+            btn.Click    += onClick;
         }
 
         // ساخت TableLayoutPanel دو ستونه: col0=لیبل (عرض ثابت) | col1=فیلد (پر)
@@ -631,6 +777,7 @@ namespace CaseManagement
         private System.Windows.Forms.Button btnNew;
         private System.Windows.Forms.Button btnDelete;
         private System.Windows.Forms.Button btnEdit;
+        private System.Windows.Forms.Button btnHistory;
         private System.Windows.Forms.Button btnSave;
         private System.Windows.Forms.Button btnPrint;
         private System.Windows.Forms.Button btnFamilyCard;
@@ -698,6 +845,10 @@ namespace CaseManagement
         private System.Windows.Forms.Label lblSuspensionReason;
         private CaseManagement.Helpers.FieldBox fieldSuspensionReason;
         private System.Windows.Forms.Label lblHeadInfo;
+        private System.Windows.Forms.Button btnPrevCase;
+        private System.Windows.Forms.Button btnNextCase;
+        private System.Windows.Forms.FlowLayoutPanel panCaseNav;
+        private System.Windows.Forms.Panel headBarPanel;
         private System.Windows.Forms.Label lblDisabilityDetails;
         private System.Windows.Forms.TextBox txtDisabilityDetails;
         private System.Windows.Forms.TabControl tabsMain;

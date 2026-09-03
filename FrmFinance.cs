@@ -390,7 +390,7 @@ namespace CaseManagement
         {
             if (_isSavingAssistance) return;
 
-            if (!SecurityContext.CanEdit())
+            if (!CaseManagement.Enterprise.PermissionService.Require("Finance.Edit"))
             {
                 UiTheme.ShowWarning(this, "کاربر فقط مشاهده اجازه ثبت کمک ندارد.");
                 return;
@@ -493,6 +493,14 @@ VALUES (@CasID, @AssistanceDate, @Amount, @AssistanceType, @Description, @Create
                     CaseManagement.Sync.OfflineSyncInitializer.OperationCreate);
             CaseManagement.Sync.SyncOutboxService.Capture("TblCase", selectedCaseId,
                 CaseManagement.Sync.OfflineSyncInitializer.OperationUpdate);
+
+            // تاریخچهٔ کاملِ رکورد — هم برای کمکِ تازه‌ثبت‌شده و هم برای پرونده‌ای
+            // که نوعِ درخواستی‌اش تغییر کرد.
+            if (newAssistanceId > 0)
+                CaseManagement.Enterprise.VersionService.Capture("TblAssistance", newAssistanceId,
+                    CaseManagement.Enterprise.VersionService.OperationInsert);
+            CaseManagement.Enterprise.VersionService.Capture("TblCase", selectedCaseId,
+                CaseManagement.Enterprise.VersionService.OperationUpdate);
 
             LoadAssistance();
             LoadReports();

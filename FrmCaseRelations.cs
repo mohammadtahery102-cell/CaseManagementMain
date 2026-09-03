@@ -172,7 +172,7 @@ namespace CaseManagement
 
         private void btnAdd_Click(object sender, EventArgs e)
         {
-            if (!SecurityContext.CanEdit())
+            if (!CaseManagement.Enterprise.PermissionService.Require("CaseRelation.Edit"))
             {
                 Msg.Show("کاربر فقط مشاهده اجازه افزودن رابطه ندارد.");
                 return;
@@ -266,7 +266,7 @@ namespace CaseManagement
 
         private void btnDelete_Click(object sender, EventArgs e)
         {
-            if (!SecurityContext.CanDelete())
+            if (!CaseManagement.Enterprise.PermissionService.Require("CaseRelation.Delete"))
             {
                 Msg.Show("حذف رابطه فقط برای مدیر سیستم مجاز است.");
                 return;

@@ -18,6 +18,14 @@ namespace CaseManagement.Enterprise
 
         public FrmErrorLog()
         {
+            // دفاع لایه‌ای: حتی اگر این فرم مستقیم ساخته شود، بدون مجوز
+            // «مشاهده گزارش خطاها» بلافاصله بسته می‌شود.
+            if (!PermissionService.Require("Error.View"))
+            {
+                Load += delegate { Close(); };
+                return;
+            }
+
             BuildUi();
             LoadErrors();
         }

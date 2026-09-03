@@ -25,6 +25,14 @@ namespace CaseManagement.Enterprise
         // نمایش تاریخچه یک رکورد مشخص.
         public FrmVersions(string entityName, int entityId)
         {
+            // دفاع لایه‌ای: حتی اگر این فرم مستقیم ساخته شود، بدون مجوز
+            // «مشاهده تاریخچه نسخه‌ها» بلافاصله بسته می‌شود.
+            if (!PermissionService.Require("Version.View"))
+            {
+                Load += delegate { Close(); };
+                return;
+            }
+
             _entityName = entityName ?? "";
             _entityId   = entityId;
 

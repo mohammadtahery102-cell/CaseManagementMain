@@ -690,6 +690,81 @@ CREATE TABLE IF NOT EXISTS EntUserPermission (
 
             AddPermission(con, "Finance.View",    "بخش مالی",       "مالی", 230, true, true,  true);
             AddPermission(con, "Accounting.View", "حسابداری ایتام", "مالی", 240, true, true,  true);
+
+            // ─── Sprint 0A — بستن شکاف‌های بدون بررسی مجوز (خانواده/اسناد/
+            // متقاضی/روابط/بایگانی) و عملیات چاپ و خروجی و تاریخچه. مقادیر
+            // پیش‌فرض دقیقاً همان دسترسی فعلی بر پایه SecurityContext را
+            // بازتولید می‌کنند تا هیچ کاربری روز اول چیزی کم یا زیاد نشود.
+            AddPermission(con, "Family.Edit",       "ویرایش عضو خانواده",   "خانواده", 250, true, true,  false);
+            AddPermission(con, "Family.Delete",     "حذف عضو خانواده",      "خانواده", 260, true, false, false);
+            AddPermission(con, "Family.Print",      "چاپ عضو خانواده",      "خانواده", 270, true, true,  true);
+
+            AddPermission(con, "Docs.Edit",         "ویرایش سند",           "اسناد", 280, true, true,  false);
+            AddPermission(con, "Docs.Delete",       "حذف سند",              "اسناد", 290, true, false, false);
+            AddPermission(con, "Docs.Print",        "چاپ سند",              "اسناد", 300, true, true,  true);
+
+            AddPermission(con, "Applicant.Edit",    "ویرایش متقاضی",        "متقاضیان", 310, true, true,  false);
+            AddPermission(con, "Applicant.Delete",  "حذف متقاضی",           "متقاضیان", 320, true, false, false);
+
+            AddPermission(con, "CaseRelation.Edit",   "ثبت رابطه پرونده",   "پرونده", 330, true, true,  false);
+            AddPermission(con, "CaseRelation.Delete", "حذف رابطه پرونده",   "پرونده", 340, true, false, false);
+
+            AddPermission(con, "Case.Print",        "چاپ پرونده",           "پرونده", 350, true, true,  true);
+
+            AddPermission(con, "Archive.Restore",         "بازیابی از بایگانی", "بایگانی", 360, true, false, false);
+            AddPermission(con, "Archive.PermanentDelete", "حذف دائمی از بایگانی", "بایگانی", 370, false, false, false);
+
+            AddPermission(con, "Report.Run",    "اجرای گزارش‌ساز پویا", "گزارش", 380, true, true, true);
+            AddPermission(con, "Report.Export", "خروجی گزارش‌ساز پویا", "گزارش", 390, true, true, true);
+
+            AddPermission(con, "Barcode.Print", "چاپ بارکد", "بارکد", 400, true, true, true);
+
+            AddPermission(con, "GuardianCard.Print",           "چاپ کارت شناسایی",   "کارت شناسایی", 410, true, true, true);
+            AddPermission(con, "GuardianCard.ManageTemplates", "مدیریت قالب کارت",   "کارت شناسایی", 420, true, false, false);
+
+            // ─── Phase 2 — کنترلِ دقیق‌ترِ عملیاتِ قالبِ کارت. مقادیرِ پیش‌فرض
+            // عمداً هم‌سطحِ GuardianCard.ManageTemplates بالا هستند (فقط
+            // Admin) — این پنج کلید فقط برایِ کنترلِ ریزتر در کنارِ دروازهٔ
+            // کلیِ فرم اضافه شده‌اند، نه جایگزینِ آن؛ خودِ ManageTemplates
+            // دست‌نخورده می‌ماند.
+            AddPermission(con, "GuardianCard.Template.View",     "مشاهدهٔ قالب‌های کارت", "کارت شناسایی", 421, true, true,  true);
+            AddPermission(con, "GuardianCard.Template.Create",   "ایجاد قالب کارت",       "کارت شناسایی", 422, true, false, false);
+            AddPermission(con, "GuardianCard.Template.Edit",     "ویرایش قالب کارت",      "کارت شناسایی", 423, true, false, false);
+            AddPermission(con, "GuardianCard.Template.Delete",   "حذف قالب کارت",         "کارت شناسایی", 424, true, false, false);
+            AddPermission(con, "GuardianCard.Template.Activate", "فعال/غیرفعال‌سازی قالب کارت", "کارت شناسایی", 425, true, false, false);
+
+            // توجه: «AssistanceReceipt.Print» عمداً در Sprint 0A افزوده نشده.
+            // چاپ رسید مساعدت از FrmFinance.cs فراخوانی می‌شود و طبق محدودیت
+            // صریح این اسپرینت («Do not touch Finance») دست‌نخورده باقی مانده؛
+            // نامزد Sprint 0B/بعدی است (نگاه کنید گزارش تکمیل Sprint 0A).
+
+            // ─── نسخهٔ ۱٫۰ / فاز ۳ (موج ۴) — مالی و حسابداری. مقادیر پیش‌فرض
+            // دقیقاً همان دسترسی فعلیِ بر پایهٔ SecurityContext را بازتولید
+            // می‌کنند تا هیچ کاربری روز اول چیزی کم یا زیاد نشود.
+            AddPermission(con, "Finance.Edit",    "ثبت/ویرایش کمک مالی",     "مالی", 440, true, true,  false);
+
+            AddPermission(con, "Accounting.Edit",        "ثبت/ویرایش سند حسابداری", "حسابداری", 450, true, true,  false);
+            AddPermission(con, "Accounting.Reverse",     "ابطال سند حسابداری",      "حسابداری", 460, true, false, false);
+            AddPermission(con, "Accounting.ClosePeriod", "بستن دوره مالی",          "حسابداری", 470, true, false, false);
+            AddPermission(con, "Accounting.Repair",      "اصلاح داده‌های تاریخی حسابداری", "حسابداری", 480, false, false, false);
+            AddPermission(con, "Accounting.Backup",      "پشتیبان‌گیری/بازیابی حسابداری",  "حسابداری", 490, false, false, false);
+
+            // ─── نسخهٔ ۱٫۰ / فاز ۴ (موج ۵) — کاربران/تنظیمات/پشتیبان‌گیری/
+            // همگام‌سازی/مراکز/ماژول‌ها. «User.Manage» و «Module.Manage» از
+            // قبل (پایهٔ اولیهٔ PermissionService) تعریف شده بودند ولی به هیچ
+            // مسیری وصل نبودند — همین‌جا فقط سیمِ‌کشی می‌شوند، کلید تازه‌ای
+            // لازم نیست. مراکز/پشتیبان‌گیری عمداً فقط SuperAdmin می‌مانند
+            // (دقیقاً همان رفتار فعلی؛ گسترش به Admin یک تصمیمِ محصولیِ جداست).
+            AddPermission(con, "Center.Manage",  "مدیریت مراکز",                 "سیستم", 500, false, false, false);
+            AddPermission(con, "Backup.Create",  "پشتیبان‌گیری کامل نرم‌افزار",   "سیستم", 510, false, false, false);
+            AddPermission(con, "Backup.Restore", "بازیابی کامل نرم‌افزار",       "سیستم", 520, false, false, false);
+            AddPermission(con, "Sync.Execute",   "اجرای همگام‌سازی",             "همگام‌سازی", 530, true, true, false);
+
+            // دستیار هوشمند — فاز ۱. طبق AI_ASSISTANT_PHASE1_FIXES.md §5:
+            // جست‌وجو برای همه (مثل Case.View)؛ ایجاد یادآوری فقط برای کسانی که
+            // خودشان می‌توانند یادآوری بسازند (Operator به بالا).
+            AddPermission(con, "AI.Search",           "جستجوی هوشمند (زبان طبیعی)",   "دستیار هوشمند", 610, true, true, true);
+            AddPermission(con, "AI.Reminders.Create", "ایجاد یادآوری با دستور طبیعی", "دستیار هوشمند", 611, true, true, false);
         }
 
         private static void AddPermission(SQLiteConnection con, string key, string name,

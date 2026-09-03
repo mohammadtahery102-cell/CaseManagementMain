@@ -350,7 +350,7 @@ namespace CaseManagement
 
         private void RestoreSelected()
         {
-            if (!SecurityContext.CanDelete())
+            if (!CaseManagement.Enterprise.PermissionService.Require("Archive.Restore"))
             {
                 UiTheme.ShowWarning(this, "بازگردانی فقط برای مدیر سیستم مجاز است.");
                 return;
@@ -459,7 +459,7 @@ namespace CaseManagement
             if (IsDocMode)
                 return;
 
-            if (!SecurityContext.IsSuperAdmin())
+            if (!CaseManagement.Enterprise.PermissionService.Require("Archive.PermanentDelete"))
             {
                 UiTheme.ShowWarning(this, "حذف همیشگی فقط برای مدیر ارشد سیستم مجاز است.");
                 return;
@@ -490,6 +490,11 @@ namespace CaseManagement
                 var pendingDelete =
                     CaseManagement.Sync.SyncOutboxService.PrepareDelete("TblCase", casId.Value);
 
+                // به همان دلیل، عکسِ فوریِ کاملِ رکورد هم پیش از DELETE برداشته
+                // می‌شود و نسخهٔ «حذف» فقط پس از حذفِ موفق ثبت می‌گردد.
+                string deletedSnapshot = CaseManagement.Enterprise.VersionService
+                    .ReadSnapshotText("TblCase", casId.Value);
+
                 using (SQLiteConnection con = db.GetConnection())
                 using (SQLiteCommand cmd = new SQLiteCommand(
                     "DELETE FROM TblCase WHERE CasID = @CasID AND IsArchived = 1", con))
@@ -511,6 +516,9 @@ namespace CaseManagement
                     FileHelper.DeleteFileIfExists(path);
 
                 AuditLogger.Log("حذف همیشگی", "TblCase", casId.Value, oldValue, "");
+
+                CaseManagement.Enterprise.VersionService.CaptureDeleted(
+                    "TblCase", casId.Value, deletedSnapshot);
 
                 UiTheme.ShowSuccess(this, "پرونده برای همیشه حذف شد.");
                 LoadArchived();

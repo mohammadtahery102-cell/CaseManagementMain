@@ -288,7 +288,7 @@ ON CONFLICT(UserID, ModuleKey) DO UPDATE SET IsEnabled = @Enabled;",
         // بررسی‌های مشترک: دسترسی مدیر و ممنوعیت تغییر ماژول پایه.
         private static WorkflowActionResult EnsureManageable(string moduleKey)
         {
-            if (!SecurityContext.IsAdmin())
+            if (!PermissionService.Require("Module.Manage"))
                 return WorkflowActionResult.Fail("مدیریت ماژول‌ها فقط برای مدیر سیستم مجاز است.");
 
             if (string.IsNullOrWhiteSpace(moduleKey))

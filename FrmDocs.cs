@@ -38,10 +38,21 @@ namespace CaseManagement
         // FrmCase این پرچم را قبل از Show() روی true می‌گذارد.
         public bool IsEmbedded { get; set; } = false;
 
+        // آموزش — همان delegate پیمایشی که FrmFamily دارد (درخواستِ کاربر:
+        // «پنجرهٔ اعضاء خانواده و اسناد دکمهٔ بعدی و قبلی داشته باشد که نظر به
+        // شمارهٔ فرم پرونده بالا و پایین برود»). FrmCase موقعِ جاسازی مقدارش
+        // را می‌دهد؛ در حالتِ مستقل null می‌ماند و نوارِ دکمه‌ها پنهان است.
+        public Func<int, bool> CaseNavigator { get; set; }
+
         private int currentDocId = 0;
         private string storedDocFilePath = "";
         private string pendingSourceFilePath = "";
         private string pendingOriginalFileName = "";
+
+        // ─── ویژگی ۵ (فعال‌سازی) — قفل رکورد، عیناً همان الگوی FrmFamily ────
+        private int  _docLockId = 0;
+        private bool _docLockedByOther = false;
+        private System.Windows.Forms.Timer _docLockHeartbeat;
 
         public FrmDocs()
         {
@@ -76,6 +87,44 @@ namespace CaseManagement
             btnSave.BackColor = UiTheme.Success;
             btnSave.FlatAppearance.MouseOverBackColor = ControlPaint.Light(UiTheme.Success, 0.18f);
             btnSave.FlatAppearance.MouseDownBackColor = ControlPaint.Dark(UiTheme.Success, 0.08f);
+
+            // آموزش — ApplySweep هر Panel را سفید و هر Label را تیره می‌کند؛
+            // نوارِ سرمه‌ایِ بالای فرم (و دکمه‌های پیمایشِ داخلش) باید بعد از
+            // آن دوباره رنگ بگیرند — همان کاری که FrmFamily برای lblHeadInfo
+            // می‌کند.
+            headBarPanel.BackColor = UiTheme.PrimaryDark;
+            panCaseNav.BackColor   = UiTheme.PrimaryDark;
+            lblHeadInfo.BackColor  = UiTheme.PrimaryDark;
+            lblHeadInfo.ForeColor  = Color.White;
+
+            foreach (Button navBtn in new[] { btnPrevCase, btnNextCase })
+            {
+                navBtn.BackColor = UiTheme.Primary;
+                navBtn.ForeColor = Color.White;
+                navBtn.FlatAppearance.MouseOverBackColor = ControlPaint.Light(UiTheme.Primary, 0.18f);
+                navBtn.FlatAppearance.MouseDownBackColor = ControlPaint.Dark(UiTheme.Primary, 0.08f);
+            }
+        }
+
+        // دکمه‌های پیمایش فقط delegate را صدا می‌زنند؛ بارگذاری و رفرش را
+        // FrmCase انجام می‌دهد (RefreshForCase از SyncMembersTab صدا می‌شود).
+        private void btnPrevCase_Click(object sender, EventArgs e)
+        {
+            if (CaseNavigator != null)
+                CaseNavigator(-1);
+        }
+
+        private void btnNextCase_Click(object sender, EventArgs e)
+        {
+            if (CaseNavigator != null)
+                CaseNavigator(1);
+        }
+
+        // نوارِ سرِ فرم: کدِ پروندهٔ جاری (هم‌الگوی lblHeadInfo در FrmFamily).
+        private void UpdateDocsHeadInfo()
+        {
+            lblHeadInfo.Text = "اسناد پرونده: " +
+                (string.IsNullOrWhiteSpace(CurrentCaseCode) ? "—" : CurrentCaseCode);
         }
 
         private void FrmDocs_Load(object sender, EventArgs e)
@@ -114,7 +163,13 @@ namespace CaseManagement
                 UiTheme.SetButtonIcon(btnSave, "✔");
                 UiTheme.SetButtonIcon(btnEdit, "✎");
                 UiTheme.SetButtonIcon(btnDelete, "✕");
+
+                // دکمه‌های «پروندهٔ قبلی/بعدی» فقط وقتی معنا دارند که FrmCase
+                // میزبان باشد و delegate پیمایش را داده باشد.
+                panCaseNav.Visible = CaseNavigator != null;
             }
+
+            UpdateDocsHeadInfo();
 
             Text = "اسناد" +
                    (string.IsNullOrEmpty(CurrentCaseCode) ? "" : "  —  پرونده: " + CurrentCaseCode) +
@@ -139,12 +194,14 @@ namespace CaseManagement
                    (string.IsNullOrEmpty(CurrentCaseCode) ? "" : "  —  پرونده: " + CurrentCaseCode) +
                    "  [" + SecurityContext.CenterDisplay + "]";
 
+            UpdateDocsHeadInfo();
             LoadDocs();
             ClearForm();
         }
 
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
+            ReleaseDocLock();
             UpdatePreview("");
             base.OnFormClosed(e);
         }
@@ -159,8 +216,57 @@ namespace CaseManagement
             dgvDocs.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
         }
 
+        // قفلِ سندِ جاری را آزاد و تایمرِ تمدید را متوقف می‌کند — قبل از
+        // بارگذاریِ سندی دیگر، پاک‌کردنِ فرم، یا بستنِ فرم صدا زده می‌شود.
+        private void ReleaseDocLock()
+        {
+            if (_docLockId > 0)
+            {
+                CaseManagement.Enterprise.LockService.Release(_docLockId);
+                _docLockId = 0;
+            }
+
+            _docLockedByOther = false;
+
+            if (_docLockHeartbeat != null)
+                _docLockHeartbeat.Stop();
+        }
+
+        // تلاش برای قفل کردنِ سندِ تازه‌بارگذاری‌شده. اگر توسط کاربر دیگری
+        // قفل باشد، داده همچنان برای مشاهده نمایش داده می‌شود؛ خودِ ذخیره
+        // (btnEdit_Click) با پرچمِ _docLockedByOther مسدود می‌شود.
+        private void TryLockDoc(int docId)
+        {
+            if (docId <= 0) return;
+
+            CaseManagement.Enterprise.LockResult lockResult =
+                CaseManagement.Enterprise.LockService.TryAcquire("TblDocs", docId);
+
+            if (!lockResult.Acquired)
+            {
+                _docLockedByOther = true;
+                Msg.Show(lockResult.DeniedMessage);
+                return;
+            }
+
+            _docLockId = lockResult.LockID;
+
+            if (_docLockHeartbeat == null)
+            {
+                _docLockHeartbeat = new System.Windows.Forms.Timer();
+                _docLockHeartbeat.Interval = 5 * 60 * 1000; // ۵ دقیقه
+                _docLockHeartbeat.Tick += delegate
+                {
+                    CaseManagement.Enterprise.LockService.Heartbeat(_docLockId);
+                };
+            }
+
+            _docLockHeartbeat.Start();
+        }
+
         private void ClearForm()
         {
+            ReleaseDocLock();
             currentDocId = 0;
             storedDocFilePath = "";
             pendingSourceFilePath = "";
@@ -432,7 +538,7 @@ namespace CaseManagement
 
         private void btnSave_Click(object sender, EventArgs e)
         {
-            if (!SecurityContext.CanEdit())
+            if (!CaseManagement.Enterprise.PermissionService.Require("Docs.Edit"))
             {
                 Msg.Show("کاربر فقط مشاهده اجازه ثبت سند ندارد.");
                 return;
@@ -516,6 +622,10 @@ namespace CaseManagement
                 CaseManagement.Sync.SyncOutboxService.Capture("TblDocs", currentDocId,
                     CaseManagement.Sync.OfflineSyncInitializer.OperationCreate);
 
+                // تاریخچهٔ کاملِ رکورد (عکس فوری همهٔ ستون‌های سند).
+                CaseManagement.Enterprise.VersionService.Capture("TblDocs", currentDocId,
+                    CaseManagement.Enterprise.VersionService.OperationInsert);
+
                 Msg.Show("سند ذخیره شد");
                 LoadDocs();
                 ClearForm();
@@ -531,7 +641,7 @@ namespace CaseManagement
 
         private void btnEdit_Click(object sender, EventArgs e)
         {
-            if (!SecurityContext.CanEdit())
+            if (!CaseManagement.Enterprise.PermissionService.Require("Docs.Edit"))
             {
                 Msg.Show("کاربر فقط مشاهده اجازه ویرایش سند ندارد.");
                 return;
@@ -540,6 +650,12 @@ namespace CaseManagement
             if (currentDocId <= 0)
             {
                 Msg.Show("اول یک سند را انتخاب کن");
+                return;
+            }
+
+            if (_docLockedByOther)
+            {
+                Msg.Show("این سند هم‌اکنون توسط کاربر دیگری در حال ویرایش است. لطفاً بعداً تلاش کنید.");
                 return;
             }
 
@@ -623,6 +739,9 @@ namespace CaseManagement
                 CaseManagement.Sync.SyncOutboxService.Capture("TblDocs", currentDocId,
                     CaseManagement.Sync.OfflineSyncInitializer.OperationUpdate);
 
+                CaseManagement.Enterprise.VersionService.Capture("TblDocs", currentDocId,
+                    CaseManagement.Enterprise.VersionService.OperationUpdate);
+
                 Msg.Show("سند ویرایش شد");
                 LoadDocs();
                 ClearForm();
@@ -645,7 +764,7 @@ namespace CaseManagement
         // «بایگانی» قابلِ بازگردانی باشد. فایلِ فیزیکی سند دست‌نخورده می‌ماند.
         private void btnDelete_Click(object sender, EventArgs e)
         {
-            if (!SecurityContext.CanDelete())
+            if (!CaseManagement.Enterprise.PermissionService.Require("Docs.Delete"))
             {
                 Msg.Show("بایگانی سند فقط برای مدیر سیستم مجاز است.");
                 return;
@@ -702,6 +821,11 @@ namespace CaseManagement
                 CaseManagement.Sync.SyncOutboxService.Capture("TblDocs", archivedDocId,
                     CaseManagement.Sync.OfflineSyncInitializer.OperationStatus);
 
+                // بایگانی ویرایشِ ستونِ IsArchived است، پس نسخه هم از نوع «ویرایش»
+                // ثبت می‌شود (رکورد حذف نشده و همچنان خواندنی است).
+                CaseManagement.Enterprise.VersionService.Capture("TblDocs", archivedDocId,
+                    CaseManagement.Enterprise.VersionService.OperationUpdate);
+
                 Msg.Show("سند بایگانی شد");
                 LoadDocs();
                 ClearForm();
@@ -714,6 +838,12 @@ namespace CaseManagement
 
         private void btnPrint_Click(object sender, EventArgs e)
         {
+            if (!CaseManagement.Enterprise.PermissionService.Require("Docs.Print"))
+            {
+                Msg.Show("کاربر اجازه چاپ فهرست اسناد را ندارد.");
+                return;
+            }
+
             DataTable table = dgvDocs.DataSource as DataTable;
             if (table == null || table.Rows.Count == 0)
             {
@@ -747,6 +877,8 @@ namespace CaseManagement
 
         private void LoadDocToForm(int docId)
         {
+            ReleaseDocLock();
+
             try
             {
                 using (SQLiteConnection con = db.GetConnection())
@@ -783,6 +915,8 @@ namespace CaseManagement
                         UpdatePreview(storedDocFilePath);
                     }
                 }
+
+                TryLockDoc(currentDocId);
             }
             catch (Exception ex)
             {

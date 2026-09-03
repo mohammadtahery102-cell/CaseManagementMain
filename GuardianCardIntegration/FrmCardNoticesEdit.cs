@@ -23,6 +23,7 @@ namespace CaseManagement.GuardianCardIntegration
     {
         private readonly int _caseId;
         private readonly GuardianCardData _currentData;
+        private readonly bool _isSimpleLayout;
         private readonly CaseCardRepository _repo = new CaseCardRepository();
 
         private TextBox[] _txtNotices;
@@ -36,21 +37,29 @@ namespace CaseManagement.GuardianCardIntegration
         private RadioButton _radPrintOnly;
         private RadioButton _radSaveDb;
 
+        // آموزش — فقط برای قالبِ «ساده» (isSimpleLayout=true): یک جعبهٔ
+        // بزرگِ «تذکرات» به‌جای فرمِ ۸فیلدیِ قالبِ کامل. کاربر گزارش داد که
+        // فرمِ «شرط ۱..۵» را پیدا نمی‌کرد/نمی‌فهمید کدامش «تذکرات» است.
+        private TextBox _txtSimpleNotes;
+        private Label _lblSimpleNotesDefault;
+
         // نتیجه برای فراخوان (FrmGuardianCardPreview) — فقط وقتی DialogResult
         // برابر OK است معتبرند.
         public bool SavedPermanently { get; private set; }
         public GuardianCardData PrintOnlyData { get; private set; }
 
-        public FrmCardNoticesEdit(int caseId, GuardianCardData currentData)
+        public FrmCardNoticesEdit(int caseId, GuardianCardData currentData, bool isSimpleLayout = false)
         {
             _caseId = caseId;
             _currentData = currentData;
+            _isSimpleLayout = isSimpleLayout;
             BuildUi();
             Load += delegate { LoadValues(); };
         }
 
         private void BuildUi()
         {
+            if (_isSimpleLayout) { BuildSimpleUi(); return; }
             Text = "ویرایش محتوای کارت شناسایی این پرونده";
             RightToLeft = RightToLeft.Yes;
             RightToLeftLayout = true;
@@ -154,6 +163,87 @@ namespace CaseManagement.GuardianCardIntegration
             ClientSize = new Size(640, y + 56);
         }
 
+        // آموزش — نسخهٔ سادهٔ همین فرم برای قالبِ «ساده»: فقط یک جعبهٔ بزرگِ
+        // «تذکرات» (همان CardNotice1)، بدونِ ۵ شرط/متنِ حقوقی/تلفن/آدرسِ
+        // مخصوصِ قالبِ کامل که در قالبِ ساده اصلاً چاپ نمی‌شوند.
+        private void BuildSimpleUi()
+        {
+            Text = "ویرایشِ «تذکرات» — کارتِ ساده";
+            RightToLeft = RightToLeft.Yes;
+            RightToLeftLayout = true;
+            BackColor = UiTheme.Background;
+            Font = UiTheme.Font(UiTheme.SizeBody);
+            StartPosition = FormStartPosition.CenterParent;
+            FormBorderStyle = FormBorderStyle.FixedDialog;
+            MaximizeBox = false;
+            MinimizeBox = false;
+            ClientSize = new Size(560, 420);
+
+            Label lblTitle = new Label
+            {
+                Text = "تذکرات", AutoSize = false, TextAlign = ContentAlignment.MiddleRight,
+                Font = UiTheme.FontBold(10F)
+            };
+            lblTitle.SetBounds(16, 12, 528, 24);
+            Controls.Add(lblTitle);
+
+            _txtSimpleNotes = new TextBox
+            {
+                RightToLeft = RightToLeft.Yes, Multiline = true, ScrollBars = ScrollBars.Vertical,
+                AcceptsReturn = true
+            };
+            _txtSimpleNotes.SetBounds(16, 40, 528, 200);
+            Controls.Add(_txtSimpleNotes);
+
+            _lblSimpleNotesDefault = new Label
+            {
+                AutoSize = false, TextAlign = ContentAlignment.MiddleRight,
+                ForeColor = UiTheme.TextMuted, Font = UiTheme.Font(8F)
+            };
+            _lblSimpleNotesDefault.SetBounds(16, 244, 528, 18);
+            Controls.Add(_lblSimpleNotesDefault);
+
+            int y = 274;
+            Label lblMode = new Label
+            {
+                Text = "حالتِ ذخیره:", AutoSize = false, TextAlign = ContentAlignment.MiddleRight,
+                Font = UiTheme.FontBold(9.5F)
+            };
+            lblMode.SetBounds(16, y, 100, 22);
+            Controls.Add(lblMode);
+            y += 26;
+
+            _radPrintOnly = new RadioButton
+            {
+                Text = "فقط برای این چاپ (چیزی در دیتابیس ذخیره نمی‌شود)",
+                Checked = true, AutoSize = true, RightToLeft = RightToLeft.Yes
+            };
+            _radPrintOnly.SetBounds(16, y, 500, 22);
+            Controls.Add(_radPrintOnly);
+            y += 28;
+
+            _radSaveDb = new RadioButton
+            {
+                Text = "ذخیرهٔ دائمی در دیتابیس (این تذکرات برای همیشه روی کارت این پرونده می‌ماند)",
+                AutoSize = true, RightToLeft = RightToLeft.Yes
+            };
+            _radSaveDb.SetBounds(16, y, 528, 22);
+            Controls.Add(_radSaveDb);
+            y += 36;
+
+            var btnSave = UiTheme.CreateButton("ادامه", "💾", UiTheme.Success);
+            btnSave.SetBounds(16, y, 120, 36);
+            btnSave.Click += delegate { Save(); };
+            Controls.Add(btnSave);
+
+            var btnCancel = UiTheme.CreateSecondaryButton("انصراف", "");
+            btnCancel.SetBounds(144, y, 100, 36);
+            btnCancel.Click += delegate { DialogResult = DialogResult.Cancel; Close(); };
+            Controls.Add(btnCancel);
+
+            ClientSize = new Size(560, y + 56);
+        }
+
         private int AddSingleField(int y, string title, out TextBox textBox, out Label defaultLabel)
         {
             Label lblTitle = new Label
@@ -185,6 +275,13 @@ namespace CaseManagement.GuardianCardIntegration
             {
                 var c = _repo.GetCase(_caseId);
 
+                if (_isSimpleLayout)
+                {
+                    _txtSimpleNotes.Text = c.CardNotice1 ?? "";
+                    _lblSimpleNotesDefault.Text = "مقدار فعلی روی کارت: " + (_currentData.SimpleNotes ?? "");
+                    return;
+                }
+
                 string[] overrides = { c.CardNotice1, c.CardNotice2, c.CardNotice3, c.CardNotice4, c.CardNotice5 };
                 string[] defaults = { _currentData.Notice1, _currentData.Notice2, _currentData.Notice3, _currentData.Notice4, _currentData.Notice5 };
 
@@ -213,6 +310,27 @@ namespace CaseManagement.GuardianCardIntegration
         {
             try
             {
+                if (_isSimpleLayout)
+                {
+                    if (_radSaveDb.Checked)
+                    {
+                        _repo.UpdateCardNotice1(_caseId, _txtSimpleNotes.Text);
+                        SavedPermanently = true;
+                        PrintOnlyData = null;
+                    }
+                    else
+                    {
+                        GuardianCardData clone = _currentData.Clone();
+                        ApplyIfNotEmpty(_txtSimpleNotes.Text, v => clone.SimpleNotes = v);
+                        SavedPermanently = false;
+                        PrintOnlyData = clone;
+                    }
+
+                    DialogResult = DialogResult.OK;
+                    Close();
+                    return;
+                }
+
                 if (_radSaveDb.Checked)
                 {
                     _repo.UpdateCardOverrides(

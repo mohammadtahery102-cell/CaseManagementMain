@@ -88,10 +88,26 @@ namespace CaseManagement.Helpers
         public const string ForcePasswordChangeDays = "ForcePasswordChangeDays";
         public const string AuditEnabled           = "AuditEnabled";
 
+        // ─── خروجی‌ها ──────────────────────────────────────────────────────────
+        // آموزش — تا امروز تاریخچهٔ تغییرات و کمک‌های مالیِ پرونده در هیچ خروجی‌ای
+        // نمی‌آمد. این دو کلید (پیش‌فرض روشن) اجازه می‌دهند هرکدام از این دو بخش
+        // در خروجیِ Word خاموش شود — مثلاً وقتی فرمِ فشردهٔ تک‌صفحه‌ای لازم است.
+        public const string ExportIncludeHistory    = "ExportIncludeHistory";
+        public const string ExportIncludeAssistance = "ExportIncludeAssistance";
+
         // ─── تب Backup ─────────────────────────────────────────────────────────
         public const string BackupSchedule       = "BackupSchedule"; // Daily/Weekly/Monthly
         public const string BackupRetentionCount = "BackupRetentionCount";
         public const string LastRestoreDate      = "LastRestoreDate";
+
+        // آموزش — رمزِ بکاپِ خودکار (نسخهٔ ۱٫۰ — Option D): بکاپِ خودکار بدون
+        // حضور کاربر اجرا می‌شود، پس نمی‌توان هر بار رمز پرسید. این کلید مقدارِ
+        // رمز را نگه می‌دارد، ولی نه به‌صورتِ متنِ‌ساده — با DPAPI (محدودهٔ
+        // LocalMachine) رمزنگاری و Base64 می‌شود، پس دیدنِ مستقیمِ سطرِ
+        // TblAppSettings هم رمز را لو نمی‌دهد. اگر تنظیم نشده باشد، بکاپِ
+        // خودکار به‌جای نوشتنِ فایلِ متنِ‌ساده، فقط رد می‌شود و در audit_errors
+        // ثبت می‌کند — هرگز به رمزنگاری‌نشده برنمی‌گردد.
+        public const string AutoBackupPasswordProtected = "AutoBackupPasswordProtected";
 
         // ─── تب اعلان‌ها (هرکدام پیش‌فرض روشن = رفتار فعلی بدون تغییر) ─────────
         public const string Notify_BackupMissing     = "Notify_BackupMissing";

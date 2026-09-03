@@ -65,6 +65,17 @@ namespace CaseManagement.Helpers
                 FillFamilyBlock(doc, familyData, isTemplate1);
                 FillDocsBlock(doc, docsData, isTemplate1);
 
+                // آموزش — دو بخشِ تازه، دقیقاً هم‌الگوی FillDocsBlock (افزودن به
+                // انتهای Body با یک صفحهٔ جدید). تا امروز خروجیِ پرونده فقط
+                // TblCase + TblFamily + TblDocs را داشت، پس «چه کسی کِی چه چیزی را
+                // عوض کرد» و «چقدر کمک دریافت شده» در هیچ خروجی‌ای دیده نمی‌شد.
+                // هر دو با کلیدِ تنظیمات قابلِ خاموش‌کردن‌اند (پیش‌فرض روشن).
+                if (SettingsHelper.GetInt(SettingsHelper.ExportIncludeAssistance, 1) == 1)
+                    FillAssistanceBlock(doc, caseId);
+
+                if (SettingsHelper.GetInt(SettingsHelper.ExportIncludeHistory, 1) == 1)
+                    FillHistoryBlock(doc, caseId);
+
                 DataRow row = caseData.Rows[0];
 
                 Dictionary<string, string> caseValues = BuildCaseValues(row, familyData.Rows.Count, docsData.Rows.Count);
@@ -80,23 +91,24 @@ namespace CaseManagement.Helpers
                 ReplaceTextEverywhere(doc, caseValues);
                 // آموزش — عکسِ سرپرست در «الگوی شماره ۱»: پس از بازخوردِ کاربر
                 // (خیلی بزرگ شده بود)، به نصفِ اندازهٔ قبلی (۴۰۰×۳۸۰ → ۲۰۰×۱۹۰
-                // نقطه، معادلِ ۲.۵ برابرِ اندازهٔ اصلیِ ۸۰×۷۶) برگشت.
-                // الگوی پیش‌فرض دست‌نخورده ماند. فایلِ واقعیِ «الگوی شماره ۲»ی
-                // کاربر {{HeadPhoto}} ندارد (فقط {{FamilyPhoto}})، پس این
-                // فراخوانی برای آن الگو بی‌اثر است (هیچ placeholderـی پیدا
-                // نمی‌شود) — بی‌خطر، چون ReplaceImageEverywhere وقتی متنِ
-                // placeholder را در سند پیدا نکند کاری نمی‌کند.
-                float headW = isTemplate1 ? 200f : 80f;
-                float headH = isTemplate1 ? 190f : 76f;
+                // نقطه، معادلِ ۲.۵ برابرِ اندازهٔ اصلیِ ۸۰×۷۶) برگشت. الگوی
+                // پیش‌فرض دست‌نخورده ماند. الگوی شماره ۲ (فایلِ واقعیِ کاربر،
+                // نسخهٔ نهایی): کاربر خودش یک ستونِ عمودی‌ادغام‌شده در سمتِ
+                // چپِ جدولِ سرپرست ساخت (حدودِ ۸۰×۱۲۲ نقطه، باریک و بلند) برای
+                // {{HeadPhoto}}، و {{FamilyPhoto}} در ردیفِ پایینیِ عریض‌تر
+                // (حدودِ ۲۴۰×۱۰۸ نقطه) ماند — اندازه‌ها اینجا با همان دو جعبهٔ
+                // واقعیِ خودِ فایل (نه یک طرحِ فرضی) هم‌خوان شده‌اند.
+                float headW = isTemplate1 ? 200f : isTemplate2 ? 75f : 80f;
+                float headH = isTemplate1 ? 190f : isTemplate2 ? 115f : 76f;
                 ReplaceImageEverywhere(doc, "{{HeadPhoto}}", GetValue(row, "PhotoPath"), headW, headH);
-                // عکس جمعی دو برابر شد (درخواست کاربر). اندازه‌اش دست‌نخورده
-                // می‌ماند؛ حالا که جدولِ مشخصات + عکسِ سرپرست + عکسِ جمعی در
-                // الگوی شماره ۱ یک بلوکِ اتمیک است، این سه با هم به صفحهٔ بعد
-                // می‌روند نه اینکه جدولِ مشخصات وسط شکسته شود. الگوی شماره ۲:
-                // اندازه‌اش با جعبهٔ واقعیِ «عکس جمعی» در فایلِ کاربر (حدودِ
-                // ۲۲۶×۱۵۷ نقطه) هم‌خوان است.
-                float familyW = isTemplate2 ? 200f : 460f;
-                float familyH = isTemplate2 ? 120f : 132f;
+                // عکس جمعی دو برابر شد (درخواست کاربر). اندازه‌اش برای الگوی
+                // پیش‌فرض/الگوی۱ دست‌نخورده می‌ماند؛ حالا که جدولِ مشخصات +
+                // عکسِ سرپرست + عکسِ جمعی در الگوی شماره ۱ یک بلوکِ اتمیک است،
+                // این سه با هم به صفحهٔ بعد می‌روند نه اینکه جدولِ مشخصات وسط
+                // شکسته شود. الگوی شماره ۲: جعبهٔ عریض‌ترِ عکسِ جمعی در ردیفِ
+                // پایین (بالا توضیح داده شد).
+                float familyW = isTemplate2 ? 230f : 460f;
+                float familyH = isTemplate2 ? 90f : 132f;
                 ReplaceImageEverywhere(doc, "{{FamilyPhoto}}", GetValue(row, "FamilyPhotoPath"), familyW, familyH);
 
                 // آموزش — لینک موقعیت باید *پس از* جای‌گزینی متن و *پیش از*
@@ -416,6 +428,165 @@ namespace CaseManagement.Helpers
         {
             string allText = string.Concat(element.Descendants<Text>().Select(t => t.Text));
             return allText.Contains(text);
+        }
+
+        // ─── بخشِ کمک‌های مالیِ پرونده ───────────────────────────────────────
+        // آموزش — GetDataTable خودش پارامترِ @CasID را می‌بندد، پس همان مسیرِ
+        // پارامتریِ موجود استفاده می‌شود (بدونِ الحاقِ رشته به SQL).
+        private void FillAssistanceBlock(WordprocessingDocument doc, int caseId)
+        {
+            // آموزش — داده *قبل* از افزودن هر چیزی به سند خوانده می‌شود: اگر
+            // پرونده‌ای هیچ کمکی ندارد، هیچ صفحه‌ای اضافه نمی‌شود. این‌طور
+            // خروجیِ پرونده‌های بدونِ کمک دقیقاً همان چیزی می‌ماند که قبلاً بود
+            // (یک صفحهٔ خالیِ «هیچ کمکی ثبت نشده» فقط نویز است)، و آزمون‌های
+            // صفحه‌بندیِ موجود هم دست‌نخورده باقی می‌مانند.
+            DataTable data = TryGetDataTable(
+                "SELECT AssistanceDate, AssistanceType, Amount, Description " +
+                "FROM TblAssistance WHERE CasID = @CasID ORDER BY AssistanceID", caseId);
+
+            if (data == null || data.Rows.Count == 0)
+                return;
+
+            Body body = doc.MainDocumentPart.Document.Body;
+
+            body.AppendChild(new Paragraph(new Run(new Break() { Type = BreakValues.Page })));
+            body.AppendChild(CreateParagraph("بخش کمک‌های مالی"));
+
+            decimal total = 0;
+            int index = 1;
+
+            foreach (DataRow row in data.Rows)
+            {
+                decimal amount;
+                if (decimal.TryParse(GetValue(row, "Amount"), out amount))
+                    total += amount;
+
+                body.AppendChild(CreateParagraph(
+                    index + ". تاریخ: " + ToPersianExportDate(GetValue(row, "AssistanceDate")) +
+                    " | نوع: " + GetValue(row, "AssistanceType") +
+                    " | مبلغ: " + GetValue(row, "Amount")));
+
+                string description = GetValue(row, "Description");
+                if (!string.IsNullOrWhiteSpace(description))
+                    body.AppendChild(CreateParagraph("   توضیحات: " + description));
+
+                index++;
+            }
+
+            body.AppendChild(CreateParagraph(
+                "جمع کل کمک‌ها: " + total.ToString("N0") + "   |   تعداد: " + data.Rows.Count));
+        }
+
+        // ─── بخشِ تاریخچهٔ تغییراتِ پرونده ───────────────────────────────────
+        // آموزش — سه منبعِ تاریخچه در برنامه وجود دارد و هر سه اینجا می‌آیند:
+        //   ۱. TblCaseStatusHistory — تغییرِ وضعیتِ خدمات (با دلیل و یادداشت)
+        //   ۲. EntRecordVersion     — عکسِ فوریِ کاملِ رکورد + فیلدهای تغییرکرده
+        //   ۳. TblAuditLog          — ردّ عمومیِ عملیات
+        // هرکدام که در دیتابیس نبود بی‌صدا رد می‌شود (ماژولِ راه‌اندازی‌نشده).
+        private void FillHistoryBlock(WordprocessingDocument doc, int caseId)
+        {
+            // به همان دلیلِ FillAssistanceBlock، هر سه منبع *قبل* از دست‌زدن به
+            // سند خوانده می‌شوند و اگر هیچ‌کدام ردیفی نداشتند، هیچ صفحه‌ای
+            // اضافه نمی‌شود.
+            DataTable status = TryGetDataTable(
+                "SELECT OldStatus, NewStatus, ChangeType, Reason, Notes, ChangedAt, ChangedBy " +
+                "FROM TblCaseStatusHistory WHERE CasID = @CasID ORDER BY StatusID", caseId);
+
+            DataTable versions = TryGetDataTable(
+                "SELECT VersionNo, Operation, ChangedFields, ChangedAt, ChangedBy " +
+                "FROM EntRecordVersion WHERE EntityName = 'TblCase' AND EntityID = @CasID " +
+                "ORDER BY VersionNo", caseId);
+
+            DataTable audit = TryGetDataTable(
+                "SELECT Operation, OldValue, NewValue, CreatedAt, Username " +
+                "FROM TblAuditLog WHERE EntityName = 'TblCase' AND EntityID = @CasID " +
+                "ORDER BY LogID", caseId);
+
+            if (!HasRows(status) && !HasRows(versions) && !HasRows(audit))
+                return;
+
+            Body body = doc.MainDocumentPart.Document.Body;
+
+            body.AppendChild(new Paragraph(new Run(new Break() { Type = BreakValues.Page })));
+            body.AppendChild(CreateParagraph("بخش تاریخچه تغییرات پرونده"));
+
+            // ── ۱. تاریخچهٔ وضعیت خدمات ──
+            if (HasRows(status))
+            {
+                body.AppendChild(CreateParagraph("— تغییرات وضعیت خدمات —"));
+
+                foreach (DataRow row in status.Rows)
+                {
+                    string from = GetValue(row, "OldStatus");
+                    body.AppendChild(CreateParagraph(
+                        ToPersianExportDate(GetValue(row, "ChangedAt")) +
+                        " | " + (string.IsNullOrWhiteSpace(from) ? "(ثبت اولیه)" : from) +
+                        " ← " + GetValue(row, "NewStatus") +
+                        " | توسط: " + GetValue(row, "ChangedBy")));
+
+                    string reason = GetValue(row, "Reason");
+                    if (!string.IsNullOrWhiteSpace(reason))
+                        body.AppendChild(CreateParagraph("   دلیل: " + reason));
+
+                    string notes = GetValue(row, "Notes");
+                    if (!string.IsNullOrWhiteSpace(notes))
+                        body.AppendChild(CreateParagraph("   یادداشت: " + notes));
+                }
+            }
+
+            // ── ۲. نسخه‌های کاملِ رکورد ──
+            if (HasRows(versions))
+            {
+                body.AppendChild(CreateParagraph("— نسخه‌های ثبت‌شده رکورد —"));
+
+                foreach (DataRow row in versions.Rows)
+                {
+                    body.AppendChild(CreateParagraph(
+                        "نسخه " + GetValue(row, "VersionNo") +
+                        " | " + GetValue(row, "Operation") +
+                        " | " + ToPersianExportDate(GetValue(row, "ChangedAt")) +
+                        " | توسط: " + GetValue(row, "ChangedBy")));
+
+                    string changed = GetValue(row, "ChangedFields");
+                    if (!string.IsNullOrWhiteSpace(changed))
+                        body.AppendChild(CreateParagraph("   فیلدهای تغییرکرده: " + changed));
+                }
+            }
+
+            // ── ۳. ردّ عمومیِ عملیات ──
+            if (HasRows(audit))
+            {
+                body.AppendChild(CreateParagraph("— ردّ عملیات —"));
+
+                foreach (DataRow row in audit.Rows)
+                {
+                    body.AppendChild(CreateParagraph(
+                        ToPersianExportDate(GetValue(row, "CreatedAt")) +
+                        " | " + GetValue(row, "Operation") +
+                        " | کاربر: " + GetValue(row, "Username")));
+                }
+            }
+
+        }
+
+        private static bool HasRows(DataTable table)
+        {
+            return table != null && table.Rows.Count > 0;
+        }
+
+        // نسخهٔ تحمل‌پذیرِ GetDataTable — جدول/ستونِ ناموجود (ماژولِ
+        // راه‌اندازی‌نشده یا دیتابیسِ قدیمی) خروجی را نمی‌شکند.
+        private DataTable TryGetDataTable(string query, int caseId)
+        {
+            try
+            {
+                return GetDataTable(query, caseId);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[OpenXmlCaseExporter.TryGetDataTable] " + ex.Message);
+                return null;
+            }
         }
 
         private Paragraph CreateParagraph(string text)

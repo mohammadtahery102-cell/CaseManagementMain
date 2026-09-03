@@ -209,6 +209,76 @@ LIMIT @MaxRows", con))
             return result;
         }
 
+        // آموزش — فهرستِ اعضای خانواده برای قالبِ «ساده» (نگاه کنید
+        // GuardianCardData.Orphans). آموزش — رفعِ باگ: نسخهٔ قبلی با
+        // MemberRole='یتیم' فیلتر می‌کرد (مثلِ GetFamilyMemberCount بالا)،
+        // ولی در دیتابیسِ واقعیِ کاربر این ستون برای هیچ رکوردی پر نشده
+        // (۳۸۰۲ عضوِ موجود، همه MemberRole خالی) — یعنی فهرست همیشه خالی
+        // می‌ماند. طبقِ درخواستِ صریحِ کاربر، حالا همهٔ اعضای پرونده (بدونِ
+        // فیلترِ نقش) نمایش داده می‌شوند.
+        public List<OrphanRow> GetOrphans(int caseId)
+        {
+            var list = new List<OrphanRow>();
+            using (SQLiteConnection con = _db.GetConnection())
+            using (SQLiteCommand cmd = new SQLiteCommand(
+                "SELECT MemberName, MemberFatherName, MemberTazkiraNo, MemberPhotoPath, BirthDate FROM TblFamily " +
+                "WHERE CasID = @CasID ORDER BY FamID", con))
+            {
+                cmd.Parameters.AddWithValue("@CasID", caseId);
+                con.Open();
+                using (SQLiteDataReader dr = cmd.ExecuteReader())
+                {
+                    while (dr.Read())
+                    {
+                        // آموزش — رفعِ باگِ حیاتی: PersianCalendar فقط تاریخ‌هایِ
+                        // بینِ ۶۲۲ تا ۹۹۹۹ میلادی را می‌پذیرد و برایِ هر
+                        // مقدارِ خارج از این بازه (که در دادهٔ واقعیِ سال‌ها
+                        // وارد‌شده توسط کاربران کاملاً محتمل است — مثلاً
+                        // تاریخِ ناقص/خرابِ ثبت‌شده) ArgumentOutOfRangeException
+                        // می‌دهد؛ چون این استثنا داخلِ چاپِ جمعی (فراخوانی
+                        // برایِ ده‌ها پروندهٔ پشتِ‌سرهم) گرفته نمی‌شد، یک
+                        // تاریخِ تولدِ خرابِ تکی می‌توانست کلِ آن پرونده را از
+                        // میانهٔ دسته بیندازد و باعثِ جابه‌جاییِ پرونده‌های
+                        // بعدی در خروجی شود. حالا مثلِ بقیهٔ متدهایِ همین
+                        // کلاس (DescribeAge) با try/catch محافظت می‌شود —
+                        // تاریخِ نامعتبر فقط خودش خالی می‌ماند، نه اینکه کلِ
+                        // پرونده را بترکاند.
+                        string birthDate = "";
+                        try
+                        {
+                            DateTime birthDateRaw = PersianDateHelper.ParseStoredDate(dr["BirthDate"], DateTime.MinValue);
+                            if (birthDateRaw != DateTime.MinValue)
+                            {
+                                // آموزش — به‌درخواستِ کاربر: روی کارت فقط *سالِ*
+                                // تولد چاپ می‌شود (مثلاً «۱۳۹۰»)، نه تاریخِ کامل.
+                                // دلیل: ستونِ تاریخ بخشِ زیادی از عرضِ جدولِ اعضا
+                                // را می‌گرفت و جای «نام پدر» و «شماره تذکره» را
+                                // تنگ می‌کرد. مقدارِ ذخیره‌شده در دیتابیس هیچ
+                                // تغییری نمی‌کند — فقط نمایشِ روی کارت.
+                                string full = PersianDateHelper.ToPersianDateString(birthDateRaw);
+                                int slash = full.IndexOf('/');
+                                birthDate = slash > 0 ? full.Substring(0, slash) : full;
+                            }
+                        }
+                        catch
+                        {
+                            birthDate = "";
+                        }
+
+                        list.Add(new OrphanRow
+                        {
+                            Name = dr["MemberName"] == DBNull.Value ? "" : dr["MemberName"].ToString(),
+                            FatherName = dr["MemberFatherName"] == DBNull.Value ? "" : dr["MemberFatherName"].ToString(),
+                            BirthDate = birthDate,
+                            TazkiraNo = dr["MemberTazkiraNo"] == DBNull.Value ? "" : dr["MemberTazkiraNo"].ToString(),
+                            Photo = dr["MemberPhotoPath"] == DBNull.Value ? "" : dr["MemberPhotoPath"].ToString()
+                        });
+                    }
+                }
+            }
+            return list;
+        }
+
         private static CaseModel MapCase(DataRow row)
         {
             return new CaseModel
@@ -286,6 +356,30 @@ WHERE CasID = @CasID", con))
                 cmd.Parameters.AddWithValue("@Legal", (legalLine ?? "").Trim());
                 cmd.Parameters.AddWithValue("@Phone", (phone ?? "").Trim());
                 cmd.Parameters.AddWithValue("@Address", (address ?? "").Trim());
+                cmd.Parameters.AddWithValue("@CasID", caseId);
+                con.Open();
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+        // آموزش — همتای تک‌ستونیِ UpdateCardOverrides بالا، فقط برای «تذکرات»
+        // قالبِ ساده (که همان CardNotice1 است). چرا متدِ جدا؟ چون
+        // UpdateCardOverrides همیشه هر ۸ ستون را UPDATE می‌کند — اگر از آن
+        // برای ذخیرهٔ «فقط تذکراتِ قالبِ ساده» استفاده می‌شد، مقادیرِ
+        // موجودِ Notice2-5/LegalLine/Phone/Address (که به قالبِ ساده اصلاً
+        // نمایش داده نمی‌شوند) با رشتهٔ خالی پاک می‌شدند.
+        public void UpdateCardNotice1(int caseId, string notice1)
+        {
+            if (caseId <= 0)
+                throw new ArgumentException("شناسه پرونده معتبر نیست.");
+
+            CenterGuard.EnsureCaseAccess(_db, caseId);
+
+            using (SQLiteConnection con = _db.GetConnection())
+            using (SQLiteCommand cmd = new SQLiteCommand(
+                "UPDATE TblCase SET CardNotice1 = @N1 WHERE CasID = @CasID", con))
+            {
+                cmd.Parameters.AddWithValue("@N1", (notice1 ?? "").Trim());
                 cmd.Parameters.AddWithValue("@CasID", caseId);
                 con.Open();
                 cmd.ExecuteNonQuery();
