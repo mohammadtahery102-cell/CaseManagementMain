@@ -161,6 +161,26 @@ WHERE c.CasID = @CasID", caseId);
                 float familyH = isTemplate2 ? 90f : 132f;
                 ReplaceImageEverywhere(doc, "{{FamilyPhoto}}", GetValue(row, "FamilyPhotoPath"), familyW, familyH);
 
+                // ─── الزام نسخهٔ تحویلی (مورد ۱۰) — «عکس محل معلولیت» ────────
+                //
+                // این عکس از قبل قابلِ بارگذاری بود، ولی به‌عنوانِ *سند* در
+                // دستهٔ `DISABILITY_AREA_PHOTO` (تصمیم #۱۱) — و هیچ خروجی‌ای
+                // آن را رندر نمی‌کرد. از دیدِ کاربر یعنی «بارگذاری می‌شود ولی
+                // هیچ‌جا دیده نمی‌شود».
+                //
+                // مسیرِ فایل از همان جدولِ اسناد گرفته می‌شود، نه از ستونی
+                // تازه: افزودنِ ستونِ عکس روی TblCase یعنی دو مسیرِ ذخیره برای
+                // یک واقعیت، و همان واگراییِ دوگانه‌ای که این پروژه بارها
+                // بهایش را داده. جدیدترین سندِ آن دسته انتخاب می‌شود چون
+                // ارزیابیِ تازه‌تر ملاک است.
+                //
+                // اندازه هم‌خانوادهٔ عکسِ جمعی است. اگر پرونده چنین سندی
+                // نداشته باشد، مسیر خالی می‌ماند و
+                // RemoveUnusedPlaceholdersEverywhere جای خالی را پاک می‌کند —
+                // پس خروجیِ پرونده‌های غیرمعلول عیناً مثلِ قبل می‌ماند.
+                ReplaceImageEverywhere(doc, "{{DisabilityAreaPhoto}}",
+                    GetLatestDocumentPath(caseId, "DISABILITY_AREA_PHOTO"), familyW, familyH);
+
                 // آموزش — لینک موقعیت باید *پس از* جای‌گزینی متن و *پیش از*
                 // پاک‌سازی placeholderهای بی‌مصرف اجرا شود؛ وگرنه یا متنِ خام
                 // چاپ می‌شود یا کادر لینک خالی می‌ماند.
@@ -700,6 +720,42 @@ WHERE c.CasID = @CasID", caseId);
 
         // نسخهٔ تحمل‌پذیرِ GetDataTable — جدول/ستونِ ناموجود (ماژولِ
         // راه‌اندازی‌نشده یا دیتابیسِ قدیمی) خروجی را نمی‌شکند.
+        // مورد ۱۰ — مسیرِ فایلِ جدیدترین سندِ یک دستهٔ مشخص برای این پرونده.
+        // رشتهٔ خالی یعنی «چنین سندی نیست» و فراخوان‌کننده باید بی‌سروصدا
+        // از آن بگذرد؛ هیچ استثنایی به بیرون درز نمی‌کند چون نبودِ یک عکس
+        // نباید تولیدِ کلِ سند را متوقف کند.
+        private string GetLatestDocumentPath(int caseId, string categoryCode)
+        {
+            if (caseId <= 0 || string.IsNullOrWhiteSpace(categoryCode)) return "";
+
+            try
+            {
+                using (SQLiteConnection con = db.GetConnection())
+                using (SQLiteCommand cmd = new SQLiteCommand(@"
+SELECT d.DocFilePath
+FROM TblDocs d
+JOIN TblDocumentCategory dc ON dc.DocumentCategoryID = d.DocumentCategoryID
+WHERE d.CasID = @CasID
+  AND dc.Code = @Code
+  AND IFNULL(d.IsArchived, 0) = 0
+  AND IFNULL(TRIM(d.DocFilePath), '') <> ''
+ORDER BY d.DocID DESC
+LIMIT 1;", con))
+                {
+                    cmd.Parameters.AddWithValue("@CasID", caseId);
+                    cmd.Parameters.AddWithValue("@Code", categoryCode);
+                    con.Open();
+                    object value = cmd.ExecuteScalar();
+                    string path = value == null || value == DBNull.Value ? "" : Convert.ToString(value);
+                    return File.Exists(path) ? path : "";
+                }
+            }
+            catch
+            {
+                return "";
+            }
+        }
+
         private DataTable TryGetDataTable(string query, int caseId)
         {
             try

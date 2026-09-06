@@ -427,6 +427,73 @@ namespace CaseManagement.Helpers
             score.Columns.Add(new ReportColumn("CalculatedDate", "تاریخ محاسبه", "vs.CalculatedDate", ReportColumnType.Date));
             list.Add(score);
 
+            // ─── الزام نسخهٔ تحویلی (مورد ۱۳) — وضعیتِ اسناد و تکمیلِ پرونده ──
+            //
+            // چرا منبعِ تازه لازم بود: همهٔ منابعِ بالا *ردیف‌محور*ند — یک ردیف
+            // به‌ازای هر پرونده یا هر سندِ ناقص. آنچه گزارشِ مدیریتی می‌خواهد
+            // پاسخِ «چند درصدِ پرونده‌های هر سایت/ولایت/نوع، اسنادشان کامل
+            // است» است. با گروه‌بندیِ همین منبع روی ولایت یا سایت یا نوع
+            // درخواست، مستقیماً همان جدول به دست می‌آید.
+            //
+            // همهٔ ستون‌ها از ستون‌های *کش‌شده* و نمایه‌شده می‌آیند
+            // (`CompletionPercent`، `CompletionStatusCode`، `VulnerabilityBand`)
+            // و هیچ محاسبهٔ زنده‌ای انجام نمی‌شود — همان قاعده‌ای که داشبورد
+            // و جستجوی پیشرفته رعایت می‌کنند. شمارشِ اسناد زیرپرس‌وجوی
+            // اسکالر است، نه JOIN: جوین ردیفِ پرونده را تکثیر می‌کرد و هر
+            // گروه‌بندی و شمارشی را خراب.
+            //
+            // ⚠ وابستگی: تا وقتی «بازمحاسبهٔ تکمیل و امتیاز» در تبِ نگهداری
+            // یک‌بار اجرا نشده باشد، ستون‌های کش برای پرونده‌های قدیمی NULL‌اند
+            // و این گزارش برایشان خالی درمی‌آید. این نقصِ گزارش نیست.
+            var completionStatus = new ReportSource
+            {
+                Key = "CompletionStatus", DisplayName = "وضعیت تکمیل و اسناد",
+                FromClause = "TblCase c",
+                CenterColumn = "c.CenterID",
+                ArchivedColumn = "c.IsArchived"
+            };
+            completionStatus.Columns.Add(new ReportColumn("CaseCode", "کد پرونده", "c.Code", ReportColumnType.Text));
+            completionStatus.Columns.Add(new ReportColumn("FormNo", "شماره فرم", "c.FormNo", ReportColumnType.Text));
+            completionStatus.Columns.Add(new ReportColumn("HeadFullName", "نام سرپرست", "c.HeadFullName", ReportColumnType.Text));
+            completionStatus.Columns.Add(new ReportColumn("Province", "ولایت", "c.Province", ReportColumnType.Text));
+            completionStatus.Columns.Add(new ReportColumn("District", "ولسوالی", "c.District", ReportColumnType.Text));
+            completionStatus.Columns.Add(new ReportColumn("Site", "سایت", "c.Site", ReportColumnType.Text));
+            completionStatus.Columns.Add(new ReportColumn("RequestType", "نوع درخواست", "c.RequestType", ReportColumnType.Text));
+            completionStatus.Columns.Add(new ReportColumn("ServiceStatus", "وضعیت خدمات", "c.ServiceStatus", ReportColumnType.Text));
+            completionStatus.Columns.Add(new ReportColumn("CompletionPercent", "درصد تکمیل", "c.CompletionPercent", ReportColumnType.Number));
+            completionStatus.Columns.Add(new ReportColumn("CompletionStatus", "وضعیت تکمیل",
+                "CASE IFNULL(c.CompletionStatusCode,'') " +
+                "WHEN 'COMPLETE' THEN 'کامل' WHEN 'IN_PROGRESS' THEN 'در حال تکمیل' " +
+                "WHEN 'INCOMPLETE' THEN 'ناقص' ELSE 'محاسبه نشده' END", ReportColumnType.Text));
+            completionStatus.Columns.Add(new ReportColumn("VulnerabilityBand", "سطح خطر",
+                "CASE IFNULL(c.VulnerabilityBand,'') " +
+                "WHEN 'HIGH' THEN 'پرخطر' WHEN 'MEDIUM' THEN 'متوسط' " +
+                "WHEN 'LOW' THEN 'کم‌خطر' ELSE 'محاسبه نشده' END", ReportColumnType.Text));
+            completionStatus.Columns.Add(new ReportColumn("DocsTotal", "تعداد اسناد",
+                "(SELECT COUNT(*) FROM TblDocs d WHERE d.CasID = c.CasID AND IFNULL(d.IsArchived,0) = 0)",
+                ReportColumnType.Number));
+            completionStatus.Columns.Add(new ReportColumn("DocsVerified", "اسناد تأییدشده",
+                "(SELECT COUNT(*) FROM TblDocs d WHERE d.CasID = c.CasID AND IFNULL(d.IsArchived,0) = 0 " +
+                "AND IFNULL(d.IsVerified,0) = 1)", ReportColumnType.Number));
+            completionStatus.Columns.Add(new ReportColumn("DocsWithoutFile", "سند بدون فایل",
+                "(SELECT COUNT(*) FROM TblDocs d WHERE d.CasID = c.CasID AND IFNULL(d.IsArchived,0) = 0 " +
+                "AND IFNULL(TRIM(d.DocFilePath),'') = '')", ReportColumnType.Number));
+            // شمارِ دسته‌های الزامیِ کم — همان تعریفی که دروازهٔ فعال‌سازی
+            // به کار می‌برد، از جمله قاعدهٔ شرطیِ «عکس کارت معلولیت»، تا
+            // گزارش و دروازه دربارهٔ یک پرونده حرفِ متفاوت نزنند.
+            completionStatus.Columns.Add(new ReportColumn("MissingRequiredDocs", "دستهٔ الزامیِ کم",
+                "(SELECT COUNT(*) FROM TblRequiredDocument rd " +
+                " JOIN TblDocumentCategory dc ON dc.DocumentCategoryID = rd.DocumentCategoryID AND dc.IsActive = 1 " +
+                " WHERE rd.RequestTypeID = c.RequestTypeID AND rd.IsActive = 1 AND rd.IsMandatory = 1 " +
+                "   AND NOT (dc.Code = 'DISABILITY_CARD_PHOTO' " +
+                "            AND IFNULL(TRIM(c.DisabilityCardStatus),'') <> 'دارد') " +
+                "   AND (SELECT COUNT(*) FROM TblDocs d2 " +
+                "         WHERE d2.CasID = c.CasID AND d2.DocumentCategoryID = rd.DocumentCategoryID " +
+                "           AND IFNULL(d2.IsArchived,0) = 0) < rd.MinCount)",
+                ReportColumnType.Number));
+            completionStatus.Columns.Add(new ReportColumn("CalculatedAt", "تاریخ محاسبه", "c.CompletionCalculatedAt", ReportColumnType.Date));
+            list.Add(completionStatus);
+
             return list;
         }
 

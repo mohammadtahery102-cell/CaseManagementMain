@@ -2465,6 +2465,22 @@ ORDER BY SortOrder, Value", con))
             btnMissingFiles.Click += BtnCheckMissingFiles_Click;
             buttonFlow.Controls.Add(btnMissingFiles);
 
+            // الزامات نسخهٔ تحویلی (موارد ۵، ۱۱، ۱۲، ۱۳) — نقطهٔ فراخوانِ
+            // بازمحاسبهٔ گروهی.
+            //
+            // چرا لازم شد: `CaseCompletionService.RecalculateAll` و
+            // `VulnerabilityScoreService.RecalculateAll` هر دو از مدت‌ها پیش
+            // نوشته شده بودند ولی **هیچ فراخوان‌کننده‌ای نداشتند**. ستون‌های
+            // کشِ درصدِ تکمیل و امتیازِ آسیب‌پذیری فقط وقتی پر می‌شوند که
+            // پرونده ذخیره شود، پس روی دادهٔ موجود (۱٬۶۶۱ پرونده) هر دو NULL
+            // بودند. نتیجه: کارت‌های کیفیت و ریسکِ داشبورد، فیلترهای جستجوی
+            // پیشرفته و بلوکِ وضعیت در گزارشِ تفصیلی همگی برای کلِ جمعیتِ
+            // موجود خالی درمی‌آمدند — کد بی‌عیب بود، فقط هرگز اجرا نمی‌شد.
+            Button btnRecalcAll = UiTheme.CreateSecondaryButton("بازمحاسبهٔ تکمیل و امتیاز", "∑");
+            btnRecalcAll.Size = new Size(210, 38);
+            btnRecalcAll.Click += BtnRecalculateAll_Click;
+            buttonFlow.Controls.Add(btnRecalcAll);
+
             _txtMaintenanceOutput = new TextBox
             {
                 Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical,
@@ -2550,6 +2566,62 @@ ORDER BY SortOrder, Value", con))
             catch (Exception ex)
             {
                 AppendMaintenanceOutput("خطا: " + ex.Message);
+            }
+        }
+
+        // الزامات ۵/۱۱/۱۲/۱۳ — بازمحاسبهٔ گروهیِ درصدِ تکمیل و امتیازِ
+        // آسیب‌پذیری برای همهٔ پرونده‌ها.
+        //
+        // ترتیب عمدی است: اول تکمیل، بعد امتیاز — چون «وضعیتِ تکمیل» خودش
+        // یکی از حقایقِ امتیازدهی است، پس اگر برعکس اجرا شود امتیاز روی
+        // دادهٔ کهنه حساب می‌شود. همین ترتیب در مسیرِ ذخیرهٔ پرونده هم رعایت
+        // شده است.
+        //
+        // چون روی هزاران پرونده اجرا می‌شود، تأیید صریح گرفته می‌شود و
+        // نشانگرِ انتظار نشان داده می‌شود. هر دو سرویس خودشان تراکنش و
+        // خطاگیری دارند و شمارِ پرونده‌های پردازش‌شده را برمی‌گردانند.
+        private void BtnRecalculateAll_Click(object sender, EventArgs e)
+        {
+            if (!UiTheme.ShowConfirm(this,
+                    "درصد تکمیل و امتیاز آسیب‌پذیری برای همهٔ پرونده‌ها دوباره محاسبه می‌شود." +
+                    Environment.NewLine + Environment.NewLine +
+                    "این کار روی پایگاه‌دادهٔ بزرگ ممکن است چند دقیقه طول بکشد و در این مدت برنامه پاسخ نمی‌دهد." +
+                    Environment.NewLine + "داده‌ای حذف نمی‌شود؛ فقط ستون‌های محاسباتی به‌روز می‌شوند." +
+                    Environment.NewLine + Environment.NewLine +
+                    "ادامه می‌دهید؟",
+                    "بازمحاسبهٔ گروهی"))
+                return;
+
+            Cursor previous = Cursor;
+            Cursor = Cursors.WaitCursor;
+            try
+            {
+                AppendMaintenanceOutput("شروع بازمحاسبهٔ گروهی...");
+
+                int completion = Helpers.CaseCompletionService.RecalculateAll();
+                AppendMaintenanceOutput("درصد تکمیل برای " + completion + " پرونده محاسبه شد.");
+
+                int score = Helpers.VulnerabilityScoreService.RecalculateAll(
+                    Helpers.VulnerabilityScoreService.ReasonManual);
+                AppendMaintenanceOutput("امتیاز آسیب‌پذیری برای " + score + " پرونده محاسبه شد.");
+
+                AuditLogger.Log("بازمحاسبه گروهی", "TblCase", 0, "",
+                    "تکمیل=" + completion + "; امتیاز=" + score);
+
+                LoadMaintenanceStats();
+                UiTheme.ShowSuccess(this,
+                    "بازمحاسبه انجام شد." + Environment.NewLine +
+                    "درصد تکمیل: " + completion + " پرونده" + Environment.NewLine +
+                    "امتیاز آسیب‌پذیری: " + score + " پرونده");
+            }
+            catch (Exception ex)
+            {
+                AppendMaintenanceOutput("خطا در بازمحاسبه: " + ex.Message);
+                Msg.Show("بازمحاسبهٔ گروهی کامل نشد: " + ex.Message);
+            }
+            finally
+            {
+                Cursor = previous;
             }
         }
 
