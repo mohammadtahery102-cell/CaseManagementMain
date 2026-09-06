@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.SQLite;
@@ -65,16 +65,82 @@ namespace CaseManagement.Helpers
             Migrant(t, c, mig);
             Family(t, fam);
             Survey(t, c);
+            GuardianProxy(t, db, caseId);
             BlankGroups(t);
 
             return t;
+        }
+
+        // ── ورقهٔ وکالت موقت سرپرستی ایتام ───────────────────────────────────
+        // آموزش — چرا توکن‌های این ورقه هم اینجا ساخته می‌شوند و نه در فرمِ
+        // فراخواننده: تا امروز «وکالت موقت» تنها فورمی بود که داده‌اش را از
+        // کادرهای روی صفحهٔ FrmCase می‌خواند، پس بیرونِ آن فرم قابلِ استفاده
+        // نبود و با بقیهٔ فورم‌های رسمی یک‌جا جمع نمی‌شد. با آمدن به همین
+        // کلاس، مرکزِ فورم‌های رسمی می‌تواند آن را مثلِ پنج فورمِ دیگر باز کند.
+        //
+        // نام/نام‌پدر/تذکرهٔ «سرپرست» در قالبِ این ورقه با توکن‌های Guardian*
+        // علامت خورده، ولی همان مقدارِ Head* است — پس این‌ها مستعارند، نه
+        // کوئریِ تازه.
+        private static void GuardianProxy(Dictionary<string, string> t, DatabaseHelper db, int caseId)
+        {
+            // ⚠ «پرکردن فقط اگر خالی باشد» عمدی است: فورم ۱ همین توکن‌ها را از
+            // TblOrphan.GuardianName پر می‌کند و بازنویسیِ آن، خروجیِ آن فورم را
+            // خراب می‌کرد. اینجا فقط جای خالی پر می‌شود.
+            Fill(t, "GuardianName", Get(t, "HeadName"));
+            Fill(t, "GuardianFather", Get(t, "HeadFather"));
+            Fill(t, "GuardianTazkira", Get(t, "HeadTazkira"));
+            Fill(t, "GuardianTazkiraType", Get(t, "HeadIdCardType"));
+
+            // تعدادِ ایتامِ تحتِ سرپرستی — همان شمارشی که FrmCase می‌کرد.
+            int orphans = 0;
+            try
+            {
+                object v = db.ExecuteScalar(
+                    "SELECT COUNT(*) FROM TblFamily WHERE CasID = @id AND COALESCE(MemberRole,'') = 'یتیم'",
+                    new SQLiteParameter("@id", caseId));
+                if (v != null && v != DBNull.Value) orphans = Convert.ToInt32(v);
+            }
+            catch { }
+
+            Fill(t, "OrphanCount", Ltr(orphans.ToString(CultureInfo.InvariantCulture)));
+
+            // خانه‌های دستی؛ مقدارِ اولیه دارند تا دیالوگ خالی باز نشود، ولی
+            // کاربر همه را می‌تواند عوض کند.
+            string today = PersianDateHelper.ToPersianDateString(DateTime.Now);
+            Fill(t, "IssueDate", Ltr(today));
+            Fill(t, "FromDate", Ltr(today));
+            Fill(t, "ToDate", "");
+            Fill(t, "Reason", "");
+            Fill(t, "ProxyName", "");
+            Fill(t, "ProxyFather", "");
+            Fill(t, "ProxyTazkira", "");
+        }
+
+        private static string Get(Dictionary<string, string> t, string key)
+        {
+            string v;
+            return t.TryGetValue(key, out v) ? v : "";
+        }
+
+        // کلید را فقط وقتی می‌نویسد که وجود نداشته باشد یا خالی باشد.
+        private static void Fill(Dictionary<string, string> t, string key, string value)
+        {
+            string current;
+            if (t.TryGetValue(key, out current) && !string.IsNullOrWhiteSpace(current)) return;
+            t[key] = value ?? "";
         }
 
         // ── سربرگ ────────────────────────────────────────────────────────────
         private static void Header(Dictionary<string, string> t, DataRow c,
                                    DatabaseHelper db, string typeCode)
         {
-            t["OrgName"]    = SettingsHelper.Get(SettingsHelper.OrgName);
+            // نامِ مؤسسه در سربرگِ هر پنج فورم چاپ می‌شود. اگر تنظیم نشده
+            // باشد، به نامِ لاتین برمی‌گردیم — همان مؤسسه است، فقط به خطِ
+            // دیگر. به CenterName برنمی‌گردیم چون آن نامِ *شعبه* است
+            // («کابل»، «بلخ») و چاپش به‌جای نامِ مؤسسه سندِ رسمی را غلط
+            // می‌کند.
+            t["OrgName"] = Coalesce(SettingsHelper.Get(SettingsHelper.OrgName),
+                                    SettingsHelper.Get(SettingsHelper.OrgNameEn));
             t["Province"]   = S(c, "Province");
             t["District"]   = S(c, "District");
             t["Zone"]       = S(c, "Zone");
