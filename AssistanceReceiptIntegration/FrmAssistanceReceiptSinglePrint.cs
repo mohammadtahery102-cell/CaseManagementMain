@@ -21,6 +21,7 @@ namespace CaseManagement.AssistanceReceiptIntegration
     public class FrmAssistanceReceiptSinglePrint : Form
     {
         private readonly int _assistanceId;
+        private CoreWebView2Environment _env;
         private WebView2 _webView;
         private Panel _toolbar;
         private Label _lblStatus;
@@ -131,8 +132,29 @@ namespace CaseManagement.AssistanceReceiptIntegration
                 "CaseManagement", "WebView2UserData");
             Directory.CreateDirectory(userDataFolder);
 
-            CoreWebView2Environment env = await CoreWebView2Environment.CreateAsync(null, userDataFolder);
-            await _webView.EnsureCoreWebView2Async(env);
+            // F-40 — محیط نگه داشته می‌شود چون ساختِ CoreWebView2PrintSettings
+            // فقط از روی همین شیء ممکن است و PDF باید صریحاً A4 باشد.
+            _env = await CoreWebView2Environment.CreateAsync(null, userDataFolder);
+            await _webView.EnsureCoreWebView2Async(_env);
+        }
+
+        // F-40 — بدونِ تنظیماتِ صریح، PrintToPdfAsync اندازهٔ پیش‌فرضِ خودش
+        // (Letter، ۲۷۹٫۴ میلی‌متر) را می‌گیرد و `@page{size:A4}`ِ داخلِ CSS
+        // را نادیده می‌گذارد؛ آن‌وقت برگِ ۲۹۵ میلی‌متری دوباره سرریز می‌کرد و
+        // اصلاحِ ارتفاعِ رسید در خروجیِ PDF بی‌اثر می‌ماند.
+        // A4 = ۲۱۰×۲۹۷ میلی‌متر = ۸٫۲۶۸×۱۱٫۶۹۳ اینچ.
+        private CoreWebView2PrintSettings BuildA4PrintSettings()
+        {
+            if (_env == null) return null;
+
+            CoreWebView2PrintSettings settings = _env.CreatePrintSettings();
+            settings.PageWidth  = 210d / 25.4d;
+            settings.PageHeight = 297d / 25.4d;
+            settings.MarginTop = 0; settings.MarginBottom = 0;
+            settings.MarginLeft = 0; settings.MarginRight = 0;
+            // پس‌زمینه‌های امنیتی (واترمارک، ریزنویسی، نوار) بخشی از سندند.
+            settings.ShouldPrintBackgrounds = true;
+            return settings;
         }
 
         private async Task RenderAndNavigateAsync(AssistanceReceiptData data)
@@ -241,7 +263,7 @@ namespace CaseManagement.AssistanceReceiptIntegration
                     await LoadReceiptAsync(commit: true);
 
                     SetStatus("در حال ساخت PDF...");
-                    bool ok = await _webView.CoreWebView2.PrintToPdfAsync(sfd.FileName);
+                    bool ok = await _webView.CoreWebView2.PrintToPdfAsync(sfd.FileName, BuildA4PrintSettings());
                     SetStatus("");
                     if (ok)
                         UiTheme.ShowSuccess(this, "فایل PDF ذخیره شد:\n" + sfd.FileName);

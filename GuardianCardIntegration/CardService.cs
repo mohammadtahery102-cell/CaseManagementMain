@@ -80,6 +80,11 @@ namespace CaseManagement.GuardianCardIntegration
                 IssueDate = PersianDateHelper.ToPersianDateString(issueDate),
                 ExpiryDate = PersianDateHelper.ToPersianDateString(expiryDate),
 
+                // از CaseModel که CaseCardRepository از قبل پر می‌کرد — تا
+                // امروز اینجا رها می‌شد و به کارت نمی‌رسید.
+                DisabilityType = c.DisabilityType,
+                DisabilityDegree = c.DisabilityDegree,
+
                 Province = c.Province,
                 District = c.District,
                 // آموزش — رفع باگ «همیشه نوشته می‌شد بامیان»: نوار تزئینی دور

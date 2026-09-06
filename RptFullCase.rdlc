@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Report xmlns="http://schemas.microsoft.com/sqlserver/reporting/2008/01/reportdefinition" xmlns:rd="http://schemas.microsoft.com/SQLServer/reporting/reportdesigner">
   <Body>
     <ReportItems>
@@ -1754,8 +1754,345 @@
         </TablixRowHierarchy>
         <DataSetName>FamilyData</DataSetName>
       </Tablix>
+      <Textbox Name="RepresentativeHeader">
+        <CanGrow>true</CanGrow>
+        <Height>0.22in</Height>
+        <Width>6.5in</Width>
+        <Top>7.15in</Top>
+        <Left>0in</Left>
+        <Visibility><Hidden>=IIf(Len(Trim(First(Fields!Rep1Summary.Value, "CaseData") &amp; "")) = 0, True, False)</Hidden></Visibility>
+        <Style>
+          <Border><Style>None</Style></Border>
+          <FontSize>10pt</FontSize>
+          <FontWeight>Bold</FontWeight>
+          <TextAlign>Right</TextAlign>
+          <Direction>RTL</Direction>
+          <PaddingLeft>2pt</PaddingLeft>
+          <PaddingRight>2pt</PaddingRight>
+        </Style>
+        <Paragraphs>
+          <Paragraph>
+            <TextRuns>
+              <TextRun><Value>نمایندهٔ قانونی</Value><Style /></TextRun>
+            </TextRuns>
+            <Style />
+          </Paragraph>
+        </Paragraphs>
+      </Textbox>
+      <Textbox Name="Lbl_Rep1">
+        <CanGrow>true</CanGrow>
+        <Height>0.2in</Height>
+        <Width>1.7in</Width>
+        <Top>7.42in</Top>
+        <Left>4.8in</Left>
+        <Visibility><Hidden>=IIf(Len(Trim(First(Fields!Rep1Summary.Value, "CaseData") &amp; "")) = 0, True, False)</Hidden></Visibility>
+        <Style>
+          <Border><Style>None</Style></Border>
+          <FontSize>8pt</FontSize>
+          <FontWeight>Bold</FontWeight>
+          <TextAlign>Right</TextAlign>
+          <Direction>RTL</Direction>
+          <PaddingLeft>2pt</PaddingLeft>
+          <PaddingRight>2pt</PaddingRight>
+        </Style>
+        <Paragraphs>
+          <Paragraph>
+            <TextRuns>
+              <TextRun><Value>نمایندهٔ اول :</Value><Style /></TextRun>
+            </TextRuns>
+            <Style />
+          </Paragraph>
+        </Paragraphs>
+      </Textbox>
+      <Textbox Name="Val_Rep1">
+        <CanGrow>true</CanGrow>
+        <Height>0.2in</Height>
+        <Width>4.6in</Width>
+        <Top>7.42in</Top>
+        <Left>0in</Left>
+        <Visibility><Hidden>=IIf(Len(Trim(First(Fields!Rep1Summary.Value, "CaseData") &amp; "")) = 0, True, False)</Hidden></Visibility>
+        <Style>
+          <Border><Style>None</Style></Border>
+          <FontSize>8pt</FontSize>
+          <TextAlign>Right</TextAlign>
+          <Direction>RTL</Direction>
+          <PaddingLeft>2pt</PaddingLeft>
+          <PaddingRight>2pt</PaddingRight>
+        </Style>
+        <Paragraphs>
+          <Paragraph>
+            <TextRuns>
+              <TextRun><Value>=First(Fields!Rep1Summary.Value, "CaseData")</Value><Style /></TextRun>
+            </TextRuns>
+            <Style />
+          </Paragraph>
+        </Paragraphs>
+      </Textbox>
+      <Textbox Name="Lbl_Rep2">
+        <CanGrow>true</CanGrow>
+        <Height>0.2in</Height>
+        <Width>1.7in</Width>
+        <Top>7.62in</Top>
+        <Left>4.8in</Left>
+        <Visibility><Hidden>=IIf(Len(Trim(First(Fields!Rep2Summary.Value, "CaseData") &amp; "")) = 0, True, False)</Hidden></Visibility>
+        <Style>
+          <Border><Style>None</Style></Border>
+          <FontSize>8pt</FontSize>
+          <FontWeight>Bold</FontWeight>
+          <TextAlign>Right</TextAlign>
+          <Direction>RTL</Direction>
+          <PaddingLeft>2pt</PaddingLeft>
+          <PaddingRight>2pt</PaddingRight>
+        </Style>
+        <Paragraphs>
+          <Paragraph>
+            <TextRuns>
+              <TextRun><Value>نمایندهٔ دوم :</Value><Style /></TextRun>
+            </TextRuns>
+            <Style />
+          </Paragraph>
+        </Paragraphs>
+      </Textbox>
+      <Textbox Name="Val_Rep2">
+        <CanGrow>true</CanGrow>
+        <Height>0.2in</Height>
+        <Width>4.6in</Width>
+        <Top>7.62in</Top>
+        <Left>0in</Left>
+        <Visibility><Hidden>=IIf(Len(Trim(First(Fields!Rep2Summary.Value, "CaseData") &amp; "")) = 0, True, False)</Hidden></Visibility>
+        <Style>
+          <Border><Style>None</Style></Border>
+          <FontSize>8pt</FontSize>
+          <TextAlign>Right</TextAlign>
+          <Direction>RTL</Direction>
+          <PaddingLeft>2pt</PaddingLeft>
+          <PaddingRight>2pt</PaddingRight>
+        </Style>
+        <Paragraphs>
+          <Paragraph>
+            <TextRuns>
+              <TextRun><Value>=First(Fields!Rep2Summary.Value, "CaseData")</Value><Style /></TextRun>
+            </TextRuns>
+            <Style />
+          </Paragraph>
+        </Paragraphs>
+      </Textbox>
+      <Textbox Name="StatusHeader">
+        <CanGrow>true</CanGrow>
+        <Height>0.22in</Height>
+        <Width>6.5in</Width>
+        <Top>7.90in</Top>
+        <Left>0in</Left>
+        <Style>
+          <Border><Style>None</Style></Border>
+          <FontSize>10pt</FontSize>
+          <FontWeight>Bold</FontWeight>
+          <TextAlign>Right</TextAlign>
+          <Direction>RTL</Direction>
+          <PaddingLeft>2pt</PaddingLeft>
+          <PaddingRight>2pt</PaddingRight>
+        </Style>
+        <Paragraphs>
+          <Paragraph>
+            <TextRuns>
+              <TextRun><Value>وضعیت پرونده</Value><Style /></TextRun>
+            </TextRuns>
+            <Style />
+          </Paragraph>
+        </Paragraphs>
+      </Textbox>
+      <Textbox Name="Lbl_Completion">
+        <CanGrow>true</CanGrow>
+        <Height>0.2in</Height>
+        <Width>1.7in</Width>
+        <Top>8.17in</Top>
+        <Left>4.8in</Left>
+        <Style>
+          <Border><Style>None</Style></Border>
+          <FontSize>8pt</FontSize>
+          <FontWeight>Bold</FontWeight>
+          <TextAlign>Right</TextAlign>
+          <Direction>RTL</Direction>
+          <PaddingLeft>2pt</PaddingLeft>
+          <PaddingRight>2pt</PaddingRight>
+        </Style>
+        <Paragraphs>
+          <Paragraph>
+            <TextRuns>
+              <TextRun><Value>تکمیل پرونده :</Value><Style /></TextRun>
+            </TextRuns>
+            <Style />
+          </Paragraph>
+        </Paragraphs>
+      </Textbox>
+      <Textbox Name="Val_Completion">
+        <CanGrow>true</CanGrow>
+        <Height>0.2in</Height>
+        <Width>4.6in</Width>
+        <Top>8.17in</Top>
+        <Left>0in</Left>
+        <Style>
+          <Border><Style>None</Style></Border>
+          <FontSize>8pt</FontSize>
+          <TextAlign>Right</TextAlign>
+          <Direction>RTL</Direction>
+          <PaddingLeft>2pt</PaddingLeft>
+          <PaddingRight>2pt</PaddingRight>
+        </Style>
+        <Paragraphs>
+          <Paragraph>
+            <TextRuns>
+              <TextRun><Value>=Trim(First(Fields!CompletionStatusText.Value, "CaseData") &amp; " " &amp; IIf(Len(Trim(First(Fields!CompletionPercent.Value, "CaseData") &amp; "")) = 0, "", "(" &amp; First(Fields!CompletionPercent.Value, "CaseData") &amp; "٪)"))</Value><Style /></TextRun>
+            </TextRuns>
+            <Style />
+          </Paragraph>
+        </Paragraphs>
+      </Textbox>
+      <Textbox Name="Lbl_Vulnerability">
+        <CanGrow>true</CanGrow>
+        <Height>0.2in</Height>
+        <Width>1.7in</Width>
+        <Top>8.37in</Top>
+        <Left>4.8in</Left>
+        <Style>
+          <Border><Style>None</Style></Border>
+          <FontSize>8pt</FontSize>
+          <FontWeight>Bold</FontWeight>
+          <TextAlign>Right</TextAlign>
+          <Direction>RTL</Direction>
+          <PaddingLeft>2pt</PaddingLeft>
+          <PaddingRight>2pt</PaddingRight>
+        </Style>
+        <Paragraphs>
+          <Paragraph>
+            <TextRuns>
+              <TextRun><Value>امتیاز آسیب‌پذیری :</Value><Style /></TextRun>
+            </TextRuns>
+            <Style />
+          </Paragraph>
+        </Paragraphs>
+      </Textbox>
+      <Textbox Name="Val_Vulnerability">
+        <CanGrow>true</CanGrow>
+        <Height>0.2in</Height>
+        <Width>4.6in</Width>
+        <Top>8.37in</Top>
+        <Left>0in</Left>
+        <Style>
+          <Border><Style>None</Style></Border>
+          <FontSize>8pt</FontSize>
+          <TextAlign>Right</TextAlign>
+          <Direction>RTL</Direction>
+          <PaddingLeft>2pt</PaddingLeft>
+          <PaddingRight>2pt</PaddingRight>
+        </Style>
+        <Paragraphs>
+          <Paragraph>
+            <TextRuns>
+              <TextRun><Value>=Trim(IIf(Len(Trim(First(Fields!VulnerabilityScore.Value, "CaseData") &amp; "")) = 0, "", First(Fields!VulnerabilityScore.Value, "CaseData") &amp; " ") &amp; First(Fields!VulnerabilityBandText.Value, "CaseData"))</Value><Style /></TextRun>
+            </TextRuns>
+            <Style />
+          </Paragraph>
+        </Paragraphs>
+      </Textbox>
+      <Textbox Name="Lbl_Funding">
+        <CanGrow>true</CanGrow>
+        <Height>0.2in</Height>
+        <Width>1.7in</Width>
+        <Top>8.57in</Top>
+        <Left>4.8in</Left>
+        <Visibility><Hidden>=IIf(Len(Trim(First(Fields!FundingSummary.Value, "CaseData") &amp; "")) = 0, True, False)</Hidden></Visibility>
+        <Style>
+          <Border><Style>None</Style></Border>
+          <FontSize>8pt</FontSize>
+          <FontWeight>Bold</FontWeight>
+          <TextAlign>Right</TextAlign>
+          <Direction>RTL</Direction>
+          <PaddingLeft>2pt</PaddingLeft>
+          <PaddingRight>2pt</PaddingRight>
+        </Style>
+        <Paragraphs>
+          <Paragraph>
+            <TextRuns>
+              <TextRun><Value>تأمین مالی :</Value><Style /></TextRun>
+            </TextRuns>
+            <Style />
+          </Paragraph>
+        </Paragraphs>
+      </Textbox>
+      <Textbox Name="Val_Funding">
+        <CanGrow>true</CanGrow>
+        <Height>0.2in</Height>
+        <Width>4.6in</Width>
+        <Top>8.57in</Top>
+        <Left>0in</Left>
+        <Visibility><Hidden>=IIf(Len(Trim(First(Fields!FundingSummary.Value, "CaseData") &amp; "")) = 0, True, False)</Hidden></Visibility>
+        <Style>
+          <Border><Style>None</Style></Border>
+          <FontSize>8pt</FontSize>
+          <TextAlign>Right</TextAlign>
+          <Direction>RTL</Direction>
+          <PaddingLeft>2pt</PaddingLeft>
+          <PaddingRight>2pt</PaddingRight>
+        </Style>
+        <Paragraphs>
+          <Paragraph>
+            <TextRuns>
+              <TextRun><Value>=First(Fields!FundingSummary.Value, "CaseData")</Value><Style /></TextRun>
+            </TextRuns>
+            <Style />
+          </Paragraph>
+        </Paragraphs>
+      </Textbox>
+      <Textbox Name="Lbl_DocsVerified">
+        <CanGrow>true</CanGrow>
+        <Height>0.2in</Height>
+        <Width>1.7in</Width>
+        <Top>8.77in</Top>
+        <Left>4.8in</Left>
+        <Style>
+          <Border><Style>None</Style></Border>
+          <FontSize>8pt</FontSize>
+          <FontWeight>Bold</FontWeight>
+          <TextAlign>Right</TextAlign>
+          <Direction>RTL</Direction>
+          <PaddingLeft>2pt</PaddingLeft>
+          <PaddingRight>2pt</PaddingRight>
+        </Style>
+        <Paragraphs>
+          <Paragraph>
+            <TextRuns>
+              <TextRun><Value>اسناد تأییدشده :</Value><Style /></TextRun>
+            </TextRuns>
+            <Style />
+          </Paragraph>
+        </Paragraphs>
+      </Textbox>
+      <Textbox Name="Val_DocsVerified">
+        <CanGrow>true</CanGrow>
+        <Height>0.2in</Height>
+        <Width>4.6in</Width>
+        <Top>8.77in</Top>
+        <Left>0in</Left>
+        <Style>
+          <Border><Style>None</Style></Border>
+          <FontSize>8pt</FontSize>
+          <TextAlign>Right</TextAlign>
+          <Direction>RTL</Direction>
+          <PaddingLeft>2pt</PaddingLeft>
+          <PaddingRight>2pt</PaddingRight>
+        </Style>
+        <Paragraphs>
+          <Paragraph>
+            <TextRuns>
+              <TextRun><Value>=Trim(First(Fields!VerifiedDocsSummary.Value, "CaseData") &amp; "   —   بازدید میدانی: " &amp; First(Fields!FieldVisitCountText.Value, "CaseData"))</Value><Style /></TextRun>
+            </TextRuns>
+            <Style />
+          </Paragraph>
+        </Paragraphs>
+      </Textbox>
     </ReportItems>
-    <Height>8.3in</Height>
+    <Height>9.1in</Height>
     <Style />
   </Body>
   <Width>6.5in</Width>
@@ -1925,6 +2262,42 @@
         </Field>
         <Field Name="HeadIdCardType">
           <DataField>HeadIdCardType</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="Rep1Summary">
+          <DataField>Rep1Summary</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="Rep2Summary">
+          <DataField>Rep2Summary</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="CompletionPercent">
+          <DataField>CompletionPercent</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="CompletionStatusText">
+          <DataField>CompletionStatusText</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="VulnerabilityScore">
+          <DataField>VulnerabilityScore</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="VulnerabilityBandText">
+          <DataField>VulnerabilityBandText</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="FundingSummary">
+          <DataField>FundingSummary</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="VerifiedDocsSummary">
+          <DataField>VerifiedDocsSummary</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="FieldVisitCountText">
+          <DataField>FieldVisitCountText</DataField>
           <rd:TypeName>System.String</rd:TypeName>
         </Field>
       </Fields>

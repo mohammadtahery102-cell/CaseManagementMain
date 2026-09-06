@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.SQLite;
@@ -76,6 +76,15 @@ namespace CaseManagement.Helpers
     // ─────────────────────────────────────────────────────────────────────────
     public static class ReportCatalog
     {
+        // آموزش — چرا ثابت و نه رشتهٔ درجا: این دو زیرکوئری در چند ستون
+        // تکرار می‌شوند و هر واگراییِ کوچکی بینشان یعنی «تعداد کم» با
+        // «کامل است؟» همدیگر را نقض کنند.
+        private const string REQUIRED_DOC_COUNT =
+            "(SELECT COUNT(*) FROM TblRequiredDocument rd0 WHERE rd0.RequestTypeID = c.RequestTypeID AND rd0.IsActive = 1 AND rd0.IsMandatory = 1)";
+
+        private const string SATISFIED_DOC_COUNT =
+            "(SELECT COUNT(*) FROM TblRequiredDocument rd1 JOIN TblDocumentCategory dc1 ON dc1.DocumentCategoryID = rd1.DocumentCategoryID AND dc1.IsActive = 1 WHERE rd1.RequestTypeID = c.RequestTypeID AND rd1.IsActive = 1 AND rd1.IsMandatory = 1 AND (SELECT COUNT(*) FROM TblDocs d1 WHERE d1.CasID = c.CasID AND d1.DocumentCategoryID = rd1.DocumentCategoryID AND IFNULL(d1.IsArchived,0) = 0) >= rd1.MinCount)";
+
         public static readonly List<ReportSource> Sources = BuildSources();
 
         public static ReportSource FindSource(string key)
@@ -154,6 +163,12 @@ namespace CaseManagement.Helpers
             docs.Columns.Add(new ReportColumn("OriginalFileName", "نام فایل", "d.OriginalFileName", ReportColumnType.Text));
             docs.Columns.Add(new ReportColumn("ServiceStatus", "وضعیت خدمات", "c.ServiceStatus", ReportColumnType.Text));
             docs.Columns.Add(new ReportColumn("RequestType", "نوع درخواست", "c.RequestType", ReportColumnType.Text));
+            // Phase 5.5-D — وضعیتِ تأییدِ سند (ستون‌های فاز ۵.۵-الف).
+            docs.Columns.Add(new ReportColumn("VerificationStatus", "وضعیت تأیید",
+                "CASE WHEN IFNULL(d.IsVerified,0) = 1 THEN 'تأیید شده' ELSE 'در انتظار تأیید' END",
+                ReportColumnType.Text));
+            docs.Columns.Add(new ReportColumn("VerifiedBy", "تأییدکننده", "d.VerifiedBy", ReportColumnType.Text));
+            docs.Columns.Add(new ReportColumn("VerifiedDate", "تاریخ تأیید", "d.VerifiedDate", ReportColumnType.Date));
             list.Add(docs);
 
             var assistance = new ReportSource
@@ -217,6 +232,197 @@ namespace CaseManagement.Helpers
             familyHistory.Columns.Add(new ReportColumn("ChangedAt", "تاریخ تغییر", "fh.ChangedAt", ReportColumnType.Date));
             familyHistory.Columns.Add(new ReportColumn("ChangedBy", "تغییر توسط", "fh.ChangedBy", ReportColumnType.Text));
             list.Add(familyHistory);
+
+            // ═══════════════════════════════════════════════════════════════
+            // Phase 5.5-C — منابعِ گزارشِ پیشرفته.
+            //
+            // همه از همان زیرساختِ موجود (فیلتر/گروه‌بندی/فیلترِ مرکز/بایگانی)
+            // استفاده می‌کنند و فقط داده تعریف می‌کنند — هیچ کدِ اجراییِ تازه‌ای
+            // لازم نیست. کلیدهای ستونِ موجود هرگز تغییر نکردند، پس قالب‌های
+            // ذخیره‌شده در TblReportTemplate سالم می‌مانند.
+            // ═══════════════════════════════════════════════════════════════
+
+            // «پرونده‌ها» با محورهای تازه: تکمیل و آسیب‌پذیری. روی ستون‌های
+            // کشِ ایندکس‌دار کار می‌کنند، نه محاسبهٔ زنده.
+            cases.Columns.Add(new ReportColumn("CompletionPercent", "درصد تکمیل", "c.CompletionPercent", ReportColumnType.Number));
+            cases.Columns.Add(new ReportColumn("CompletionStatus", "وضعیت تکمیل",
+                "CASE IFNULL(c.CompletionStatusCode,'') WHEN 'COMPLETE' THEN 'کامل' " +
+                "WHEN 'IN_PROGRESS' THEN 'در حال تکمیل' WHEN 'INCOMPLETE' THEN 'ناقص' ELSE 'محاسبه نشده' END",
+                ReportColumnType.Text));
+            cases.Columns.Add(new ReportColumn("VulnerabilityScore", "امتیاز آسیب‌پذیری", "c.VulnerabilityScore", ReportColumnType.Number));
+            cases.Columns.Add(new ReportColumn("VulnerabilityBand", "سطح آسیب‌پذیری",
+                "CASE IFNULL(c.VulnerabilityBand,'') WHEN 'HIGH' THEN 'پرخطر' " +
+                "WHEN 'MEDIUM' THEN 'متوسط' WHEN 'LOW' THEN 'کم‌خطر' ELSE 'محاسبه نشده' END",
+                ReportColumnType.Text));
+            cases.Columns.Add(new ReportColumn("SuspensionReason", "دلیل تعلیق", "c.SuspensionReason", ReportColumnType.Text));
+
+            // ─── خلاصهٔ اسنادِ الزامی در سطحِ پرونده ─────────────────────────
+            // منبعِ MissingDocuments یک ردیف به‌ازای هر «دسته» می‌دهد؛ برای
+            // پاسخِ «این پرونده چند سند دارد و چند تا کم دارد» یک شمارشِ
+            // سطحِ پرونده لازم است، وگرنه باید ردیف‌ها را دستی جمع می‌زدند.
+            cases.Columns.Add(new ReportColumn("RequiredDocsTotal", "اسناد الزامی (تعداد)",
+                REQUIRED_DOC_COUNT, ReportColumnType.Number));
+            cases.Columns.Add(new ReportColumn("RequiredDocsHave", "اسناد الزامی موجود",
+                SATISFIED_DOC_COUNT, ReportColumnType.Number));
+            cases.Columns.Add(new ReportColumn("RequiredDocsMissing", "اسناد الزامی کم",
+                REQUIRED_DOC_COUNT + " - " + SATISFIED_DOC_COUNT, ReportColumnType.Number));
+            cases.Columns.Add(new ReportColumn("DocsComplete", "اسناد کامل است؟",
+                "CASE WHEN " + SATISFIED_DOC_COUNT + " >= " + REQUIRED_DOC_COUNT +
+                " THEN 'بلی' ELSE 'خیر' END", ReportColumnType.Text));
+            cases.Columns.Add(new ReportColumn("DocsUploaded", "تعداد کل اسناد آپلودشده",
+                "(SELECT COUNT(*) FROM TblDocs d2 WHERE d2.CasID = c.CasID " +
+                "AND IFNULL(d2.IsArchived,0) = 0 AND IFNULL(TRIM(d2.DocFilePath), '') <> '')",
+                ReportColumnType.Number));
+
+            // ─── پوششِ فورمِ بررسی نسبت به بازدیدها ─────────────────────────
+            // قاعدهٔ کاری: فقط بازدیدِ اول فورمِ بررسیِ الزامی دارد (MinCount=1
+            // در ماتریس)، ولی حالتِ پیش‌فرضِ موردِ انتظار «یک فورم به‌ازای هر
+            // بازدید» است. این دو ستون فاصله را نشان می‌دهند بی‌آنکه چیزی را
+            // مسدود کنند — قضاوت با کاربر است.
+            cases.Columns.Add(new ReportColumn("FieldVisitCount", "تعداد بازدید میدانی",
+                "(SELECT COUNT(*) FROM TblFieldVisit fv WHERE fv.CasID = c.CasID)",
+                ReportColumnType.Number));
+            cases.Columns.Add(new ReportColumn("SurveyFormCount", "فورم بررسی آپلودشده",
+                "(SELECT COUNT(*) FROM TblDocs d3 " +
+                "JOIN TblDocumentCategory dc3 ON dc3.DocumentCategoryID = d3.DocumentCategoryID " +
+                "WHERE d3.CasID = c.CasID AND dc3.Code = 'INVESTIGATION_FORMS' " +
+                "AND IFNULL(d3.IsArchived,0) = 0 AND IFNULL(TRIM(d3.DocFilePath), '') <> '')",
+                ReportColumnType.Number));
+
+            // ─── اسنادِ الزامیِ کم ───────────────────────────────────────────
+            // هر ردیف = یک دستهٔ الزامیِ کم در یک پرونده؛ پس گزارشِ «اسناد
+            // ناقص» مستقیماً از همین منبع ساخته می‌شود.
+            var missingDocs = new ReportSource
+            {
+                Key = "MissingDocuments", DisplayName = "اسناد الزامی ناقص",
+                FromClause =
+                    "TblCase c " +
+                    "JOIN TblRequiredDocument rd ON rd.RequestTypeID = c.RequestTypeID AND rd.IsActive = 1 AND rd.IsMandatory = 1 " +
+                    "JOIN TblDocumentCategory dc ON dc.DocumentCategoryID = rd.DocumentCategoryID AND dc.IsActive = 1",
+                CenterColumn = "c.CenterID",
+                ArchivedColumn = "c.IsArchived"
+            };
+            missingDocs.Columns.Add(new ReportColumn("CaseCode", "کد پرونده", "c.Code", ReportColumnType.Text));
+            missingDocs.Columns.Add(new ReportColumn("HeadFullName", "نام سرپرست", "c.HeadFullName", ReportColumnType.Text));
+            missingDocs.Columns.Add(new ReportColumn("Province", "ولایت", "c.Province", ReportColumnType.Text));
+            missingDocs.Columns.Add(new ReportColumn("RequestType", "نوع درخواست", "IFNULL(rt.Name, c.RequestType)", ReportColumnType.Text));
+            missingDocs.Columns.Add(new ReportColumn("CategoryName", "دسته سند الزامی", "dc.Name", ReportColumnType.Text));
+            missingDocs.Columns.Add(new ReportColumn("MinCount", "حداقل لازم", "rd.MinCount", ReportColumnType.Number));
+            missingDocs.Columns.Add(new ReportColumn("ExistingCount", "موجود",
+                "(SELECT COUNT(*) FROM TblDocs d WHERE d.CasID = c.CasID " +
+                "AND d.DocumentCategoryID = dc.DocumentCategoryID AND IFNULL(d.IsArchived,0) = 0)",
+                ReportColumnType.Number));
+            // ستونِ وضعیت تا کاربر بتواند همین منبع را روی «ناقص» فیلتر کند.
+            // بدونِ آن، گزارش هر دستهٔ الزامیِ هر پرونده را ردیف می‌کند و
+            // تشخیصِ «کدام‌ها کم است» با چشم انجام می‌شد.
+            missingDocs.Columns.Add(new ReportColumn("DocStatus", "وضعیت سند",
+                "CASE WHEN (SELECT COUNT(*) FROM TblDocs d WHERE d.CasID = c.CasID " +
+                "AND d.DocumentCategoryID = dc.DocumentCategoryID AND IFNULL(d.IsArchived,0) = 0) " +
+                ">= rd.MinCount THEN 'کامل' ELSE 'ناقص' END", ReportColumnType.Text));
+            // «ثبت شده ولی فایل ندارد» — همان تعریفِ رسمیِ فاز ۵.۵ از سندِ ناقص.
+            missingDocs.Columns.Add(new ReportColumn("NoFileCount", "بدون فایل پیوست",
+                "(SELECT COUNT(*) FROM TblDocs d WHERE d.CasID = c.CasID " +
+                "AND d.DocumentCategoryID = dc.DocumentCategoryID AND IFNULL(d.IsArchived,0) = 0 " +
+                "AND IFNULL(TRIM(d.DocFilePath), '') = '')", ReportColumnType.Number));
+            missingDocs.FromClause += " LEFT JOIN TblRequestType rt ON rt.RequestTypeID = c.RequestTypeID";
+            list.Add(missingDocs);
+
+            // ─── تأمین مالی و خیّر ──────────────────────────────────────────
+            var funding = new ReportSource
+            {
+                Key = "Funding", DisplayName = "تأمین مالی و خیّرین",
+                FromClause =
+                    "TblCaseFunding cf " +
+                    "JOIN TblCase c ON c.CasID = cf.CasID " +
+                    "JOIN TblFundingSource fs ON fs.FundingSourceID = cf.FundingSourceID " +
+                    "LEFT JOIN TblSponsor s ON s.SponsorID = cf.SponsorID",
+                CenterColumn = "c.CenterID",
+                ArchivedColumn = "c.IsArchived"
+            };
+            funding.Columns.Add(new ReportColumn("CaseCode", "کد پرونده", "c.Code", ReportColumnType.Text));
+            funding.Columns.Add(new ReportColumn("HeadFullName", "نام سرپرست", "c.HeadFullName", ReportColumnType.Text));
+            funding.Columns.Add(new ReportColumn("Province", "ولایت", "c.Province", ReportColumnType.Text));
+            funding.Columns.Add(new ReportColumn("FundingSource", "منبع تأمین مالی", "fs.Name", ReportColumnType.Text));
+            funding.Columns.Add(new ReportColumn("FundingCode", "کد منبع", "fs.Code", ReportColumnType.Text));
+            funding.Columns.Add(new ReportColumn("SponsorName", "خیّر", "s.Name", ReportColumnType.Text));
+            funding.Columns.Add(new ReportColumn("StartDate", "از تاریخ", "cf.StartDate", ReportColumnType.Date));
+            funding.Columns.Add(new ReportColumn("EndDate", "تا تاریخ", "cf.EndDate", ReportColumnType.Date));
+            funding.Columns.Add(new ReportColumn("FundingStatus", "وضعیت",
+                "CASE WHEN cf.IsActive = 1 THEN 'فعال' ELSE 'غیرفعال' END", ReportColumnType.Text));
+            list.Add(funding);
+
+            // ─── بازدید میدانی ──────────────────────────────────────────────
+            var visits = new ReportSource
+            {
+                Key = "FieldVisits", DisplayName = "بازدیدهای میدانی",
+                FromClause = "TblFieldVisit v JOIN TblCase c ON c.CasID = v.CasID",
+                CenterColumn = "c.CenterID",
+                ArchivedColumn = "c.IsArchived"
+            };
+            visits.Columns.Add(new ReportColumn("CaseCode", "کد پرونده", "c.Code", ReportColumnType.Text));
+            visits.Columns.Add(new ReportColumn("HeadFullName", "نام سرپرست", "c.HeadFullName", ReportColumnType.Text));
+            visits.Columns.Add(new ReportColumn("Province", "ولایت", "c.Province", ReportColumnType.Text));
+            visits.Columns.Add(new ReportColumn("VisitDate", "تاریخ بازدید", "v.VisitDate", ReportColumnType.Date));
+            visits.Columns.Add(new ReportColumn("VisitorName", "بازدیدکننده", "v.VisitorName", ReportColumnType.Text));
+            visits.Columns.Add(new ReportColumn("VisitResult", "نتیجه", "v.VisitResult", ReportColumnType.Text));
+            visits.Columns.Add(new ReportColumn("Recommendation", "توصیه", "v.Recommendation", ReportColumnType.Text));
+            visits.Columns.Add(new ReportColumn("VisitNotes", "یادداشت", "v.Notes", ReportColumnType.Text));
+            // Feature 2 — «ولسوالی» برای گزارشِ ولایت/ولسوالی.
+            visits.Columns.Add(new ReportColumn("District", "ولسوالی", "c.District", ReportColumnType.Text));
+            // Feature 2 — «در انتظار / انجام‌شده».
+            //
+            // TblFieldVisit ستونِ وضعیت ندارد و افزودنش برای این گزارش یک
+            // تغییرِ اسکیما بود که این فاز اجازه‌اش را نمی‌دهد. وضعیت از
+            // خودِ داده استنتاج می‌شود: بازدیدی که نتیجه‌اش ثبت شده
+            // «انجام‌شده» است و بازدیدی که هنوز نتیجه ندارد «در انتظار».
+            // چون یک ستونِ معمولیِ گزارش است، هم فیلتر می‌شود (گزارشِ
+            // «بازدیدهای در انتظار» / «انجام‌شده») و هم گروه‌بندی.
+            visits.Columns.Add(new ReportColumn("VisitStatus", "وضعیت بازدید",
+                "CASE WHEN TRIM(COALESCE(v.VisitResult, '')) = '' THEN 'در انتظار' ELSE 'انجام‌شده' END",
+                ReportColumnType.Text));
+            // شمارنده برای گزارش‌های تجمیعی (تعداد بازدید در هر گروه).
+            visits.Columns.Add(new ReportColumn("VisitCount", "تعداد بازدید", "1", ReportColumnType.Number));
+            list.Add(visits);
+
+            // ─── تایم‌لاین پرونده ───────────────────────────────────────────
+            var timeline = new ReportSource
+            {
+                Key = "Timeline", DisplayName = "تایم‌لاین پرونده",
+                FromClause = "TblCaseTimeline t JOIN TblCase c ON c.CasID = t.CasID",
+                CenterColumn = "c.CenterID",
+                ArchivedColumn = "c.IsArchived"
+            };
+            timeline.Columns.Add(new ReportColumn("CaseCode", "کد پرونده", "c.Code", ReportColumnType.Text));
+            timeline.Columns.Add(new ReportColumn("HeadFullName", "نام سرپرست", "c.HeadFullName", ReportColumnType.Text));
+            timeline.Columns.Add(new ReportColumn("EventDate", "تاریخ", "t.EventDate", ReportColumnType.Date));
+            timeline.Columns.Add(new ReportColumn("EventCategory", "دسته رویداد", "t.EventCategoryCode", ReportColumnType.Text));
+            timeline.Columns.Add(new ReportColumn("EventType", "نوع رویداد", "t.EventTypeCode", ReportColumnType.Text));
+            timeline.Columns.Add(new ReportColumn("EventTitle", "رویداد", "t.Title", ReportColumnType.Text));
+            timeline.Columns.Add(new ReportColumn("EventDetails", "شرح", "t.Details", ReportColumnType.Text));
+            timeline.Columns.Add(new ReportColumn("EventUser", "کاربر", "t.Username", ReportColumnType.Text));
+            list.Add(timeline);
+
+            // ─── امتیاز آسیب‌پذیری (ریزِ سهمِ معیارها) ───────────────────────
+            var score = new ReportSource
+            {
+                Key = "VulnerabilityScore", DisplayName = "امتیاز آسیب‌پذیری",
+                FromClause =
+                    "TblVulnerabilityScoreDetail vd " +
+                    "JOIN TblVulnerabilityScore vs ON vs.ScoreID = vd.ScoreID AND vs.IsCurrent = 1 " +
+                    "JOIN TblCase c ON c.CasID = vd.CasID",
+                CenterColumn = "c.CenterID",
+                ArchivedColumn = "c.IsArchived"
+            };
+            score.Columns.Add(new ReportColumn("CaseCode", "کد پرونده", "c.Code", ReportColumnType.Text));
+            score.Columns.Add(new ReportColumn("HeadFullName", "نام سرپرست", "c.HeadFullName", ReportColumnType.Text));
+            score.Columns.Add(new ReportColumn("TotalScore", "امتیاز کل", "vs.Score", ReportColumnType.Number));
+            score.Columns.Add(new ReportColumn("Band", "سطح خطر",
+                "CASE vs.Band WHEN 'HIGH' THEN 'پرخطر' WHEN 'MEDIUM' THEN 'متوسط' " +
+                "WHEN 'LOW' THEN 'کم‌خطر' ELSE '—' END", ReportColumnType.Text));
+            score.Columns.Add(new ReportColumn("CriteriaName", "معیار", "vd.CriteriaName", ReportColumnType.Text));
+            score.Columns.Add(new ReportColumn("CriteriaScore", "امتیاز معیار", "vd.ScoreValue", ReportColumnType.Number));
+            score.Columns.Add(new ReportColumn("CalculatedDate", "تاریخ محاسبه", "vs.CalculatedDate", ReportColumnType.Date));
+            list.Add(score);
 
             return list;
         }

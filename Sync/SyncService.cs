@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Data.SQLite;
 using System.Diagnostics;
 using System.Threading;
 using CaseManagement.Helpers;
@@ -258,6 +259,16 @@ namespace CaseManagement.Sync
             string cursor = SyncOutboxService.GetState(KeyPullCursor, "");
             int page = 0;
 
+            // Phase 5.5-B — پرونده‌هایی که این اجرای دریافت لمسشان کرده.
+            // امتیازِ آسیب‌پذیری دادهٔ مشتق است و سینک نمی‌شود؛ پس هر گره
+            // باید خودش پس از دریافت بازمحاسبه کند. طبقِ تصمیمِ صریحِ کاربر
+            // این کار *پس از پایانِ دسته* انجام می‌شود، نه به‌ازای هر ردیف:
+            // ردیف‌به‌ردیف هم مسیرِ پرریسکِ اعمال را سنگین می‌کرد و هم برای
+            // یک پرونده که چند تغییر گرفته چند بار بی‌دلیل حساب می‌کرد.
+            var affectedCases = new HashSet<int>();
+
+            try
+            {
             while (!cancel.IsCancellationRequested)
             {
                 SyncPullResult pull;
@@ -306,6 +317,8 @@ namespace CaseManagement.Sync
                             case SyncApplier.ApplyOutcome.Updated:
                             case SyncApplier.ApplyOutcome.Deleted:
                                 result.Downloaded++;
+                                int affected = ResolveAffectedCaseId(change);
+                                if (affected > 0) affectedCases.Add(affected);
                                 break;
 
                             case SyncApplier.ApplyOutcome.SkippedConflict:
@@ -359,6 +372,59 @@ namespace CaseManagement.Sync
                         "Download/StalledCursor");
                     return;
                 }
+            }
+            }
+            finally
+            {
+                // finally چون Download چند نقطهٔ خروج دارد (لغو، قطعِ شبکه،
+                // پایانِ صفحات، نشانگرِ پیش‌نرونده). بدونِ آن، بازمحاسبه فقط
+                // در یکی از مسیرها اجرا می‌شد و بقیه امتیازِ کهنه می‌ماندند.
+                RecalculateScoresAfterSync(affectedCases);
+            }
+        }
+
+        // پروندهٔ متأثر از یک تغییرِ دریافت‌شده. برای خودِ TblCase از GlobalID
+        // خودش، و برای جدول‌های فرزند از ParentGlobalID. عمداً اینجاست و نه
+        // در SyncApplier: مسیرِ اعمال (پرریسک‌ترین کدِ پروژه) دست‌نخورده می‌ماند.
+        private static int ResolveAffectedCaseId(SyncChange change)
+        {
+            if (change == null) return 0;
+
+            string globalId = string.Equals(change.EntityName, "TblCase", StringComparison.OrdinalIgnoreCase)
+                ? change.GlobalId
+                : change.ParentGlobalId;
+
+            if (string.IsNullOrWhiteSpace(globalId)) return 0;
+
+            try
+            {
+                using (var con = new CaseManagement.DAL.DatabaseHelper().GetConnection())
+                using (var cmd = new SQLiteCommand(
+                    "SELECT CasID FROM TblCase WHERE GlobalID = @G LIMIT 1;", con))
+                {
+                    cmd.Parameters.AddWithValue("@G", globalId);
+                    con.Open();
+                    object value = cmd.ExecuteScalar();
+                    return value == null || value == DBNull.Value ? 0 : Convert.ToInt32(value);
+                }
+            }
+            catch { return 0; }
+        }
+
+        private static void RecalculateScoresAfterSync(HashSet<int> affectedCases)
+        {
+            if (affectedCases == null || affectedCases.Count == 0) return;
+
+            try
+            {
+                CaseManagement.Helpers.VulnerabilityScoreService.RecalculateMany(
+                    affectedCases, CaseManagement.Helpers.VulnerabilityScoreService.ReasonSyncImport);
+            }
+            catch (Exception ex)
+            {
+                // شکستِ بازمحاسبه نباید نتیجهٔ همگام‌سازی را باطل کند؛
+                // امتیاز در ذخیرهٔ بعدیِ همان پرونده به‌روز می‌شود.
+                Log(ex, "Download/ScoreRecalc");
             }
         }
 

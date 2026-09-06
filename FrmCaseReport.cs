@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Data;
 using System.Data.SQLite;
 using System.Windows.Forms;
@@ -63,8 +63,23 @@ namespace CaseManagement
                 return;
             }
 
+            // Phase 7 — خلاصهٔ نمایندهٔ قانونی در همان CaseData.
+            //
+            // چرا زیرقوئری و نه DataSourceِ سوم: در چاپ، خواستهٔ کاربر
+            // فقط سه قلم است (نام/نسبت/تلفن) و حداکثر دو ردیف؛ یک
+            // Tablixِ تازه برای دو ردیف، چیدمانِ مطلقِ گزارش را بیشتر به‌هم
+            // می‌ریخت تا اینکه سود برساند. دو ستونِ متنی همین سه
+            // قلم را در یک خطِ خوانا جمع می‌کنند، و اگر نماینده‌ای
+            // ثبت نشده باشد رشته خالی می‌ماند و خودِ ردیف در RDLC
+            // پنهان می‌شود — پس گزارشِ پروندهٔ غیرمعلول دقیقاً
+            // مثلِ قبل چاپ می‌شود.
+            // Phase 5.5-D — کوئری از RdlcExportHelper.CaseDataSql می‌آید تا این
+            // مسیر (نمایشِ روی صفحه) و مسیرِ خروجیِ PDF/Word دقیقاً یک مجموعه
+            // ستون بسازند. پیش از این دو تعریفِ جدا بودند و ستون‌های فاز ۷ فقط
+            // به یکی رسیده بود — خروجیِ PDF/Word/دسته‌ای می‌شکست.
             reportViewer1.LocalReport.DataSources.Add(
-                new ReportDataSource("CaseData", GetDataTable("SELECT * FROM TblCase WHERE CasID = @CasID")));
+                new ReportDataSource("CaseData",
+                    GetDataTable(Helpers.RdlcExportHelper.CaseDataSql)));
 
             reportViewer1.LocalReport.DataSources.Add(
                 new ReportDataSource("FamilyData", GetDataTable("SELECT * FROM TblFamily WHERE CasID = @CasID ORDER BY FamID")));
@@ -72,6 +87,10 @@ namespace CaseManagement
             reportViewer1.LocalReport.DataSources.Add(
                 new ReportDataSource("DocsData", GetDataTable("SELECT * FROM TblDocs WHERE CasID = @CasID ORDER BY DocID")));
         }
+
+        // Phase 5.5-D — RepresentativeSummarySql به RdlcExportHelper منتقل شد
+        // (کنارِ بقیهٔ تعریفِ CaseData). اینجا نگه‌داشتنش یعنی دو نسخه از یک
+        // منطق، و همان واگرایی که خروجیِ PDF/Word را شکسته بود.
 
         private DataTable GetDataTable(string query)
         {

@@ -38,6 +38,20 @@ namespace CaseManagement
 
         private int selectedCaseId;
 
+        // ─── H4 ──────────────────────────────────────────────────────────────
+        // نوعِ درخواستِ *ذخیره‌شدهٔ* پروندهٔ انتخاب‌شده، و اینکه آیا کمبو
+        // توانست همان مقدار را نشان دهد.
+        //
+        // چرا هر دو لازم‌اند: cmbRequestType از نوعِ DropDownList است. اگر
+        // مقدارِ ذخیره‌شده در TblLookup نباشد (مثلاً «سایر» که در فاز ۳ حذف
+        // شد، یا مقداری که مدیر بعداً پاک کرده)، انتسابِ .Text بی‌صدا نادیده
+        // گرفته می‌شود و کمبو مقدارِ *پروندهٔ قبلی* را نگه می‌دارد. بدونِ این
+        // پرچم، مقایسهٔ «کمبو با مقدارِ ذخیره‌شده فرق دارد» را به‌اشتباه
+        // «کاربر عمداً عوضش کرد» تفسیر می‌کردیم — یعنی دقیقاً همان
+        // بازطبقه‌بندیِ خاموشی که این رفع جلویش را می‌گیرد.
+        private string selectedCaseRequestType = "";
+        private bool   selectedCaseRequestTypeSelectable;
+
         // دکمه‌های این فرم در سه متدِ جدا ساخته می‌شوند و متغیرِ محلی‌اند، پس
         // سازنده‌ی میان‌بُر یک‌بار اینجا ساخته و در هر سه جا استفاده می‌شود.
         private Helpers.FormShortcuts.Builder _shortcuts;
@@ -249,6 +263,13 @@ namespace CaseManagement
             btnAssistanceReceipt.Margin = new Padding(4);
             btnAssistanceReceipt.Click += delegate
             {
+                // F-45 — چاپ رسید در پایگاه‌داده *می‌نویسد* (تخصیص دائمیِ
+                // ReceiptNo و مهرِ PrintedAt)، پس مثل ثبت کمک مجوز می‌خواهد.
+                if (!CaseManagement.Enterprise.PermissionService.Require("AssistanceReceipt.Print"))
+                {
+                    UiTheme.ShowWarning(this, "کاربر فقط مشاهده اجازه چاپ برگه دریافت مساعدت ندارد.");
+                    return;
+                }
                 int assistanceId = GetSelectedAssistanceId();
                 if (assistanceId <= 0)
                 {
@@ -265,6 +286,13 @@ namespace CaseManagement
             btnAssistanceReceiptBatch.Margin = new Padding(4);
             btnAssistanceReceiptBatch.Click += delegate
             {
+                // F-45 — چاپ گروهی خطرِ بیشتری دارد: به همهٔ رکوردهای منطبق با
+                // فیلتر یک‌جا شمارهٔ رسید می‌دهد.
+                if (!CaseManagement.Enterprise.PermissionService.Require("AssistanceReceipt.Print"))
+                {
+                    UiTheme.ShowWarning(this, "کاربر فقط مشاهده اجازه چاپ گروهی برگه‌ها ندارد.");
+                    return;
+                }
                 using (var frm = new AssistanceReceiptIntegration.FrmAssistanceReceiptFilterPrint())
                     frm.ShowDialog(this);
             };
@@ -275,6 +303,12 @@ namespace CaseManagement
             btnPackageBatchPrint.Margin = new Padding(4);
             btnPackageBatchPrint.Click += delegate
             {
+                // F-45 — همان مسیرِ چاپِ گروهی، فقط با انتخاب بر پایهٔ بسته.
+                if (!CaseManagement.Enterprise.PermissionService.Require("AssistanceReceipt.Print"))
+                {
+                    UiTheme.ShowWarning(this, "کاربر فقط مشاهده اجازه چاپ گروهیِ بسته ندارد.");
+                    return;
+                }
                 using (var frm = new AssistanceReceiptIntegration.FrmAssistancePackageBatchPrint())
                     frm.ShowDialog(this);
             };
@@ -435,6 +469,11 @@ namespace CaseManagement
             }
 
             _isSavingAssistance = true;
+            // H4 — بیرون از بلوکِ اتصال تعریف می‌شود چون حسابرسی/تایم‌لاین/
+            // صفِ همگام‌سازی بعد از بسته‌شدنِ اتصال به آن نیاز دارند.
+            bool requestTypeChanged = false;
+            string previousRequestType = selectedCaseRequestType;
+            string appliedRequestType = "";
             try
             {
 
@@ -475,32 +514,122 @@ VALUES (@CasID, @AssistanceDate, @Amount, @AssistanceType, @Description, @Create
                 // آموزش — «نوع درخواستی» از همان ستونِ موجودِ TblCase.RequestType
                 // استفاده می‌کند (طبقِ تصمیمِ کاربر: بدونِ ستونِ تازه)؛ اینجا فقط
                 // پرونده به‌روزرسانی می‌شود، نه یک ستونِ جدید در TblAssistance.
-                using (SQLiteCommand cmdReq = new SQLiteCommand(
-                    "UPDATE TblCase SET RequestType=@RequestType WHERE CasID=@CasID", con))
+                //
+                // ─── H4: سه لایهٔ محافظت ─────────────────────────────────────
+                // پیش از این، این UPDATE در *هر* ذخیرهٔ کمک و بی‌قید اجرا
+                // می‌شد و فقط ستونِ متنی را می‌نوشت. سه نتیجهٔ خراب داشت:
+                //   ۱) اگر نوعِ ذخیره‌شده در فهرست نبود، کمبو نوعِ پروندهٔ
+                //      *قبلی* را نشان می‌داد و همان روی این پرونده مهر می‌شد
+                //      — بازطبقه‌بندیِ خاموش.
+                //   ۲) RequestTypeID هرگز به‌روز نمی‌شد، پس ستونِ متنی و کلیدِ
+                //      خارجی برای همیشه واگرا می‌شدند (گزارش‌ها یک نوع را
+                //      نشان می‌دادند و دروازهٔ فعال‌سازی/اسنادِ الزامی نوعِ
+                //      دیگری را).
+                //   ۳) هیچ ردی در حسابرسی و تایم‌لاین نمی‌ماند.
+                //
+                // حالا: فقط وقتی می‌نویسیم که کاربر *واقعاً* و *آگاهانه*
+                // نوع را عوض کرده باشد، و آن‌وقت هر دو ستون با هم.
+                string newRequestType = cmbRequestType.Text.Trim();
+
+                // «نوعِ ذخیره‌شده را می‌شناسیم» یعنی یکی از این دو:
+                //   • پرونده اصلاً نوعی ندارد (خالی) ⇒ چیزی برای ازدست‌رفتن
+                //     نیست و مقداردهی توسطِ کاربر یک کارِ کاملاً مشروع است؛
+                //   • یا نوعِ ذخیره‌شده واقعاً در کمبو نشسته است.
+                //
+                // فقط حالتِ سوم خطرناک است: پرونده نوعی *دارد* ولی کمبو
+                // نتوانسته نشانش دهد (مقدارِ خارج از فهرست) — آن‌وقت کمبو
+                // نوعِ پروندهٔ قبلی را نشان می‌دهد و نوشتنش یعنی
+                // بازطبقه‌بندیِ خاموش.
+                bool storedTypeKnown =
+                    selectedCaseRequestType.Length == 0 || selectedCaseRequestTypeSelectable;
+
+                requestTypeChanged =
+                    storedTypeKnown &&
+                    !string.Equals(newRequestType, selectedCaseRequestType, StringComparison.Ordinal);
+
+                if (requestTypeChanged)
                 {
-                    cmdReq.Parameters.Add("@RequestType", DbType.String, 100).Value = cmbRequestType.Text.Trim();
-                    cmdReq.Parameters.Add("@CasID", DbType.Int32).Value = selectedCaseId;
-                    cmdReq.ExecuteNonQuery();
+                    // نوع باید به یک ردیفِ فعالِ مرجع نگاشت شود — همان قاعده‌ای
+                    // که FrmCase.ValidateForm اعمال می‌کند. اگر نشد، هیچ
+                    // نوشتنی انجام نمی‌شود (شکستِ ایمن): کمکِ مالی ثبت
+                    // می‌شود ولی طبقه‌بندیِ پرونده دست‌نخورده می‌ماند.
+                    var option = Helpers.ReferenceDataService.FindRequestTypeByName(newRequestType);
+
+                    if (option == null)
+                    {
+                        requestTypeChanged = false;
+                        UiTheme.ShowWarning(this,
+                            "نوع درخواستیِ انتخاب‌شده در فهرستِ مرجع پیدا نشد؛ " +
+                            "نوعِ پرونده تغییر نکرد. کمکِ مالی ثبت شد.");
+                    }
+                    else
+                    {
+                        using (SQLiteCommand cmdReq = new SQLiteCommand(
+                            "UPDATE TblCase SET RequestType=@RequestType, RequestTypeID=@RequestTypeID " +
+                            "WHERE CasID=@CasID", con))
+                        {
+                            cmdReq.Parameters.Add("@RequestType", DbType.String, 100).Value = newRequestType;
+                            cmdReq.Parameters.AddWithValue("@RequestTypeID", option.ID);
+                            cmdReq.Parameters.Add("@CasID", DbType.Int32).Value = selectedCaseId;
+                            cmdReq.ExecuteNonQuery();
+                        }
+
+                        appliedRequestType = newRequestType;
+                    }
                 }
             }
 
-            AuditLogger.Log("ثبت کمک", "TblAssistance", selectedCaseId, "", "Amount=" + amount);
+            // F-52 — شناسهٔ ردیفِ حسابرسی باید شناسهٔ *همین رکوردِ کمک* باشد،
+            // نه شناسهٔ پرونده: نامِ موجودیت «TblAssistance» است، پس شناسهٔ
+            // پرونده ردیف را غیرقابلِ ردیابی می‌کرد و ده کمکِ یک پرونده هر ده
+            // با یک شناسه ثبت می‌شدند. شناسهٔ درست از قبل موجود است (همان که
+            // چند خط پایین‌تر به صف همگام‌سازی و نسخه‌برداری داده می‌شود).
+            // اگر درج به هر دلیل شناسه برنگرداند، به شناسهٔ پرونده برمی‌گردیم
+            // تا ردیفِ حسابرسی دستِ‌کم بی‌شناسه ثبت نشود.
+            AuditLogger.Log("ثبت کمک", "TblAssistance",
+                newAssistanceId > 0 ? newAssistanceId : selectedCaseId,
+                "", "CasID=" + selectedCaseId + "; Amount=" + amount);
 
-            // صفِ همگام‌سازی — کمکِ ثبت‌شده و به‌روزرسانیِ نوعِ درخواستیِ پرونده
-            // هردو باید به شعبهٔ مرکزی برسند.
+            // H4 لایهٔ ۳ — تغییرِ طبقه‌بندیِ پرونده باید دیده شود. پیش از این
+            // هیچ ردی نمی‌گذاشت: نه در حسابرسی، نه در تایم‌لاین. حالا با تبِ
+            // «تاریخچه» (H5) بلافاصله برای کاربر قابلِ مشاهده است.
+            if (requestTypeChanged && appliedRequestType.Length > 0)
+            {
+                AuditLogger.Log("تغییر نوع درخواستی", "TblCase", selectedCaseId,
+                    previousRequestType, appliedRequestType);
+
+                Helpers.TimelineService.LogRequestTypeChanged(
+                    selectedCaseId, previousRequestType, appliedRequestType);
+            }
+
+            // صفِ همگام‌سازی — کمکِ ثبت‌شده و (فقط در صورتِ تغییرِ واقعی)
+            // به‌روزرسانیِ نوعِ درخواستیِ پرونده باید به شعبهٔ مرکزی برسند.
             if (newAssistanceId > 0)
                 CaseManagement.Sync.SyncOutboxService.Capture("TblAssistance", newAssistanceId,
                     CaseManagement.Sync.OfflineSyncInitializer.OperationCreate);
-            CaseManagement.Sync.SyncOutboxService.Capture("TblCase", selectedCaseId,
-                CaseManagement.Sync.OfflineSyncInitializer.OperationUpdate);
+            if (requestTypeChanged && appliedRequestType.Length > 0)
+                CaseManagement.Sync.SyncOutboxService.Capture("TblCase", selectedCaseId,
+                    CaseManagement.Sync.OfflineSyncInitializer.OperationUpdate);
 
             // تاریخچهٔ کاملِ رکورد — هم برای کمکِ تازه‌ثبت‌شده و هم برای پرونده‌ای
             // که نوعِ درخواستی‌اش تغییر کرد.
             if (newAssistanceId > 0)
                 CaseManagement.Enterprise.VersionService.Capture("TblAssistance", newAssistanceId,
                     CaseManagement.Enterprise.VersionService.OperationInsert);
-            CaseManagement.Enterprise.VersionService.Capture("TblCase", selectedCaseId,
-                CaseManagement.Enterprise.VersionService.OperationUpdate);
+            // نسخهٔ TblCase فقط وقتی معنا دارد که پرونده واقعاً عوض شده باشد؛
+            // VersionService خودش هم نسخهٔ بدونِ تغییر نمی‌سازد، ولی نزدنِ
+            // بی‌جهتِ آن یک کوئریِ کمتر در هر ثبتِ کمک است.
+            if (requestTypeChanged && appliedRequestType.Length > 0)
+                CaseManagement.Enterprise.VersionService.Capture("TblCase", selectedCaseId,
+                    CaseManagement.Enterprise.VersionService.OperationUpdate);
+
+            // پس از تغییرِ موفق، مقدارِ مرجع به‌روز می‌شود تا ذخیرهٔ بعدیِ
+            // همین پرونده دوباره «تغییر» تلقی نشود.
+            if (requestTypeChanged && appliedRequestType.Length > 0)
+            {
+                selectedCaseRequestType = appliedRequestType;
+                selectedCaseRequestTypeSelectable = true;
+            }
 
             LoadAssistance();
             LoadReports();
@@ -599,6 +728,12 @@ WHERE CasID = @CasID
             object requestTypeVal = dgvCases.Rows[e.RowIndex].Cells["RequestType"].Value;
             string requestType = requestTypeVal == null || requestTypeVal == DBNull.Value ? "" : requestTypeVal.ToString();
             cmbRequestType.Text = requestType;
+
+            // H4 — مقدارِ ذخیره‌شده را نگه می‌داریم و بررسی می‌کنیم که کمبو
+            // واقعاً توانست نشانش دهد (توضیح کامل کنارِ تعریفِ فیلدها).
+            selectedCaseRequestType = requestType.Trim();
+            selectedCaseRequestTypeSelectable = string.Equals(
+                cmbRequestType.Text.Trim(), selectedCaseRequestType, StringComparison.Ordinal);
 
             LoadAssistance();
         }

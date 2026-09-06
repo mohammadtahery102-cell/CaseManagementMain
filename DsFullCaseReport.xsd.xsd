@@ -42,6 +42,8 @@
 							<xs:element name="UrgentSituation" type="xs:string" minOccurs="0" />
 							<xs:element name="PhotoPath" type="xs:string" minOccurs="0" />
 							<xs:element name="FamilyPhotoPath" type="xs:string" minOccurs="0" />
+							<xs:element name="Rep1Summary" type="xs:string" minOccurs="0" />
+							<xs:element name="Rep2Summary" type="xs:string" minOccurs="0" />
 						</xs:sequence>
 					</xs:complexType>
 				</xs:element>

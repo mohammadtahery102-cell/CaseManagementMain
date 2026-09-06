@@ -5,6 +5,7 @@ using System.Data.SQLite;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using CaseManagement.DAL;
 using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
@@ -38,7 +39,45 @@ namespace CaseManagement.Helpers
 
             File.Copy(templatePath, outputPath, true);
 
-            DataTable caseData = GetDataTable("SELECT * FROM TblCase WHERE CasID = @CasID", caseId);
+            // فیلدهای فقط-ماژولیِ معلولیت (صادرکنندهٔ کارت/تاریخ‌ها/یادداشت) روی
+            // TblCase آینه ندارند، پس بدونِ این LEFT JOIN هیچ خروجی‌ای آن‌ها را
+            // نمی‌دید. UNIQUE(CasID) روی TblDisability تضمین می‌کند این جوین
+            // هرگز ردیفِ پرونده را تکثیر نکند. نام‌ها alias شده‌اند تا با
+            // ستون‌های هم‌نامِ TblCase تداخل نکنند.
+            DataTable caseData = GetDataTable(@"
+SELECT c.*,
+       d.CardIssuer  AS DisabilityCardIssuer,
+       d.IssueDate   AS DisabilityIssueDate,
+       d.ExpiryDate  AS DisabilityExpiryDate,
+       d.Notes       AS DisabilityNotes,
+       -- Phase 5.5-D — خلاصه‌های وضعیت برای placeholderهای تازهٔ ورد.
+       CASE IFNULL(c.CompletionStatusCode, '')
+            WHEN 'COMPLETE'    THEN 'کامل'
+            WHEN 'IN_PROGRESS' THEN 'در حال تکمیل'
+            WHEN 'INCOMPLETE'  THEN 'ناقص'
+            ELSE '' END AS CompletionStatusText,
+       CASE IFNULL(c.VulnerabilityBand, '')
+            WHEN 'HIGH'   THEN 'پرخطر'
+            WHEN 'MEDIUM' THEN 'متوسط'
+            WHEN 'LOW'    THEN 'کم‌خطر'
+            ELSE '' END AS VulnerabilityBandText,
+       (SELECT GROUP_CONCAT(fs.Name, ' ، ')
+          FROM TblCaseFunding cf
+          JOIN TblFundingSource fs ON fs.FundingSourceID = cf.FundingSourceID
+         WHERE cf.CasID = c.CasID AND cf.IsActive = 1) AS FundingSummary,
+       (SELECT GROUP_CONCAT(sp.Name, ' ، ')
+          FROM TblCaseFunding cf
+          JOIN TblSponsor sp ON sp.SponsorID = cf.SponsorID
+         WHERE cf.CasID = c.CasID AND cf.IsActive = 1) AS SponsorSummary,
+       (SELECT CAST(SUM(CASE WHEN IFNULL(dc.IsVerified,0) = 1 THEN 1 ELSE 0 END) AS TEXT)
+               || ' / ' || CAST(COUNT(*) AS TEXT)
+          FROM TblDocs dc WHERE dc.CasID = c.CasID AND IFNULL(dc.IsArchived,0) = 0)
+       AS VerifiedDocsSummary,
+       (SELECT CAST(COUNT(*) AS TEXT) FROM TblFieldVisit v WHERE v.CasID = c.CasID)
+       AS FieldVisitCountText
+FROM TblCase c
+LEFT JOIN TblDisability d ON d.CasID = c.CasID
+WHERE c.CasID = @CasID", caseId);
             DataTable familyData = GetDataTable("SELECT * FROM TblFamily WHERE CasID = @CasID ORDER BY FamID", caseId);
             DataTable docsData = GetDataTable("SELECT * FROM TblDocs WHERE CasID = @CasID ORDER BY DocID", caseId);
 
@@ -79,6 +118,14 @@ namespace CaseManagement.Helpers
                 DataRow row = caseData.Rows[0];
 
                 Dictionary<string, string> caseValues = BuildCaseValues(row, familyData.Rows.Count, docsData.Rows.Count);
+                // Phase 7 — نمایندهٔ قانونی.
+                //
+                // چرا بی‌خطر است: این‌ها فقط ورودیِ تازه در دیکشنری‌اند.
+                // الگویی که {{Rep1Name}} ندارد کاملاً بی‌تأثیر می‌ماند، و
+                // پرونده‌ای که نماینده ندارد رشتهٔ خالی می‌گیرد که
+                // RemoveUnusedPlaceholdersEverywhere تمیزش می‌کند. پس هیچ
+                // خروجیِ موجودی تغییر نمی‌کند.
+                AddRepresentativeValues(caseValues, caseId);
                 if (isTemplate2)
                     // آموزش — فایلِ واقعیِ کاربر برای «الگوی شماره ۲» یک جدولِ
                     // *ثابتِ* ۹ردیفی است (نه {{FamilyBlockStart}}/{{FamilyBlockEnd}}
@@ -88,6 +135,9 @@ namespace CaseManagement.Helpers
                     // پرونده چاپ می‌شوند (اندازهٔ جدول در فایلِ خودِ کاربر).
                     foreach (KeyValuePair<string, string> item in BuildTemplate2FixedMemberValues(familyData))
                         caseValues[item.Key] = item.Value;
+                // ردیف‌های بی‌داده پیش از جای‌گزینی حذف می‌شوند، چون تشخیصِ
+                // «این ردیف placeholder داشت» فقط تا پیش از جای‌گزینی ممکن است.
+                PruneEmptyPlaceholderRows(doc.MainDocumentPart.Document, caseValues);
                 ReplaceTextEverywhere(doc, caseValues);
                 // آموزش — عکسِ سرپرست در «الگوی شماره ۱»: پس از بازخوردِ کاربر
                 // (خیلی بزرگ شده بود)، به نصفِ اندازهٔ قبلی (۴۰۰×۳۸۰ → ۲۰۰×۱۹۰
@@ -126,6 +176,21 @@ namespace CaseManagement.Helpers
         {
             return new Dictionary<string, string>
             {
+                // ─── Phase 5.5-D — وضعیتِ محاسبه‌شدهٔ پرونده ────────────────
+                // ⚠ این placeholderها تا وقتی در FullCaseTemplate.docx درج
+                // نشوند هیچ اثری ندارند (نگاشتِ بدونِ متناظر بی‌ضرر است و
+                // ReplaceEverywhere آن را نادیده می‌گیرد). فهرستشان در
+                // PROJECT_CONTEXT آمده تا هر وقت قالب ویرایش شد، همین‌ها
+                // اضافه شوند و خودبه‌خود پر گردند.
+                { "{{CompletionPercent}}", GetValue(row, "CompletionPercent") },
+                { "{{CompletionStatus}}", GetValue(row, "CompletionStatusText") },
+                { "{{VulnerabilityScore}}", GetValue(row, "VulnerabilityScore") },
+                { "{{VulnerabilityBand}}", GetValue(row, "VulnerabilityBandText") },
+                { "{{FundingSummary}}", GetValue(row, "FundingSummary") },
+                { "{{SponsorSummary}}", GetValue(row, "SponsorSummary") },
+                { "{{VerifiedDocs}}", GetValue(row, "VerifiedDocsSummary") },
+                { "{{FieldVisitCount}}", GetValue(row, "FieldVisitCountText") },
+
                 { "{{CasID}}", GetValue(row, "CasID") },
                 { "{{FormNo}}", GetValue(row, "FormNo") },
                 { "{{Code}}", GetValue(row, "Code") },
@@ -153,6 +218,19 @@ namespace CaseManagement.Helpers
                 { "{{Skill}}", GetValue(row, "Skill") },
                 { "{{DisabilityDegree}}", GetValue(row, "DisabilityDegree") },
                 { "{{DisabilityType}}", GetValue(row, "DisabilityType") },
+                // نُه فیلدِ معلولیت که تا امروز فقط نوشته می‌شدند و در هیچ
+                // خروجی‌ای دیده نمی‌شدند. مثل {{HeadBirthDate}} اینها فقط
+                // ورودی‌های اضافه به دیکشنری‌اند: قالبی که این نشانه‌ها را
+                // ندارد هیچ تغییری نمی‌کند.
+                { "{{DisabilityCause}}", GetValue(row, "DisabilityCause") },
+                { "{{DisabilityDescription}}", GetValue(row, "DisabilityDescription") },
+                { "{{SpecialNeeds}}", GetValue(row, "SpecialNeeds") },
+                { "{{DisabilityCardStatus}}", GetValue(row, "DisabilityCardStatus") },
+                { "{{DisabilityCardNumber}}", GetValue(row, "DisabilityCardNumber") },
+                { "{{DisabilityCardIssuer}}", GetValue(row, "DisabilityCardIssuer") },
+                { "{{DisabilityIssueDate}}", GetDate(row, "DisabilityIssueDate") },
+                { "{{DisabilityExpiryDate}}", GetDate(row, "DisabilityExpiryDate") },
+                { "{{DisabilityNotes}}", GetValue(row, "DisabilityNotes") },
                 { "{{MigrationCardType}}", GetValue(row, "MigrationCardType") },
                 { "{{MaritalStatus}}", GetValue(row, "MaritalStatus") },
                 { "{{Surveyors}}", GetValue(row, "Surveyors") },
@@ -214,6 +292,12 @@ namespace CaseManagement.Helpers
                 {
                     OpenXmlElement clone = sourceElement.CloneNode(true);
 
+                    // آموزش — عمداً اینجا ردیفِ خالی حذف *نمی‌شود*. ردیف‌های
+                    // بلوکِ عضو در «الگوی شماره ۱» کنارِ placeholder محتوای
+                    // ثابتِ فرم هم دارند («خصوصی ☐ دولتی ☐»، «معدل سال قبل:»،
+                    // «ترک تحصیل ☐ دلیل:») که با دست پر می‌شوند؛ حذفشان بخشی
+                    // از فرمِ چاپی را از بین می‌برد و بلوکِ اعضا را ناهم‌اندازه
+                    // می‌کند. حذفِ ردیف فقط در سطحِ مقادیرِ پرونده انجام می‌شود.
                     ReplaceTextInElement(clone, BuildFamilyValues(row, index));
                     ReplaceImageInElement(doc.MainDocumentPart, clone, "{{MemberPhoto}}", GetValue(row, "MemberPhotoPath"), 85f, 105f);
 
@@ -569,6 +653,42 @@ namespace CaseManagement.Helpers
 
         }
 
+        // ─── Phase 7: جفت‌های نمایندهٔ قانونی برای الگوهای Word ────
+        //
+        // همیشه هر ۸ کلیدِ هر دو نماینده افزوده می‌شود (حتی خالی)،
+        // وگرنه الگویی که {{Rep2Name}} دارد ولی پرونده نمایندهٔ دوم
+        // ندارد، متنِ خامِ placeholder را چاپ می‌کرد.
+        private void AddRepresentativeValues(Dictionary<string, string> values, int caseId)
+        {
+            var bySlot = new Dictionary<int, RepresentativeRow>();
+            try
+            {
+                foreach (RepresentativeRow row in CaseRepresentativeService.GetAll(caseId))
+                    bySlot[row.RepresentativeOrder] = row;
+            }
+            catch (Exception ex)
+            {
+                // خروجی نباید فقط به‌خاطرِ نماینده شکست بخورد.
+                System.Diagnostics.Debug.WriteLine("AddRepresentativeValues failed: " + ex.Message);
+            }
+
+            for (int slot = 1; slot <= CaseRepresentativeService.MaxRepresentatives; slot++)
+            {
+                RepresentativeRow row;
+                bySlot.TryGetValue(slot, out row);
+                string prefix = "{{Rep" + slot;
+
+                values[prefix + "Name}}"]           = row == null ? "" : row.FullName;
+                values[prefix + "Relationship}}"]   = row == null ? "" : row.RelationshipToBeneficiary;
+                values[prefix + "IdCardType}}"]     = row == null ? "" : row.IdCardType;
+                values[prefix + "NationalID}}"]     = row == null ? "" : row.NationalID;
+                values[prefix + "Phone}}"]          = row == null ? "" : row.Phone;
+                values[prefix + "SecondaryPhone}}"] = row == null ? "" : row.SecondaryPhone;
+                values[prefix + "Address}}"]        = row == null ? "" : row.Address;
+                values[prefix + "Notes}}"]          = row == null ? "" : row.Notes;
+            }
+        }
+
         private static bool HasRows(DataTable table)
         {
             return table != null && table.Rows.Count > 0;
@@ -901,6 +1021,57 @@ namespace CaseManagement.Helpers
                 return ImagePartType.Tiff;
 
             return ImagePartType.Jpeg;
+        }
+
+        // ─── حذفِ ردیف‌هایی که هیچ داده‌ای ندارند ────────────────────────────
+        //
+        // یک ردیف *فقط* وقتی حذف می‌شود که هر سه شرط برقرار باشد:
+        //   ۱) دستِ‌کم یک placeholder داشته باشد،
+        //   ۲) *همهٔ* placeholderهایش در دیکشنریِ مقادیر کلید داشته باشند،
+        //   ۳) *همهٔ* آن مقادیر خالی باشند.
+        //
+        // چرا این سه شرط با هم: شرطِ (۱) بلوکِ «تأیید و امضا» و «ارزیابی وضعیت
+        // خانواده» را نجات می‌دهد — آن ردیف‌ها عمداً خالی‌اند تا با دست پر شوند
+        // و هیچ placeholder ای ندارند، پس هرگز لمس نمی‌شوند. شرطِ (۲)
+        // placeholderهایی را که مسیرِ دیگری پرشان می‌کند کنار می‌گذارد
+        // (`{{HeadPhoto}}`/`{{FamilyPhoto}}`/`{{MemberPhoto}}` با
+        // ReplaceImageEverywhere و `{{LocationLink}}` با ReplaceLocationLink) —
+        // این‌ها در دیکشنری نیستند، پس ردیفشان حذف نمی‌شود و لینک/عکس سالم می‌ماند.
+        //
+        // آخرین ردیفِ باقی‌ماندهٔ هر جدول هرگز حذف نمی‌شود: جدولِ بدونِ ردیف در
+        // OpenXML نامعتبر است و Word فایل را خراب می‌بیند.
+        private static readonly Regex PlaceholderPattern =
+            new Regex(@"\{\{([A-Za-z0-9_]+)\}\}", RegexOptions.Compiled);
+
+        private void PruneEmptyPlaceholderRows(OpenXmlElement scope, Dictionary<string, string> values)
+        {
+            if (scope == null || values == null) return;
+
+            foreach (TableRow row in scope.Descendants<TableRow>().ToList())
+            {
+                string text = string.Concat(row.Descendants<Text>().Select(t => t.Text));
+
+                MatchCollection tokens = PlaceholderPattern.Matches(text);
+                if (tokens.Count == 0) continue;
+
+                bool allEmpty = true;
+                foreach (Match token in tokens)
+                {
+                    string value;
+                    if (!values.TryGetValue("{{" + token.Groups[1].Value + "}}", out value))
+                    {
+                        allEmpty = false;   // مسیرِ دیگری پرش می‌کند — دست نزن
+                        break;
+                    }
+                    if (!string.IsNullOrWhiteSpace(value)) { allEmpty = false; break; }
+                }
+                if (!allEmpty) continue;
+
+                Table table = row.Ancestors<Table>().FirstOrDefault();
+                if (table != null && table.Elements<TableRow>().Count() <= 1) continue;
+
+                row.Remove();
+            }
         }
 
         private void RemoveUnusedPlaceholdersEverywhere(WordprocessingDocument doc)

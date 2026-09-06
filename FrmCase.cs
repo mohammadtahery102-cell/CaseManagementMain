@@ -121,6 +121,15 @@ namespace CaseManagement
         {
             UiTheme.ApplySweep(this);
 
+            // تأکیدِ بصری روی «نوع پرونده» باید *بعد از* ApplySweep اعمال شود:
+            // آن متد رنگِ همهٔ Labelها را روی TextDark می‌نشاند، پس هر رنگی که
+            // در Designer داده شود بی‌صدا پاک می‌گردد.
+            if (label4 != null)
+            {
+                label4.Font      = UiTheme.FontBold(UiTheme.SizeSmall);
+                label4.ForeColor = UiTheme.Primary;
+            }
+
             UiTheme.SetButtonIcon(btnSave, "✔");
             UiTheme.SetButtonIcon(btnNew, "+");
             UiTheme.SetButtonIcon(btnEdit, "✎");
@@ -538,6 +547,1680 @@ namespace CaseManagement
             UpdateStopReasonVisibility();
         }
 
+        private void TxtRequestType_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            UpdateRequestTypeSectionVisibility();
+        }
+
+        // Phase 3 (بازبینی) — منبعِ واحدِ نمایش/پنهانیِ بخش‌های اختصاصیِ نوع
+        // درخواست. فقط پرچم‌های TblRequestType (از طریق ReferenceDataService)
+        // را می‌خواند — هیچ RequestTypeID/Code ای اینجا هاردکد نیست، پس افزودنِ
+        // نوعِ جدید یا تغییرِ پرچم‌ها از تنظیمات، بدونِ کامپایلِ دوباره اثر می‌کند.
+        // فیلدهای موجودِ DisabilityType/DisabilityDegree/MigrationCardType
+        // عمداً دست‌نخورده می‌مانند (رفتارِ فعلی‌شان حفظ می‌شود، فقط فیلدهای
+        // *تازه* در سه گروهِ زیر پنهان/آشکار می‌شوند).
+        private void UpdateRequestTypeSectionVisibility()
+        {
+            var sections = Helpers.ReferenceDataService.GetRequestTypeSectionsByName(txtRequestType.Text.Trim());
+
+            SetFieldGroupVisible(orphanSectionFields, sections.ShowOrphanSection);
+            SetFieldGroupVisible(disabilitySectionFields, sections.ShowDisabilitySection);
+            SetFieldGroupVisible(migrantSectionFields, sections.ShowMigrantSection);
+
+            // کارتِ هر بخش هم با خودِ بخش پنهان/آشکار می‌شود، وگرنه برای نوعِ
+            // نامربوط یک قابِ خالی با سربرگ روی صفحه می‌ماند. فیلدها بالاتر
+            // جداگانه هم پنهان می‌شوند تا اگر کارتی وجود نداشت رفتار قبلی حفظ شود.
+            SetCardVisible(cardOrphanInfo,     sections.ShowOrphanSection);
+            SetCardVisible(cardDisabilityInfo, sections.ShowDisabilitySection);
+            SetCardVisible(cardMigrantInfo,    sections.ShowMigrantSection);
+            // Phase 4 — بخشِ «اطلاعات سرپرست» (ایتام/بی‌سرپرست/بدسرپرست).
+            SetFieldGroupVisible(guardianSectionFields, sections.ShowGuardianSection);
+            SetCardVisible(cardGuardianInfo, sections.ShowGuardianSection);
+            // Phase 7 — تبِ «نمایندهٔ قانونی».
+            SetRepresentativeTabVisible(sections.ShowRepresentativeSection);
+
+            // A1 — تضادِ «سالم است» با نوعِ پروندهٔ معلول.
+            ApplyDisabledHeadRule(txtRequestType.Text.Trim());
+        }
+
+        // کدِ پایدارِ نوعِ درخواست. طبقِ قاعدهٔ پروژه منطقِ برنامه با Code
+        // مقایسه می‌کند، نه با Name (که فقط نمایشی و قابلِ ترجمه است).
+        private const string RequestTypeCodeDisabled = "DISABLED";
+
+        // ─── A1 ──────────────────────────────────────────────────────────────
+        // در پروندهٔ «معلول» سرپرست خودش همان ذینفعِ معلول است (قانونِ
+        // طبقه‌بندی: پرونده با نوعِ درخواستِ سرپرستش شناخته می‌شود)، پس تیکِ
+        // «سالم است» با نوعِ پرونده در تضادِ منطقی است.
+        //
+        // باگی که رفع می‌کند: ClearForm تیک را پیش‌فرض «سالم» می‌گذارد و
+        // UpdateHeadPhysicalState دو فیلدِ نوع/درجهٔ معلولیت را غیرفعال *و
+        // خالی* می‌کند. این دو کنترل در تبِ دیگری («مشخصات جسمی») هستند و
+        // طبقِ تصمیم #۱۲ عمداً تابعِ نمایشِ بخشِ معلولیت نیستند — پس کاربری
+        // که «معلول» را انتخاب کرده هیچ نشانه‌ای نمی‌بیند و پرونده با
+        // DisabilityType/Degree خالی ذخیره می‌شود. همین دو فیلد:
+        //   • در TblRequiredField برای DISABLED الزامی‌اند ⇒ درصدِ تکمیل
+        //     هرگز به ۱۰۰ نمی‌رسید،
+        //   • تنها فیلدهای معلولیتی‌اند که به RDLC/کارت/جستجو/داشبورد
+        //     می‌رسند ⇒ پرونده در جستجوی معلولیت پیدا نمی‌شد و روی گزارش
+        //     خالی چاپ می‌شد.
+        //
+        // عمداً فقط تیک برداشته و دو فیلد فعال می‌شوند؛ Enabledِ خودِ
+        // چک‌باکس دست‌نخورده می‌ماند تا منطقِ حالتِ فقط‌خواندنی
+        // (SetCaseEditMode) هیچ تغییری نکند.
+        private void ApplyDisabledHeadRule(string requestTypeName)
+        {
+            var option = Helpers.ReferenceDataService.FindRequestTypeByName(requestTypeName);
+
+            bool isDisabledCase = option != null && string.Equals(
+                option.Code, RequestTypeCodeDisabled, StringComparison.OrdinalIgnoreCase);
+
+            if (!isDisabledCase) return;
+
+            if (chkHeadHealthy.Checked)
+            {
+                // بدونِ هندلر، وگرنه UpdateHeadPhysicalState دوباره صدا زده
+                // می‌شود و ترتیبِ فعال‌سازی پیچیده می‌گردد.
+                chkHeadHealthy.CheckedChanged -= ChkHeadHealthy_CheckedChanged;
+                chkHeadHealthy.Checked = false;
+                chkHeadHealthy.CheckedChanged += ChkHeadHealthy_CheckedChanged;
+            }
+
+            txtDisabilityType.Enabled = true;
+            txtDisabilityDegree.Enabled = true;
+        }
+
+        // برخلافِ فیلدها، TabPage خاصیتِ Visibleِ کارایی ندارد — WinForms
+        // آن را می‌پذیرد ولی تب روی نوار می‌ماند؛ تنها راهِ واقعی
+        // حذف/افزودن از TabPages است. جایگاهِ اصلیِ تب (پیش از بازدید
+        // میدانی) حفظ می‌شود، وگرنه با هر تغییرِ نوعِ درخواست
+        // تب به انتهای نوار پرتاب می‌شد.
+        private void SetRepresentativeTabVisible(bool visible)
+        {
+            if (tabsCase == null || tabRepresentative == null) return;
+
+            // مجوزِ اختصاصیِ مشاهده (Phase 7) — دادهٔ نماینده مشخصاتِ هویتیِ
+            // شخصِ ثالث است. پیش‌فرض برای هر سه نقش روشن است، پس تبِ امروز
+            // برای هیچ‌کس ناپدید نمی‌شود؛ ولی حالا می‌توان آن را از یک نقش
+            // گرفت بدونِ دست‌زدن به دسترسیِ پرونده.
+            if (visible && !CaseManagement.Enterprise.PermissionService.HasPermission("Representative.View"))
+                visible = false;
+
+            bool present = tabsCase.TabPages.Contains(tabRepresentative);
+            if (visible == present) return;
+
+            if (visible)
+            {
+                int index = tabVisits != null && tabsCase.TabPages.Contains(tabVisits)
+                    ? tabsCase.TabPages.IndexOf(tabVisits)
+                    : tabsCase.TabPages.Count;
+                tabsCase.TabPages.Insert(index, tabRepresentative);
+            }
+            else
+            {
+                // اگر کاربر دقیقاً روی همین تب باشد، حذفِ آن بدونِ
+                // جابجاییِ انتخاب، فرم را روی تبِ خالی رها می‌کرد.
+                if (tabsCase.SelectedTab == tabRepresentative && tabsCase.TabPages.Count > 1)
+                    tabsCase.SelectedIndex = 0;
+                tabsCase.TabPages.Remove(tabRepresentative);
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // Phase 4 — ماژول‌های تخصصی: خواندن/نوشتن از طریق CaseModuleService.
+        //
+        // قاعدهٔ اعتبارسنجی و امتیازدهی (خواستهٔ صریح): فقط بخش‌های *دیده‌شده*
+        // شرکت می‌کنند. پس ذخیره هم فقط برای ماژولی انجام می‌شود که پرچمش
+        // روشن است؛ بخشِ پنهان نه ذخیره می‌شود، نه خطا می‌دهد، و چون ردیفش
+        // ساخته نمی‌شود در درصدِ کامل‌بودن هم اثری ندارد.
+        // ═══════════════════════════════════════════════════════════════════
+        private void SaveCaseModules(int casId)
+        {
+            if (casId <= 0) return;
+
+            var sections = Helpers.ReferenceDataService.GetRequestTypeSectionsByName(txtRequestType.Text.Trim());
+
+            // ─── ایتام + سرپرست (هر دو در TblOrphan) ─────────────────────────
+            if (sections.ShowOrphanSection || sections.ShowGuardianSection)
+            {
+                var values = new Dictionary<string, object>();
+                var mirror = new Dictionary<string, object>();
+
+                if (sections.ShowOrphanSection)
+                {
+                    values["MainResidenceProvince"] = TextOrNull(txtMainResidenceProvince.Text);
+                    values["MainResidenceDistrict"] = TextOrNull(txtMainResidenceDistrict.Text);
+                    values["MainResidenceVillage"]  = TextOrNull(txtMainResidenceVillage.Text);
+                    values["FatherStatus"]          = TextOrNull(txtFatherStatus.Text);
+                    values["FatherDeathCause"]      = TextOrNull(txtFatherDeathCause.Text);
+                    values["FatherDeathDate"]       = DateOrNull(dtpFatherDeathDate);
+                    values["MotherStatus"]          = TextOrNull(txtMotherStatus.Text);
+                    values["SchoolName"]            = TextOrNull(txtOrphanSchoolName.Text);
+                    values["EducationLevel"]        = TextOrNull(txtOrphanEducationLevel.Text);
+                    values["IsStudent"]             = chkIsStudent.Checked ? 1 : 0;
+                    values["Notes"]                 = TextOrNull(txtOrphanNotes.Text);
+
+                    // آینه روی TblCase — فقط فیلدهایی که ستونِ هم‌معنا دارند.
+                    // EducationLevel و SchoolName عمداً نیستند (توضیح در
+                    // CaseModuleService: تحصیلاتِ سرپرست ≠ تحصیلاتِ کودک).
+                    mirror["MainResidenceProvince"] = values["MainResidenceProvince"];
+                    mirror["MainResidenceDistrict"] = values["MainResidenceDistrict"];
+                    mirror["MainResidenceVillage"]  = values["MainResidenceVillage"];
+                    mirror["FatherDeathCause"]      = values["FatherDeathCause"];
+                }
+
+                if (sections.ShowGuardianSection)
+                {
+                    values["GuardianName"]         = TextOrNull(txtGuardianName.Text);
+                    values["GuardianRelationship"] = TextOrNull(txtGuardianRelationship.Text);
+
+                    // Feature 3 — عکس پیش از نوشتنِ ردیف کپی می‌شود، وگرنه
+                    // مسیرِ ذخیره‌شده به فایلِ موقتِ مبدأ (مثلاً Desktop)
+                    // اشاره می‌کرد. حسابرسیِ تغییرِ عکس رایگان به‌دست می‌آید:
+                    // CaseModuleService خودش تفاوتِ هر فیلد را در تایم‌لاین
+                    // ثبت می‌کند، پس GuardianPhotoPath هم مثل بقیه دیده می‌شود.
+                    savedGuardianPhotoPath = StoreGuardianPhoto(txtCode.Text.Trim());
+                    values["GuardianPhotoPath"] = TextOrNull(savedGuardianPhotoPath);
+                }
+
+                Helpers.CaseModuleService.Save(Helpers.CaseModuleService.TableOrphan,
+                    Helpers.CaseModuleService.TitleOrphan, casId, values, mirror);
+            }
+
+            // ─── معلولیت ─────────────────────────────────────────────────────
+            if (sections.ShowDisabilitySection)
+            {
+                var values = new Dictionary<string, object>
+                {
+                    { "DisabilityType",        TextOrNull(txtDisabilityType.Text) },
+                    { "DisabilityDegree",      TextOrNull(txtDisabilityDegree.Text) },
+                    { "DisabilityCause",       TextOrNull(txtDisabilityCause.Text) },
+                    { "DisabilityDescription", TextOrNull(txtDisabilityDescription.Text) },
+                    { "SpecialNeeds",          TextOrNull(txtSpecialNeeds.Text) },
+                    { "HasDisabilityCard",     TextOrNull(txtDisabilityCardStatus.Text) },
+                    { "DisabilityCardNumber",  TextOrNull(txtDisabilityCardNumber.Text) },
+                    { "CardIssuer",            TextOrNull(txtCardIssuer.Text) },
+                    { "IssueDate",             DateOrNull(dtpDisabilityIssueDate) },
+                    { "ExpiryDate",            DateOrNull(dtpDisabilityExpiryDate) },
+                    { "Notes",                 TextOrNull(txtDisabilityNotes.Text) }
+                };
+
+                var mirror = new Dictionary<string, object>
+                {
+                    { "DisabilityType",        values["DisabilityType"] },
+                    { "DisabilityDegree",      values["DisabilityDegree"] },
+                    { "DisabilityCause",       values["DisabilityCause"] },
+                    { "DisabilityDescription", values["DisabilityDescription"] },
+                    { "SpecialNeeds",          values["SpecialNeeds"] },
+                    { "DisabilityCardStatus",  values["HasDisabilityCard"] },
+                    { "DisabilityCardNumber",  values["DisabilityCardNumber"] }
+                };
+
+                Helpers.CaseModuleService.Save(Helpers.CaseModuleService.TableDisability,
+                    Helpers.CaseModuleService.TitleDisability, casId, values, mirror);
+            }
+
+            // ─── مهاجرت ──────────────────────────────────────────────────────
+            if (sections.ShowMigrantSection)
+            {
+                int duration;
+                bool hasDuration = int.TryParse(txtAssistanceDurationMonths.Text.Trim(), out duration);
+
+                var values = new Dictionary<string, object>
+                {
+                    { "HasMigrationCard",    TextOrNull(txtHasMigrationCard.Text) },
+                    { "MigrationCardType",   TextOrNull(txtMigrationCardType.Text) },
+                    { "MigrationCardNumber", TextOrNull(txtMigrationCardNumber.Text) },
+                    { "OriginCountry",       TextOrNull(txtOriginCountry.Text) },
+                    { "DestinationCountry",  TextOrNull(txtDestinationCountry.Text) },
+                    { "DepartureDate",       dtpDepartureDate.Value.Date.ToString("yyyy-MM-dd") },
+                    { "ArrivalDate",         dtpArrivalDate.Value.Date.ToString("yyyy-MM-dd") },
+                    // یک‌طرفه از کنترلِ عمومیِ موجود (توضیح در Designer).
+                    { "MaritalStatus",       TextOrNull(txtMaritalStatus.Text) },
+                    { "AssistanceDuration",  hasDuration ? (object)duration : null },
+                    { "Notes",               TextOrNull(txtMigrantNotes.Text) }
+                };
+
+                var mirror = new Dictionary<string, object>
+                {
+                    { "HasMigrationCard",         values["HasMigrationCard"] },
+                    { "MigrationCardNumber",      values["MigrationCardNumber"] },
+                    { "DepartureDate",            values["DepartureDate"] },
+                    { "ArrivalDate",              values["ArrivalDate"] },
+                    { "AssistanceDurationMonths", values["AssistanceDuration"] }
+                };
+
+                Helpers.CaseModuleService.Save(Helpers.CaseModuleService.TableMigrant,
+                    Helpers.CaseModuleService.TitleMigrant, casId, values, mirror);
+            }
+        }
+
+        // ════════════════════════════════════════════════════════════════════
+        // Phase 7 — نمایندهٔ قانونی.
+        //
+        // همان قاعدهٔ ماژول‌های فاز ۴: ذخیره فقط وقتی بخش دیده
+        // می‌شود؛ بخشِ پنهان نه ذخیره می‌شود و نه اعتبارسنجی.
+        //
+        // ذخیره عمداً دکمهٔ جداگانه ندارد و به ذخیرهٔ خودِ پرونده
+        // گره خورده است: نمایندهٔ اول برای پروندهٔ معلولیت *الزامی*
+        // است، پس اگر دکمهٔ جدا داشت، کاربر می‌توانست پرونده را
+        // ذخیره کند و نماینده را نه — دقیقاً همان دادهٔ نامعتبری که
+        // خواستهٔ کاربر می‌خواهد جلویش گرفته شود.
+        // ════════════════════════════════════════════════════════════════════
+
+        // مسیرِ فایلِ عکسِ ذخیره‌شده (درونِ پوشهٔ پرونده) و مسیرِ
+        // فایلی که کاربر تازه انتخاب کرده و هنوز کپی نشده — همان
+        // تفکیکی که عکسِ سرپرست/جمعی دارند.
+        private string savedRep1PhotoPath = "";
+        private string savedRep2PhotoPath = "";
+        private string selectedRep1PhotoSource = "";
+        private string selectedRep2PhotoSource = "";
+
+        // ─── Feature 3: عکسِ سرپرستِ کودک ────────────────────────────────────
+        // همان تفکیکِ «مسیرِ ذخیره‌شده» و «فایلِ تازه‌انتخاب‌شده» که عکسِ
+        // سرپرستِ خانوار و نماینده دارند: کپی فقط هنگامِ ذخیرهٔ پرونده انجام
+        // می‌شود، نه هنگامِ انتخاب.
+        private string savedGuardianPhotoPath = "";
+        private string selectedGuardianPhotoSource = "";
+
+        private void btnGuardianBrowsePhoto_Click(object sender, EventArgs e)
+        {
+            if (txtCode.Text.Trim() == "")
+            {
+                Msg.Show("اول کد اختصاصی را وارد کنید");
+                txtCode.Focus();
+                return;
+            }
+
+            using (OpenFileDialog ofd = new OpenFileDialog())
+            {
+                ofd.Title = "انتخاب عکس سرپرست کودک";
+                ofd.CheckFileExists = true;
+                ofd.Multiselect = false;
+                ofd.Filter = "فایل‌های تصویری|*.jpg;*.jpeg;*.png|فایل‌های JPG|*.jpg;*.jpeg|فایل‌های PNG|*.png";
+
+                if (ofd.ShowDialog() != DialogResult.OK) return;
+                // همان سقف/قالبِ عکسِ سرپرست — قاعدهٔ دومی ساخته نمی‌شود.
+                if (!IsValidImageFile(ofd.FileName)) return;
+
+                selectedGuardianPhotoSource = ofd.FileName;
+                LoadImageToPictureBox(ofd.FileName, picGuardianPhoto);
+            }
+        }
+
+        private void btnGuardianClearPhoto_Click(object sender, EventArgs e)
+        {
+            ClearPictureBox(picGuardianPhoto);
+            selectedGuardianPhotoSource = "";
+            savedGuardianPhotoPath = "";
+        }
+
+        // کپی به پوشهٔ پرونده — دقیقاً هم‌الگوی StoreRepresentativePhoto.
+        private string StoreGuardianPhoto(string caseCode)
+        {
+            if (string.IsNullOrEmpty(selectedGuardianPhotoSource)) return savedGuardianPhotoPath;
+            if (IsSamePath(selectedGuardianPhotoSource, savedGuardianPhotoPath)) return savedGuardianPhotoPath;
+
+            string savedPath = FileHelper.SaveFileToCaseFolder(
+                selectedGuardianPhotoSource,
+                caseCode,
+                FileHelper.SectionGuardianPhotos,
+                caseCode + "-Guardian",
+                savedGuardianPhotoPath);
+
+            if (string.IsNullOrWhiteSpace(savedPath) || !File.Exists(savedPath))
+                throw new Exception("عکس سرپرست کودک ذخیره نشد: " + FileHelper.LastError);
+
+            selectedGuardianPhotoSource = "";
+            return savedPath;
+        }
+
+        private void btnRep1BrowsePhoto_Click(object sender, EventArgs e)
+        {
+            BrowseRepresentativePhoto(1);
+        }
+
+        private void btnRep2BrowsePhoto_Click(object sender, EventArgs e)
+        {
+            BrowseRepresentativePhoto(2);
+        }
+
+        private void BrowseRepresentativePhoto(int slot)
+        {
+            if (txtCode.Text.Trim() == "")
+            {
+                Msg.Show("اول کد اختصاصی را وارد کنید");
+                txtCode.Focus();
+                return;
+            }
+
+            using (OpenFileDialog ofd = new OpenFileDialog())
+            {
+                ofd.Title = "انتخاب عکس " + Helpers.CaseRepresentativeService.LabelFor(slot);
+                ofd.CheckFileExists = true;
+                ofd.Multiselect = false;
+                ofd.Filter = "فایل‌های تصویری|*.jpg;*.jpeg;*.png|فایل‌های JPG|*.jpg;*.jpeg|فایل‌های PNG|*.png";
+
+                if (ofd.ShowDialog() != DialogResult.OK) return;
+                // همان سقف/قالبِ عکسِ سرپرست — قاعدهٔ دومی ساخته نمی‌شود.
+                if (!IsValidImageFile(ofd.FileName)) return;
+
+                if (slot == 1)
+                {
+                    selectedRep1PhotoSource = ofd.FileName;
+                    LoadImageToPictureBox(ofd.FileName, picRep1Photo);
+                }
+                else
+                {
+                    selectedRep2PhotoSource = ofd.FileName;
+                    LoadImageToPictureBox(ofd.FileName, picRep2Photo);
+                }
+            }
+        }
+
+        private void btnRep1ClearPhoto_Click(object sender, EventArgs e)
+        {
+            ClearRepresentativePhoto(1);
+        }
+
+        private void btnRep2ClearPhoto_Click(object sender, EventArgs e)
+        {
+            ClearRepresentativePhoto(2);
+        }
+
+        // فقط ارجاعِ عکس پاک می‌شود؛ فایلِ روی دیسک عمداً می‌ماند
+        // — همان محافظه‌کاریِ FrmDocs/FieldVisitService (حذفِ رکورد نباید
+        // فایلِ کاربر را بی‌بازگشت پاک کند).
+        private void ClearRepresentativePhoto(int slot)
+        {
+            if (slot == 1)
+            {
+                ClearPictureBox(picRep1Photo);
+                selectedRep1PhotoSource = "";
+                savedRep1PhotoPath = "";
+            }
+            else
+            {
+                ClearPictureBox(picRep2Photo);
+                selectedRep2PhotoSource = "";
+                savedRep2PhotoPath = "";
+            }
+        }
+
+        // خالی‌کردنِ کاملِ کارتِ نمایندهٔ دوم + حذفِ ردیفِ ثبت‌شده.
+        private void btnRep2Clear_Click(object sender, EventArgs e)
+        {
+            // مجوزِ اختصاصی (Phase 7). پیش‌فرضش دقیقاً مثل Case.Delete است
+            // (فقط مدیر)، پس رفتارِ امروز عوض نمی‌شود؛ ولی از این پس مستقل
+            // از حذفِ پرونده قابلِ تنظیم است.
+            if (!CaseManagement.Enterprise.PermissionService.Require("Representative.Delete"))
+            {
+                Msg.Show("حذف نمایندهٔ قانونی فقط برای مدیر سیستم مجاز است.");
+                return;
+            }
+
+            if (!UiTheme.ShowConfirm(this, "اطلاعات نمایندهٔ دوم حذف شود؟", "حذف نمایندهٔ دوم"))
+                return;
+
+            try
+            {
+                // در پروندهٔ ذخیره‌نشده ردیفی وجود ندارد؛ فقط کنترل‌ها
+                // پاک می‌شوند و همین کافی است.
+                if (currentCaseId > 0)
+                {
+                    Helpers.CaseRepresentativeService.Delete(
+                        currentCaseId, Helpers.CaseRepresentativeService.OrderSecondary);
+                }
+
+                ClearRepresentativeSlot(2);
+                Msg.Show("اطلاعات نمایندهٔ دوم حذف شد");
+            }
+            catch (Exception ex)
+            {
+                Msg.Show("خطا در حذف نمایندهٔ دوم: " + ex.Message);
+            }
+        }
+
+        // ─── خواندنِ کنترل‌ها → مدل ────────────────────────────
+        private Helpers.RepresentativeRow BuildRepresentative(int slot)
+        {
+            bool first = slot == Helpers.CaseRepresentativeService.OrderPrimary;
+
+            return new Helpers.RepresentativeRow
+            {
+                RepresentativeOrder = slot,
+                FullName = (first ? txtRep1Name.Text : txtRep2Name.Text).Trim(),
+                RelationshipToBeneficiary = (first ? txtRep1Relationship.Text : txtRep2Relationship.Text).Trim(),
+                IdCardType = (first ? cmbRep1IdCardType.Text : cmbRep2IdCardType.Text).Trim(),
+                NationalID = (first ? txtRep1NationalID.Text : txtRep2NationalID.Text).Trim(),
+                Phone = (first ? txtRep1Phone.Text : txtRep2Phone.Text).Trim(),
+                SecondaryPhone = (first ? txtRep1Phone2.Text : txtRep2Phone2.Text).Trim(),
+                Address = (first ? txtRep1Address.Text : txtRep2Address.Text).Trim(),
+                Notes = (first ? txtRep1Notes.Text : txtRep2Notes.Text).Trim(),
+                // مسیرِ عکس در زمانِ ذخیره نهایی می‌شود (پس از کپی به
+                // پوشهٔ پرونده)؛ اینجا مقدارِ فعلی نگه داشته می‌شود تا
+                // اعتبارسنجیِ «خالی بودن» عکسِ انتخاب‌شده را هم ببیند.
+                PhotoPath = first
+                    ? (selectedRep1PhotoSource.Length > 0 ? selectedRep1PhotoSource : savedRep1PhotoPath)
+                    : (selectedRep2PhotoSource.Length > 0 ? selectedRep2PhotoSource : savedRep2PhotoPath)
+            };
+        }
+
+        // ─── اعتبارسنجی قبل از ذخیره ────────────────────────
+        // قاعده‌ها در CaseRepresentativeService.Validate اند، نه اینجا — تا
+        // همان قاعده از آزمون و هر مسیرِ آینده‌ای هم اعمال شود.
+        private bool ValidateRepresentatives()
+        {
+            var sections = Helpers.ReferenceDataService.GetRequestTypeSectionsByName(txtRequestType.Text.Trim());
+            if (!sections.ShowRepresentativeSection) return true;
+
+            Helpers.RepresentativeRow primary = BuildRepresentative(
+                Helpers.CaseRepresentativeService.OrderPrimary);
+            Helpers.RepresentativeRow secondary = BuildRepresentative(
+                Helpers.CaseRepresentativeService.OrderSecondary);
+
+            // پروندهٔ جدید ⇒ نمایندهٔ اول الزامی؛ پروندهٔ موجود ⇒ اختیاری.
+            //
+            // این تنها جایی است که تفاوتِ «تازه» و «قدیمی» معنا دارد:
+            // پروندهٔ موجود ممکن است پیش از وجودِ این قابلیت ثبت شده
+            // باشد و نماینده‌اش اصلاً نامعلوم باشد؛ بستنِ ذخیرهٔ آن
+            // یعنی کاربر نتواند حتی یک شماره تلفنِ بی‌ربط را اصلاح کند.
+            bool isNewCase = currentCaseId <= 0;
+            var requirement = isNewCase
+                ? Helpers.RepresentativeRequirement.Required
+                : Helpers.RepresentativeRequirement.Optional;
+
+            string error = Helpers.CaseRepresentativeService.Validate(
+                currentCaseId, primary, secondary, requirement);
+            if (error != null)
+            {
+                Msg.Show(error);
+                if (tabsCase != null && tabsCase.TabPages.Contains(tabRepresentative))
+                    tabsCase.SelectedTab = tabRepresentative;
+                return false;
+            }
+
+            // پروندهٔ قدیمیِ بدون نماینده: فقط اطلاع‌رسانی، نه پرسش.
+            //
+            // عمداً Msg.Show است نه ShowConfirm: دیالوگِ تأیید یعنی کاربر
+            // می‌تواند «خیر» بزند و ذخیره لغو شود — که دوباره همان
+            // مسدودکردنی است که قرار بود برداشته شود. و فقط یک بار
+            // در هر بارِ بازکردنِ پرونده نشان داده می‌شود؛ هشداری که
+            // با هر ذخیره تکرار شود خوانده نمی‌شود، فقط رد می‌شود.
+            if (!isNewCase && primary.IsEmpty && !_legacyRepWarningShown)
+            {
+                _legacyRepWarningShown = true;
+                Msg.Show("این پروندهٔ معلولیت «نمایندهٔ اول» ثبت‌شده ندارد." +
+                    Environment.NewLine +
+                    "ذخیره انجام می‌شود؛ ولی برای فعال‌کردنِ خدمات، ثبتِ نمایندهٔ اول الزامی است.");
+            }
+
+            // همان تذکره در پرونده‌های دیگر: عمداً فقط هشدار و قابلِ
+            // ادامه است — یک وکیلِ رسمی یا قیّمِ خانوادگی قانوناً
+            // می‌تواند نمایندهٔ چند ذینفع باشد، پس بستنِ آن دادهٔ
+            // درست را غیرقابلِ ثبت می‌کرد.
+            return ConfirmDuplicateRepresentativeIds(primary, secondary);
+        }
+
+        // هشدارِ پروندهٔ قدیمی در هر بازکردن یک بار نشان داده می‌شود.
+        private bool _legacyRepWarningShown;
+
+
+        private bool ConfirmDuplicateRepresentativeIds(
+            Helpers.RepresentativeRow primary, Helpers.RepresentativeRow secondary)
+        {
+            var messages = new System.Collections.Generic.List<string>();
+
+            // پروندهٔ قدیمی ممکن است نمایندهٔ اول هم نداشته باشد.
+            if (primary != null && !primary.IsEmpty) AppendDuplicateIdWarning(messages, primary);
+            if (secondary != null && !secondary.IsEmpty) AppendDuplicateIdWarning(messages, secondary);
+
+            if (messages.Count == 0) return true;
+
+            return UiTheme.ShowConfirm(this,
+                string.Join(Environment.NewLine, messages.ToArray()) + Environment.NewLine +
+                "ذخیره ادامه یابد؟",
+                "نمایندهٔ مشترک");
+        }
+
+        private void AppendDuplicateIdWarning(
+            System.Collections.Generic.List<string> messages, Helpers.RepresentativeRow row)
+        {
+            System.Collections.Generic.List<string> others =
+                Helpers.CaseRepresentativeService.FindOtherCasesWithSameId(currentCaseId, row.NationalID);
+            if (others.Count == 0) return;
+
+            messages.Add(Helpers.CaseRepresentativeService.LabelFor(row.RepresentativeOrder) +
+                " با همین شمارهٔ تذکره در پروندهٔ دیگری هم ثبت شده است: " +
+                string.Join("، ", others.ToArray()));
+        }
+
+        // ─── ذخیره ──────────────────────────────────────────
+        // پس از ثبت/ویرایشِ پرونده فراخوانی می‌شود — کنارِ
+        // SaveCaseModules و با همان قاعدهٔ «فقط بخشِ دیده‌شده».
+        private void SaveCaseRepresentatives(int casId)
+        {
+            if (casId <= 0) return;
+
+            var sections = Helpers.ReferenceDataService.GetRequestTypeSectionsByName(txtRequestType.Text.Trim());
+            if (!sections.ShowRepresentativeSection) return;
+
+            // مجوزِ اختصاصیِ ویرایش (Phase 7). پیش‌فرض برابرِ Case.Edit است، پس
+            // امروز هیچ کاربری تفاوتی نمی‌بیند. عمداً ذخیرهٔ *پرونده* را
+            // نمی‌شکند — فقط بخشِ نماینده رد می‌شود و کاربر مطلع می‌گردد،
+            // وگرنه گرفتنِ یک مجوزِ فرعی کلِ ثبتِ پرونده را از کار می‌انداخت.
+            if (!CaseManagement.Enterprise.PermissionService.HasPermission("Representative.Edit"))
+            {
+                Msg.Show("شما اجازهٔ ثبت/ویرایش نمایندهٔ قانونی را ندارید؛ بقیهٔ پرونده ذخیره شد.");
+                return;
+            }
+
+            // عکس‌ها باید پیش از نوشتنِ ردیف در دیتابیس به پوشهٔ
+            // پرونده کپی شوند، وگرنه PhotoPath به مسیرِ موقتِ مبدأ
+            // (مثلاً Desktop کاربر) اشاره می‌کرد.
+            SaveRepresentativePhotos();
+
+            Helpers.RepresentativeRow primary = BuildRepresentative(
+                Helpers.CaseRepresentativeService.OrderPrimary);
+            primary.PhotoPath = savedRep1PhotoPath;
+
+            // پروندهٔ قدیمی که کاربر نماینده‌ای برایش وارد نکرده:
+            // نه ردیفِ تهی ساخته می‌شود و نه ردیفِ موجود دست‌خورده
+            // می‌شود. خواستهٔ صریح: «دادهٔ موجود را خودکار نساز و
+            // تغییر نده.» حذفِ نمایندهٔ اول فقط از مسیرِ صریحِ
+            // دکمهٔ حذف انجام می‌شود، نه از خالی‌ماندنِ کادرها.
+            if (!primary.IsEmpty)
+                Helpers.CaseRepresentativeService.Save(casId, primary);
+
+            Helpers.RepresentativeRow secondary = BuildRepresentative(
+                Helpers.CaseRepresentativeService.OrderSecondary);
+            secondary.PhotoPath = savedRep2PhotoPath;
+
+            if (secondary.IsEmpty)
+            {
+                // کاربر نمایندهٔ دوم را خالی گذاشته: اگر قبلاً ردیفی
+                // داشته، پاک‌کردنِ کادرها باید واقعاً حذفش کند — وگرنه
+                // ردیفِ کهنه در گزارش/جستجو زنده می‌ماند.
+                Helpers.CaseRepresentativeService.Delete(
+                    casId, Helpers.CaseRepresentativeService.OrderSecondary);
+            }
+            else
+            {
+                Helpers.CaseRepresentativeService.Save(casId, secondary);
+            }
+        }
+
+        private void SaveRepresentativePhotos()
+        {
+            string caseCode = txtCode.Text.Trim();
+
+            savedRep1PhotoPath = StoreRepresentativePhoto(
+                caseCode, 1, selectedRep1PhotoSource, savedRep1PhotoPath);
+            savedRep2PhotoPath = StoreRepresentativePhoto(
+                caseCode, 2, selectedRep2PhotoSource, savedRep2PhotoPath);
+        }
+
+        private string StoreRepresentativePhoto(string caseCode, int slot, string source, string existing)
+        {
+            if (string.IsNullOrEmpty(source)) return existing;
+            if (IsSamePath(source, existing)) return existing;
+
+            string savedPath = FileHelper.SaveFileToCaseFolder(
+                source,
+                caseCode,
+                FileHelper.SectionRepresentativePhotos,
+                caseCode + "-Rep" + slot,
+                existing);
+
+            if (string.IsNullOrWhiteSpace(savedPath) || !File.Exists(savedPath))
+                throw new Exception("عکس " + Helpers.CaseRepresentativeService.LabelFor(slot) +
+                    " ذخیره نشد: " + FileHelper.LastError);
+
+            if (slot == 1) selectedRep1PhotoSource = ""; else selectedRep2PhotoSource = "";
+            return savedPath;
+        }
+
+        // ─── بارگذاری ───────────────────────────────────────
+        private void LoadCaseRepresentatives(int casId)
+        {
+            ClearRepresentativeSlot(1);
+            ClearRepresentativeSlot(2);
+            if (casId <= 0) return;
+
+            foreach (Helpers.RepresentativeRow row in Helpers.CaseRepresentativeService.GetAll(casId))
+                FillRepresentativeSlot(row);
+        }
+
+        private void FillRepresentativeSlot(Helpers.RepresentativeRow row)
+        {
+            bool first = row.RepresentativeOrder == Helpers.CaseRepresentativeService.OrderPrimary;
+            if (!first && row.RepresentativeOrder != Helpers.CaseRepresentativeService.OrderSecondary)
+                return;   // جایگاهِ سوم هنوز کنترلی ندارد (فقط داده پذیرفته می‌شود)
+
+            if (first)
+            {
+                txtRep1Name.Text = row.FullName;
+                SetComboBoxText(txtRep1Relationship, row.RelationshipToBeneficiary);
+                SetComboBoxText(cmbRep1IdCardType, row.IdCardType);
+                txtRep1NationalID.Text = row.NationalID;
+                txtRep1Phone.Text = row.Phone;
+                txtRep1Phone2.Text = row.SecondaryPhone;
+                txtRep1Address.Text = row.Address;
+                txtRep1Notes.Text = row.Notes;
+                savedRep1PhotoPath = row.PhotoPath ?? "";
+                selectedRep1PhotoSource = "";
+                LoadRepresentativePhoto(savedRep1PhotoPath, picRep1Photo);
+            }
+            else
+            {
+                txtRep2Name.Text = row.FullName;
+                SetComboBoxText(txtRep2Relationship, row.RelationshipToBeneficiary);
+                SetComboBoxText(cmbRep2IdCardType, row.IdCardType);
+                txtRep2NationalID.Text = row.NationalID;
+                txtRep2Phone.Text = row.Phone;
+                txtRep2Phone2.Text = row.SecondaryPhone;
+                txtRep2Address.Text = row.Address;
+                txtRep2Notes.Text = row.Notes;
+                savedRep2PhotoPath = row.PhotoPath ?? "";
+                selectedRep2PhotoSource = "";
+                LoadRepresentativePhoto(savedRep2PhotoPath, picRep2Photo);
+            }
+        }
+
+        // فایلِ گم‌شده نباید بازکردنِ پرونده را بشکند — کادر خالی
+        // می‌ماند و مسیرِ ثبت‌شده دست‌نخورده می‌ماند.
+        private void LoadRepresentativePhoto(string path, PictureBox target)
+        {
+            ClearPictureBox(target);
+            if (string.IsNullOrWhiteSpace(path)) return;
+            try
+            {
+                if (File.Exists(path)) LoadImageToPictureBox(path, target);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("LoadRepresentativePhoto failed: " + ex.Message);
+            }
+        }
+
+        private void ClearRepresentativeSlot(int slot)
+        {
+            if (slot == 1)
+            {
+                txtRep1Name.Text = "";
+                txtRep1Relationship.SelectedIndex = -1; txtRep1Relationship.Text = "";
+                cmbRep1IdCardType.SelectedIndex = -1; cmbRep1IdCardType.Text = "";
+                txtRep1NationalID.Text = "";
+                txtRep1Phone.Text = "";
+                txtRep1Phone2.Text = "";
+                txtRep1Address.Text = "";
+                txtRep1Notes.Text = "";
+                ClearRepresentativePhoto(1);
+            }
+            else
+            {
+                txtRep2Name.Text = "";
+                txtRep2Relationship.SelectedIndex = -1; txtRep2Relationship.Text = "";
+                cmbRep2IdCardType.SelectedIndex = -1; cmbRep2IdCardType.Text = "";
+                txtRep2NationalID.Text = "";
+                txtRep2Phone.Text = "";
+                txtRep2Phone2.Text = "";
+                txtRep2Address.Text = "";
+                txtRep2Notes.Text = "";
+                ClearRepresentativePhoto(2);
+            }
+        }
+
+        // فهرستِ نسبت از همان TblLookup می‌آید که اعتبارسنجی مرجعِ
+        // خود می‌گیرد — یک منبع، پس گزینهٔ قابلِ انتخاب هرگز
+        // نمی‌تواند مقدارِ نامعتبر باشد.
+        //
+        // آموزش — چرا LookupHelper.FillCombo استفاده نشد: آن متد وقتی
+        // مقدارِ فعلی در فهرست نباشد، خودبه‌خود گزینهٔ اول را
+        // انتخاب می‌کند. برای فیلدی که *الزامی* است یعنی هر
+        // نمایندهٔ خالی بی‌سروصدا نسبتِ «پدر» می‌گرفت و کاربر
+        // هرگز مجبور نمی‌شد آن را آگاهانه انتخاب کند — دقیقاً
+        // همان دادهٔ نادرستی که اعتبارسنجی می‌خواهد جلویش را بگیرد.
+        private void LoadRepresentativeLookups()
+        {
+            string[] values = Helpers.LookupHelper.GetValues(
+                Helpers.CaseRepresentativeService.LookupRelationship).ToArray();
+
+            txtRep1Relationship.Items.Clear();
+            txtRep1Relationship.Items.AddRange(values);
+            txtRep2Relationship.Items.Clear();
+            txtRep2Relationship.Items.AddRange(values);
+        }
+
+        private static object TextOrNull(string value)
+        {
+            string trimmed = (value ?? "").Trim();
+            return trimmed.Length == 0 ? null : trimmed;
+        }
+
+        // معادلِ TextOrNull برای تاریخ‌های *اختیاری*.
+        //
+        // آموزش — چرا لازم است: PersianDatePicker همیشه یک DateTime دارد
+        // (پیش‌فرض: امروز)، پس نوشتنِ بی‌قیدِ .Value یعنی «هیچ تاریخی ثبت
+        // نشده» و «امروز ثبت شده» در دیتابیس یکسان می‌شوند. با ShowCheckBox
+        // فعال، Checked دقیقاً همان تفکیک را می‌دهد: تیک‌نخورده ⇒ NULL.
+        // قالبِ رشته همان قراردادِ پروژه است (yyyy-MM-dd میلادی؛ نمایشِ شمسی
+        // فقط در لایهٔ UI).
+        private static object DateOrNull(Helpers.PersianDatePicker picker)
+        {
+            if (picker == null || !picker.Checked) return null;
+            return picker.Value.Date.ToString("yyyy-MM-dd",
+                System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        // بارگذاریِ ماژول‌ها هنگام باز کردن یک پرونده. اگر ردیفی نباشد
+        // (پروندهٔ قدیمی یا نوعی که این ماژول را ندارد) کنترل‌ها خالی می‌مانند.
+        private void LoadCaseModules(int casId)
+        {
+            ClearCaseModuleFields();
+            if (casId <= 0) return;
+
+            System.Data.DataRow orphan = Helpers.CaseModuleService.Load(Helpers.CaseModuleService.TableOrphan, casId);
+            if (orphan != null)
+            {
+                txtMainResidenceProvince.Text = ModuleString(orphan, "MainResidenceProvince");
+                txtMainResidenceDistrict.Text = ModuleString(orphan, "MainResidenceDistrict");
+                txtMainResidenceVillage.Text  = ModuleString(orphan, "MainResidenceVillage");
+                SetComboBoxText(txtFatherStatus, ModuleString(orphan, "FatherStatus"));
+                SetComboBoxText(txtFatherDeathCause, ModuleString(orphan, "FatherDeathCause"));
+                SetDatePickerValue(dtpFatherDeathDate, orphan["FatherDeathDate"]);
+                SetComboBoxText(txtMotherStatus, ModuleString(orphan, "MotherStatus"));
+                txtOrphanSchoolName.Text = ModuleString(orphan, "SchoolName");
+                SetComboBoxText(txtOrphanEducationLevel, ModuleString(orphan, "EducationLevel"));
+                chkIsStudent.Checked = orphan["IsStudent"] != DBNull.Value && Convert.ToInt32(orphan["IsStudent"]) != 0;
+                txtOrphanNotes.Text = ModuleString(orphan, "Notes");
+                txtGuardianName.Text = ModuleString(orphan, "GuardianName");
+                SetComboBoxText(txtGuardianRelationship, ModuleString(orphan, "GuardianRelationship"));
+
+                // Feature 3 — عکسِ سرپرستِ کودک.
+                savedGuardianPhotoPath = ModuleString(orphan, "GuardianPhotoPath");
+                selectedGuardianPhotoSource = "";
+                if (!string.IsNullOrWhiteSpace(savedGuardianPhotoPath) && File.Exists(savedGuardianPhotoPath))
+                    LoadImageToPictureBox(savedGuardianPhotoPath, picGuardianPhoto);
+                else
+                    ClearPictureBox(picGuardianPhoto);
+            }
+
+            System.Data.DataRow disability = Helpers.CaseModuleService.Load(Helpers.CaseModuleService.TableDisability, casId);
+            if (disability != null)
+            {
+                SetComboBoxText(txtDisabilityCause, ModuleString(disability, "DisabilityCause"));
+                txtDisabilityDescription.Text = ModuleString(disability, "DisabilityDescription");
+                txtSpecialNeeds.Text = ModuleString(disability, "SpecialNeeds");
+                SetComboBoxText(txtDisabilityCardStatus, ModuleString(disability, "HasDisabilityCard"));
+                txtDisabilityCardNumber.Text = ModuleString(disability, "DisabilityCardNumber");
+                txtCardIssuer.Text = ModuleString(disability, "CardIssuer");
+                SetDatePickerValue(dtpDisabilityIssueDate, disability["IssueDate"]);
+                SetDatePickerValue(dtpDisabilityExpiryDate, disability["ExpiryDate"]);
+                txtDisabilityNotes.Text = ModuleString(disability, "Notes");
+            }
+
+            System.Data.DataRow migrant = Helpers.CaseModuleService.Load(Helpers.CaseModuleService.TableMigrant, casId);
+            if (migrant != null)
+            {
+                SetComboBoxText(txtHasMigrationCard, ModuleString(migrant, "HasMigrationCard"));
+                txtMigrationCardNumber.Text = ModuleString(migrant, "MigrationCardNumber");
+                txtOriginCountry.Text = ModuleString(migrant, "OriginCountry");
+                txtDestinationCountry.Text = ModuleString(migrant, "DestinationCountry");
+                SetDatePickerValue(dtpDepartureDate, migrant["DepartureDate"]);
+                SetDatePickerValue(dtpArrivalDate, migrant["ArrivalDate"]);
+                object duration = migrant["AssistanceDuration"];
+                txtAssistanceDurationMonths.Text = duration == DBNull.Value ? "" : duration.ToString();
+                txtMigrantNotes.Text = ModuleString(migrant, "Notes");
+            }
+        }
+
+        private static string ModuleString(System.Data.DataRow row, string columnName)
+        {
+            if (!row.Table.Columns.Contains(columnName)) return "";
+            object value = row[columnName];
+            return value == DBNull.Value ? "" : value.ToString();
+        }
+
+        private void ClearCaseModuleFields()
+        {
+            txtFatherStatus.SelectedIndex = -1; txtFatherStatus.Text = "";
+            txtMotherStatus.SelectedIndex = -1; txtMotherStatus.Text = "";
+            txtGuardianRelationship.SelectedIndex = -1; txtGuardianRelationship.Text = "";
+            txtOrphanEducationLevel.SelectedIndex = -1; txtOrphanEducationLevel.Text = "";
+
+            txtOrphanSchoolName.Text = "";
+            txtOrphanNotes.Text = "";
+            txtGuardianName.Text = "";
+            // Feature 3 — عکسِ سرپرستِ کودک هم باید با بقیهٔ فیلدهای ماژول
+            // خالی شود، وگرنه عکسِ پروندهٔ قبلی روی پروندهٔ تازه می‌ماند و
+            // ذخیره می‌شد (همان کلاسِ باگی که ClearCaseModuleFields برایش هست).
+            ClearPictureBox(picGuardianPhoto);
+            savedGuardianPhotoPath = "";
+            selectedGuardianPhotoSource = "";
+            chkIsStudent.Checked = false;
+            txtCardIssuer.Text = "";
+            txtDisabilityNotes.Text = "";
+            txtOriginCountry.Text = "";
+            txtDestinationCountry.Text = "";
+            txtMigrantNotes.Text = "";
+
+            // پروندهٔ تازه هیچ‌کدام از این تاریخ‌های اختیاری را ندارد؛ تیک
+            // برداشته می‌شود تا ذخیره NULL بنویسد نه «امروز».
+            dtpFatherDeathDate.Value = DateTime.Today;
+            dtpFatherDeathDate.Checked = false;
+            dtpDisabilityIssueDate.Value = DateTime.Today;
+            dtpDisabilityIssueDate.Checked = false;
+            dtpDisabilityExpiryDate.Value = DateTime.Today;
+            dtpDisabilityExpiryDate.Checked = false;
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // Phase 5 — تب بازدید میدانی. همهٔ دسترسی به داده از طریق
+        // FieldVisitService است (تایم‌لاین و بازمحاسبهٔ کامل‌بودن داخلِ خودِ
+        // سرویس انجام می‌شود، پس اینجا تکرار نمی‌شوند).
+        // ═══════════════════════════════════════════════════════════════════
+        private int currentVisitId;
+
+        // ─── تبِ تاریخچه (H5) ────────────────────────────────────────────────
+        // فقط خواندنی. TblCaseTimeline از فاز ۳ پر می‌شد ولی هیچ صفحه‌ای آن را
+        // نشان نمی‌داد؛ این متد همان نمایشِ نبوده است.
+        private void RefreshTimelineTab()
+        {
+            if (dgvTimeline == null) return;
+
+            if (currentCaseId <= 0)
+            {
+                dgvTimeline.DataSource = null;
+                return;
+            }
+
+            try
+            {
+                dgvTimeline.DataSource = Helpers.TimelineService.GetCaseTimeline(currentCaseId);
+            }
+            catch (Exception ex)
+            {
+                // نمایشِ تاریخچه هرگز نباید بازکردنِ پرونده را بشکند.
+                System.Diagnostics.Debug.WriteLine("RefreshTimelineTab failed: " + ex.Message);
+                dgvTimeline.DataSource = null;
+            }
+        }
+
+        private void RefreshVisitsTab()
+        {
+            if (dgvVisits == null) return;
+
+            if (currentCaseId <= 0)
+            {
+                dgvVisits.DataSource = null;
+                ClearVisitEntry();
+                return;
+            }
+
+            try
+            {
+                dgvVisits.DataSource = Helpers.FieldVisitService.GetVisitsTable(currentCaseId);
+                ApplyVisitGridHeaders();
+            }
+            catch (Exception ex)
+            {
+                Msg.Show("خطا در بارگذاری بازدیدها: " + ex.Message);
+            }
+        }
+
+        private void ApplyVisitGridHeaders()
+        {
+            if (dgvVisits.Columns.Count == 0) return;
+
+            if (dgvVisits.Columns.Contains("VisitID"))
+                dgvVisits.Columns["VisitID"].Visible = false;
+            if (dgvVisits.Columns.Contains("VisitDate"))
+                dgvVisits.Columns["VisitDate"].HeaderText = "تاریخ بازدید";
+            if (dgvVisits.Columns.Contains("VisitorName"))
+                dgvVisits.Columns["VisitorName"].HeaderText = "بازدیدکننده";
+            if (dgvVisits.Columns.Contains("VisitResult"))
+                dgvVisits.Columns["VisitResult"].HeaderText = "نتیجه";
+            if (dgvVisits.Columns.Contains("Recommendation"))
+                dgvVisits.Columns["Recommendation"].HeaderText = "توصیه";
+            if (dgvVisits.Columns.Contains("Notes"))
+                dgvVisits.Columns["Notes"].HeaderText = "یادداشت";
+            if (dgvVisits.Columns.Contains("PhotoCount"))
+                dgvVisits.Columns["PhotoCount"].HeaderText = "تعداد عکس";
+        }
+
+        private void ClearVisitEntry()
+        {
+            currentVisitId = 0;
+            dtpVisitDate.Value = DateTime.Today;
+            txtVisitorName.Text = Helpers.SecurityContext.Username ?? "";
+            txtVisitResult.SelectedIndex = -1;
+            txtVisitResult.Text = "";
+            txtVisitRecommendation.SelectedIndex = -1;
+            txtVisitRecommendation.Text = "";
+            txtVisitNotes.Text = "";
+        }
+
+        private void dgvVisits_CellClick(object sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex < 0 || !dgvVisits.Columns.Contains("VisitID")) return;
+
+            object idValue = dgvVisits.Rows[e.RowIndex].Cells["VisitID"].Value;
+            if (idValue == null || idValue == DBNull.Value) return;
+
+            var visit = Helpers.FieldVisitService.GetVisit(Convert.ToInt32(idValue));
+            if (visit == null) return;
+
+            currentVisitId = visit.VisitID;
+            SetDatePickerValue(dtpVisitDate, visit.VisitDate);
+            txtVisitorName.Text = visit.VisitorName;
+            SetComboBoxText(txtVisitResult, visit.VisitResult);
+            SetComboBoxText(txtVisitRecommendation, visit.Recommendation);
+            txtVisitNotes.Text = visit.Notes;
+        }
+
+        private void btnVisitNew_Click(object sender, EventArgs e)
+        {
+            ClearVisitEntry();
+        }
+
+        private void btnVisitSave_Click(object sender, EventArgs e)
+        {
+            if (!CaseManagement.Enterprise.PermissionService.Require("Case.Edit"))
+            {
+                Msg.Show("کاربر فقط مشاهده اجازه ثبت بازدید ندارد.");
+                return;
+            }
+
+            if (currentCaseId <= 0)
+            {
+                Msg.Show("اول پرونده را ذخیره یا انتخاب کنید");
+                return;
+            }
+
+            try
+            {
+                Helpers.FieldVisitService.SaveVisit(
+                    currentVisitId,
+                    currentCaseId,
+                    dtpVisitDate.Value.Date.ToString("yyyy-MM-dd"),
+                    txtVisitorName.Text.Trim(),
+                    txtVisitResult.Text.Trim(),
+                    txtVisitRecommendation.Text.Trim(),
+                    txtVisitNotes.Text.Trim());
+
+                Msg.Show(currentVisitId > 0 ? "بازدید ویرایش شد" : "بازدید ثبت شد");
+                RefreshVisitsTab();
+                ClearVisitEntry();
+            }
+            catch (Exception ex)
+            {
+                Msg.Show("خطا در ذخیره بازدید: " + ex.Message);
+            }
+        }
+
+        private void btnVisitDelete_Click(object sender, EventArgs e)
+        {
+            if (!CaseManagement.Enterprise.PermissionService.Require("Case.Delete"))
+            {
+                Msg.Show("حذف بازدید فقط برای مدیر سیستم مجاز است.");
+                return;
+            }
+
+            if (currentVisitId <= 0)
+            {
+                Msg.Show("اول یک بازدید را از فهرست انتخاب کنید");
+                return;
+            }
+
+            if (!UiTheme.ShowConfirm(this, "این بازدید حذف شود؟", "حذف بازدید"))
+                return;
+
+            try
+            {
+                Helpers.FieldVisitService.DeleteVisit(currentVisitId);
+                Msg.Show("بازدید حذف شد");
+                RefreshVisitsTab();
+                ClearVisitEntry();
+            }
+            catch (Exception ex)
+            {
+                Msg.Show("خطا در حذف بازدید: " + ex.Message);
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // Phase 6 — تب خانواده. حداقلی و عمداً بدونِ ماژولِ مدیریتِ جداگانه:
+        // نمایشِ شناسهٔ خانوار + فهرستِ پرونده‌های هم‌خانوار + پیوند/جدا کردن.
+        // ═══════════════════════════════════════════════════════════════════
+        private void RefreshFamilyTab()
+        {
+            if (dgvFamilyCases == null) return;
+
+            if (currentCaseId <= 0)
+            {
+                dgvFamilyCases.DataSource = null;
+                lblFamilyGroupValue.Text = "شناسه خانوار: —  (اول پرونده را ذخیره یا انتخاب کنید)";
+                return;
+            }
+
+            try
+            {
+                int groupId = Helpers.FamilyGroupService.GetFamilyGroupId(currentCaseId);
+                bool isRoot = groupId == currentCaseId;
+                int memberCount = Helpers.FamilyGroupService.GetMemberCount(currentCaseId);
+
+                lblFamilyGroupValue.Text = string.Format(
+                    "شناسه خانوار: {0}   |   نقش این پرونده: {1}   |   تعداد پرونده‌های خانوار: {2}",
+                    groupId, isRoot ? "ریشه خانوار" : "عضو", memberCount);
+
+                dgvFamilyCases.DataSource = Helpers.FamilyGroupService.GetFamilyCases(currentCaseId);
+                ApplyFamilyGridHeaders();
+            }
+            catch (Exception ex)
+            {
+                Msg.Show("خطا در بارگذاری اطلاعات خانواده: " + ex.Message);
+            }
+        }
+
+        private void ApplyFamilyGridHeaders()
+        {
+            if (dgvFamilyCases.Columns.Count == 0) return;
+
+            if (dgvFamilyCases.Columns.Contains("CasID"))
+                dgvFamilyCases.Columns["CasID"].Visible = false;
+            if (dgvFamilyCases.Columns.Contains("Code"))
+                dgvFamilyCases.Columns["Code"].HeaderText = "کد پرونده";
+            if (dgvFamilyCases.Columns.Contains("HeadFullName"))
+                dgvFamilyCases.Columns["HeadFullName"].HeaderText = "نام سرپرست";
+            if (dgvFamilyCases.Columns.Contains("ServiceStatus"))
+                dgvFamilyCases.Columns["ServiceStatus"].HeaderText = "وضعیت خدمات";
+            if (dgvFamilyCases.Columns.Contains("RequestTypeName"))
+                dgvFamilyCases.Columns["RequestTypeName"].HeaderText = "نوع درخواست";
+            if (dgvFamilyCases.Columns.Contains("FamilyRole"))
+                dgvFamilyCases.Columns["FamilyRole"].HeaderText = "نقش در خانوار";
+        }
+
+        private void btnFamilyLink_Click(object sender, EventArgs e)
+        {
+            if (!CaseManagement.Enterprise.PermissionService.Require("Case.Edit"))
+            {
+                Msg.Show("کاربر فقط مشاهده اجازه تغییر خانواده ندارد.");
+                return;
+            }
+
+            if (currentCaseId <= 0)
+            {
+                Msg.Show("اول پرونده را ذخیره یا انتخاب کنید");
+                return;
+            }
+
+            int selectedCasId = ShowFamilyLinkPicker();
+            if (selectedCasId <= 0) return;
+
+            string error;
+            if (!Helpers.FamilyGroupService.LinkToFamily(currentCaseId, selectedCasId, out error))
+            {
+                Msg.Show(error);
+                return;
+            }
+
+            Msg.Show("پرونده به خانواده پیوند خورد");
+            RefreshFamilyTab();
+        }
+
+        private void btnFamilyUnlink_Click(object sender, EventArgs e)
+        {
+            if (!CaseManagement.Enterprise.PermissionService.Require("Case.Edit"))
+            {
+                Msg.Show("کاربر فقط مشاهده اجازه تغییر خانواده ندارد.");
+                return;
+            }
+
+            if (currentCaseId <= 0)
+            {
+                Msg.Show("اول پرونده را ذخیره یا انتخاب کنید");
+                return;
+            }
+
+            if (!UiTheme.ShowConfirm(this,
+                "این پرونده از خانوار جدا شود و مستقل گردد؟", "جدا کردن از خانواده"))
+                return;
+
+            string error;
+            if (!Helpers.FamilyGroupService.UnlinkFromFamily(currentCaseId, out error))
+            {
+                Msg.Show(error);
+                return;
+            }
+
+            Msg.Show("پرونده از خانواده جدا شد");
+            RefreshFamilyTab();
+        }
+
+        // انتخابگرِ سبک — یک دیالوگِ ساخته‌شده در کد، نه یک فرمِ تازه در پروژه
+        // (خواستهٔ صریح: بدونِ صفحاتِ مدیریتیِ پیچیده).
+        private int ShowFamilyLinkPicker()
+        {
+            using (var dialog = new Form())
+            {
+                dialog.Text = "انتخاب پرونده ریشه خانوار";
+                dialog.StartPosition = FormStartPosition.CenterParent;
+                dialog.Size = new System.Drawing.Size(820, 520);
+                dialog.RightToLeft = RightToLeft.Yes;
+                dialog.RightToLeftLayout = true;
+                dialog.MinimizeBox = false;
+                dialog.MaximizeBox = false;
+
+                var txtSearch = new TextBox { Dock = DockStyle.Top, Height = 30 };
+                var grid = new DataGridView
+                {
+                    Dock = DockStyle.Fill,
+                    ReadOnly = true,
+                    AllowUserToAddRows = false,
+                    AllowUserToDeleteRows = false,
+                    MultiSelect = false,
+                    SelectionMode = DataGridViewSelectionMode.FullRowSelect,
+                    AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
+                    RightToLeft = RightToLeft.Yes
+                };
+
+                var btnOk = new Button { Text = "پیوند", DialogResult = DialogResult.OK, Width = 120, Height = 36 };
+                var btnCancel = new Button { Text = "انصراف", DialogResult = DialogResult.Cancel, Width = 120, Height = 36 };
+                var buttons = new FlowLayoutPanel
+                {
+                    Dock = DockStyle.Bottom,
+                    Height = 48,
+                    FlowDirection = FlowDirection.LeftToRight,
+                    Padding = new Padding(10, 6, 10, 6)
+                };
+                buttons.Controls.Add(btnOk);
+                buttons.Controls.Add(btnCancel);
+
+                EventHandler reload = delegate
+                {
+                    try
+                    {
+                        grid.DataSource = Helpers.FamilyGroupService.SearchCasesForLink(
+                            txtSearch.Text, currentCaseId);
+                        if (grid.Columns.Contains("CasID")) grid.Columns["CasID"].Visible = false;
+                        if (grid.Columns.Contains("Code")) grid.Columns["Code"].HeaderText = "کد پرونده";
+                        if (grid.Columns.Contains("FormNo")) grid.Columns["FormNo"].HeaderText = "شماره فرم";
+                        if (grid.Columns.Contains("HeadFullName")) grid.Columns["HeadFullName"].HeaderText = "نام سرپرست";
+                        if (grid.Columns.Contains("HeadFatherName")) grid.Columns["HeadFatherName"].HeaderText = "نام پدر";
+                        if (grid.Columns.Contains("Phone")) grid.Columns["Phone"].HeaderText = "تلفن";
+                        if (grid.Columns.Contains("RequestTypeName")) grid.Columns["RequestTypeName"].HeaderText = "نوع درخواست";
+                    }
+                    catch (Exception ex)
+                    {
+                        Msg.Show("خطا در جستجو: " + ex.Message);
+                    }
+                };
+
+                txtSearch.TextChanged += reload;
+                dialog.Controls.Add(grid);
+                dialog.Controls.Add(txtSearch);
+                dialog.Controls.Add(buttons);
+                dialog.AcceptButton = btnOk;
+                dialog.CancelButton = btnCancel;
+
+                reload(null, EventArgs.Empty);
+
+                if (dialog.ShowDialog(this) != DialogResult.OK) return 0;
+                if (grid.CurrentRow == null || !grid.Columns.Contains("CasID")) return 0;
+
+                object idValue = grid.CurrentRow.Cells["CasID"].Value;
+                return idValue == null || idValue == DBNull.Value ? 0 : Convert.ToInt32(idValue);
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // Phase 5.5-B — نمایشِ فقط‌خواندنیِ امتیاز آسیب‌پذیری.
+        // هیچ مسیرِ ویرایشی وجود ندارد: امتیاز فقط از موتور می‌آید.
+        // ═══════════════════════════════════════════════════════════════════
+        private void RefreshVulnerabilityTab()
+        {
+            if (lblVulnScoreValue == null) return;
+
+            if (currentCaseId <= 0)
+            {
+                lblVulnScoreValue.Text = "امتیاز آسیب‌پذیری: —";
+                lblVulnScoreDate.Text = "برای مشاهده، اول پرونده را ذخیره یا انتخاب کنید.";
+                dgvVulnBreakdown.DataSource = null;
+                return;
+            }
+
+            try
+            {
+                using (var con = new DatabaseHelper().GetConnection())
+                using (var cmd = new SQLiteCommand(
+                    "SELECT VulnerabilityScore, VulnerabilityBand, VulnerabilityScoreDate FROM TblCase WHERE CasID = @Id;", con))
+                {
+                    cmd.Parameters.AddWithValue("@Id", currentCaseId);
+                    con.Open();
+                    using (var dr = cmd.ExecuteReader())
+                    {
+                        if (dr.Read() && dr["VulnerabilityScore"] != DBNull.Value)
+                        {
+                            double score = Convert.ToDouble(dr["VulnerabilityScore"]);
+                            string band = dr["VulnerabilityBand"] == DBNull.Value ? "" : dr["VulnerabilityBand"].ToString();
+                            string date = dr["VulnerabilityScoreDate"] == DBNull.Value ? "" : dr["VulnerabilityScoreDate"].ToString();
+
+                            lblVulnScoreValue.Text = string.Format("امتیاز آسیب‌پذیری: {0} از ۱۰۰   |   سطح: {1}",
+                                score.ToString("0.#"),
+                                Helpers.VulnerabilityScoreService.GetBandDisplayName(band));
+                            lblVulnScoreDate.Text = string.IsNullOrEmpty(date)
+                                ? "" : "تاریخ محاسبه: " + date;
+
+                            lblVulnScoreValue.ForeColor = BandColor(band);
+                        }
+                        else
+                        {
+                            lblVulnScoreValue.Text = "امتیاز آسیب‌پذیری: هنوز محاسبه نشده";
+                            lblVulnScoreValue.ForeColor = UiTheme.TextDark;
+                            lblVulnScoreDate.Text = "با ذخیرهٔ پرونده به‌صورت خودکار محاسبه می‌شود.";
+                        }
+                    }
+                }
+
+                dgvVulnBreakdown.DataSource =
+                    Helpers.VulnerabilityScoreService.GetCurrentBreakdown(currentCaseId);
+                ApplyVulnGridHeaders();
+            }
+            catch (Exception ex)
+            {
+                Msg.Show("خطا در بارگذاری امتیاز آسیب‌پذیری: " + ex.Message);
+            }
+        }
+
+        private static System.Drawing.Color BandColor(string band)
+        {
+            switch ((band ?? "").Trim())
+            {
+                case Helpers.VulnerabilityScoreService.BandHigh:   return UiTheme.Danger;
+                case Helpers.VulnerabilityScoreService.BandMedium: return UiTheme.Warning;
+                default: return UiTheme.TextDark;
+            }
+        }
+
+        private void ApplyVulnGridHeaders()
+        {
+            if (dgvVulnBreakdown.Columns.Count == 0) return;
+
+            if (dgvVulnBreakdown.Columns.Contains("CriteriaName"))
+                dgvVulnBreakdown.Columns["CriteriaName"].HeaderText = "معیار";
+            if (dgvVulnBreakdown.Columns.Contains("FactValue"))
+                dgvVulnBreakdown.Columns["FactValue"].HeaderText = "مقدار";
+            if (dgvVulnBreakdown.Columns.Contains("ScoreValue"))
+                dgvVulnBreakdown.Columns["ScoreValue"].HeaderText = "امتیاز";
+            if (dgvVulnBreakdown.Columns.Contains("Explanation"))
+                dgvVulnBreakdown.Columns["Explanation"].HeaderText = "توضیح";
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // Phase 5.5-C — وضعیتِ محاسبه‌شدهٔ پرونده (همه فقط‌خواندنی).
+        //
+        // هیچ محاسبه‌ای اینجا انجام نمی‌شود: تکمیل و امتیاز از ستون‌های کشِ
+        // TblCase خوانده می‌شوند (که سرویس‌ها هنگام ذخیره نوشته‌اند) و مبلغِ
+        // پیشنهادی از AssistanceRuleService.Evaluate — که عمداً بی‌عارضه است،
+        // پس صرفِ نمایش هیچ رویدادی در تایم‌لاین ثبت نمی‌کند.
+        // ═══════════════════════════════════════════════════════════════════
+        private readonly ToolTip _suggestedAidTip = new ToolTip();
+
+        private void RefreshCaseStatusStats()
+        {
+            if (lblStatCompletionPct == null) return;
+
+            if (currentCaseId <= 0)
+            {
+                lblStatCompletionPct.Text = "—";
+                lblStatCompletionStatus.Text = "—";
+                lblStatVulnScore.Text = "—";
+                lblStatSuggestedAid.Text = "—";
+                lblStatVerifiedDocs.Text = "—";
+                return;
+            }
+
+            try
+            {
+                using (var con = new DatabaseHelper().GetConnection())
+                {
+                    con.Open();
+
+                    using (var cmd = new SQLiteCommand(
+                        "SELECT IFNULL(CompletionPercent, -1) AS Pct, " +
+                        "IFNULL(CompletionStatusCode, '') AS StatusCode, " +
+                        "IFNULL(VulnerabilityScore, -1) AS Score, " +
+                        "IFNULL(VulnerabilityBand, '') AS Band " +
+                        "FROM TblCase WHERE CasID = @Id;", con))
+                    {
+                        cmd.Parameters.AddWithValue("@Id", currentCaseId);
+                        using (var dr = cmd.ExecuteReader())
+                        {
+                            if (dr.Read())
+                            {
+                                int pct = Convert.ToInt32(dr["Pct"]);
+                                lblStatCompletionPct.Text = pct < 0 ? "—" : pct.ToString();
+
+                                string statusCode = dr["StatusCode"].ToString();
+                                lblStatCompletionStatus.Text = CompletionStatusDisplay(statusCode);
+                                lblStatCompletionStatus.ForeColor = CompletionStatusColor(statusCode);
+
+                                double score = Convert.ToDouble(dr["Score"]);
+                                lblStatVulnScore.Text = score < 0 ? "—" : score.ToString("0.#");
+                                lblStatVulnScore.ForeColor = BandColor(dr["Band"].ToString());
+                            }
+                        }
+                    }
+
+                    // شمارشِ تأییدِ اسناد — «تأییدشده از کل» (بخشِ تأییدِ اسناد).
+                    using (var cmd = new SQLiteCommand(
+                        "SELECT COUNT(*) AS Total, " +
+                        "SUM(CASE WHEN IFNULL(IsVerified, 0) = 1 THEN 1 ELSE 0 END) AS Verified " +
+                        "FROM TblDocs WHERE CasID = @Id AND IFNULL(IsArchived, 0) = 0;", con))
+                    {
+                        cmd.Parameters.AddWithValue("@Id", currentCaseId);
+                        using (var dr = cmd.ExecuteReader())
+                        {
+                            if (dr.Read())
+                            {
+                                int total = Convert.ToInt32(dr["Total"]);
+                                int verified = dr["Verified"] == DBNull.Value ? 0 : Convert.ToInt32(dr["Verified"]);
+                                lblStatVerifiedDocs.Text = verified + " / " + total;
+                                lblStatVerifiedDocs.ForeColor = (total > 0 && verified < total)
+                                    ? UiTheme.Warning : UiTheme.TextDark;
+                            }
+                        }
+                    }
+                }
+
+                RefreshSuggestedAssistance();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("RefreshCaseStatusStats failed: " + ex.Message);
+            }
+        }
+
+        // مبلغِ پیشنهادی + توضیحِ قاعده. Evaluate (نه EvaluateAndLog) عمداً:
+        // بازکردنِ پرونده نباید رویدادِ «قاعده تطبیق کرد» در تایم‌لاین بسازد.
+        private void RefreshSuggestedAssistance()
+        {
+            try
+            {
+                Helpers.AssistanceRecommendation recommendation =
+                    Helpers.AssistanceRuleService.Evaluate(currentCaseId);
+
+                if (recommendation.HasMatch)
+                {
+                    lblStatSuggestedAid.Text = recommendation.RecommendedAmount.ToString("#,0");
+                    lblStatSuggestedAid.ForeColor = UiTheme.Success;
+
+                    // شرحِ محاسبه به‌صورتِ tooltip — بدونِ گرفتنِ فضای صفحه.
+                    _suggestedAidTip.SetToolTip(lblStatSuggestedAid,
+                        string.Join(Environment.NewLine, recommendation.Explanation.ToArray()));
+                }
+                else
+                {
+                    lblStatSuggestedAid.Text = "—";
+                    lblStatSuggestedAid.ForeColor = UiTheme.TextMuted;
+                    _suggestedAidTip.SetToolTip(lblStatSuggestedAid,
+                        "هیچ قاعدهٔ مساعدتی با این پرونده تطبیق نکرد.");
+                }
+            }
+            catch (Exception ex)
+            {
+                lblStatSuggestedAid.Text = "—";
+                System.Diagnostics.Debug.WriteLine("RefreshSuggestedAssistance failed: " + ex.Message);
+            }
+        }
+
+        private static string CompletionStatusDisplay(string code)
+        {
+            switch ((code ?? "").Trim())
+            {
+                case "COMPLETE":    return "کامل";
+                case "IN_PROGRESS": return "در حال تکمیل";
+                case "INCOMPLETE":  return "ناقص";
+                default:            return "—";
+            }
+        }
+
+        private static System.Drawing.Color CompletionStatusColor(string code)
+        {
+            switch ((code ?? "").Trim())
+            {
+                case "COMPLETE":    return UiTheme.Success;
+                case "IN_PROGRESS": return UiTheme.Warning;
+                case "INCOMPLETE":  return UiTheme.Danger;
+                default:            return UiTheme.TextDark;
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // Phase 5.5-C — تب تأمین مالی. همهٔ نوشتن‌ها از CaseFundingService
+        // می‌گذرد (تایم‌لاین و بازمحاسبهٔ کامل‌بودن داخلِ خودِ سرویس‌اند).
+        // ═══════════════════════════════════════════════════════════════════
+        private void RefreshFundingTab()
+        {
+            if (dgvCaseFunding == null) return;
+
+            if (currentCaseId <= 0)
+            {
+                dgvCaseFunding.DataSource = null;
+                return;
+            }
+
+            try
+            {
+                dgvCaseFunding.DataSource = Helpers.CaseFundingService.GetCaseFunding(currentCaseId);
+
+                HideFundingColumn("CaseFundingID");
+                HideFundingColumn("FundingSourceID");
+                HideFundingColumn("SponsorID");
+                HideFundingColumn("IsActive");
+                FundingHeader("FundingSourceName", "منبع تأمین مالی");
+                FundingHeader("SponsorName", "خیّر");
+                FundingHeader("StartDate", "از تاریخ");
+                FundingHeader("EndDate", "تا تاریخ");
+                FundingHeader("Notes", "یادداشت");
+            }
+            catch (Exception ex)
+            {
+                Msg.Show("خطا در بارگذاری تأمین مالی: " + ex.Message);
+            }
+        }
+
+        private void HideFundingColumn(string column)
+        {
+            if (dgvCaseFunding.Columns.Contains(column))
+                dgvCaseFunding.Columns[column].Visible = false;
+        }
+
+        private void FundingHeader(string column, string text)
+        {
+            if (dgvCaseFunding.Columns.Contains(column))
+                dgvCaseFunding.Columns[column].HeaderText = text;
+        }
+
+        private void btnFundingAssign_Click(object sender, EventArgs e)
+        {
+            if (!CaseManagement.Enterprise.PermissionService.Require("Case.Edit"))
+            {
+                Msg.Show("کاربر فقط مشاهده اجازه تخصیص منبع مالی ندارد.");
+                return;
+            }
+
+            if (currentCaseId <= 0)
+            {
+                Msg.Show("اول پرونده را ذخیره یا انتخاب کنید");
+                return;
+            }
+
+            var sources = Helpers.CaseFundingService.GetFundingSources(true);
+            if (sources.Count == 0)
+            {
+                Msg.Show("هیچ منبع تأمین مالیِ فعالی تعریف نشده است. " +
+                         "از داشبورد ← «منابع مالی و خیّرین» یکی بسازید.");
+                return;
+            }
+
+            var sourceItems = new List<KeyValuePair<string, string>>();
+            foreach (var option in sources)
+                sourceItems.Add(new KeyValuePair<string, string>(option.ID.ToString(), option.Name));
+
+            // «بدون خیّر» گزینهٔ نخست است چون تخصیصِ منبع بدونِ خیّر حالتِ رایج است.
+            var sponsorItems = new List<KeyValuePair<string, string>>();
+            sponsorItems.Add(new KeyValuePair<string, string>("0", "— بدون خیّر —"));
+            foreach (var option in Helpers.CaseFundingService.GetSponsors(true))
+                sponsorItems.Add(new KeyValuePair<string, string>(option.ID.ToString(), option.Name));
+
+            Dictionary<string, string> values = CaseManagement.Enterprise.EntPrompt.Edit(this,
+                "تخصیص منبع تأمین مالی",
+                CaseManagement.Enterprise.EntField.Combo("Source", "منبع تأمین مالی", sourceItems[0].Key, sourceItems),
+                CaseManagement.Enterprise.EntField.Combo("Sponsor", "خیّر", "0", sponsorItems),
+                CaseManagement.Enterprise.EntField.Text("Start", "از تاریخ (yyyy-MM-dd)", DateTime.Today.ToString("yyyy-MM-dd")),
+                CaseManagement.Enterprise.EntField.Text("End", "تا تاریخ (اختیاری)", ""),
+                CaseManagement.Enterprise.EntField.Multiline("Notes", "یادداشت", ""));
+
+            if (values == null) return;
+
+            int sourceId, sponsorId;
+            int.TryParse(values["Source"], out sourceId);
+            int.TryParse(values["Sponsor"], out sponsorId);
+
+            if (sourceId <= 0) { Msg.Show("منبع تأمین مالی انتخاب نشد."); return; }
+
+            try
+            {
+                Helpers.CaseFundingService.AssignFunding(currentCaseId, sourceId,
+                    sponsorId > 0 ? (int?)sponsorId : null,
+                    values["Start"], values["End"], values["Notes"]);
+
+                Msg.Show("منبع تأمین مالی تخصیص یافت");
+                RefreshFundingTab();
+                RefreshCaseStatusStats();
+            }
+            catch (Exception ex)
+            {
+                Msg.Show("خطا در تخصیص منبع مالی: " + ex.Message);
+            }
+        }
+
+        private void btnFundingRemove_Click(object sender, EventArgs e)
+        {
+            if (!CaseManagement.Enterprise.PermissionService.Require("Case.Edit"))
+            {
+                Msg.Show("کاربر فقط مشاهده اجازه تغییر تأمین مالی ندارد.");
+                return;
+            }
+
+            if (dgvCaseFunding.CurrentRow == null || !dgvCaseFunding.Columns.Contains("CaseFundingID"))
+            {
+                Msg.Show("اول یک تخصیص را از فهرست انتخاب کنید");
+                return;
+            }
+
+            object idValue = dgvCaseFunding.CurrentRow.Cells["CaseFundingID"].Value;
+            if (idValue == null || idValue == DBNull.Value) return;
+
+            if (!UiTheme.ShowConfirm(this,
+                    "این تخصیص غیرفعال شود؟ سابقهٔ آن در پرونده باقی می‌ماند.",
+                    "حذف تخصیص تأمین مالی"))
+                return;
+
+            try
+            {
+                Helpers.CaseFundingService.RemoveFunding(Convert.ToInt32(idValue));
+                Msg.Show("تخصیص غیرفعال شد");
+                RefreshFundingTab();
+                RefreshCaseStatusStats();
+            }
+            catch (Exception ex)
+            {
+                Msg.Show("خطا در حذف تخصیص: " + ex.Message);
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // Phase 5.5-C — خروجیِ «پروندهٔ کامل».
+        //
+        // متفاوت با btnExportExcel که گزارشِ *چندپرونده‌ای* با فیلتر است: این
+        // یکی همهٔ بخش‌های همین پرونده را (خلاصه، اسناد، اسنادِ ناقص، امتیاز،
+        // تأمین مالی، بازدید، مساعدت، و در پایان تایم‌لاین) در یک فایل می‌ریزد.
+        // ═══════════════════════════════════════════════════════════════════
+        private void btnExportCaseFile_Click(object sender, EventArgs e)
+        {
+            if (!CaseManagement.Enterprise.PermissionService.Require("Case.Print"))
+            {
+                Msg.Show("کاربر اجازه خروجی گرفتن از پرونده را ندارد.");
+                return;
+            }
+
+            if (currentCaseId <= 0)
+            {
+                Msg.Show("اول پرونده را ذخیره یا از لیست انتخاب کن");
+                return;
+            }
+
+            var modeItems = new List<KeyValuePair<string, string>>();
+            modeItems.Add(new KeyValuePair<string, string>("EXCEL", "فایل اکسل (همهٔ بخش‌ها)"));
+            modeItems.Add(new KeyValuePair<string, string>("PRINT", "چاپ همهٔ بخش‌ها"));
+
+            Dictionary<string, string> choice = CaseManagement.Enterprise.EntPrompt.Edit(this,
+                "خروجی پروندهٔ کامل",
+                CaseManagement.Enterprise.EntField.Combo("Mode", "نوع خروجی", "EXCEL", modeItems));
+
+            if (choice == null) return;
+
+            try
+            {
+                if (choice["Mode"] == "PRINT")
+                {
+                    Helpers.CaseFileExportService.PrintFullCase(this, currentCaseId, txtCode.Text.Trim());
+                    return;
+                }
+
+                string rootFolder = FileHelper.GetOrChooseBaseRootFolder();
+                if (string.IsNullOrWhiteSpace(rootFolder))
+                {
+                    Msg.Show("محل ذخیره فایل‌ها مشخص نیست");
+                    return;
+                }
+
+                string folder = Path.Combine(rootFolder, "CaseFiles");
+                Directory.CreateDirectory(folder);
+
+                string outputPath = Path.Combine(folder,
+                    "CaseFile_" + FileHelper.CleanName(txtCode.Text.Trim()) + "_" +
+                    DateTime.Now.ToString("yyyyMMdd_HHmmss", System.Globalization.CultureInfo.InvariantCulture) + ".xlsx");
+
+                Helpers.CaseFileExportService.ExportCaseToExcel(currentCaseId, outputPath);
+
+                Msg.Show("خروجی پروندهٔ کامل ساخته شد:" + Environment.NewLine + outputPath);
+            }
+            catch (Exception ex)
+            {
+                Msg.Show("خطا در ساخت خروجی پروندهٔ کامل: " + ex.Message);
+            }
+        }
+
+        // کارتِ یک بخش را کامل (قاب + سربرگ) پنهان/آشکار می‌کند.
+        private void SetCardVisible(System.Windows.Forms.Panel card, bool visible)
+        {
+            if (card == null) return;
+            card.Visible = visible;
+        }
+
+        private void SetFieldGroupVisible(Helpers.FieldBox[] fields, bool visible)
+        {
+            if (fields == null) return;
+            foreach (var box in fields)
+            {
+                if (box == null) continue;
+                box.Visible = visible;
+            }
+        }
+
         private bool IsSuspendedStatus(string normalizedStatus)
         {
             return normalizedStatus == "قطع موقت" || normalizedStatus == "قطع";
@@ -732,6 +2415,11 @@ namespace CaseManagement
             txtServiceStatus.SelectedIndexChanged -= TxtServiceStatus_SelectedIndexChanged;
             txtServiceStatus.SelectedIndexChanged += TxtServiceStatus_SelectedIndexChanged;
 
+            // Phase 3 (بازبینی) — بخش‌های اختصاصیِ نوع درخواست.
+            txtRequestType.SelectedIndexChanged -= TxtRequestType_SelectedIndexChanged;
+            txtRequestType.SelectedIndexChanged += TxtRequestType_SelectedIndexChanged;
+            UpdateRequestTypeSectionVisibility();
+
             // آموزش — چک‌باکس سالم/معلول (به درخواست کاربر): با تیک «سالم»،
             // فیلدهای نوع/درجه معلولیت غیرفعال و خالی می‌شوند.
             chkHeadHealthy.CheckedChanged -= ChkHeadHealthy_CheckedChanged;
@@ -785,6 +2473,27 @@ namespace CaseManagement
             Helpers.LookupHelper.FillCombo(txtEducationLevel, "HeadEducationLevel");
             Helpers.LookupHelper.FillCombo(txtCoveredByOrg, "CoveredByOrg");
             Helpers.LookupHelper.FillCombo(txtSuspensionReason, "SuspensionReason");
+
+            // Phase 3 (بازبینی) — بخش‌های اختصاصیِ نوع درخواست.
+            Helpers.LookupHelper.FillCombo(txtFatherDeathCause, "FatherDeathCause");
+            Helpers.LookupHelper.FillCombo(txtDisabilityCause, "DisabilityCause");
+            Helpers.LookupHelper.FillCombo(txtDisabilityCardStatus, "DisabilityCardStatus");
+            Helpers.LookupHelper.FillCombo(txtHasMigrationCard, "HasMigrationCard");
+
+            // Phase 4 — ماژول‌های تخصصی.
+            Helpers.LookupHelper.FillCombo(txtFatherStatus, "FatherStatus");
+            Helpers.LookupHelper.FillCombo(txtMotherStatus, "MotherStatus");
+            Helpers.LookupHelper.FillCombo(txtGuardianRelationship, "GuardianRelationship");
+            // تحصیلاتِ کودک از همان فهرستِ تحصیلاتِ عضو خانواده می‌آید (مکتب/
+            // دانشگاه/…)، نه فهرستِ سرپرست — دو مفهومِ متفاوت با دو دستهٔ جدا.
+            Helpers.LookupHelper.FillCombo(txtOrphanEducationLevel, "MemberEducation");
+
+            // Phase 7 — نسبتِ نمایندهٔ قانونی.
+            LoadRepresentativeLookups();
+
+            // Phase 5 — تب بازدید میدانی.
+            Helpers.LookupHelper.FillCombo(txtVisitResult, "VisitResult");
+            Helpers.LookupHelper.FillCombo(txtVisitRecommendation, "VisitRecommendation");
         }
         private void btnChooseStorageFolder_Click(object sender, EventArgs e)
         {
@@ -902,7 +2611,9 @@ namespace CaseManagement
             txtHeadSadat.Text = "";
             txtReligion.Text = "";
             txtHeadTazkiraNo.Text = "";
-            cmbHeadIdCardType.Text = "";
+            // Feature 4 — پروندهٔ تازه هرگز بدونِ وضعیتِ تذکره نمی‌ماند؛
+            // پیش‌فرض «بدون تذکره» است نه خالی.
+            cmbHeadIdCardType.Text = Helpers.IdCardHelper.NoneDisplay;
             txtHeadOriginalResidence.Text = "";
             txtHeadCurrentResidence.Text = "";
             txtRelationshipToFamily.Text = "";
@@ -931,6 +2642,20 @@ namespace CaseManagement
             txtUrgentSituation.Text = "";
             txtPhotoPath.Text = "";
             txtFamilyPhotoPath.Text = "";
+            txtReferrerName.Text = "";
+            txtReferrerPhone.Text = "";
+
+            // Phase 3 (بازبینی) — بخش‌های اختصاصیِ نوع درخواست.
+            txtMainResidenceProvince.Text = "";
+            txtMainResidenceDistrict.Text = "";
+            txtMainResidenceVillage.Text = "";
+            txtDisabilityDescription.Text = "";
+            txtSpecialNeeds.Text = "";
+            txtDisabilityCardNumber.Text = "";
+            txtMigrationCardNumber.Text = "";
+            txtAssistanceDurationMonths.Text = "";
+            dtpDepartureDate.Value = DateTime.Today;
+            dtpArrivalDate.Value = DateTime.Today;
 
             // آموزش — رفع باگ «دکمه جدید همه فیلدها را خالی نمی‌کند»: این کمبوها
             // DropDownStyle=DropDownList دارند و برای آن‌ها «.Text = ""» هیچ اثری
@@ -941,7 +2666,9 @@ namespace CaseManagement
             {
                 txtZone, txtProvince, txtDistrict, txtRequestType, txtPriorityLevel,
                 txtHeadSadat, txtReligion, txtCoveredByOrg, txtDisabilityType,
-                txtDisabilityDegree, txtMaritalStatus, txtEducationLevel
+                txtDisabilityDegree, txtMaritalStatus, txtEducationLevel,
+                // Phase 3 (بازبینی)
+                txtFatherDeathCause, txtDisabilityCause, txtDisabilityCardStatus, txtHasMigrationCard
             };
             foreach (ComboBox cmb in dropdowns)
             {
@@ -951,6 +2678,30 @@ namespace CaseManagement
 
             // بعد از خالی‌شدن کمبوی «تحت پوشش»، کادر اسامی هم باید پنهان شود.
             UpdateCoveredByOrgNamesVisibility();
+
+            // Phase 4 — فیلدهای ماژول هم باید خالی شوند، وگرنه مقدارِ پروندهٔ
+            // قبلی روی «پروندهٔ جدید» باقی می‌ماند و ذخیره می‌شد.
+            ClearCaseModuleFields();
+
+            // Phase 7 — وگرنه نمایندهٔ پروندهٔ قبلی روی پروندهٔ جدید
+            // می‌ماند و — چون نمایندهٔ اول الزامی است و اعتبارسنجی
+            // را می‌گذراند — بی‌سروصدا ذخیره می‌شد.
+            ClearRepresentativeSlot(1);
+            ClearRepresentativeSlot(2);
+
+            // Phase 5 — پروندهٔ جدید ⇒ فهرست و فرمِ بازدید هم باید خالی شوند.
+            RefreshVisitsTab();
+            // Phase 6 — همچنین تب خانواده.
+            RefreshFamilyTab();
+            RefreshVulnerabilityTab();
+            // Phase 5.5-C — تأمین مالی و کارت‌های وضعیت.
+            RefreshFundingTab();
+            RefreshCaseStatusStats();
+            // پروندهٔ جدید هنوز تاریخچه‌ای ندارد.
+            RefreshTimelineTab();
+
+            // Phase 3 (بازبینی) — نوع درخواست خالی است ⇒ هر سه بخشِ اختصاصی پنهان.
+            UpdateRequestTypeSectionVisibility();
 
             dtpCaseDate.Value = DateTime.Today;
             dtpSurveyDate.Value = DateTime.Today;
@@ -995,6 +2746,15 @@ namespace CaseManagement
                 return false;
             }
 
+            // Phase 3 — نوع درخواست هویتِ اصلیِ پرونده است؛ باید از فهرستِ
+            // شش نوعِ مصوب (TblRequestType) انتخاب شود، نه متنِ آزاد.
+            if (Helpers.ReferenceDataService.FindRequestTypeByName(txtRequestType.Text.Trim()) == null)
+            {
+                Msg.Show("نوع درخواست را از لیست انتخاب کنید");
+                txtRequestType.Focus();
+                return false;
+            }
+
             if (IsSuspendedStatus(NormalizeServiceStatus(txtServiceStatus.Text)) &&
                 string.IsNullOrWhiteSpace(txtSuspensionReason.Text))
             {
@@ -1018,6 +2778,13 @@ namespace CaseManagement
                     return false;
                 }
             }
+
+            // Phase 7 — نمایندهٔ قانونی: خواستهٔ صریحِ «از ذخیرهٔ دادهٔ
+            // نامعتبر جلوگیری کن». آخرین بررسی است چون ممکن است
+            // کاربر را به تبِ دیگری ببرد؛ خطاهای همین تب اول دیده
+            // می‌شوند.
+            if (!ValidateRepresentatives())
+                return false;
 
             return true;
         }
@@ -1144,6 +2911,10 @@ namespace CaseManagement
             AddStringParameter(cmd, "@Province", txtProvince.Text.Trim());
             AddStringParameter(cmd, "@District", txtDistrict.Text.Trim());
             AddStringParameter(cmd, "@RequestType", txtRequestType.Text.Trim());
+            // Phase 3 — هویتِ مرجعِ تازه، در کنارِ ستونِ متنیِ قدیمی (dual-write).
+            // ValidateForm از قبل تضمین می‌کند این مقدار پیدا می‌شود.
+            var requestTypeRef = Helpers.ReferenceDataService.FindRequestTypeByName(txtRequestType.Text.Trim());
+            AddIntParameter(cmd, "@RequestTypeID", requestTypeRef != null ? requestTypeRef.ID : 1);
             AddStringParameter(cmd, "@PriorityLevel", txtPriorityLevel.Text.Trim());
             AddStringParameter(cmd, "@HeadFullName", txtHeadFullName.Text.Trim());
             AddStringParameter(cmd, "@HeadFatherName", txtHeadFatherName.Text.Trim());
@@ -1173,11 +2944,42 @@ namespace CaseManagement
             AddStringParameter(cmd, "@EducationLevel", txtEducationLevel.Text.Trim());
             bool isSuspended = IsSuspendedStatus(NormalizeServiceStatus(txtServiceStatus.Text));
             AddStringParameter(cmd, "@ServiceStatus", NormalizeServiceStatus(txtServiceStatus.Text));
+            var serviceStatusRef = Helpers.ReferenceDataService.FindServiceStatusByName(NormalizeServiceStatus(txtServiceStatus.Text));
+            AddIntParameter(cmd, "@ServiceStatusID", serviceStatusRef != null ? serviceStatusRef.ID : 1);
             AddStringParameter(cmd, "@StopReason", isSuspended ? txtStopReason.Text.Trim() : "");
             AddStringParameter(cmd, "@SuspensionReason", isSuspended ? txtSuspensionReason.Text.Trim() : "");
             AddStringParameter(cmd, "@UrgentSituation", txtUrgentSituation.Text.Trim());
             AddStringParameter(cmd, "@PhotoPath", txtPhotoPath.Text.Trim());
             AddStringParameter(cmd, "@FamilyPhotoPath", txtFamilyPhotoPath.Text.Trim());
+            // Phase 3 — معرف (اختیاری، برای همهٔ انواع پرونده).
+            AddStringParameter(cmd, "@ReferrerName", txtReferrerName.Text.Trim());
+            AddStringParameter(cmd, "@ReferrerPhone", txtReferrerPhone.Text.Trim());
+
+            // Phase 3 (بازبینی) — بخش‌های اختصاصیِ نوع درخواست. همیشه پارامتر
+            // ارسال می‌شود (حتی اگر بخش پنهان باشد)؛ چون UpdateRequestTypeSectionVisibility
+            // فقط کنترل‌ها را پنهان می‌کند، پاک نمی‌کند، مقدارِ خالی طبیعی است.
+            AddStringParameter(cmd, "@MainResidenceProvince", txtMainResidenceProvince.Text.Trim());
+            AddStringParameter(cmd, "@MainResidenceDistrict", txtMainResidenceDistrict.Text.Trim());
+            AddStringParameter(cmd, "@MainResidenceVillage", txtMainResidenceVillage.Text.Trim());
+            AddStringParameter(cmd, "@FatherDeathCause", txtFatherDeathCause.Text.Trim());
+
+            AddStringParameter(cmd, "@DisabilityCause", txtDisabilityCause.Text.Trim());
+            AddStringParameter(cmd, "@DisabilityDescription", txtDisabilityDescription.Text.Trim());
+            AddStringParameter(cmd, "@SpecialNeeds", txtSpecialNeeds.Text.Trim());
+            AddStringParameter(cmd, "@DisabilityCardStatus", txtDisabilityCardStatus.Text.Trim());
+            AddStringParameter(cmd, "@DisabilityCardNumber", txtDisabilityCardNumber.Text.Trim());
+
+            AddStringParameter(cmd, "@HasMigrationCard", txtHasMigrationCard.Text.Trim());
+            AddStringParameter(cmd, "@MigrationCardNumber", txtMigrationCardNumber.Text.Trim());
+            AddDateParameter(cmd, "@DepartureDate", dtpDepartureDate.Value.Date);
+            AddDateParameter(cmd, "@ArrivalDate", dtpArrivalDate.Value.Date);
+
+            int assistanceDurationMonths;
+            int.TryParse(txtAssistanceDurationMonths.Text.Trim(), out assistanceDurationMonths);
+            if (string.IsNullOrWhiteSpace(txtAssistanceDurationMonths.Text.Trim()))
+                cmd.Parameters.AddWithValue("@AssistanceDurationMonths", DBNull.Value);
+            else
+                AddIntParameter(cmd, "@AssistanceDurationMonths", assistanceDurationMonths);
         }
 
         // مقادیرِ «مُهرِ تعلیق» را برای درج/به‌روزرسانی آماده می‌کند: اگر وضعیتِ
@@ -1859,6 +3661,61 @@ namespace CaseManagement
                 tabsCase.SelectedTab = tabHeadInfo;
         }
 
+        // ═══════════════════════════════════════════════════════════════════
+        // هشدارِ «سندِ الزامی آپلود نشده» در لحظهٔ ذخیره.
+        //
+        // آموزش — چرا هشدار و نه مانع: مانعِ واقعی از قبل هست و جای درستش
+        // فعال‌سازیِ خدمت است (CaseActivationValidator پروندهٔ بدونِ سندِ
+        // اجباری را «فعال» نمی‌کند). ذخیرهٔ خودِ پرونده نباید بسته باشد،
+        // وگرنه کاربر نمی‌تواند اطلاعاتِ نیمه‌کاره را نگه دارد و بعداً سند را
+        // اسکن کند — همان چرخه‌ای که «چاپ ← امضا ← اسکن» ذاتاً چندمرحله‌ای
+        // است. پس اینجا فقط یادآوری می‌شود، آن‌هم یک‌بار و بدون تکرار.
+        //
+        // آموزش — دو فهرستِ جدا: «مفقود» یعنی هیچ ردیفی در آن دسته نیست؛
+        // «ناقص» یعنی ردیف هست ولی فایلی به آن پیوست نشده (DocFilePath خالی).
+        // هر دو مانعِ فعال‌سازی‌اند، پس هر دو باید دیده شوند.
+        // ═══════════════════════════════════════════════════════════════════
+        private void WarnMissingRequiredDocuments(int caseId)
+        {
+            if (caseId <= 0) return;
+
+            try
+            {
+                var missing = Helpers.RequiredDocumentService.GetMissingRequiredCategories(caseId);
+                var incomplete = Helpers.RequiredDocumentService.GetIncompleteRequiredCategories(caseId);
+                if ((missing == null || missing.Count == 0) &&
+                    (incomplete == null || incomplete.Count == 0)) return;
+
+                var sb = new System.Text.StringBuilder();
+                sb.AppendLine("پرونده ذخیره شد، ولی اسناد الزامی کامل نیست:");
+                sb.AppendLine();
+
+                if (missing != null && missing.Count > 0)
+                {
+                    sb.AppendLine("• آپلود نشده:");
+                    foreach (var m in missing)
+                        sb.AppendLine("   – " + m.Name);
+                }
+
+                if (incomplete != null && incomplete.Count > 0)
+                {
+                    sb.AppendLine("• ثبت شده ولی فایلی پیوست نشده:");
+                    foreach (var m in incomplete)
+                        sb.AppendLine("   – " + m.Name);
+                }
+
+                sb.AppendLine();
+                sb.Append("تا تکمیل نشدن این اسناد، خدمت این پرونده فعال نمی‌شود. " +
+                          "برای چاپ فورم و ضمیمهٔ نسخهٔ امضاشده، تب «اسناد» → دکمهٔ «چاپ فورم رسمی».");
+
+                Msg.Show(sb.ToString());
+            }
+            catch
+            {
+                // هشدار هرگز نباید ذخیرهٔ موفق را به خطا تبدیل کند.
+            }
+        }
+
         private void btnSave_Click(object sender, EventArgs e)
         {
             if (!CaseManagement.Enterprise.PermissionService.Require("Case.Edit"))
@@ -1880,6 +3737,12 @@ namespace CaseManagement
             }
 
             if (!ValidateForm())
+                return;
+
+            // Phase 5.5-A — دروازهٔ فعال‌سازی. برای پروندهٔ *جدید* هنوز سندی
+            // ثبت نشده، پس اگر کاربر مستقیماً «فعال» را انتخاب کرده باشد
+            // مسدود می‌شود و راهنماییِ دقیق می‌گیرد.
+            if (!PassesActivationGate(0, ""))
                 return;
 
             txtFormNo.Text = GetNextFormNo();
@@ -1928,24 +3791,32 @@ namespace CaseManagement
                     string query = @"INSERT INTO TblCase
                     (
                         FormNo, Code, CaseNo, CaseDate,
-                        Zone, Province, District, RequestType, PriorityLevel,
+                        Zone, Province, District, RequestType, RequestTypeID, PriorityLevel,
                         HeadFullName, HeadFatherName, HeadSadat, Religion, HeadTazkiraNo, HeadIdCardType,
                         HeadOriginalResidence, HeadCurrentResidence, RelationshipToFamily,
                         Phone, RelativePhone, CoveredByOrg, CoveredByOrgNames, Job, Skill,
                         DisabilityDegree, DisabilityType, MigrationCardType, MaritalStatus,
-                        Surveyors, SurveyDate, LocationAddress, EducationLevel, ServiceStatus, StopReason, SuspensionReason, UrgentSituation,
-                        PhotoPath, FamilyPhotoPath, CenterID, SuspensionDate, SuspendedByUserId, SuspendedByUsername
+                        Surveyors, SurveyDate, LocationAddress, EducationLevel, ServiceStatus, ServiceStatusID, StopReason, SuspensionReason, UrgentSituation,
+                        PhotoPath, FamilyPhotoPath, CenterID, SuspensionDate, SuspendedByUserId, SuspendedByUsername,
+                        ReferrerName, ReferrerPhone, EntrySourceCode, CreatedByUserId, CreatedByUsername,
+                        MainResidenceProvince, MainResidenceDistrict, MainResidenceVillage, FatherDeathCause,
+                        DisabilityCause, DisabilityDescription, SpecialNeeds, DisabilityCardStatus, DisabilityCardNumber,
+                        HasMigrationCard, MigrationCardNumber, DepartureDate, ArrivalDate, AssistanceDurationMonths
                     )
                     VALUES
                     (
                         @FormNo, @Code, @CaseNo, @CaseDate,
-                        @Zone, @Province, @District, @RequestType, @PriorityLevel,
+                        @Zone, @Province, @District, @RequestType, @RequestTypeID, @PriorityLevel,
                         @HeadFullName, @HeadFatherName, @HeadSadat, @Religion, @HeadTazkiraNo, @HeadIdCardType,
                         @HeadOriginalResidence, @HeadCurrentResidence, @RelationshipToFamily,
                         @Phone, @RelativePhone, @CoveredByOrg, @CoveredByOrgNames, @Job, @Skill,
                         @DisabilityDegree, @DisabilityType, @MigrationCardType, @MaritalStatus,
-                        @Surveyors, @SurveyDate, @LocationAddress, @EducationLevel, @ServiceStatus, @StopReason, @SuspensionReason, @UrgentSituation,
-                        @PhotoPath, @FamilyPhotoPath, @CenterID, @SuspensionDate, @SuspendedByUserId, @SuspendedByUsername
+                        @Surveyors, @SurveyDate, @LocationAddress, @EducationLevel, @ServiceStatus, @ServiceStatusID, @StopReason, @SuspensionReason, @UrgentSituation,
+                        @PhotoPath, @FamilyPhotoPath, @CenterID, @SuspensionDate, @SuspendedByUserId, @SuspendedByUsername,
+                        @ReferrerName, @ReferrerPhone, @EntrySourceCode, @CreatedByUserId, @CreatedByUsername,
+                        @MainResidenceProvince, @MainResidenceDistrict, @MainResidenceVillage, @FatherDeathCause,
+                        @DisabilityCause, @DisabilityDescription, @SpecialNeeds, @DisabilityCardStatus, @DisabilityCardNumber,
+                        @HasMigrationCard, @MigrationCardNumber, @DepartureDate, @ArrivalDate, @AssistanceDurationMonths
                     );";
 
                     using (var cmd = new SQLiteCommand(query, con))
@@ -1954,6 +3825,13 @@ namespace CaseManagement
                         cmd.Parameters.AddWithValue("@CenterID", Helpers.SecurityContext.CurrentCenterId > 0
                             ? Helpers.SecurityContext.CurrentCenterId : 1);
                         AddSuspensionStampParameters(cmd);
+
+                        // Phase 3 — منشأ ثبت: فقط اینجا (مسیرِ درج دستی) نوشته
+                        // می‌شود؛ مسیرِ سینک مقدار خودش را در SyncApplier می‌زند.
+                        AddStringParameter(cmd, "@EntrySourceCode", "MANUAL");
+                        cmd.Parameters.AddWithValue("@CreatedByUserId",
+                            Helpers.SecurityContext.IsLoggedIn ? (object)Helpers.SecurityContext.UserId : DBNull.Value);
+                        AddStringParameter(cmd, "@CreatedByUsername", Helpers.SecurityContext.Username ?? "");
 
                         con.Open();
                         cmd.ExecuteNonQuery();
@@ -1976,6 +3854,29 @@ namespace CaseManagement
                 AuditLogger.Log("ثبت", "TblCase", currentCaseId, "", BuildCurrentCaseAuditText());
                 AuditLogger.RecordStatusChange(currentCaseId, "", NormalizeServiceStatus(txtServiceStatus.Text),
                     txtSuspensionReason.Text.Trim(), txtStopReason.Text.Trim());
+
+                // Phase 3 — تایم‌لاینِ مرکزی (در کنارِ AuditLogger/RecordStatusChange
+                // موجود، نه جایگزینِ آن‌ها).
+                Helpers.TimelineService.LogCaseCreated(currentCaseId, txtCode.Text.Trim());
+
+                // Phase 6 — پروندهٔ تازه ریشهٔ خانوارِ خودش می‌شود
+                // (FamilyGroupID = CasID). فقط برای رکوردِ *جدید*؛ ویرایش
+                // پیوندِ خانوادگیِ موجود را دست نمی‌زند.
+                Helpers.FamilyGroupService.EnsureRoot(currentCaseId);
+
+                // Phase 4 — ماژول‌های تخصصی (فقط بخش‌های دیده‌شده). خودش
+                // تایم‌لاین و بازمحاسبهٔ کامل‌بودن را انجام می‌دهد.
+                SaveCaseModules(currentCaseId);
+                // Phase 7 — همان قاعده: فقط وقتی بخش دیده می‌شود.
+                SaveCaseRepresentatives(currentCaseId);
+
+                // پیش از فاز ۴ — زیرساختِ کامل‌بودنِ پرونده: محاسبه و ذخیره در
+                // ستون‌های کشِ TblCase (برای داشبورد/گزارش/فیلترِ فازِ بعدی).
+                Helpers.CaseCompletionService.RecalculateAndStore(currentCaseId);
+                // Phase 5.5-B — امتیاز پس از کامل‌بودن حساب می‌شود، چون
+                // CompletionStatus خودش یکی از حقایقِ امتیازدهی است.
+                Helpers.VulnerabilityScoreService.RecalculateAndStore(
+                    currentCaseId, Helpers.VulnerabilityScoreService.ReasonCaseSaved);
 
                 if (tazkiraAuditNote != null)
                     AuditLogger.Log("هشدار تذکره تکراری - تأیید کاربر", "TblCase", currentCaseId, "", tazkiraAuditNote);
@@ -2000,6 +3901,7 @@ namespace CaseManagement
                     CaseManagement.Sync.OfflineSyncInitializer.OperationCreate);
 
                 Msg.Show("اطلاعات با موفقیت ذخیره شد");
+                WarnMissingRequiredDocuments(currentCaseId);
                 LoadCases();
                 SyncMembersTab();
                 SetCaseEditMode(false);   // درج موفق → بازگشت به حالت نمایش
@@ -2051,6 +3953,14 @@ namespace CaseManagement
 
                 string oldValue = GetCaseAuditTextFromDb(currentCaseId);
                 string oldStatus = GetCaseStatusById(currentCaseId);
+                string oldRequestType = GetCaseRequestTypeById(currentCaseId);
+                string oldSuspensionReason = GetCaseSuspensionReasonById(currentCaseId);
+
+                // Phase 5.5-A — دروازهٔ فعال‌سازی. فقط وقتی وضعیت واقعاً به
+                // «فعال» *تغییر* می‌کند اجرا می‌شود؛ ویرایشِ عادیِ پروندهٔ از
+                // قبل فعال دست‌نخورده می‌ماند.
+                if (!PassesActivationGate(currentCaseId, oldStatus))
+                    return false;
 
                 if (IsCodeExists(txtCode.Text.Trim(), currentCaseId))
                 {
@@ -2085,6 +3995,7 @@ namespace CaseManagement
                         Province = @Province,
                         District = @District,
                         RequestType = @RequestType,
+                        RequestTypeID = @RequestTypeID,
                         PriorityLevel = @PriorityLevel,
                         HeadFullName = @HeadFullName,
                         HeadFatherName = @HeadFatherName,
@@ -2110,11 +4021,28 @@ namespace CaseManagement
                         LocationAddress = @LocationAddress,
                         EducationLevel = @EducationLevel,
                         ServiceStatus = @ServiceStatus,
+                        ServiceStatusID = @ServiceStatusID,
                         StopReason = @StopReason,
                         SuspensionReason = @SuspensionReason,
                         UrgentSituation = @UrgentSituation,
                         PhotoPath = @PhotoPath,
                         FamilyPhotoPath = @FamilyPhotoPath,
+                        ReferrerName = @ReferrerName,
+                        ReferrerPhone = @ReferrerPhone,
+                        MainResidenceProvince = @MainResidenceProvince,
+                        MainResidenceDistrict = @MainResidenceDistrict,
+                        MainResidenceVillage = @MainResidenceVillage,
+                        FatherDeathCause = @FatherDeathCause,
+                        DisabilityCause = @DisabilityCause,
+                        DisabilityDescription = @DisabilityDescription,
+                        SpecialNeeds = @SpecialNeeds,
+                        DisabilityCardStatus = @DisabilityCardStatus,
+                        DisabilityCardNumber = @DisabilityCardNumber,
+                        HasMigrationCard = @HasMigrationCard,
+                        MigrationCardNumber = @MigrationCardNumber,
+                        DepartureDate = @DepartureDate,
+                        ArrivalDate = @ArrivalDate,
+                        AssistanceDurationMonths = @AssistanceDurationMonths,
                         UpdatedAt = datetime('now'),
                         SuspensionDate = CASE WHEN ServiceStatus = @ServiceStatus THEN SuspensionDate ELSE @SuspensionDate END,
                         SuspendedByUserId = CASE WHEN ServiceStatus = @ServiceStatus THEN SuspendedByUserId ELSE @SuspendedByUserId END,
@@ -2151,6 +4079,43 @@ namespace CaseManagement
                 AuditLogger.RecordStatusChange(currentCaseId, oldStatus, NormalizeServiceStatus(txtServiceStatus.Text),
                     txtSuspensionReason.Text.Trim(), txtStopReason.Text.Trim());
 
+                // Phase 3 — تایم‌لاینِ مرکزی: ویرایشِ عمومی + تغییرِ نوع درخواست/
+                // وضعیت خدمات (فقط وقتی واقعاً عوض شده باشند).
+                string newStatusText = NormalizeServiceStatus(txtServiceStatus.Text);
+                string newRequestTypeText = txtRequestType.Text.Trim();
+                Helpers.TimelineService.LogCaseUpdated(currentCaseId);
+                if (!string.Equals(oldStatus, newStatusText, StringComparison.Ordinal))
+                    Helpers.TimelineService.LogServiceStatusChanged(currentCaseId, oldStatus, newStatusText);
+                if (!string.Equals(oldRequestType, newRequestTypeText, StringComparison.Ordinal))
+                    Helpers.TimelineService.LogRequestTypeChanged(currentCaseId, oldRequestType, newRequestTypeText);
+
+                // Phase 5.5-A — ویرایشِ دلیلِ تعلیق *بدونِ* تغییرِ وضعیت.
+                // AuditLogger.RecordStatusChange در این حالت زود برمی‌گردد
+                // (وضعیت عوض نشده)، پس بدونِ این خط چنین ویرایشی هیچ ردی
+                // در تاریخچه نمی‌گذاشت.
+                string newSuspensionReason = IsSuspendedStatus(newStatusText)
+                    ? txtSuspensionReason.Text.Trim() : "";
+                if (string.Equals(oldStatus, newStatusText, StringComparison.Ordinal) &&
+                    !string.Equals(oldSuspensionReason ?? "", newSuspensionReason, StringComparison.Ordinal))
+                {
+                    Helpers.TimelineService.LogSuspensionReasonUpdated(
+                        currentCaseId, oldSuspensionReason, newSuspensionReason);
+                    AuditLogger.Log("ویرایش دلیل تعلیق", "TblCase", currentCaseId,
+                        oldSuspensionReason, newSuspensionReason);
+                }
+
+                // Phase 4 — ماژول‌های تخصصی (فقط بخش‌های دیده‌شده).
+                SaveCaseModules(currentCaseId);
+                // Phase 7 — همان قاعده: فقط وقتی بخش دیده می‌شود.
+                SaveCaseRepresentatives(currentCaseId);
+
+                // پیش از فاز ۴ — زیرساختِ کامل‌بودنِ پرونده.
+                Helpers.CaseCompletionService.RecalculateAndStore(currentCaseId);
+                // Phase 5.5-B — امتیاز پس از کامل‌بودن حساب می‌شود، چون
+                // CompletionStatus خودش یکی از حقایقِ امتیازدهی است.
+                Helpers.VulnerabilityScoreService.RecalculateAndStore(
+                    currentCaseId, Helpers.VulnerabilityScoreService.ReasonCaseSaved);
+
                 // تاریخچهٔ کاملِ رکورد — توضیح در مسیر ثبت (SaveNewCase) آمده است.
                 // اگر ویرایش هیچ فیلدی را عوض نکرده باشد، VersionService خودش
                 // نسخهٔ تکراری نمی‌سازد.
@@ -2162,8 +4127,13 @@ namespace CaseManagement
                     CaseManagement.Sync.OfflineSyncInitializer.OperationUpdate);
 
                 Msg.Show("اطلاعات ویرایش شد");
+                WarnMissingRequiredDocuments(currentCaseId);
                 LoadCases();
                 SyncMembersTab();
+                // همین ویرایش رویدادهای تازه‌ای در تایم‌لاین ساخته است؛ تب
+                // تاریخچه باید بلافاصله آن‌ها را نشان دهد، نه بعد از بازکردنِ
+                // دوبارهٔ پرونده.
+                RefreshTimelineTab();
                 return true;
             }
             catch (SQLiteException ex)
@@ -2194,6 +4164,19 @@ namespace CaseManagement
                 Msg.Show("حذف پرونده فقط برای مدیر سیستم مجاز است.");
                 return;
             }
+
+            // F-13 — حذف پرونده با ON DELETE CASCADE کلِ ردیف‌های TblAssistance
+            // را هم می‌برد؛ یعنی سابقهٔ مالیِ مددجو، از جمله رسیدهایی که با
+            // شمارهٔ سریالِ دائمی چاپ و امضا شده‌اند. برگهٔ کاغذی بیرون از
+            // سامانه باقی می‌ماند و دیگر هیچ رکوردی پشتش نیست. نسخهٔ
+            // VersionService فقط از خودِ TblCase عکس می‌گیرد، نه از فرزندان،
+            // پس بازگشت جز از پشتیبان ممکن نیست.
+            //
+            // قاعده: وجودِ *رسیدِ چاپ‌شده* حذف را می‌بندد (نه صرفِ وجودِ کمک) —
+            // چون همان است که سندِ کاغذیِ بیرونی ساخته. کمکِ بدونِ رسید فقط
+            // هشدار می‌گیرد و کاربر می‌تواند ادامه دهد.
+            if (!ConfirmDeleteAgainstAssistanceHistory(currentCaseId))
+                return;
 
             DeleteMode mode = ShowDeleteModeDialog();
             if (mode == DeleteMode.Cancel)
@@ -2270,6 +4253,73 @@ namespace CaseManagement
             {
                 Msg.Show("خطا در حذف: " + ex.Message);
             }
+        }
+
+        // F-13 — دروازهٔ سابقهٔ مالی پیش از حذف پرونده.
+        // خروجی true یعنی «ادامه بده»، false یعنی «حذف انجام نشود».
+        //
+        // دو سطح دارد، چون دو ریسک متفاوت‌اند:
+        //   • رسیدِ چاپ‌شده (ReceiptNo دارد)  ⇒ حذف مسدود. سندِ کاغذیِ
+        //     شماره‌دار بیرون از سامانه وجود دارد و بی‌پشتوانه می‌شود.
+        //   • کمکِ بدونِ رسید                  ⇒ فقط تأیید صریح کاربر.
+        //
+        // شکستِ کوئری عمداً حذف را متوقف می‌کند (fail-closed): اگر نتوانیم
+        // ثابت کنیم رسیدی نیست، حق نداریم سابقهٔ مالی را نابود کنیم.
+        private bool ConfirmDeleteAgainstAssistanceHistory(int casId)
+        {
+            int assistanceCount = 0;
+            int printedReceiptCount = 0;
+
+            try
+            {
+                using (var con = db.GetConnection())
+                using (var cmd = new SQLiteCommand(
+                    "SELECT COUNT(*), SUM(CASE WHEN ReceiptNo IS NOT NULL THEN 1 ELSE 0 END) " +
+                    "FROM TblAssistance WHERE CasID = @CasID", con))
+                {
+                    AddIntParameter(cmd, "@CasID", casId);
+                    con.Open();
+                    using (var dr = cmd.ExecuteReader())
+                    {
+                        if (dr.Read())
+                        {
+                            assistanceCount = dr.IsDBNull(0) ? 0 : Convert.ToInt32(dr.GetValue(0));
+                            printedReceiptCount = dr.IsDBNull(1) ? 0 : Convert.ToInt32(dr.GetValue(1));
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Msg.Show("بررسی سابقهٔ مالی این پرونده ممکن نشد، پس حذف انجام نمی‌شود: " + ex.Message);
+                return false;
+            }
+
+            if (printedReceiptCount > 0)
+            {
+                Msg.Show(
+                    "این پرونده " + printedReceiptCount + " برگه دریافت مساعدتِ چاپ‌شده دارد و قابل حذف نیست." +
+                    Environment.NewLine + Environment.NewLine +
+                    "برگه‌های چاپ‌شده شمارهٔ سریالِ دائمی دارند و بیرون از سامانه در دست مددجو یا در بایگانی‌اند؛ " +
+                    "حذف پرونده آن‌ها را بی‌پشتوانه می‌کند و سابقهٔ مالی بازگشت‌ناپذیر از بین می‌رود." +
+                    Environment.NewLine + Environment.NewLine +
+                    "به‌جای حذف، وضعیت خدمات را روی «قطع» بگذارید یا پرونده را بایگانی کنید.");
+                return false;
+            }
+
+            if (assistanceCount > 0)
+            {
+                return UiTheme.ShowConfirm(this,
+                    "این پرونده " + assistanceCount + " رکورد کمک مالی دارد که با حذف پرونده برای همیشه پاک می‌شود " +
+                    "(هنوز هیچ برگه‌ای برایشان چاپ نشده)." +
+                    Environment.NewLine + Environment.NewLine +
+                    "این رکوردها در نسخهٔ پشتیبان قابل بازیابی‌اند، ولی از خودِ برنامه نه." +
+                    Environment.NewLine + Environment.NewLine +
+                    "آیا حذف پرونده ادامه یابد؟",
+                    "حذف پرونده دارای سابقهٔ مالی");
+            }
+
+            return true;
         }
 
         // ─── تاریخچهٔ تغییراتِ همین پرونده ──────────────────────────────────
@@ -2449,6 +4499,80 @@ WHERE CasID = @CasID", con))
             }
         }
 
+        // Phase 5.5-A — دلیلِ تعلیقِ ذخیره‌شده، برای تشخیصِ «ویرایشِ دلیل بدونِ
+        // تغییرِ وضعیت» (که RecordStatusChange زود برمی‌گردد و ثبتش نمی‌کند).
+        private string GetCaseSuspensionReasonById(int caseId)
+        {
+            using (var con = db.GetConnection())
+            using (var cmd = new SQLiteCommand("SELECT SuspensionReason FROM TblCase WHERE CasID = @CasID", con))
+            {
+                AddIntParameter(cmd, "@CasID", caseId);
+                con.Open();
+                object result = cmd.ExecuteScalar();
+                return result == null || result == DBNull.Value ? "" : result.ToString();
+            }
+        }
+
+        // Phase 5.5-A — دروازهٔ مرحله‌ایِ فعال‌سازی.
+        // خروجی false ⇒ ذخیره متوقف شود.
+        private bool PassesActivationGate(int casId, string oldStatusName)
+        {
+            // Phase 7 — پرچم از نوعِ *انتخاب‌شدهٔ فرم* می‌آید، نه از
+            // دیتابیس: دروازه پیش از UPDATE اجرا می‌شود، پس اگر کاربر
+            // همزمان نوع را به «معلول» عوض کرده باشد، دیتابیس هنوز
+            // مقدارِ کهنه را دارد.
+            bool requiresRepresentative = Helpers.ReferenceDataService
+                .GetRequestTypeSectionsByName(txtRequestType.Text.Trim()).ShowRepresentativeSection;
+
+            var gate = Helpers.CaseActivationValidator.Evaluate(
+                casId, oldStatusName, NormalizeServiceStatus(txtServiceStatus.Text),
+                requiresRepresentative);
+
+            // کاربری که نماینده را در همین نشست تایپ کرده ولی هنوز
+            // ذخیره نشده، نباید پیامِ «نماینده ثبت نشده» ببیند —
+            // SaveCaseRepresentatives پس از همین دروازه اجرا می‌شود، پس
+            // در لحظهٔ ارزیابی هنوز ردیفی در دیتابیس نیست.
+            if (gate.MissingRepresentative && requiresRepresentative &&
+                !BuildRepresentative(Helpers.CaseRepresentativeService.OrderPrimary).IsEmpty)
+            {
+                gate.MissingRepresentative = false;
+                if (!gate.HasAnyFinding)
+                    gate.Outcome = Helpers.ActivationGateOutcome.Allowed;
+            }
+
+            if (gate.IsBlocked)
+            {
+                Msg.Show(gate.BuildMessage(
+                    "برای فعال‌کردن پرونده، موارد الزامی باید کامل باشند. موارد زیر باقی است:"));
+                return false;
+            }
+
+            if (gate.HasWarning)
+            {
+                // «در انتظار تایید» فقط هشدار می‌دهد — کاربر می‌تواند ادامه دهد.
+                return UiTheme.ShowConfirm(this,
+                    gate.BuildMessage("این پرونده مواردِ الزامیِ ناتمام دارد:") +
+                    "\n\nآیا با این وجود ذخیره شود؟",
+                    "موارد الزامی ناتمام");
+            }
+
+            return true;
+        }
+
+        // Phase 3 — برای تشخیصِ تغییرِ نوع درخواست هنگام ویرایش (تایم‌لاین).
+        private string GetCaseRequestTypeById(int caseId)
+        {
+            using (var con = db.GetConnection())
+            using (var cmd = new SQLiteCommand("SELECT RequestType FROM TblCase WHERE CasID = @CasID", con))
+            {
+                AddIntParameter(cmd, "@CasID", caseId);
+                con.Open();
+
+                object result = cmd.ExecuteScalar();
+                return result == null || result == DBNull.Value ? "" : result.ToString();
+            }
+        }
+
         private string GetDbString(System.Data.IDataReader dr, string columnName)
         {
             object value = dr[columnName];
@@ -2460,7 +4584,24 @@ WHERE CasID = @CasID", con))
             // آموزش — پارس با InvariantCulture (نه Convert.ToDateTime که از
             // کالچر شمسی ترد استفاده می‌کند و سال میلادی ذخیره‌شده را اشتباه
             // تفسیر می‌کرد). جزئیات در PersianDateHelper.ParseStoredDate.
+            //
+            // NULL/خالیِ دیتابیس باید به حالتِ «تیک‌نخورده» برگردد، نه به
+            // «امروز». قبلاً هر دو حالت یکسان بارگذاری می‌شدند و کاربر
+            // نمی‌توانست تشخیص دهد تاریخی ثبت شده یا نه — و ذخیرهٔ بعدی همان
+            // «امروز» را دائمی می‌کرد. برای کنترل‌هایی که ShowCheckBox ندارند
+            // رفتار دقیقاً مثل قبل است (Checked همیشه true برمی‌گردد).
+            bool hasValue = value != null && value != DBNull.Value
+                            && !string.IsNullOrWhiteSpace(value.ToString());
+
+            if (!hasValue)
+            {
+                picker.Checked = false;
+                picker.Value = DateTime.Today;
+                return;
+            }
+
             picker.Value = Helpers.PersianDateHelper.ParseStoredDate(value, DateTime.Today);
+            picker.Checked = true;
         }
 
         private void LoadCaseFromReader(System.Data.IDataReader dr)
@@ -2520,6 +4661,48 @@ WHERE CasID = @CasID", con))
             txtUrgentSituation.Text = GetDbString(dr, "UrgentSituation");
             txtPhotoPath.Text = GetDbString(dr, "PhotoPath");
             txtFamilyPhotoPath.Text = GetDbString(dr, "FamilyPhotoPath");
+            txtReferrerName.Text = GetDbString(dr, "ReferrerName");
+            txtReferrerPhone.Text = GetDbString(dr, "ReferrerPhone");
+
+            // Phase 3 (بازبینی) — بخش‌های اختصاصیِ نوع درخواست.
+            txtMainResidenceProvince.Text = GetDbString(dr, "MainResidenceProvince");
+            txtMainResidenceDistrict.Text = GetDbString(dr, "MainResidenceDistrict");
+            txtMainResidenceVillage.Text = GetDbString(dr, "MainResidenceVillage");
+            SetComboBoxText(txtFatherDeathCause, GetDbString(dr, "FatherDeathCause"));
+
+            SetComboBoxText(txtDisabilityCause, GetDbString(dr, "DisabilityCause"));
+            txtDisabilityDescription.Text = GetDbString(dr, "DisabilityDescription");
+            txtSpecialNeeds.Text = GetDbString(dr, "SpecialNeeds");
+            SetComboBoxText(txtDisabilityCardStatus, GetDbString(dr, "DisabilityCardStatus"));
+            txtDisabilityCardNumber.Text = GetDbString(dr, "DisabilityCardNumber");
+
+            SetComboBoxText(txtHasMigrationCard, GetDbString(dr, "HasMigrationCard"));
+            txtMigrationCardNumber.Text = GetDbString(dr, "MigrationCardNumber");
+            SetDatePickerValue(dtpDepartureDate, dr["DepartureDate"]);
+            SetDatePickerValue(dtpArrivalDate, dr["ArrivalDate"]);
+            object durationValue = dr["AssistanceDurationMonths"];
+            txtAssistanceDurationMonths.Text = durationValue == DBNull.Value ? "" : durationValue.ToString();
+
+            // Phase 4 — ماژول‌های تخصصی بعد از ستون‌های TblCase بارگذاری
+            // می‌شوند، چون جدولِ ماژول مرجعِ منطقِ تازه است و باید حرفِ آخر را
+            // بزند اگر آینه و ماژول (به هر دلیل) واگرا شده باشند.
+            LoadCaseModules(currentCaseId);
+            LoadCaseRepresentatives(currentCaseId);
+            // هر پروندهٔ تازه‌بازشده یک بار حقِّ هشدار دارد.
+            _legacyRepWarningShown = false;
+            // Phase 5 — سوابق بازدیدِ همین پرونده.
+            RefreshVisitsTab();
+            // Phase 6 — وضعیتِ خانوارِ همین پرونده.
+            RefreshFamilyTab();
+            // Phase 5.5-B — امتیاز آسیب‌پذیریِ ذخیره‌شده.
+            RefreshVulnerabilityTab();
+            // Phase 5.5-C — تأمین مالی و کارت‌های وضعیتِ محاسبه‌شده.
+            RefreshFundingTab();
+            RefreshCaseStatusStats();
+            // تاریخچهٔ کاملِ همین پرونده (آخرین تب).
+            RefreshTimelineTab();
+
+            UpdateRequestTypeSectionVisibility();
 
             SetDatePickerValue(dtpCaseDate, dr["CaseDate"]);
             SetDatePickerValue(dtpSurveyDate, dr["SurveyDate"]);

@@ -389,6 +389,7 @@
     <Compile Include="FrmReportBuilder.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="FrmReferenceDataSettings.cs" />
     <Compile Include="FrmSettings.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -470,6 +471,26 @@
     <Compile Include="Helpers\LogoHelper.cs" />
     <Compile Include="Helpers\IdCardHelper.cs" />
     <Compile Include="Helpers\LookupHelper.cs" />
+    <Compile Include="Helpers\ReferenceDataService.cs" />
+    <Compile Include="Helpers\ReferenceDataAdminService.cs" />
+    <Compile Include="Helpers\RequiredDocumentService.cs" />
+    <Compile Include="Helpers\TimelineService.cs" />
+    <Compile Include="Helpers\CaseCompletionService.cs" />
+    <Compile Include="Helpers\CaseFormTokens.cs" />
+    <Compile Include="Helpers\CaseOfficialForms.cs" />
+    <Compile Include="Helpers\CaseModuleService.cs" />
+    <Compile Include="Helpers\CaseRepresentativeService.cs" />
+    <Compile Include="Helpers\FieldVisitService.cs" />
+    <Compile Include="Helpers\CaseFundingService.cs" />
+    <Compile Include="Helpers\AssistanceRuleService.cs" />
+    <Compile Include="Helpers\FamilyGroupService.cs" />
+    <Compile Include="Helpers\VulnerabilityScoreService.cs" />
+    <Compile Include="Helpers\CaseExportDataProvider.cs" />
+    <Compile Include="Helpers\DashboardMetricsService.cs" />
+    <Compile Include="Helpers\FrmFundingAdmin.cs" />
+    <Compile Include="Helpers\FrmAssistanceRuleAdmin.cs" />
+    <Compile Include="Helpers\CaseFileExportService.cs" />
+    <Compile Include="Helpers\CaseActivationValidator.cs" />
     <Compile Include="Helpers\SecurityContext.cs" />
     <Compile Include="Helpers\SessionTimeoutMonitor.cs" />
     <Compile Include="Helpers\ReportTemplateHelper.cs" />
@@ -656,6 +677,24 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Include="Templates\Forms\فورم درخواست استخدام.docx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <!-- فورم‌های رسمیِ پرونده (درخواست / بررسی) — موتور: DocxFormExport،
+         داده: CaseFormTokens. مثل بقیهٔ فورم‌ها در زیرپوشهٔ Forms می‌مانند تا
+         ReportTemplateHelper.DiscoverCaseTemplates آن‌ها را «الگوی پرونده» نبیند. -->
+    <Content Include="Templates\Forms\فورم ۱ - درخواست ایتام.docx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Templates\Forms\فورم ۲ - درخواست نیازمندان.docx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Templates\Forms\فورم ۳ - درخواست درمان.docx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Templates\Forms\فورم ۴ - تحقیق و بررسی.docx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Templates\Forms\فورم ۷ - پرونده بخش درمان.docx">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Include="Templates\الگوی_شماره_1.docx">

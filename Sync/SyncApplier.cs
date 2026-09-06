@@ -51,7 +51,16 @@ namespace CaseManagement.Sync
                 "LastModifiedAt",
                 "LastModifiedBy",
                 "SyncStatus",
-                "CasID", "FamID", "DocID", "AssistanceID"   // شناسه‌های محلی
+                // شناسه‌های محلی — Phase 4: سه شناسهٔ ماژول هم اضافه شد، وگرنه
+                // payloadِ راه دور می‌توانست PKِ محلی را بازنویسی کند.
+                "CasID", "FamID", "DocID", "AssistanceID",
+                "OrphanID", "DisabilityID", "MigrantID",
+                // Phase 5 (TblFieldVisitPhoto سینک نمی‌شود — توضیح در
+                // OfflineSyncInitializer.SyncedTables).
+                "SponsorID", "VisitID", "CaseFundingID",
+                // Phase 3 — منشأ ثبت همیشه از دیدِ گیرنده تعیین می‌شود، نه از
+                // Payloadِ فرستنده (پایینِ Insert override می‌شود).
+                "EntrySourceCode", "SyncOperationID"
             };
 
         public static ApplyOutcome Apply(SyncChange change)
@@ -196,6 +205,22 @@ namespace CaseManagement.Sync
             {
                 names.Add("[CasID]");
                 parameters.Add(new SQLiteParameter("@parent", parentLocalId));
+            }
+
+            // Phase 3 — منشأ ثبت: صرف‌نظر از اینکه سمتِ ارسال چه چیزی در
+            // Payload گذاشته، از دیدِ *این* گره رکورد از سینک آمده. این دو
+            // ستون در NeverWrite هستند (پس هرگز از حلقهٔ بالا نوشته نمی‌شوند)
+            // و اینجا صریحاً و یک‌بار مقداردهی می‌شوند — همان الگویِ GlobalID.
+            if (columns.Contains("EntrySourceCode"))
+            {
+                names.Add("[EntrySourceCode]");
+                parameters.Add(new SQLiteParameter("@entrySource", "SYNC"));
+            }
+            if (columns.Contains("SyncOperationID"))
+            {
+                names.Add("[SyncOperationID]");
+                string opId = !string.IsNullOrWhiteSpace(change.Cursor) ? change.Cursor : change.GlobalId;
+                parameters.Add(new SQLiteParameter("@syncOpId", (object)opId ?? DBNull.Value));
             }
 
             var placeholders = new List<string>();

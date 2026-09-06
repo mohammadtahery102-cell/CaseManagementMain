@@ -38,6 +38,15 @@ namespace CaseManagement
         private ComboBox cmbHCoveredByOrg;
         private TextBox txtHCoveredByOrgNames;
         private ComboBox cmbHProvince, cmbHRequestType, cmbHPriority, cmbHSadat, cmbHReligion, cmbHMarital, cmbHEducationTier, cmbHDisabilityType, cmbHStatus;
+        // Phase 5.5-B — فیلترِ سطحِ خطر. روی ستونِ کشِ TblCase کار می‌کند
+        // (تصمیمِ کاربر: فیلتر و جستجو فقط از ستون‌های کش).
+        private ComboBox cmbHVulnBand;
+        // Phase 5.5-C — فیلترِ وضعیتِ تکمیل. مثلِ سطحِ خطر، روی ستونِ کشِ
+        // ایندکس‌دارِ TblCase کار می‌کند نه محاسبهٔ زنده.
+        private ComboBox cmbHCompletion;
+        // Phase 7 — جستجوی نمایندهٔ قانونی (نام/تذکره/تلفن/نسبت).
+        private TextBox txtHRepName, txtHRepTazkira, txtHRepPhone;
+        private ComboBox cmbHRepRelationship;
         // بخش ۴ — فیلتر نوع تذکره سرپرست
         private ComboBox cmbHIdCardType;
         private Helpers.PersianDatePicker dtpHFrom, dtpHTo;
@@ -93,6 +102,36 @@ namespace CaseManagement
         public FrmAdvancedSearch()
         {
             BuildUi();
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // Phase 5.5-D — ورودیِ «drill-down» از داشبورد.
+        //
+        // چرا اینجا و نه سازندهٔ تازه روی FrmCase: فیلترهای سطحِ خطر و وضعیتِ
+        // تکمیل از قبل *در همین فرم* وجود دارند (فاز ۵.۵-ب و ج). استفاده از
+        // آن‌ها یعنی هیچ سطحِ عمومیِ تازه‌ای به FrmCase (فرمِ ۶۱۰۰ خطی که
+        // نشستِ موازی هم رویش کار می‌کند) اضافه نمی‌شود، و کاربر همان
+        // فیلترهایی را می‌بیند که می‌شناسد و می‌تواند دستی تغییرشان دهد.
+        //
+        // مقادیر *نمایشی* پاس داده می‌شوند (نه کد)، چون همان چیزی است که
+        // کمبوها نگه می‌دارند؛ نگاشتِ نمایش→کد داخلِ همان فیلترهای موجود
+        // انجام می‌شود و اینجا تکرار نمی‌گردد.
+        public FrmAdvancedSearch(string vulnerabilityBandDisplay, string completionDisplay)
+            : this()
+        {
+            if (!string.IsNullOrWhiteSpace(vulnerabilityBandDisplay) && cmbHVulnBand != null)
+                cmbHVulnBand.Text = vulnerabilityBandDisplay;
+
+            if (!string.IsNullOrWhiteSpace(completionDisplay) && cmbHCompletion != null)
+                cmbHCompletion.Text = completionDisplay;
+
+            // نتیجه بلافاصله نشان داده می‌شود — کاربر از داشبورد روی یک عدد
+            // کلیک کرده و انتظار دارد همان مجموعه را ببیند، نه فرمِ خالی.
+            try { LoadHeadResults(); }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("FrmAdvancedSearch drill-down failed: " + ex.Message);
+            }
         }
 
         private void BuildUi()
@@ -158,9 +197,24 @@ namespace CaseManagement
             // دانشگاه/مکتب اعضای خانواده یکی نیست، این سه گزینه یک «رده‌بندی»
             // منطقی روی همان مقادیر هستند (نگاه کنید به GetHeadEducationTierSql).
             cmbHEducationTier = MakeCombo("همه", new[] { "دانشگاهی", "مکتبی", "سایر مقاطع" });
-            cmbHDisabilityType = MakeCombo("همه", new[] { "جسمی", "ذهنی", "بینایی", "شنوایی", "گفتاری", "حسی" });
+            // منبع واحد (مثلِ ServiceStatus پایین‌تر): FrmCase و FrmFamily هر دو
+            // این فهرست را از TblLookup می‌خوانند، پس اگر اینجا هاردکد بماند،
+            // نوعِ معلولیتی که مدیرِ سیستم اضافه می‌کند در پرونده‌ها ثبت می‌شود
+            // ولی هرگز قابلِ جستجو نیست.
+            cmbHDisabilityType = MakeCombo("همه", Helpers.LookupHelper.GetValues("DisabilityType").ToArray());
             // منبع واحد: به‌جای آرایه‌ی هاردکد، از TblLookup (دسته ServiceStatus) خوانده می‌شود.
             cmbHStatus = MakeCombo("همه", Helpers.LookupHelper.GetValues("ServiceStatus").ToArray());
+            cmbHVulnBand = MakeCombo("همه", new[] { "پرخطر", "متوسط", "کم‌خطر" });
+            cmbHCompletion = MakeCombo("همه", new[] { "کامل", "در حال تکمیل", "ناقص" });
+            // Phase 7 — نمایندهٔ قانونی. فهرستِ نسبت از همان دستهٔ
+            // TblLookup می‌آید که فرمِ پرونده می‌نویسد — فهرستِ هاردکد
+            // با اولین ویرایشِ مدیر از داده واگرا می‌شد.
+            txtHRepName = new TextBox();
+            txtHRepTazkira = new TextBox();
+            txtHRepPhone = new TextBox();
+            cmbHRepRelationship = MakeCombo("همه",
+                Helpers.LookupHelper.GetValues(
+                    Helpers.CaseRepresentativeService.LookupRelationship).ToArray());
             cmbHIdCardType = MakeCombo("همه", new[]
             {
                 Helpers.IdCardHelper.Electronic, Helpers.IdCardHelper.Paper,
@@ -192,6 +246,12 @@ namespace CaseManagement
                 new KeyValuePair<string, Control>("شغل", txtHJob),
                 new KeyValuePair<string, Control>("نوع معلولیت", cmbHDisabilityType),
                 new KeyValuePair<string, Control>("وضعیت خدمات", cmbHStatus),
+                new KeyValuePair<string, Control>("سطح آسیب‌پذیری", cmbHVulnBand),
+                new KeyValuePair<string, Control>("وضعیت تکمیل", cmbHCompletion),
+                new KeyValuePair<string, Control>("نام نماینده قانونی", txtHRepName),
+                new KeyValuePair<string, Control>("تذکره نماینده", txtHRepTazkira),
+                new KeyValuePair<string, Control>("تماس نماینده", txtHRepPhone),
+                new KeyValuePair<string, Control>("نسبت نماینده", cmbHRepRelationship),
                 new KeyValuePair<string, Control>("از تاریخ", dtpHFrom),
                 new KeyValuePair<string, Control>("تا تاریخ", dtpHTo),
             };
@@ -383,6 +443,9 @@ WHERE 1 = 1 AND IsArchived = 0";
                 AddExactFilter(sql, cmd, "DisabilityType", "@DisabType", cmbHDisabilityType.Text);
                 AddExactFilter(sql, cmd, "CoveredByOrg", "@CovByOrg", cmbHCoveredByOrg.Text);
                 AddExactFilter(sql, cmd, "ServiceStatus", "@Status", cmbHStatus.Text);
+                AddVulnerabilityBandFilter(sql, cmd, cmbHVulnBand.Text);
+                AddCompletionStatusFilter(sql, cmd, cmbHCompletion.Text);
+                AddRepresentativeFilters(sql, cmd);
                 AddIdCardFilter(sql, cmd, "HeadIdCardType", "HeadTazkiraNo", "@HIdCard", cmbHIdCardType.Text);
 
                 if (cmbHEducationTier.Text != "همه")
@@ -494,8 +557,10 @@ WHERE 1 = 1 AND IsArchived = 0";
             cmbMEducationTier = MakeCombo("همه", new[] { "دانشگاهی", "مکتبی", "سایر مقاطع" });
             cmbMMarital = MakeCombo("همه", new[] { "مجرد", "متأهل", "مطلقه" });
             cmbMReligion = MakeCombo("همه", new[] { "اهل تشیع", "اهل تسنن" });
-            cmbMPhysical = MakeCombo("همه", new[] { "سالم", "معلول", "مریض" });
-            cmbMDisabilityType = MakeCombo("همه", new[] { "جسمی", "ذهنی", "بینایی", "شنوایی", "گفتاری", "حسی" });
+            // هر دو از TblLookup — همان دسته‌هایی که FrmFamily برای این دو
+            // کنترل استفاده می‌کند (PhysicalStatus و DisabilityType).
+            cmbMPhysical = MakeCombo("همه", Helpers.LookupHelper.GetValues("PhysicalStatus").ToArray());
+            cmbMDisabilityType = MakeCombo("همه", Helpers.LookupHelper.GetValues("DisabilityType").ToArray());
             // منبع واحد: به‌جای آرایه‌ی هاردکد، از TblLookup (دسته ServiceStatus) خوانده می‌شود.
             cmbMStatus = MakeCombo("همه", Helpers.LookupHelper.GetValues("ServiceStatus").ToArray());
 
@@ -748,8 +813,15 @@ WHERE 1 = 1 AND c.IsArchived = 0" + whereTail;
 
             if (v == Helpers.IdCardHelper.NoneDisplay)
             {
-                sql.Append(" AND COALESCE(" + typeColumn + ", '') = ''" +
-                           " AND COALESCE(" + numberColumn + ", '') = ''");
+                // Feature 4 — «بدون تذکره» حالا مقدارِ *ذخیره‌شده* است. شرطِ
+                // قدیمی فقط رکوردهای خالی را می‌گرفت، پس بعد از مهاجرت هیچ
+                // نتیجه‌ای برنمی‌گرداند. هر دو شکل پوشش داده می‌شوند تا
+                // رکوردهای مهاجرت‌شده و هر رکوردِ خالیِ باقی‌مانده (مثلاً
+                // رسیده از همگام‌سازیِ یک شعبهٔ قدیمی) هر دو پیدا شوند.
+                sql.Append(" AND (" + typeColumn + " = " + parameterName +
+                           " OR (COALESCE(" + typeColumn + ", '') = ''" +
+                           " AND COALESCE(" + numberColumn + ", '') = ''))");
+                cmd.Parameters.AddWithValue(parameterName, Helpers.IdCardHelper.NoneDisplay);
                 return;
             }
 
@@ -787,6 +859,85 @@ WHERE 1 = 1 AND c.IsArchived = 0" + whereTail;
 
             sql.Append(" AND " + column + " LIKE " + parameter);
             cmd.Parameters.AddWithValue(parameter, "%" + value.Trim() + "%");
+        }
+
+        // Phase 5.5-B — نامِ نمایشیِ فارسی به کدِ پایدارِ بانْد نگاشت می‌شود.
+        // فیلتر روی TblCase.VulnerabilityBand (ایندکس‌دار) اعمال می‌گردد، نه
+        // محاسبهٔ زنده — همان قاعده‌ای که برای CompletionStatusCode گذاشته شد.
+        // ─── Phase 7: فیلترِ نمایندهٔ قانونی ──────────────────────
+        //
+        // چرا EXISTS و نه JOIN: هر پرونده می‌تواند دو نماینده داشته
+        // باشد؛ با JOIN همان پرونده دو بار در نتایج می‌آمد و شمارندهٔ
+        // صفحه‌بندی (همان whereTail که به SELECT COUNT داده می‌شود) عددِ
+        // غلط می‌ساخت. EXISTS همیشه یک ردیف به‌ازای هر پرونده می‌دهد.
+        //
+        // هر فیلتر زیرقوئریِ جداگانه دارد (و نه یک EXISTSِ مشترک) تا
+        // معنایش با بقیهٔ فیلترها یکی باشد: «پرونده‌هایی که نماینده‌ای
+        // با این نام دارند و نماینده‌ای با آن تلفن» — لزوماً یک نفر.
+        private void AddRepresentativeFilters(StringBuilder sql, SQLiteCommand cmd)
+        {
+            AddRepresentativeLike(sql, cmd, "FullName", "@RepName", txtHRepName.Text);
+            AddRepresentativeLike(sql, cmd, "NationalID", "@RepTazkira", txtHRepTazkira.Text);
+            AddRepresentativeLike(sql, cmd, "Phone", "@RepPhone", txtHRepPhone.Text);
+
+            string relationship = (cmbHRepRelationship.Text ?? "").Trim();
+            if (relationship.Length > 0 && relationship != "همه")
+            {
+                sql.Append(@" AND EXISTS (SELECT 1 FROM TblCaseRepresentative r
+                                          WHERE r.CasID = TblCase.CasID AND r.IsActive = 1
+                                            AND r.RelationshipToBeneficiary = @RepRelationship)");
+                cmd.Parameters.AddWithValue("@RepRelationship", relationship);
+            }
+        }
+
+        // تلفن و تذکره را هم LIKE می‌گیرد — کاربر معمولاً چند رقمِ
+        // آخر را به خاطر دارد، نه کلِ شماره را با قالبِ دقیق.
+        private void AddRepresentativeLike(StringBuilder sql, SQLiteCommand cmd,
+            string column, string parameter, string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return;
+
+            sql.Append(" AND EXISTS (SELECT 1 FROM TblCaseRepresentative r" +
+                       " WHERE r.CasID = TblCase.CasID AND r.IsActive = 1" +
+                       " AND r." + column + " LIKE " + parameter + ")");
+            cmd.Parameters.AddWithValue(parameter, "%" + value.Trim() + "%");
+        }
+
+        // Phase 5.5-C — نامِ نمایشی به کدِ پایدار. هم‌الگوی فیلترِ سطحِ خطر.
+        private void AddCompletionStatusFilter(StringBuilder sql, SQLiteCommand cmd, string displayValue)
+        {
+            if (string.IsNullOrWhiteSpace(displayValue) || displayValue == "همه")
+                return;
+
+            string code;
+            switch (displayValue.Trim())
+            {
+                case "کامل":         code = "COMPLETE";    break;
+                case "در حال تکمیل": code = "IN_PROGRESS"; break;
+                case "ناقص":         code = "INCOMPLETE";  break;
+                default: return;
+            }
+
+            sql.Append(" AND CompletionStatusCode = @CompletionStatus");
+            cmd.Parameters.AddWithValue("@CompletionStatus", code);
+        }
+
+        private void AddVulnerabilityBandFilter(StringBuilder sql, SQLiteCommand cmd, string displayValue)
+        {
+            if (string.IsNullOrWhiteSpace(displayValue) || displayValue == "همه")
+                return;
+
+            string code;
+            switch (displayValue.Trim())
+            {
+                case "پرخطر":  code = Helpers.VulnerabilityScoreService.BandHigh;   break;
+                case "متوسط":  code = Helpers.VulnerabilityScoreService.BandMedium; break;
+                case "کم‌خطر": code = Helpers.VulnerabilityScoreService.BandLow;    break;
+                default: return;
+            }
+
+            sql.Append(" AND VulnerabilityBand = @VulnBand");
+            cmd.Parameters.AddWithValue("@VulnBand", code);
         }
 
         private void AddExactFilter(StringBuilder sql, SQLiteCommand cmd, string column, string parameter, string value)

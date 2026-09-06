@@ -1,4 +1,4 @@
-using CaseManagement.DAL;
+﻿using CaseManagement.DAL;
 using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
@@ -889,12 +889,1332 @@ CREATE TABLE IF NOT EXISTS TblApplicantStatusHistory (
                 // ─── شماره‌فرمِ گمشده را پر کن (مثلاً پرونده‌های همگام‌شده‌ی قدیمی
                 // که بدون FormNo ثبت شده‌اند) تا خروجی جمعی روی آن‌ها هم کار کند.
                 BackfillMissingFormNumbers(con);
+
+                // Feature 4 — وضعیتِ تذکره باید همیشه یکی از سه حالت باشد.
+                NormalizeIdCardStatus(con);
+
+                // ═══════════════════════════════════════════════════════════════
+                // Phase 3 — لایهٔ پایه (Foundation Layer): نوع درخواست/وضعیت خدمات
+                // به‌عنوان جدول مرجع، دسته‌بندی اسناد، تایم‌لاین پرونده.
+                // افزایشی صرف: ستون‌های متنی موجود (RequestType/ServiceStatus/
+                // DocCategory) دست‌نخورده می‌مانند تا صفحات/گزارش‌های موجود کار
+                // کنند؛ ستون‌های ID جدید هویتِ مرجعِ تازه‌اند (dual-write).
+                // ═══════════════════════════════════════════════════════════════
+                EnsureFoundationLayerObjects(con);
             }
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        // Phase 3 — لایهٔ پایه
+        // ─────────────────────────────────────────────────────────────────────
+        private static void EnsureFoundationLayerObjects(SQLiteConnection con)
+        {
+            EnsureRequestTypeAndServiceStatus(con);
+            EnsureDocumentClassification(con);
+            EnsureCaseTimeline(con);
+            EnsureCaseFoundationColumns(con);
+            EnsureDocsCategoryColumn(con);
+
+            // Phase 3 (بازبینی) — الزاماتِ مصوبِ کاربر: بخش‌های اختصاصیِ نوع
+            // درخواست، فیلدهای ایتام/معلولیت/مهاجرت، دسته‌های سندِ معلولیت.
+            EnsureRequestTypeSectionFlags(con);
+            EnsureRequestTypeSpecificCaseColumns(con);
+            EnsureDisabilityDocumentCategories(con);
+
+            // Phase 3 (پیش از فاز ۴) — زیرساختِ کامل‌بودنِ پرونده.
+            EnsureCaseCompletionObjects(con);
+
+            // Phase 4 — ماژول‌های تخصصیِ پرونده (ایتام/معلولیت/مهاجرت).
+            EnsureSpecializedCaseModules(con);
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // Phase 4 — سه ماژولِ تخصصی، هر کدام یک ردیف به‌ازای هر پرونده.
+        //
+        // راهبردِ ذخیره‌سازی: dual-write (همان الگویِ مصوبِ تصمیم #۱).
+        // ستون‌های هم‌نامِ TblCase حذف یا رها نمی‌شوند، چون
+        // DisabilityType/DisabilityDegree/MigrationCardType/MaritalStatus را
+        // گزارشِ RDLC (DsFullCaseReport)، OpenXmlCaseExporter،
+        // ExcelCaseImporter، FrmAdvancedSearch و FrmDashboard می‌خوانند — و
+        // بازطراحیِ هیچ‌کدام در دامنهٔ این فاز نیست. جدول‌های ماژول مرجعِ
+        // منطقِ تازه‌اند؛ ستون‌های TblCase سطحِ سازگاری‌اند و CaseModuleService
+        // هر دو را با هم می‌نویسد.
+        //
+        // نکتهٔ مهم: UNIQUE(CasID) یعنی هر پرونده حداکثر یک ردیفِ هر ماژول
+        // دارد؛ ذخیره باید UPSERT باشد نه INSERTِ کور.
+        // ═══════════════════════════════════════════════════════════════════
+        private static void EnsureSpecializedCaseModules(SQLiteConnection con)
+        {
+            // ─── ماژول ایتام ─────────────────────────────────────────────────
+            // طبقِ تصمیمِ صریحِ کاربر برای سه نوعِ «کودک» ساخته می‌شود
+            // (ایتام/بی‌سرپرست/بدسرپرست)، چون فیلدهای سرپرست (Guardian*) در
+            // همین جدول‌اند و بخشِ «اطلاعات سرپرست» برای هر سه نوع دیده می‌شود؛
+            // فیلدهای فوتِ پدر/مادر برای دو نوعِ دیگر خالی می‌مانند.
+            ExecuteNonQuery(con, @"
+CREATE TABLE IF NOT EXISTS TblOrphan (
+    OrphanID              INTEGER PRIMARY KEY AUTOINCREMENT,
+    CasID                 INTEGER NOT NULL,
+    MainResidenceProvince TEXT    NULL,
+    MainResidenceDistrict TEXT    NULL,
+    MainResidenceVillage  TEXT    NULL,
+    FatherStatus          TEXT    NULL,
+    FatherDeathCause      TEXT    NULL,
+    FatherDeathDate       TEXT    NULL,
+    MotherStatus          TEXT    NULL,
+    GuardianName          TEXT    NULL,
+    GuardianRelationship  TEXT    NULL,
+    SchoolName            TEXT    NULL,
+    EducationLevel        TEXT    NULL,
+    IsStudent             INTEGER NOT NULL DEFAULT 0,
+    Notes                 TEXT    NULL,
+    CenterID              INTEGER NULL,
+    GlobalID              TEXT    NULL,
+    CreatedAt             TEXT    NOT NULL DEFAULT (datetime('now')),
+    CreatedBy             TEXT    NULL,
+    UpdatedAt             TEXT    NULL,
+    CONSTRAINT FK_Orphan_Case FOREIGN KEY (CasID)
+        REFERENCES TblCase (CasID) ON DELETE CASCADE,
+    CONSTRAINT UQ_TblOrphan_CasID UNIQUE (CasID)
+);");
+            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblOrphan_CasID ON TblOrphan(CasID);");
+            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblOrphan_FatherStatus ON TblOrphan(FatherStatus);");
+
+            // Feature 3 — عکسِ سرپرستِ کودک. تنها عکسی بود که فرمِ ورودِ دستی
+            // نداشت (سرپرستِ خانوار، عکسِ جمعی و هر دو نمایندهٔ قانونی از
+            // قبل داشتند). EnsureColumn چون جدول از قبل روی نصب‌های موجود
+            // ساخته شده و CREATE TABLE IF NOT EXISTS ستون تازه اضافه نمی‌کند.
+            EnsureColumn(con, "TblOrphan", "GuardianPhotoPath", "TEXT NULL");
+
+            // ─── ماژول معلولیت ───────────────────────────────────────────────
+            ExecuteNonQuery(con, @"
+CREATE TABLE IF NOT EXISTS TblDisability (
+    DisabilityID          INTEGER PRIMARY KEY AUTOINCREMENT,
+    CasID                 INTEGER NOT NULL,
+    DisabilityType        TEXT    NULL,
+    DisabilityDegree      TEXT    NULL,
+    DisabilityCause       TEXT    NULL,
+    DisabilityDescription TEXT    NULL,
+    SpecialNeeds          TEXT    NULL,
+    HasDisabilityCard     TEXT    NULL,
+    DisabilityCardNumber  TEXT    NULL,
+    CardIssuer            TEXT    NULL,
+    IssueDate             TEXT    NULL,
+    ExpiryDate            TEXT    NULL,
+    Notes                 TEXT    NULL,
+    CenterID              INTEGER NULL,
+    GlobalID              TEXT    NULL,
+    CreatedAt             TEXT    NOT NULL DEFAULT (datetime('now')),
+    CreatedBy             TEXT    NULL,
+    UpdatedAt             TEXT    NULL,
+    CONSTRAINT FK_Disability_Case FOREIGN KEY (CasID)
+        REFERENCES TblCase (CasID) ON DELETE CASCADE,
+    CONSTRAINT UQ_TblDisability_CasID UNIQUE (CasID)
+);");
+            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblDisability_CasID ON TblDisability(CasID);");
+            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblDisability_Type ON TblDisability(DisabilityType, DisabilityDegree);");
+            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblDisability_Expiry ON TblDisability(ExpiryDate);");
+
+            // ─── ماژول مهاجرت ────────────────────────────────────────────────
+            ExecuteNonQuery(con, @"
+CREATE TABLE IF NOT EXISTS TblMigrant (
+    MigrantID           INTEGER PRIMARY KEY AUTOINCREMENT,
+    CasID               INTEGER NOT NULL,
+    HasMigrationCard    TEXT    NULL,
+    MigrationCardType   TEXT    NULL,
+    MigrationCardNumber TEXT    NULL,
+    OriginCountry       TEXT    NULL,
+    DestinationCountry  TEXT    NULL,
+    DepartureDate       TEXT    NULL,
+    ArrivalDate         TEXT    NULL,
+    MaritalStatus       TEXT    NULL,
+    AssistanceDuration  INTEGER NULL,
+    Notes               TEXT    NULL,
+    CenterID            INTEGER NULL,
+    GlobalID            TEXT    NULL,
+    CreatedAt           TEXT    NOT NULL DEFAULT (datetime('now')),
+    CreatedBy           TEXT    NULL,
+    UpdatedAt           TEXT    NULL,
+    CONSTRAINT FK_Migrant_Case FOREIGN KEY (CasID)
+        REFERENCES TblCase (CasID) ON DELETE CASCADE,
+    CONSTRAINT UQ_TblMigrant_CasID UNIQUE (CasID)
+);");
+            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblMigrant_CasID ON TblMigrant(CasID);");
+            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblMigrant_Card ON TblMigrant(MigrationCardType);");
+
+            // هویتِ سراسری — پیش‌نیازِ همگام‌سازی (همان الگوی چهار جدولِ موجود).
+            EnsureChildGlobalId(con, "TblOrphan",     "OrphanID");
+            EnsureChildGlobalId(con, "TblDisability", "DisabilityID");
+            EnsureChildGlobalId(con, "TblMigrant",    "MigrantID");
+
+            // ─── پرچمِ بخشِ «اطلاعات سرپرست» ─────────────────────────────────
+            // Family/General عمداً پرچم ندارند: طبقِ تصمیمِ کاربر همیشه دیده
+            // می‌شوند، پس افزودنِ پرچمی که همیشه ۱ است فقط پیچیدگیِ بی‌اثر بود.
+            EnsureColumn(con, "TblRequestType", "ShowGuardianSection", "INTEGER NOT NULL DEFAULT 0");
+
+            // ماتریسِ نهاییِ مصوبِ فاز ۴ — تنها جایِ تعریفِ این قاعده.
+            // (ایتام: ایتام+معلولیت+سرپرست | بی‌سرپرست/بدسرپرست: معلولیت+سرپرست
+            //  | معلول: معلولیت | مهاجر: مهاجرت | کهن‌سال: هیچ‌کدام)
+            SetRequestTypeSections(con, "ORPHAN",                orphan: 1, disability: 1, migrant: 0, guardian: 1);
+            SetRequestTypeSections(con, "UNSUPPORTED_CHILD",     orphan: 0, disability: 1, migrant: 0, guardian: 1);
+            SetRequestTypeSections(con, "BADLY_SUPPORTED_CHILD", orphan: 0, disability: 1, migrant: 0, guardian: 1);
+            SetRequestTypeSections(con, "DISABLED",              orphan: 0, disability: 1, migrant: 0, guardian: 0);
+            SetRequestTypeSections(con, "MIGRANT",               orphan: 0, disability: 0, migrant: 1, guardian: 0);
+            SetRequestTypeSections(con, "ELDERLY",               orphan: 0, disability: 0, migrant: 0, guardian: 0);
+
+            // دسته‌های Lookup تازهٔ ماژول‌ها.
+            EnsureDefaultLookupSet(con, "FatherStatus",         new[] { "فوت‌شده", "زنده", "مفقود", "نامعلوم" });
+            EnsureDefaultLookupSet(con, "MotherStatus",         new[] { "فوت‌شده", "زنده", "مفقود", "نامعلوم" });
+            EnsureDefaultLookupSet(con, "GuardianRelationship", new[] { "مادر", "پدرکلان", "مادرکلان", "کاکا", "ماما", "خاله", "عمه", "برادر", "خواهر", "سایر" });
+
+            EnsureModuleRequiredFields(con);
+
+            // Phase 5 — بازدید میدانی، منابع تأمین مالی، خیّرین، قواعد مساعدت.
+            EnsureFieldVisitAndFundingObjects(con);
+
+            // Phase 6 — گروهِ خانواده (FamilyGroup).
+            EnsureFamilyGroupObjects(con);
+
+            // Phase 5.5-A — زیرساختِ تأییدِ سند.
+            EnsureDocumentVerificationObjects(con);
+
+            // Phase 5.5-B — امتیاز آسیب‌پذیری.
+            EnsureVulnerabilityScoreObjects(con);
+
+            // Phase 7 — نمایندهٔ قانونی (وکیل/قیّم) پرونده.
+            EnsureLegalRepresentativeObjects(con);
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // Phase 5.5-B — موتورِ امتیازِ آسیب‌پذیری (۰ تا ۱۰۰).
+        //
+        // سه لایه:
+        //   TblVulnerabilityCriteria = «چه چیزی سنجیده می‌شود» (نگاشت به یک
+        //       نامِ حقیقتِ مجاز در CaseFacts)
+        //   TblVulnerabilityRule     = «چه شرطی چند امتیاز دارد»
+        //   TblVulnerabilityScore(+Detail) = نتیجهٔ محاسبه و ریزِ آن
+        //
+        // هیچ امتیازی در کد هاردکد نیست؛ همه از این دو جدولِ پیکربندی می‌آید.
+        //
+        // معیارهای «آینده‌نگر»: معیاری که به حقیقتی اشاره کند که هنوز وجود
+        // ندارد (مثلاً سرپرستِ زن یا وضعیتِ مسکن) بی‌ضرر است — CaseFacts.Get
+        // برای نامِ ناشناخته null برمی‌گرداند و شرط تطبیق نمی‌کند. پس با
+        // IsActive=0 دانه‌کاری می‌شوند و روزی که آن داده اضافه شد، فقط کافی
+        // است فعال شوند: نه تغییرِ شِما، نه تغییرِ موتور.
+        // ═══════════════════════════════════════════════════════════════════
+        private static void EnsureVulnerabilityScoreObjects(SQLiteConnection con)
+        {
+            ExecuteNonQuery(con, @"
+CREATE TABLE IF NOT EXISTS TblVulnerabilityCriteria (
+    CriteriaID  INTEGER PRIMARY KEY AUTOINCREMENT,
+    Code        TEXT    NOT NULL UNIQUE,
+    Name        TEXT    NOT NULL,
+    FactName    TEXT    NOT NULL,
+    Description TEXT    NULL,
+    SortOrder   INTEGER NOT NULL DEFAULT 0,
+    IsActive    INTEGER NOT NULL DEFAULT 1,
+    CreatedAt   TEXT    NOT NULL DEFAULT (datetime('now'))
+);");
+            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_VulnCriteria_Active ON TblVulnerabilityCriteria(IsActive, SortOrder);");
+
+            ExecuteNonQuery(con, @"
+CREATE TABLE IF NOT EXISTS TblVulnerabilityRule (
+    RuleID     INTEGER PRIMARY KEY AUTOINCREMENT,
+    CriteriaID INTEGER NOT NULL,
+    Operator   TEXT    NOT NULL,
+    Value      TEXT    NULL,
+    ScoreValue REAL    NOT NULL DEFAULT 0,
+    Notes      TEXT    NULL,
+    IsActive   INTEGER NOT NULL DEFAULT 1,
+    CreatedAt  TEXT    NOT NULL DEFAULT (datetime('now')),
+    CONSTRAINT FK_VulnRule_Criteria FOREIGN KEY (CriteriaID)
+        REFERENCES TblVulnerabilityCriteria (CriteriaID) ON DELETE CASCADE
+);");
+            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_VulnRule_Criteria ON TblVulnerabilityRule(CriteriaID, IsActive);");
+
+            // نتیجهٔ محاسبه. نسخه‌دار است (IsCurrent) تا تاریخچهٔ ممیزی حفظ
+            // شود — خواستهٔ صریحِ «حفظِ امتیاز/تاریخ/دلیل/ریزِ سهم‌ها».
+            // بدونِ GlobalID: امتیاز دادهٔ مشتق است و سینک نمی‌شود.
+            ExecuteNonQuery(con, @"
+CREATE TABLE IF NOT EXISTS TblVulnerabilityScore (
+    ScoreID           INTEGER PRIMARY KEY AUTOINCREMENT,
+    CasID             INTEGER NOT NULL,
+    Score             REAL    NOT NULL DEFAULT 0,
+    Band              TEXT    NULL,
+    CalculationReason TEXT    NULL,
+    CalculatedDate    TEXT    NOT NULL DEFAULT (datetime('now')),
+    CalculatedBy      TEXT    NULL,
+    IsCurrent         INTEGER NOT NULL DEFAULT 1,
+    CenterID          INTEGER NULL,
+    CONSTRAINT FK_VulnScore_Case FOREIGN KEY (CasID)
+        REFERENCES TblCase (CasID) ON DELETE CASCADE
+);");
+            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_VulnScore_Case ON TblVulnerabilityScore(CasID, IsCurrent);");
+            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_VulnScore_Date ON TblVulnerabilityScore(CalculatedDate);");
+
+            // ریزِ سهمِ هر قاعده. CasID عمداً تکرار (denormalize) شده — همان
+            // الگوی TblFieldVisitPhoto (تصمیم #۲۴): این جدول «نوهٔ» پرونده است
+            // و زیرساختِ بکاپ فرض می‌کند فرزند مستقیماً CasID دارد.
+            ExecuteNonQuery(con, @"
+CREATE TABLE IF NOT EXISTS TblVulnerabilityScoreDetail (
+    DetailID     INTEGER PRIMARY KEY AUTOINCREMENT,
+    ScoreID      INTEGER NOT NULL,
+    CasID        INTEGER NOT NULL,
+    CriteriaCode TEXT    NOT NULL,
+    CriteriaName TEXT    NULL,
+    RuleID       INTEGER NULL,
+    FactValue    TEXT    NULL,
+    ScoreValue   REAL    NOT NULL DEFAULT 0,
+    Explanation  TEXT    NULL,
+    CONSTRAINT FK_VulnScoreDetail_Score FOREIGN KEY (ScoreID)
+        REFERENCES TblVulnerabilityScore (ScoreID) ON DELETE CASCADE,
+    CONSTRAINT FK_VulnScoreDetail_Case FOREIGN KEY (CasID)
+        REFERENCES TblCase (CasID) ON DELETE CASCADE
+);");
+            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_VulnScoreDetail_Score ON TblVulnerabilityScoreDetail(ScoreID);");
+            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_VulnScoreDetail_Case ON TblVulnerabilityScoreDetail(CasID);");
+
+            // ستون‌های کشِ TblCase — تنها مسیرِ فیلتر/جستجو طبقِ تصمیمِ کاربر.
+            EnsureColumn(con, "TblCase", "VulnerabilityScore",     "REAL NULL");
+            EnsureColumn(con, "TblCase", "VulnerabilityScoreDate", "TEXT NULL");
+            EnsureColumn(con, "TblCase", "VulnerabilityBand",      "TEXT NULL");
+            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblCase_VulnBand ON TblCase(VulnerabilityBand);");
+            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblCase_VulnScore ON TblCase(VulnerabilityScore);");
+
+            EnsureDefaultVulnerabilityConfig(con);
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // Phase 7 — نمایندهٔ قانونی (وکیل/قیّم) پرونده.
+        //
+        // چرا جدولِ فرزندِ جدا و نه ستون‌های Rep1*/Rep2* روی TblDisability:
+        //   • خواستهٔ صریحِ «ساختارِ تکراری نساز» — دو دستهٔ هشت‌ستونیِ هم‌شکل
+        //     روی یک جدول، همان تکرارِ ممنوع بود.
+        //   • خواستهٔ صریحِ «توسعهٔ آینده» — نمایندهٔ سوم فقط یک ردیفِ تازه
+        //     می‌خواهد، نه هشت ستونِ تازه و نه تغییرِ شِما.
+        //   • یکپارچگیِ ارجاعی — FK به TblCase با CASCADE، دقیقاً مثل
+        //     TblFamily/TblDocs؛ با ستون‌های تخت هیچ FK ای ممکن نبود.
+        //
+        // چرا والدش TblCase است و نه TblDisability: نماینده به خودِ ذینفع
+        // تعلق دارد، نه به «ردیفِ معلولیت». اگر والدش TblDisability بود،
+        // این جدول «نوهٔ» پرونده می‌شد و طبقِ تصمیم‌های #۲۴/#۲۵ هم بکاپ و هم
+        // همگام‌سازی به کارِ اضافه و محدودیتِ شناخته‌شده می‌خوردند. با والدِ
+        // مستقیم، همان MergeChildTable و همان ResolveParent بدونِ تغییر کار
+        // می‌کنند — و روزی که نماینده برای نوعِ دیگری هم لازم شود، فقط یک
+        // پرچم در TblRequestType روشن می‌شود.
+        //
+        // UNIQUE(CasID, RepresentativeOrder) قاعدهٔ کسب‌وکار را در سطحِ
+        // دیتابیس قفل می‌کند: هر پرونده حداکثر یک «نمایندهٔ اول» و یک
+        // «نمایندهٔ دوم» دارد؛ ذخیره باید UPSERT باشد نه INSERTِ کور.
+        // ═══════════════════════════════════════════════════════════════════
+        private static void EnsureLegalRepresentativeObjects(SQLiteConnection con)
+        {
+            ExecuteNonQuery(con, @"
+CREATE TABLE IF NOT EXISTS TblCaseRepresentative (
+    RepresentativeID          INTEGER PRIMARY KEY AUTOINCREMENT,
+    CasID                     INTEGER NOT NULL,
+    RepresentativeOrder       INTEGER NOT NULL DEFAULT 1,
+    FullName                  TEXT    NOT NULL,
+    RelationshipToBeneficiary TEXT    NULL,
+    IdCardType                TEXT    NULL,
+    NationalID                TEXT    NULL,
+    Phone                     TEXT    NULL,
+    SecondaryPhone            TEXT    NULL,
+    Address                   TEXT    NULL,
+    PhotoPath                 TEXT    NULL,
+    Notes                     TEXT    NULL,
+    IsActive                  INTEGER NOT NULL DEFAULT 1,
+    CenterID                  INTEGER NULL,
+    GlobalID                  TEXT    NULL,
+    CreatedAt                 TEXT    NOT NULL DEFAULT (datetime('now')),
+    CreatedBy                 TEXT    NULL,
+    UpdatedAt                 TEXT    NULL,
+    CONSTRAINT FK_CaseRepresentative_Case FOREIGN KEY (CasID)
+        REFERENCES TblCase (CasID) ON DELETE CASCADE,
+    CONSTRAINT UQ_TblCaseRepresentative_Order UNIQUE (CasID, RepresentativeOrder)
+);");
+
+            // شاخص‌ها: هر ستونی که جستجو رویش فیلتر می‌گذارد (خواستهٔ صریحِ
+            // «جستجو بر اساسِ نام/تذکره/تلفن/نسبت») + کلیدِ خارجی.
+            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblCaseRepresentative_CasID ON TblCaseRepresentative(CasID, RepresentativeOrder);");
+            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblCaseRepresentative_NationalID ON TblCaseRepresentative(NationalID);");
+            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblCaseRepresentative_Phone ON TblCaseRepresentative(Phone);");
+            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblCaseRepresentative_FullName ON TblCaseRepresentative(FullName);");
+            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblCaseRepresentative_Relationship ON TblCaseRepresentative(RelationshipToBeneficiary);");
+
+            // مهاجرتِ دیتابیس‌های موجود: ستون‌ها از طریق EnsureColumn اضافه
+            // می‌شوند تا نصب‌هایی که نسخهٔ اولِ جدول را ساخته‌اند هم کامل شوند
+            // (همان قاعدهٔ «هرگز ALTER TABLE برهنه» در Migration Rules).
+            EnsureColumn(con, "TblCaseRepresentative", "IdCardType",     "TEXT NULL");
+            EnsureColumn(con, "TblCaseRepresentative", "SecondaryPhone", "TEXT NULL");
+            EnsureColumn(con, "TblCaseRepresentative", "PhotoPath",      "TEXT NULL");
+            EnsureColumn(con, "TblCaseRepresentative", "IsActive",       "INTEGER NOT NULL DEFAULT 1");
+
+            // هویتِ سراسری — پیش‌نیازِ همگام‌سازی (همان الگویِ شش جدولِ موجود).
+            EnsureChildGlobalId(con, "TblCaseRepresentative", "RepresentativeID");
+
+            // ─── پرچمِ بخشِ «نمایندهٔ قانونی» ────────────────────────────────
+            // مثلِ چهار پرچمِ قبلی، تنها جایِ تعریفِ این قاعده. طبقِ خواستهٔ
+            // کاربر فقط برایِ پرونده‌های «معلول» روشن است؛ روشن‌کردنش برای
+            // نوعی دیگر یک UPDATE است، نه تغییرِ کد.
+            EnsureColumn(con, "TblRequestType", "ShowRepresentativeSection", "INTEGER NOT NULL DEFAULT 0");
+            SetRequestTypeRepresentativeSection(con, "ORPHAN",                0);
+            SetRequestTypeRepresentativeSection(con, "UNSUPPORTED_CHILD",     0);
+            SetRequestTypeRepresentativeSection(con, "BADLY_SUPPORTED_CHILD", 0);
+            SetRequestTypeRepresentativeSection(con, "DISABLED",              1);
+            SetRequestTypeRepresentativeSection(con, "MIGRANT",               0);
+            SetRequestTypeRepresentativeSection(con, "ELDERLY",               0);
+
+            // نسبتِ نماینده با ذینفع — واژگانِ بسته. «سایر» عمداً هست چون
+            // وکیلِ رسمی نسبتِ خویشاوندی ندارد؛ اعتبارسنجی همین فهرست را
+            // مرجع می‌گیرد، پس نسبتِ خودساخته ذخیره نمی‌شود.
+            EnsureDefaultLookupSet(con, "RepresentativeRelationship", new[]
+            {
+                "پدر", "مادر", "پدرکلان", "مادرکلان", "کاکا", "ماما", "خاله", "عمه",
+                "برادر", "خواهر", "فرزند", "همسر", "وکیل رسمی", "قیّم قانونی", "سایر"
+            });
+        }
+
+        private static void SetRequestTypeRepresentativeSection(SQLiteConnection con, string code, int show)
+        {
+            using (var cmd = new SQLiteCommand(
+                "UPDATE TblRequestType SET ShowRepresentativeSection = @Show WHERE Code = @Code;", con))
+            {
+                cmd.Parameters.AddWithValue("@Show", show);
+                cmd.Parameters.AddWithValue("@Code", code);
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+        private static void EnsureVulnCriteria(SQLiteConnection con, string code, string name,
+            string factName, int sortOrder, int isActive)
+        {
+            using (var cmd = new SQLiteCommand(@"
+INSERT INTO TblVulnerabilityCriteria (Code, Name, FactName, SortOrder, IsActive)
+SELECT @Code, @Name, @Fact, @Sort, @Active
+WHERE NOT EXISTS (SELECT 1 FROM TblVulnerabilityCriteria WHERE Code = @Code);", con))
+            {
+                cmd.Parameters.AddWithValue("@Code", code);
+                cmd.Parameters.AddWithValue("@Name", name);
+                cmd.Parameters.AddWithValue("@Fact", factName);
+                cmd.Parameters.AddWithValue("@Sort", sortOrder);
+                cmd.Parameters.AddWithValue("@Active", isActive);
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+        private static void EnsureVulnRule(SQLiteConnection con, string criteriaCode,
+            string op, string value, double scoreValue)
+        {
+            using (var cmd = new SQLiteCommand(@"
+INSERT INTO TblVulnerabilityRule (CriteriaID, Operator, Value, ScoreValue)
+SELECT c.CriteriaID, @Op, @Val, @Score
+FROM TblVulnerabilityCriteria c
+WHERE c.Code = @Code
+  AND NOT EXISTS (
+      SELECT 1 FROM TblVulnerabilityRule r
+      WHERE r.CriteriaID = c.CriteriaID AND r.Operator = @Op AND IFNULL(r.Value,'') = IFNULL(@Val,''));", con))
+            {
+                cmd.Parameters.AddWithValue("@Code", criteriaCode);
+                cmd.Parameters.AddWithValue("@Op", op);
+                cmd.Parameters.AddWithValue("@Val", (object)value ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@Score", scoreValue);
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+        // ─── معیارها و قواعدِ پیش‌فرض ────────────────────────────────────────
+        // فقط بر پایهٔ داده‌ای که *همین حالا* در دیتابیس هست (خواستهٔ صریح:
+        // هیچ فیلدِ کسب‌وکاریِ تازه‌ای در این فاز ساخته نمی‌شود).
+        private static void EnsureDefaultVulnerabilityConfig(SQLiteConnection con)
+        {
+            // فعال — پشتوانهٔ دادهٔ موجود دارند.
+            EnsureVulnCriteria(con, "ORPHAN",            "ایتام",               "RequestType",       1,  1);
+            EnsureVulnCriteria(con, "DISABLED",          "معلولیت",             "RequestType",       2,  1);
+            EnsureVulnCriteria(con, "DISABILITY_DEGREE", "درجه معلولیت",        "DisabilityDegree",  3,  1);
+            EnsureVulnCriteria(con, "MIGRANT",           "مهاجرت",              "RequestType",       4,  1);
+            EnsureVulnCriteria(con, "ELDERLY",           "کهن‌سالی",             "RequestType",       5,  1);
+            EnsureVulnCriteria(con, "NO_BREADWINNER",    "نبودِ نان‌آور",        "HasBreadwinner",    6,  1);
+            EnsureVulnCriteria(con, "LARGE_FAMILY",      "خانوارِ پرجمعیت",      "FamilyMemberCount", 7,  1);
+            EnsureVulnCriteria(con, "HEAD_AGE",          "سنِ سرپرست",          "HeadAge",           8,  1);
+
+            // غیرفعال — «جای‌نگهدارِ آینده». به حقیقتی اشاره می‌کنند که هنوز
+            // در CaseFacts وجود ندارد؛ تا روزی که آن داده اضافه شود، حتی اگر
+            // کسی فعالشان کند هم بی‌اثرند (حقیقتِ ناشناخته ⇒ عدمِ تطبیق).
+            EnsureVulnCriteria(con, "FEMALE_HEADED",     "سرپرستِ خانوارِ زن",    "HeadGender",        50, 0);
+            EnsureVulnCriteria(con, "POOR_HOUSING",      "وضعیتِ نامناسبِ مسکن",  "HousingCondition",  51, 0);
+
+            // قواعدِ پیش‌فرض — مجموعِ حداکثرِ نظری لازم نیست دقیقاً ۱۰۰ شود:
+            // موتور در پایان به بازهٔ ۰..۱۰۰ کلمپ می‌کند.
+            EnsureVulnRule(con, "ORPHAN",            "=",  "ORPHAN",   20);
+            EnsureVulnRule(con, "DISABLED",          "=",  "DISABLED", 15);
+            EnsureVulnRule(con, "MIGRANT",           "=",  "MIGRANT",  10);
+            EnsureVulnRule(con, "ELDERLY",           "=",  "ELDERLY",  10);
+            EnsureVulnRule(con, "DISABILITY_DEGREE", "=",  "شدید",     20);
+            EnsureVulnRule(con, "DISABILITY_DEGREE", "=",  "متوسط",    10);
+            EnsureVulnRule(con, "NO_BREADWINNER",    "=",  "0",        15);
+            EnsureVulnRule(con, "LARGE_FAMILY",      ">",  "8",        15);
+            EnsureVulnRule(con, "HEAD_AGE",          ">=", "70",       10);
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // Phase 5.5-A — «زیرساختِ» تأییدِ سند.
+        //
+        // فقط ستون‌ها ساخته می‌شوند. طبقِ تصمیمِ صریحِ کاربر، قاعدهٔ فعال‌سازی
+        // در این فاز *به تأیید کاری ندارد*:
+        //     سندِ الزامیِ نبود  ⇒ مسدود
+        //     سندِ ناقص          ⇒ مسدود
+        //     وضعیتِ تأیید       ⇒ نادیده (فعلاً)
+        // گردشِ کاملِ تأیید (و افزودنِ آن به شرطِ فعال‌سازی) کارِ فازِ بعدی است.
+        // ═══════════════════════════════════════════════════════════════════
+        private static void EnsureDocumentVerificationObjects(SQLiteConnection con)
+        {
+            if (!TableExists(con, "TblDocs")) return;
+
+            EnsureColumn(con, "TblDocs", "IsVerified",        "INTEGER NOT NULL DEFAULT 0");
+            EnsureColumn(con, "TblDocs", "VerifiedBy",        "TEXT NULL");
+            EnsureColumn(con, "TblDocs", "VerifiedDate",      "TEXT NULL");
+            EnsureColumn(con, "TblDocs", "VerificationNotes", "TEXT NULL");
+
+            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblDocs_IsVerified ON TblDocs(IsVerified);");
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // Phase 6 — گروه‌بندیِ خانوادگیِ پرونده‌ها.
+        //
+        // تصمیمِ صریحِ کاربر: «پروندهٔ فعلی = ریشهٔ خانوار» و «ساختارِ موازیِ
+        // دومی ساخته نشود». پس هیچ جدولِ تازه‌ای اضافه نمی‌شود؛ فقط یک ستون:
+        //
+        //   FamilyGroupID = CasIDِ پروندهٔ ریشه.
+        //   NULL          = پروندهٔ مستقل (خودش ریشهٔ خودش است).
+        //   خودارجاع      = ریشه (FamilyGroupID = CasID خودش).
+        //
+        // چرا جدولِ TblFamilyGroup ساخته نشد: اطلاعاتِ مشترکِ خانوار (آدرس،
+        // تلفن، سرپرست) از قبل روی پروندهٔ ریشه هست؛ جدولِ جدا همان‌ها را
+        // تکرار می‌کرد — دقیقاً همان «ساختارِ موازیِ دوم» که ممنوع شد.
+        //
+        // ⚠ توجه: TblFamily چیزِ دیگری است (اعضای خانواده، فرزندِ TblCase) و
+        // دست‌نخورده می‌ماند. این ستون گروه‌بندیِ *پرونده‌ها*ست، نه اعضا.
+        //
+        // بدونِ FOREIGN KEY — عمداً، هم‌سو با الگویِ soft-link موجود (تصمیم #۴):
+        // یک FKِ خودارجاع روی TblCase مسیرِ حذف/بازیابی را پیچیده می‌کرد و
+        // RepairBrokenChildForeignKey را در معرضِ همان باگِ تاریخیِ rename
+        // قرار می‌داد.
+        // ═══════════════════════════════════════════════════════════════════
+        private static void EnsureFamilyGroupObjects(SQLiteConnection con)
+        {
+            EnsureColumn(con, "TblCase", "FamilyGroupID", "INTEGER NULL");
+            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblCase_FamilyGroupID ON TblCase(FamilyGroupID);");
+
+            // هیچ backfillی انجام نمی‌شود: پرونده‌های موجود با NULL می‌مانند
+            // («مستقل»)، دقیقاً طبقِ خواستهٔ «بدونِ پیچیدگیِ مهاجرت».
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // Phase 5 — دو دستهٔ متفاوت، با قواعدِ چرخهٔ عمرِ متفاوت:
+        //
+        //   • دادهٔ پرونده‌محور (TblFieldVisit، TblFieldVisitPhoto،
+        //     TblCaseFunding): با پرونده CASCADE حذف می‌شوند و دوطرفه سینک
+        //     می‌شوند.
+        //   • دادهٔ پیکربندی/دفترچه (TblFundingSource، TblSponsor،
+        //     TblAssistanceRule، TblAssistanceRuleCondition): هرگز حذف
+        //     نمی‌شوند (فقط IsActive=0) و طبقِ تصمیمِ کاربر یک‌طرفه‌اند
+        //     (دفترِ مرکزی → شعبه)، پس در SyncedTables ثبت نمی‌شوند.
+        //     استثنا: TblSponsor طبقِ همان تصمیم دوطرفه است، چون شعبه هم
+        //     خیّرِ محلی ثبت می‌کند.
+        // ═══════════════════════════════════════════════════════════════════
+        private static void EnsureFieldVisitAndFundingObjects(SQLiteConnection con)
+        {
+            // ─── بازدید میدانی ───────────────────────────────────────────────
+            ExecuteNonQuery(con, @"
+CREATE TABLE IF NOT EXISTS TblFieldVisit (
+    VisitID        INTEGER PRIMARY KEY AUTOINCREMENT,
+    CasID          INTEGER NOT NULL,
+    VisitDate      TEXT    NOT NULL,
+    VisitorUserID  INTEGER NULL,
+    VisitorName    TEXT    NULL,
+    VisitResult    TEXT    NULL,
+    Recommendation TEXT    NULL,
+    Notes          TEXT    NULL,
+    CenterID       INTEGER NULL,
+    GlobalID       TEXT    NULL,
+    CreatedDate    TEXT    NOT NULL DEFAULT (datetime('now')),
+    CreatedBy      TEXT    NULL,
+    UpdatedAt      TEXT    NULL,
+    CONSTRAINT FK_FieldVisit_Case FOREIGN KEY (CasID)
+        REFERENCES TblCase (CasID) ON DELETE CASCADE
+);");
+            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblFieldVisit_CasID ON TblFieldVisit(CasID, VisitDate DESC);");
+            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblFieldVisit_Date ON TblFieldVisit(VisitDate);");
+
+            // آموزش — CasID روی جدولِ عکس *عمداً* تکرار (denormalize) شده.
+            // این تنها جدولِ «نوهٔ» پرونده است و دو زیرساختِ موجود
+            // (SyncApplier.ResolveParent و BackupHelper.MergeChildTable) هر دو
+            // فرض می‌کنند فرزند مستقیماً CasID دارد. با این ستون، هر دو بدونِ
+            // هیچ تغییری کار می‌کنند؛ جایگزینش تغییردادنِ آن دو زیرساختِ
+            // پرریسک بود.
+            ExecuteNonQuery(con, @"
+CREATE TABLE IF NOT EXISTS TblFieldVisitPhoto (
+    PhotoID     INTEGER PRIMARY KEY AUTOINCREMENT,
+    VisitID     INTEGER NOT NULL,
+    CasID       INTEGER NOT NULL,
+    FilePath    TEXT    NOT NULL,
+    Description TEXT    NULL,
+    CenterID    INTEGER NULL,
+    GlobalID    TEXT    NULL,
+    CreatedDate TEXT    NOT NULL DEFAULT (datetime('now')),
+    CreatedBy   TEXT    NULL,
+    CONSTRAINT FK_FieldVisitPhoto_Visit FOREIGN KEY (VisitID)
+        REFERENCES TblFieldVisit (VisitID) ON DELETE CASCADE,
+    CONSTRAINT FK_FieldVisitPhoto_Case FOREIGN KEY (CasID)
+        REFERENCES TblCase (CasID) ON DELETE CASCADE
+);");
+            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblFieldVisitPhoto_VisitID ON TblFieldVisitPhoto(VisitID);");
+            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblFieldVisitPhoto_CasID ON TblFieldVisitPhoto(CasID);");
+
+            // ─── منابع تأمین مالی (پیکربندی) ─────────────────────────────────
+            ExecuteNonQuery(con, @"
+CREATE TABLE IF NOT EXISTS TblFundingSource (
+    FundingSourceID INTEGER PRIMARY KEY AUTOINCREMENT,
+    Code            TEXT    NOT NULL UNIQUE,
+    Name            TEXT    NOT NULL,
+    Description     TEXT    NULL,
+    SortOrder       INTEGER NOT NULL DEFAULT 0,
+    IsActive        INTEGER NOT NULL DEFAULT 1,
+    GlobalID        TEXT    NULL,
+    CreatedAt       TEXT    NOT NULL DEFAULT (datetime('now'))
+);");
+            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblFundingSource_Active ON TblFundingSource(IsActive, SortOrder);");
+
+            InsertFundingSource(con, "ORPHAN_PROJECT",     "پروژه ایتام",        1);
+            InsertFundingSource(con, "DISABILITY_PROJECT", "پروژه معلولین",      2);
+            InsertFundingSource(con, "MIGRANT_PROJECT",    "پروژه مهاجرین",      3);
+            InsertFundingSource(con, "GENERAL_FUND",       "صندوق عمومی",        4);
+            InsertFundingSource(con, "EMERGENCY_FUND",     "صندوق اضطراری",      5);
+
+            // ─── خیّرین (دفترچهٔ مستقل و قابل استفادهٔ مجدد) ──────────────────
+            ExecuteNonQuery(con, @"
+CREATE TABLE IF NOT EXISTS TblSponsor (
+    SponsorID INTEGER PRIMARY KEY AUTOINCREMENT,
+    Name      TEXT    NOT NULL,
+    Phone     TEXT    NULL,
+    Email     TEXT    NULL,
+    Address   TEXT    NULL,
+    Notes     TEXT    NULL,
+    IsActive  INTEGER NOT NULL DEFAULT 1,
+    CenterID  INTEGER NULL,
+    GlobalID  TEXT    NULL,
+    CreatedAt TEXT    NOT NULL DEFAULT (datetime('now')),
+    CreatedBy TEXT    NULL,
+    UpdatedAt TEXT    NULL
+);");
+            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblSponsor_Active ON TblSponsor(IsActive, Name);");
+
+            // ─── پیوندِ پرونده ↔ منبع مالی (چند به چند، با بازهٔ زمانی) ───────
+            // FK به جدول‌های دفترچه از نوعِ RESTRICT است (پیش‌فرضِ SQLite): یک
+            // منبع/خیّرِ در حالِ استفاده نباید حذف شود — غیرفعال می‌شود.
+            ExecuteNonQuery(con, @"
+CREATE TABLE IF NOT EXISTS TblCaseFunding (
+    CaseFundingID   INTEGER PRIMARY KEY AUTOINCREMENT,
+    CasID           INTEGER NOT NULL,
+    FundingSourceID INTEGER NOT NULL,
+    SponsorID       INTEGER NULL,
+    StartDate       TEXT    NULL,
+    EndDate         TEXT    NULL,
+    Notes           TEXT    NULL,
+    IsActive        INTEGER NOT NULL DEFAULT 1,
+    CenterID        INTEGER NULL,
+    GlobalID        TEXT    NULL,
+    CreatedAt       TEXT    NOT NULL DEFAULT (datetime('now')),
+    CreatedBy       TEXT    NULL,
+    UpdatedAt       TEXT    NULL,
+    CONSTRAINT FK_CaseFunding_Case FOREIGN KEY (CasID)
+        REFERENCES TblCase (CasID) ON DELETE CASCADE,
+    CONSTRAINT FK_CaseFunding_Source FOREIGN KEY (FundingSourceID)
+        REFERENCES TblFundingSource (FundingSourceID),
+    CONSTRAINT FK_CaseFunding_Sponsor FOREIGN KEY (SponsorID)
+        REFERENCES TblSponsor (SponsorID)
+);");
+            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblCaseFunding_CasID ON TblCaseFunding(CasID, IsActive);");
+            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblCaseFunding_Source ON TblCaseFunding(FundingSourceID);");
+            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblCaseFunding_Sponsor ON TblCaseFunding(SponsorID);");
+
+            // ─── قواعد مساعدت (پیکربندی) ─────────────────────────────────────
+            // موتورِ عمومیِ EntRule/RuleEngine دست‌نخورده می‌ماند: آن برای
+            // هشدار/جلوگیری است و هیچ محاسبهٔ مبلغی ندارد. این جدول موتورِ
+            // «مبلغِ پیشنهادی» است — دو مسئولیتِ متفاوت، دو جدولِ متفاوت.
+            ExecuteNonQuery(con, @"
+CREATE TABLE IF NOT EXISTS TblAssistanceRule (
+    RuleID    INTEGER PRIMARY KEY AUTOINCREMENT,
+    Name      TEXT    NOT NULL,
+    Priority  INTEGER NOT NULL DEFAULT 100,
+    Amount    REAL    NOT NULL DEFAULT 0,
+    Notes     TEXT    NULL,
+    IsActive  INTEGER NOT NULL DEFAULT 1,
+    CenterID  INTEGER NULL,
+    GlobalID  TEXT    NULL,
+    CreatedAt TEXT    NOT NULL DEFAULT (datetime('now')),
+    CreatedBy TEXT    NULL,
+    UpdatedAt TEXT    NULL
+);");
+            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblAssistanceRule_Active ON TblAssistanceRule(IsActive, Priority);");
+
+            ExecuteNonQuery(con, @"
+CREATE TABLE IF NOT EXISTS TblAssistanceRuleCondition (
+    ConditionID INTEGER PRIMARY KEY AUTOINCREMENT,
+    RuleID      INTEGER NOT NULL,
+    FieldName   TEXT    NOT NULL,
+    Operator    TEXT    NOT NULL,
+    Value       TEXT    NULL,
+    CONSTRAINT FK_AssistanceRuleCondition_Rule FOREIGN KEY (RuleID)
+        REFERENCES TblAssistanceRule (RuleID) ON DELETE CASCADE
+);");
+            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_AssistanceRuleCondition_Rule ON TblAssistanceRuleCondition(RuleID);");
+
+            // هویتِ سراسری فقط برای جدول‌هایی که واقعاً سینک می‌شوند.
+            EnsureChildGlobalId(con, "TblFieldVisit",      "VisitID");
+            EnsureChildGlobalId(con, "TblFieldVisitPhoto", "PhotoID");
+            EnsureChildGlobalId(con, "TblCaseFunding",     "CaseFundingID");
+            EnsureChildGlobalId(con, "TblSponsor",         "SponsorID");
+
+            // ─── پرچم‌های اختیاریِ کامل‌بودن ──────────────────────────────────
+            // هر دو با پیش‌فرضِ 0 ساخته می‌شوند، پس تا وقتی مدیر آن‌ها را روشن
+            // نکند، فرمولِ درصدِ کامل‌بودن دقیقاً همان ۵۰/۵۰ قبلی می‌ماند.
+            // «زیرساخت، نه اجبار» — خواستهٔ صریحِ این فاز.
+            EnsureColumn(con, "TblRequestType", "RequiresFieldVisit", "INTEGER NOT NULL DEFAULT 0");
+            EnsureColumn(con, "TblRequestType", "RequiresFunding",    "INTEGER NOT NULL DEFAULT 0");
+
+            EnsureDefaultLookupSet(con, "VisitResult", new[] { "تأیید شد", "مغایرت دارد", "واجد شرایط نیست", "یافت نشد", "نامشخص" });
+            EnsureDefaultLookupSet(con, "VisitRecommendation", new[] { "تأیید", "رد", "تعلیق", "افزایش کمک", "کاهش کمک", "بدون تغییر" });
+        }
+
+        private static void InsertFundingSource(SQLiteConnection con, string code, string name, int sortOrder)
+        {
+            using (var cmd = new SQLiteCommand(@"
+INSERT INTO TblFundingSource (Code, Name, SortOrder)
+SELECT @Code, @Name, @Sort
+WHERE NOT EXISTS (SELECT 1 FROM TblFundingSource WHERE Code = @Code);", con))
+            {
+                cmd.Parameters.AddWithValue("@Code", code);
+                cmd.Parameters.AddWithValue("@Name", name);
+                cmd.Parameters.AddWithValue("@Sort", sortOrder);
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+        // ─── مشارکتِ ماژول‌ها در محاسبهٔ کامل‌بودن ────────────────────────────
+        // فیلدهای مشترک (dual-write) از قبل روی TblCase امتیاز می‌گیرند؛ ولی
+        // فیلدهای «فقط ماژولی» (FatherStatus، GuardianName، OriginCountry، …)
+        // ستونی روی TblCase ندارند و applicableFields در CaseCompletionService
+        // آن‌ها را کنار می‌گذاشت — یعنی بی‌صدا از امتیازدهی حذف می‌شدند.
+        // SourceTable این شکاف را می‌بندد: هر ردیفِ ماتریس می‌گوید مقدارش را
+        // از کدام جدول بخوان. پیش‌فرضِ 'TblCase' رفتارِ همهٔ ردیف‌های موجود را
+        // بدونِ تغییر حفظ می‌کند.
+        private static void EnsureModuleRequiredFields(SQLiteConnection con)
+        {
+            EnsureColumn(con, "TblRequiredField", "SourceTable", "TEXT NOT NULL DEFAULT 'TblCase'");
+
+            // ایتام — بخشِ ایتام فقط برای نوعِ ORPHAN دیده می‌شود، پس فقط
+            // همان نوع این فیلدها را در امتیاز دارد.
+            InsertModuleRequiredField(con, "ORPHAN", "TblOrphan", "FatherStatus",  "وضعیت پدر");
+            InsertModuleRequiredField(con, "ORPHAN", "TblOrphan", "MotherStatus",  "وضعیت مادر");
+
+            // سرپرست — برای هر سه نوعی که بخشِ سرپرست را نشان می‌دهند.
+            InsertModuleRequiredField(con, "ORPHAN",                "TblOrphan", "GuardianName",         "نام سرپرست کودک");
+            InsertModuleRequiredField(con, "UNSUPPORTED_CHILD",     "TblOrphan", "GuardianName",         "نام سرپرست کودک");
+            InsertModuleRequiredField(con, "BADLY_SUPPORTED_CHILD", "TblOrphan", "GuardianName",         "نام سرپرست کودک");
+            InsertModuleRequiredField(con, "ORPHAN",                "TblOrphan", "GuardianRelationship", "نسبت سرپرست");
+            InsertModuleRequiredField(con, "UNSUPPORTED_CHILD",     "TblOrphan", "GuardianRelationship", "نسبت سرپرست");
+            InsertModuleRequiredField(con, "BADLY_SUPPORTED_CHILD", "TblOrphan", "GuardianRelationship", "نسبت سرپرست");
+
+            // مهاجرت — کشورِ مبدأ معیارِ حداقلیِ یک پروندهٔ مهاجر است.
+            InsertModuleRequiredField(con, "MIGRANT", "TblMigrant", "OriginCountry", "کشور مبدأ");
+        }
+
+        private static void InsertModuleRequiredField(SQLiteConnection con, string requestTypeCode,
+            string sourceTable, string fieldName, string displayName)
+        {
+            using (var cmd = new SQLiteCommand(@"
+INSERT INTO TblRequiredField (RequestTypeID, FieldName, DisplayName, SourceTable)
+SELECT rt.RequestTypeID, @FieldName, @DisplayName, @SourceTable
+FROM TblRequestType rt
+WHERE rt.Code = @TypeCode
+  AND NOT EXISTS (
+      SELECT 1 FROM TblRequiredField x
+      WHERE x.RequestTypeID = rt.RequestTypeID AND x.FieldName = @FieldName);", con))
+            {
+                cmd.Parameters.AddWithValue("@TypeCode", requestTypeCode);
+                cmd.Parameters.AddWithValue("@FieldName", fieldName);
+                cmd.Parameters.AddWithValue("@DisplayName", displayName);
+                cmd.Parameters.AddWithValue("@SourceTable", sourceTable);
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+        // به‌روزرسانیِ چهار پرچمِ بخش برای یک نوعِ درخواست.
+        // جایگزینِ SetRequestTypeSectionFlags فاز ۳ (که سه پرچم داشت) نیست —
+        // آن متد دست‌نخورده می‌ماند چون EnsureRequestTypeSectionFlags هنوز
+        // مقادیرِ پیش‌فرضِ اولیه را با آن می‌نویسد؛ این متد پرچمِ چهارم را هم
+        // پوشش می‌دهد و بعد از آن اجرا می‌شود، پس حرفِ آخر را می‌زند.
+        private static void SetRequestTypeSections(SQLiteConnection con, string code,
+            int orphan, int disability, int migrant, int guardian)
+        {
+            using (var cmd = new SQLiteCommand(@"
+UPDATE TblRequestType
+SET ShowOrphanSection = @Orphan, ShowDisabilitySection = @Disability,
+    ShowMigrantSection = @Migrant, ShowGuardianSection = @Guardian
+WHERE Code = @Code;", con))
+            {
+                cmd.Parameters.AddWithValue("@Orphan", orphan);
+                cmd.Parameters.AddWithValue("@Disability", disability);
+                cmd.Parameters.AddWithValue("@Migrant", migrant);
+                cmd.Parameters.AddWithValue("@Guardian", guardian);
+                cmd.Parameters.AddWithValue("@Code", code);
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+        // ─── ماتریسِ فیلدهای الزامی + ستون‌های کشِ کامل‌بودن روی TblCase ──────
+        // هم‌الگوی TblRequiredDocument: داده‌محور، نه سوییچِ هاردکدشدهٔ C#.
+        // CaseCompletionService این جدول را برای هر RequestTypeID می‌خواند و
+        // نامِ ستون‌ها را مستقیماً روی ردیفِ TblCase چک می‌کند.
+        private static void EnsureCaseCompletionObjects(SQLiteConnection con)
+        {
+            ExecuteNonQuery(con, @"
+CREATE TABLE IF NOT EXISTS TblRequiredField (
+    RequiredFieldID INTEGER PRIMARY KEY AUTOINCREMENT,
+    RequestTypeID   INTEGER NOT NULL,
+    FieldName       TEXT    NOT NULL,
+    DisplayName     TEXT    NOT NULL,
+    IsMandatory     INTEGER NOT NULL DEFAULT 1,
+    IsActive        INTEGER NOT NULL DEFAULT 1,
+    CONSTRAINT FK_RequiredField_RequestType FOREIGN KEY (RequestTypeID)
+        REFERENCES TblRequestType (RequestTypeID) ON DELETE CASCADE,
+    CONSTRAINT UQ_RequiredField UNIQUE (RequestTypeID, FieldName)
+);");
+            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_RequiredField_RequestType ON TblRequiredField(RequestTypeID, IsActive);");
+
+            // ─── فیلدهای پایه — برای هر شش نوعِ درخواست یکسان ────────────────
+            // این‌ها معیارِ «کیفیتِ داده» هستند، نه شرطِ ذخیره (ValidateForm
+            // مستقلاً Code/HeadFullName/RequestType/ServiceStatus را الزامی
+            // می‌کند)؛ اینجا صرفاً برای محاسبهٔ درصدِ کامل‌بودن استفاده می‌شوند.
+            string[] allTypes = { "ORPHAN", "UNSUPPORTED_CHILD", "BADLY_SUPPORTED_CHILD", "DISABLED", "MIGRANT", "ELDERLY" };
+            foreach (string type in allTypes)
+            {
+                InsertRequiredField(con, type, "HeadFullName",     "نام سرپرست");
+                InsertRequiredField(con, type, "HeadFatherName",   "نام پدر سرپرست");
+                InsertRequiredField(con, type, "HeadTazkiraNo",    "شماره تذکره سرپرست");
+                InsertRequiredField(con, type, "Phone",            "شماره تماس");
+                InsertRequiredField(con, type, "Province",         "ولایت");
+                InsertRequiredField(con, type, "District",         "ولسوالی");
+            }
+
+            // ─── فیلدهای اختصاصی — همان بخش‌هایی که در FrmCase نمایش داده
+            //     می‌شوند (UpdateRequestTypeSectionVisibility) ─────────────────
+            InsertRequiredField(con, "ORPHAN", "MainResidenceProvince", "ولایت اقامتگاه اصلی");
+            InsertRequiredField(con, "ORPHAN", "MainResidenceDistrict", "ولسوالی اقامتگاه اصلی");
+            InsertRequiredField(con, "ORPHAN", "FatherDeathCause",      "دلیل فوت پدر");
+
+            InsertRequiredField(con, "DISABLED", "DisabilityType",   "نوع معلولیت");
+            InsertRequiredField(con, "DISABLED", "DisabilityDegree", "درجه معلولیت");
+            InsertRequiredField(con, "DISABLED", "DisabilityCause",  "دلیل معلولیت");
+
+            InsertRequiredField(con, "MIGRANT", "HasMigrationCard",    "دارای کارت مهاجرت");
+            InsertRequiredField(con, "MIGRANT", "MigrationCardNumber","شماره کارت مهاجرت");
+
+            // ─── ستون‌های کشِ محاسبه‌شده روی TblCase (برای فیلتر/گزارش/داشبوردِ
+            //     فازِ بعدی — بدون نیاز به JOIN با جدولِ جدا) ────────────────
+            EnsureColumn(con, "TblCase", "CompletionPercent",     "INTEGER NULL");
+            EnsureColumn(con, "TblCase", "CompletionStatusCode",  "TEXT NULL");
+            EnsureColumn(con, "TblCase", "CompletionCalculatedAt","TEXT NULL");
+            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblCase_CompletionStatus ON TblCase(CompletionStatusCode);");
+        }
+
+        private static void InsertRequiredField(SQLiteConnection con, string requestTypeCode, string fieldName, string displayName)
+        {
+            using (var cmd = new SQLiteCommand(@"
+INSERT INTO TblRequiredField (RequestTypeID, FieldName, DisplayName)
+SELECT rt.RequestTypeID, @FieldName, @DisplayName
+FROM TblRequestType rt
+WHERE rt.Code = @TypeCode
+  AND NOT EXISTS (
+      SELECT 1 FROM TblRequiredField x
+      WHERE x.RequestTypeID = rt.RequestTypeID AND x.FieldName = @FieldName);", con))
+            {
+                cmd.Parameters.AddWithValue("@TypeCode", requestTypeCode);
+                cmd.Parameters.AddWithValue("@FieldName", fieldName);
+                cmd.Parameters.AddWithValue("@DisplayName", displayName);
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+        // ─── پرچم‌های نمایشِ بخش، به ازای نوع درخواست ──────────────────────
+        // منبعِ واحدِ حقیقت برای «کدام بخش برای کدام نوع درخواست دیده شود»؛
+        // FrmCase (و هر فرم/موتورِ قواعدِ آینده) فقط همین سه پرچم را می‌خواند،
+        // هرگز RequestTypeID را هاردکد نمی‌کند.
+        private static void EnsureRequestTypeSectionFlags(SQLiteConnection con)
+        {
+            EnsureColumn(con, "TblRequestType", "ShowOrphanSection",     "INTEGER NOT NULL DEFAULT 0");
+            EnsureColumn(con, "TblRequestType", "ShowDisabilitySection", "INTEGER NOT NULL DEFAULT 0");
+            EnsureColumn(con, "TblRequestType", "ShowMigrantSection",    "INTEGER NOT NULL DEFAULT 0");
+
+            // ایتام: هم بخشِ ایتام و هم بخشِ معلولیت (عضوِ خانواده می‌تواند
+            // معلول باشد)؛ معلولیت: فقط بخشِ معلولیت؛ مهاجر: فقط بخشِ مهاجرت.
+            // سه نوعِ دیگر (بی‌سرپرست/بدسرپرست/کهن‌سال) فعلاً بدونِ بخشِ
+            // اختصاصی — طبقِ مصوبه صراحتاً تعریف نشده‌اند.
+            SetRequestTypeSectionFlags(con, "ORPHAN",   showOrphan: 1, showDisability: 1, showMigrant: 0);
+            SetRequestTypeSectionFlags(con, "DISABLED", showOrphan: 0, showDisability: 1, showMigrant: 0);
+            SetRequestTypeSectionFlags(con, "MIGRANT",  showOrphan: 0, showDisability: 0, showMigrant: 1);
+        }
+
+        private static void SetRequestTypeSectionFlags(SQLiteConnection con, string code,
+            int showOrphan, int showDisability, int showMigrant)
+        {
+            using (var cmd = new SQLiteCommand(@"
+UPDATE TblRequestType
+SET ShowOrphanSection = @Orphan, ShowDisabilitySection = @Disability, ShowMigrantSection = @Migrant
+WHERE Code = @Code;", con))
+            {
+                cmd.Parameters.AddWithValue("@Orphan", showOrphan);
+                cmd.Parameters.AddWithValue("@Disability", showDisability);
+                cmd.Parameters.AddWithValue("@Migrant", showMigrant);
+                cmd.Parameters.AddWithValue("@Code", code);
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+        // ─── فیلدهای اختصاصیِ ایتام/معلولیت/مهاجرت روی TblCase ─────────────
+        // افزایشی صرف، هم‌سو با الگویِ موجودِ DisabilityDegree/MigrationCardType؛
+        // بدونِ جدولِ ماژولِ جدا (طبقِ تصمیمِ صریحِ کاربر: بدونِ فرم پویا/
+        // جدولِ ماژولِ مجزا در این فاز).
+        private static void EnsureRequestTypeSpecificCaseColumns(SQLiteConnection con)
+        {
+            // ایتام — اقامتگاهِ اصلی + دلیلِ فوتِ پدر.
+            EnsureColumn(con, "TblCase", "MainResidenceProvince", "TEXT NULL");
+            EnsureColumn(con, "TblCase", "MainResidenceDistrict", "TEXT NULL");
+            EnsureColumn(con, "TblCase", "MainResidenceVillage",  "TEXT NULL");
+            EnsureColumn(con, "TblCase", "FatherDeathCause",      "TEXT NULL");
+
+            // معلولیت — تکمیلِ فیلدهای موجودِ DisabilityType/DisabilityDegree.
+            EnsureColumn(con, "TblCase", "DisabilityCause",       "TEXT NULL");
+            EnsureColumn(con, "TblCase", "DisabilityDescription", "TEXT NULL");
+            EnsureColumn(con, "TblCase", "SpecialNeeds",          "TEXT NULL");
+            EnsureColumn(con, "TblCase", "DisabilityCardStatus",  "TEXT NULL");
+            EnsureColumn(con, "TblCase", "DisabilityCardNumber",  "TEXT NULL");
+
+            // مهاجرت — تکمیلِ فیلدِ موجودِ MigrationCardType.
+            EnsureColumn(con, "TblCase", "HasMigrationCard",         "TEXT NULL");
+            EnsureColumn(con, "TblCase", "MigrationCardNumber",      "TEXT NULL");
+            EnsureColumn(con, "TblCase", "DepartureDate",            "TEXT NULL");
+            EnsureColumn(con, "TblCase", "ArrivalDate",              "TEXT NULL");
+            EnsureColumn(con, "TblCase", "AssistanceDurationMonths", "INTEGER NULL");
+
+            // دسته‌های Lookup تازه (الگوی موجودِ MaritalStatus/DisabilityType).
+            EnsureDefaultLookupSet(con, "FatherDeathCause",     new[] { "جنگ", "بیماری", "حادثه", "سایر" });
+            EnsureDefaultLookupSet(con, "DisabilityCause",      new[] { "مادرزادی", "حادثه", "جنگ", "بیماری", "سایر" });
+            EnsureDefaultLookupSet(con, "DisabilityCardStatus", new[] { "دارد", "ندارد", "در حال اقدام" });
+            EnsureDefaultLookupSet(con, "HasMigrationCard",     new[] { "بله", "خیر" });
+        }
+
+        // ─── دسته‌های سندِ اختصاصیِ معلولیت ──────────────────────────────────
+        private static void EnsureDisabilityDocumentCategories(SQLiteConnection con)
+        {
+            if (!TableExists(con, "TblDocumentCategory")) return;
+
+            InsertDocCategory(con, "DISABILITY_AREA_PHOTO",   "عکس محل معلولیت",         "DisabilityAreaPhoto",  7);
+            InsertDocCategory(con, "DISABILITY_CARD_PHOTO",   "عکس کارت معلولیت",         "DisabilityCardPhoto",  8);
+            InsertDocCategory(con, "MEDICAL_DOCUMENTS",       "اسناد پزشکی",              "MedicalDocuments",     9);
+            InsertDocCategory(con, "DISABILITY_VERIFICATION", "اسناد تأییدیهٔ معلولیت",    "DisabilityVerification", 10);
+
+            // «عکسِ محل معلولیت» و «عکسِ کارتِ معلولیت» صراحتاً «تصاویرِ
+            // الزامیِ اضافه» هستند؛ اسناد پزشکی/تأییدیه فقط قابلِ دسته‌بندی‌اند
+            // (متنِ مصوبه آن‌ها را «الزامی» نخوانده).
+            InsertRequiredDocument(con, "DISABLED", "DISABILITY_AREA_PHOTO", 1);
+            InsertRequiredDocument(con, "DISABLED", "DISABILITY_CARD_PHOTO", 1);
+        }
+
+        // ─── نوع درخواست (مرجع) ─────────────────────────────────────────────
+        private static void EnsureRequestTypeAndServiceStatus(SQLiteConnection con)
+        {
+            ExecuteNonQuery(con, @"
+CREATE TABLE IF NOT EXISTS TblRequestType (
+    RequestTypeID INTEGER PRIMARY KEY AUTOINCREMENT,
+    Code          TEXT    NOT NULL UNIQUE,
+    Name          TEXT    NOT NULL,
+    SortOrder     INTEGER NOT NULL DEFAULT 0,
+    IsActive      INTEGER NOT NULL DEFAULT 1,
+    CenterID      INTEGER NULL,
+    GlobalID      TEXT    NULL,
+    CreatedAt     TEXT    NOT NULL DEFAULT (datetime('now'))
+);");
+            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblRequestType_Active ON TblRequestType(IsActive, SortOrder);");
+
+            // شش نوع درخواستِ مصوب — بدون «سایر» (تصمیم صریح کاربر).
+            InsertReferenceRow(con, "TblRequestType", "Code", "ORPHAN",                new[] { "Name", "ایتام" },              1);
+            InsertReferenceRow(con, "TblRequestType", "Code", "UNSUPPORTED_CHILD",     new[] { "Name", "بی‌سرپرست" },          2);
+            InsertReferenceRow(con, "TblRequestType", "Code", "BADLY_SUPPORTED_CHILD", new[] { "Name", "بدسرپرست" },           3);
+            InsertReferenceRow(con, "TblRequestType", "Code", "DISABLED",              new[] { "Name", "معلول" },              4);
+            InsertReferenceRow(con, "TblRequestType", "Code", "MIGRANT",               new[] { "Name", "مهاجر" },              5);
+            InsertReferenceRow(con, "TblRequestType", "Code", "ELDERLY",               new[] { "Name", "کهن‌سال" },            6);
+
+            // ─── وضعیت خدمات (مرجع) ────────────────────────────────────────
+            ExecuteNonQuery(con, @"
+CREATE TABLE IF NOT EXISTS TblServiceStatus (
+    ServiceStatusID  INTEGER PRIMARY KEY AUTOINCREMENT,
+    Code             TEXT    NOT NULL UNIQUE,
+    Name             TEXT    NOT NULL,
+    IsPreService     INTEGER NOT NULL DEFAULT 0,
+    IsActiveService  INTEGER NOT NULL DEFAULT 0,
+    IsTerminal       INTEGER NOT NULL DEFAULT 0,
+    RequiresReason   INTEGER NOT NULL DEFAULT 0,
+    SortOrder        INTEGER NOT NULL DEFAULT 0,
+    IsActive         INTEGER NOT NULL DEFAULT 1,
+    GlobalID         TEXT    NULL,
+    CreatedAt        TEXT    NOT NULL DEFAULT (datetime('now'))
+);");
+            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblServiceStatus_Active ON TblServiceStatus(IsActive, SortOrder);");
+
+            // شش وضعیت — همان مقادیرِ فارسیِ CaseDomain.ServiceStatuses، فقط
+            // اکنون هم Code (پایدار) و هم پرچم‌های چرخهٔ عمر دارند.
+            InsertServiceStatusRow(con, "APPLICANT",              "متقاضی",          1, 1, 0, 0, 0, 1);
+            InsertServiceStatusRow(con, "UNDER_REVIEW",           "در حال بررسی",    1, 0, 0, 0, 0, 2);
+            InsertServiceStatusRow(con, "PENDING_APPROVAL",       "در انتظار تایید", 1, 0, 0, 0, 0, 3);
+            InsertServiceStatusRow(con, "ACTIVE",                 "فعال",            0, 1, 0, 0, 0, 4);
+            InsertServiceStatusRow(con, "TEMPORARILY_SUSPENDED",  "قطع موقت",        0, 0, 0, 1, 0, 5);
+            InsertServiceStatusRow(con, "SUSPENDED",              "قطع",             0, 0, 1, 1, 0, 6);
+
+            // ─── گذارهای مجاز (فقط داده — اجرا/بلاک‌کردن در این فاز پیاده
+            //     نمی‌شود؛ زیرساخت برای فاز بعدی گردش‌کار) ─────────────────────
+            ExecuteNonQuery(con, @"
+CREATE TABLE IF NOT EXISTS TblServiceStatusTransition (
+    TransitionID   INTEGER PRIMARY KEY AUTOINCREMENT,
+    FromStatusID   INTEGER NOT NULL,
+    ToStatusID     INTEGER NOT NULL,
+    RequiresReason INTEGER NOT NULL DEFAULT 0,
+    IsActive       INTEGER NOT NULL DEFAULT 1,
+    CONSTRAINT FK_ServiceStatusTransition_From FOREIGN KEY (FromStatusID)
+        REFERENCES TblServiceStatus (ServiceStatusID),
+    CONSTRAINT FK_ServiceStatusTransition_To FOREIGN KEY (ToStatusID)
+        REFERENCES TblServiceStatus (ServiceStatusID),
+    CONSTRAINT UQ_ServiceStatusTransition UNIQUE (FromStatusID, ToStatusID)
+);");
+            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_ServiceStatusTransition_From ON TblServiceStatusTransition(FromStatusID, IsActive);");
+
+            InsertTransition(con, "APPLICANT",             "UNDER_REVIEW",          0);
+            InsertTransition(con, "APPLICANT",             "SUSPENDED",             1);
+            InsertTransition(con, "UNDER_REVIEW",           "PENDING_APPROVAL",     0);
+            InsertTransition(con, "UNDER_REVIEW",           "SUSPENDED",            1);
+            InsertTransition(con, "PENDING_APPROVAL",       "ACTIVE",               0);
+            InsertTransition(con, "PENDING_APPROVAL",       "UNDER_REVIEW",         0);
+            InsertTransition(con, "PENDING_APPROVAL",       "SUSPENDED",            1);
+            InsertTransition(con, "ACTIVE",                 "TEMPORARILY_SUSPENDED",1);
+            InsertTransition(con, "ACTIVE",                 "SUSPENDED",            1);
+            InsertTransition(con, "TEMPORARILY_SUSPENDED",  "ACTIVE",               0);
+            InsertTransition(con, "TEMPORARILY_SUSPENDED",  "SUSPENDED",            1);
+        }
+
+        private static void InsertServiceStatusRow(SQLiteConnection con, string code, string name,
+            int isPreService, int isActiveService, int isTerminal, int requiresReason, int isActiveUnused, int sortOrder)
+        {
+            using (var cmd = new SQLiteCommand(@"
+INSERT INTO TblServiceStatus (Code, Name, IsPreService, IsActiveService, IsTerminal, RequiresReason, SortOrder)
+SELECT @Code, @Name, @IsPre, @IsActiveSvc, @IsTerminal, @Reason, @Sort
+WHERE NOT EXISTS (SELECT 1 FROM TblServiceStatus WHERE Code = @Code);", con))
+            {
+                cmd.Parameters.AddWithValue("@Code", code);
+                cmd.Parameters.AddWithValue("@Name", name);
+                cmd.Parameters.AddWithValue("@IsPre", isPreService);
+                cmd.Parameters.AddWithValue("@IsActiveSvc", isActiveService);
+                cmd.Parameters.AddWithValue("@IsTerminal", isTerminal);
+                cmd.Parameters.AddWithValue("@Reason", requiresReason);
+                cmd.Parameters.AddWithValue("@Sort", sortOrder);
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+        private static void InsertTransition(SQLiteConnection con, string fromCode, string toCode, int requiresReason)
+        {
+            using (var cmd = new SQLiteCommand(@"
+INSERT INTO TblServiceStatusTransition (FromStatusID, ToStatusID, RequiresReason)
+SELECT f.ServiceStatusID, t.ServiceStatusID, @Reason
+FROM TblServiceStatus f, TblServiceStatus t
+WHERE f.Code = @FromCode AND t.Code = @ToCode
+  AND NOT EXISTS (
+      SELECT 1 FROM TblServiceStatusTransition x
+      WHERE x.FromStatusID = f.ServiceStatusID AND x.ToStatusID = t.ServiceStatusID);", con))
+            {
+                cmd.Parameters.AddWithValue("@FromCode", fromCode);
+                cmd.Parameters.AddWithValue("@ToCode", toCode);
+                cmd.Parameters.AddWithValue("@Reason", requiresReason);
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+        // درجِ idempotent یک ردیفِ مرجع با یک ستونِ اضافیِ نام‌دار (Name).
+        private static void InsertReferenceRow(SQLiteConnection con, string table, string codeColumn,
+            string codeValue, string[] extraNameValue, int sortOrder)
+        {
+            string extraCol = extraNameValue[0];
+            string extraVal = extraNameValue[1];
+            using (var cmd = new SQLiteCommand(string.Format(@"
+INSERT INTO {0} ({1}, {2}, SortOrder)
+SELECT @Code, @Extra, @Sort
+WHERE NOT EXISTS (SELECT 1 FROM {0} WHERE {1} = @Code);", table, codeColumn, extraCol), con))
+            {
+                cmd.Parameters.AddWithValue("@Code", codeValue);
+                cmd.Parameters.AddWithValue("@Extra", extraVal);
+                cmd.Parameters.AddWithValue("@Sort", sortOrder);
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+        // ─── دسته‌بندی اسناد (مرجع) + ماتریسِ اسنادِ الزامی ────────────────────
+        private static void EnsureDocumentClassification(SQLiteConnection con)
+        {
+            ExecuteNonQuery(con, @"
+CREATE TABLE IF NOT EXISTS TblDocumentCategory (
+    DocumentCategoryID INTEGER PRIMARY KEY AUTOINCREMENT,
+    Code               TEXT    NOT NULL UNIQUE,
+    Name               TEXT    NOT NULL,
+    FolderName         TEXT    NOT NULL,
+    SortOrder          INTEGER NOT NULL DEFAULT 0,
+    IsActive           INTEGER NOT NULL DEFAULT 1,
+    GlobalID           TEXT    NULL,
+    CreatedAt          TEXT    NOT NULL DEFAULT (datetime('now'))
+);");
+            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblDocumentCategory_Active ON TblDocumentCategory(IsActive, SortOrder);");
+
+            InsertDocCategory(con, "IDENTITY",            "اسناد هویتی",              "Identity",           1);
+            InsertDocCategory(con, "MIGRATION",            "اسناد مهاجرت",             "Migration",          2);
+            InsertDocCategory(con, "REQUEST_FORMS",        "فرم‌های درخواست",          "RequestForms",       3);
+            InsertDocCategory(con, "INVESTIGATION_FORMS",  "فرم‌های بررسی",            "InvestigationForms", 4);
+            InsertDocCategory(con, "MEDICAL_DISABILITY",   "اسناد پزشکی و معلولیت",    "MedicalDisability",  5);
+            InsertDocCategory(con, "EDUCATIONAL",          "اسناد تحصیلی",             "Educational",        6);
+
+            ExecuteNonQuery(con, @"
+CREATE TABLE IF NOT EXISTS TblRequiredDocument (
+    RequiredDocumentID  INTEGER PRIMARY KEY AUTOINCREMENT,
+    RequestTypeID       INTEGER NOT NULL,
+    DocumentCategoryID  INTEGER NOT NULL,
+    IsMandatory         INTEGER NOT NULL DEFAULT 1,
+    MinCount            INTEGER NOT NULL DEFAULT 1,
+    IsActive            INTEGER NOT NULL DEFAULT 1,
+    CONSTRAINT FK_RequiredDocument_RequestType FOREIGN KEY (RequestTypeID)
+        REFERENCES TblRequestType (RequestTypeID) ON DELETE CASCADE,
+    CONSTRAINT FK_RequiredDocument_Category FOREIGN KEY (DocumentCategoryID)
+        REFERENCES TblDocumentCategory (DocumentCategoryID) ON DELETE CASCADE,
+    CONSTRAINT UQ_RequiredDocument UNIQUE (RequestTypeID, DocumentCategoryID)
+);");
+            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_RequiredDocument_RequestType ON TblRequiredDocument(RequestTypeID, IsActive);");
+
+            // ماتریسِ پیش‌فرض — قابلِ ویرایش (فقط داده): هویت و فرمِ درخواست
+            // برای همهٔ انواع الزامی‌اند؛ مهاجرت فقط برای مهاجر؛ پزشکی/معلولیت
+            // فقط برای معلول؛ تحصیلی برای دو نوعِ کودک.
+            string[] allTypes = { "ORPHAN", "UNSUPPORTED_CHILD", "BADLY_SUPPORTED_CHILD", "DISABLED", "MIGRANT", "ELDERLY" };
+            foreach (string type in allTypes)
+            {
+                InsertRequiredDocument(con, type, "IDENTITY", 1);
+                InsertRequiredDocument(con, type, "REQUEST_FORMS", 1);
+                // فورمِ تحقیق و بررسی (فورم ۴). MinCount پیش‌فرضِ جدول ۱ است،
+                // یعنی فقط بازدیدِ *اول* الزامی است؛ بازدیدهای بعدی می‌توانند
+                // فورم داشته باشند یا نه — همان قاعده‌ای که کاربر خواست.
+                InsertRequiredDocument(con, type, "INVESTIGATION_FORMS", 1);
+            }
+            InsertRequiredDocument(con, "MIGRANT",  "MIGRATION", 1);
+            InsertRequiredDocument(con, "DISABLED", "MEDICAL_DISABILITY", 1);
+            InsertRequiredDocument(con, "UNSUPPORTED_CHILD",     "EDUCATIONAL", 1);
+            InsertRequiredDocument(con, "BADLY_SUPPORTED_CHILD", "EDUCATIONAL", 1);
+        }
+
+        private static void InsertDocCategory(SQLiteConnection con, string code, string name, string folderName, int sortOrder)
+        {
+            using (var cmd = new SQLiteCommand(@"
+INSERT INTO TblDocumentCategory (Code, Name, FolderName, SortOrder)
+SELECT @Code, @Name, @Folder, @Sort
+WHERE NOT EXISTS (SELECT 1 FROM TblDocumentCategory WHERE Code = @Code);", con))
+            {
+                cmd.Parameters.AddWithValue("@Code", code);
+                cmd.Parameters.AddWithValue("@Name", name);
+                cmd.Parameters.AddWithValue("@Folder", folderName);
+                cmd.Parameters.AddWithValue("@Sort", sortOrder);
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+        private static void InsertRequiredDocument(SQLiteConnection con, string requestTypeCode, string categoryCode, int isMandatory)
+        {
+            using (var cmd = new SQLiteCommand(@"
+INSERT INTO TblRequiredDocument (RequestTypeID, DocumentCategoryID, IsMandatory)
+SELECT rt.RequestTypeID, dc.DocumentCategoryID, @Mandatory
+FROM TblRequestType rt, TblDocumentCategory dc
+WHERE rt.Code = @TypeCode AND dc.Code = @CategoryCode
+  AND NOT EXISTS (
+      SELECT 1 FROM TblRequiredDocument x
+      WHERE x.RequestTypeID = rt.RequestTypeID AND x.DocumentCategoryID = dc.DocumentCategoryID);", con))
+            {
+                cmd.Parameters.AddWithValue("@TypeCode", requestTypeCode);
+                cmd.Parameters.AddWithValue("@CategoryCode", categoryCode);
+                cmd.Parameters.AddWithValue("@Mandatory", isMandatory);
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+        // ─── تایم‌لاین پرونده (افزوده‌شونده‌فقط) ───────────────────────────────
+        private static void EnsureCaseTimeline(SQLiteConnection con)
+        {
+            ExecuteNonQuery(con, @"
+CREATE TABLE IF NOT EXISTS TblCaseTimeline (
+    TimelineID         INTEGER PRIMARY KEY AUTOINCREMENT,
+    CasID              INTEGER NOT NULL,
+    EventCategoryCode  TEXT    NOT NULL,
+    EventTypeCode      TEXT    NOT NULL,
+    EventDate          TEXT    NOT NULL,
+    EventAt            TEXT    NOT NULL DEFAULT (datetime('now')),
+    SourceTable        TEXT    NULL,
+    SourceID           INTEGER NULL,
+    FamID              INTEGER NULL,
+    FieldName          TEXT    NULL,
+    OldValue           TEXT    NULL,
+    NewValue           TEXT    NULL,
+    Amount             REAL    NULL,
+    Title              TEXT    NOT NULL,
+    Details            TEXT    NULL,
+    IsSystemGenerated  INTEGER NOT NULL DEFAULT 1,
+    UserID             INTEGER NULL,
+    Username           TEXT    NULL,
+    CenterID           INTEGER NULL,
+    GlobalID           TEXT    NULL,
+    CreatedAt          TEXT    NOT NULL DEFAULT (datetime('now')),
+    CONSTRAINT FK_CaseTimeline_Case FOREIGN KEY (CasID)
+        REFERENCES TblCase (CasID) ON DELETE CASCADE
+);");
+            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblCaseTimeline_Case ON TblCaseTimeline(CasID, EventAt DESC);");
+            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblCaseTimeline_Type ON TblCaseTimeline(EventCategoryCode, EventTypeCode);");
+            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblCaseTimeline_Source ON TblCaseTimeline(SourceTable, SourceID);");
+        }
+
+        // ─── ستون‌های پایهٔ TblCase: هویتِ ارجاعی + منشأ ثبت + معرف ────────────
+        // dual-write: ستون‌های متنیِ RequestType/ServiceStatus دست‌نخورده
+        // می‌مانند (۹۰+ نقطهٔ مصرف در داشبورد/جستجو/گزارش/سینک)؛ این ستون‌های
+        // جدید هویتِ مرجعِ تازه‌اند و فقط توسط کدِ تازه خوانده می‌شوند.
+        private static void EnsureCaseFoundationColumns(SQLiteConnection con)
+        {
+            EnsureColumn(con, "TblCase", "RequestTypeID",     "INTEGER NOT NULL DEFAULT 1");
+            EnsureColumn(con, "TblCase", "ServiceStatusID",    "INTEGER NOT NULL DEFAULT 1");
+            EnsureColumn(con, "TblCase", "ReferrerName",       "TEXT NULL");
+            EnsureColumn(con, "TblCase", "ReferrerPhone",      "TEXT NULL");
+            EnsureColumn(con, "TblCase", "EntrySourceCode",    "TEXT NOT NULL DEFAULT 'MANUAL'");
+            EnsureColumn(con, "TblCase", "CreatedByUserId",    "INTEGER NULL");
+            EnsureColumn(con, "TblCase", "CreatedByUsername",  "TEXT NULL");
+            EnsureColumn(con, "TblCase", "SyncOperationID",    "TEXT NULL");
+
+            // Backfill یک‌باره: مقدارِ متنیِ موجود را به شناسهٔ مرجع نگاشت کن.
+            // ردیف‌هایی که مقدارشان با هیچ‌کدام از نام‌های مرجع مطابق نیست
+            // (خالی/نامعتبر/«سایر» قدیمی) روی مقدارِ DEFAULT (۱) باقی می‌مانند —
+            // چون طبقِ تصمیمِ کاربر «سایر» دیگر نوعِ رسمی نیست و داده‌های
+            // موجود ارزشِ مهاجرت ندارند.
+            ExecuteNonQuery(con, @"
+UPDATE TblCase
+SET RequestTypeID = (SELECT rt.RequestTypeID FROM TblRequestType rt WHERE rt.Name = TblCase.RequestType)
+WHERE EXISTS (SELECT 1 FROM TblRequestType rt WHERE rt.Name = TblCase.RequestType);");
+
+            ExecuteNonQuery(con, @"
+UPDATE TblCase
+SET ServiceStatusID = (SELECT ss.ServiceStatusID FROM TblServiceStatus ss WHERE ss.Name = TblCase.ServiceStatus)
+WHERE EXISTS (SELECT 1 FROM TblServiceStatus ss WHERE ss.Name = TblCase.ServiceStatus);");
+
+            // ─── F-01 — جهتِ برعکسِ همان Backfill: پرکردنِ ستونِ *متنی* از روی
+            // کلیدِ خارجی، فقط برای ردیف‌هایی که ستونِ متنی‌شان خالی است.
+            //
+            // چرا لازم شد: دو Backfill بالا فقط متن→شناسه‌اند. روی پایگاه‌دادهٔ
+            // واقعی، ستونِ متنیِ RequestType برای ۱۶۶۰ پرونده NULL و برای ۱
+            // پرونده خالی بود، پس آن دستورها هیچ ردیفی را لمس نکردند و شناسه
+            // روی مقدارِ DEFAULT (۱) ماند. نتیجه: دو ستونی که قرار بود همیشه
+            // یک چیز بگویند، برای *۱۰۰٪* پرونده‌ها واگرا بودند — و چون گزارش
+            // تفصیلی، کارت شناسایی، برگهٔ رسید و خروجی‌های Word/Excel همگی
+            // ستونِ *متنی* را می‌خوانند، «نوع درخواستی» در همهٔ آن‌ها خالی
+            // چاپ می‌شد، در حالی که دروازهٔ فعال‌سازی و ماتریسِ اسنادِ الزامی
+            // از روی شناسه کار می‌کردند.
+            //
+            // قاعده‌ها:
+            //   • فقط خالی/NULL پر می‌شود؛ هیچ مقدارِ موجودی بازنویسی نمی‌شود.
+            //   • فقط وقتی شناسه به ردیفِ مرجع نگاشت شود.
+            //   • idempotent — بارِ دوم هیچ ردیفی شرط را برآورده نمی‌کند.
+            //
+            // ⚠ تصمیمِ کسب‌وکاری که این کد نمی‌تواند بگیرد: پرونده‌هایی که
+            // شناسه‌شان روی DEFAULT مانده، «ایتام» نمایش داده می‌شوند چون
+            // DEFAULT همان ۱ است. اگر طبقه‌بندیِ واقعیِ آن‌ها چیزِ دیگری است،
+            // باید پیش از تحویل بازنگری شود. این کد فقط تضمین می‌کند دو ستون
+            // یک چیز بگویند؛ نمی‌تواند تضمین کند آن یک چیز درست است.
+            ExecuteNonQuery(con, @"
+UPDATE TblCase
+SET RequestType = (SELECT rt.Name FROM TblRequestType rt WHERE rt.RequestTypeID = TblCase.RequestTypeID)
+WHERE IFNULL(TRIM(RequestType), '') = ''
+  AND EXISTS (SELECT 1 FROM TblRequestType rt WHERE rt.RequestTypeID = TblCase.RequestTypeID);");
+
+            ExecuteNonQuery(con, @"
+UPDATE TblCase
+SET ServiceStatus = (SELECT ss.Name FROM TblServiceStatus ss WHERE ss.ServiceStatusID = TblCase.ServiceStatusID)
+WHERE IFNULL(TRIM(ServiceStatus), '') = ''
+  AND EXISTS (SELECT 1 FROM TblServiceStatus ss WHERE ss.ServiceStatusID = TblCase.ServiceStatusID);");
+
+            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblCase_RequestTypeID ON TblCase(RequestTypeID);");
+            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblCase_ServiceStatusID ON TblCase(ServiceStatusID);");
+        }
+
+        // ─── دسته‌بندیِ سند روی TblDocs (افزایشی) ──────────────────────────────
+        private static void EnsureDocsCategoryColumn(SQLiteConnection con)
+        {
+            if (!TableExists(con, "TblDocs")) return;
+
+            EnsureColumn(con, "TblDocs", "DocumentCategoryID", "INTEGER NULL");
+            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblDocs_DocumentCategoryID ON TblDocs(DocumentCategoryID);");
         }
 
         // به پرونده‌هایی که «شماره فرم» ندارند (NULL/خالی/غیرعددی) یک شماره‌ی یکتا
         // و افزایشی می‌دهد که از بزرگ‌ترین شماره‌ی فعلی شروع می‌شود. idempotent است:
         // روی پرونده‌هایی که از قبل شماره دارند دست نمی‌زند.
+        // ═══════════════════════════════════════════════════════════════════
+        // Feature 4 — قاعدهٔ سه‌حالتیِ وضعیتِ تذکره
+        //
+        // هر رکورد باید دقیقاً یکی از «تذکره الکترونیکی» / «تذکره کاغذی» /
+        // «بدون تذکره» باشد؛ خالی مجاز نیست.
+        //
+        // ⚠ مهاجرت عمداً فقط رکوردهایی را دست می‌زند که نوع *و* شماره هر دو
+        // خالی‌اند. رکوردی که شمارهٔ تذکره دارد ولی نوعش ثبت نشده، اگر
+        // «بدون تذکره» علامت می‌خورد یک دادهٔ خودمتناقض می‌ساخت (ادعای
+        // نداشتنِ تذکره در کنارِ شمارهٔ همان تذکره) و تصمیم #۴۳ هم صراحتاً
+        // می‌گوید نوع از روی شماره استنتاج نشود. آن رکوردها دست‌نخورده
+        // می‌مانند و در آمار زیرِ «نوع نامشخص» دیده می‌شوند تا کاربر خودش
+        // تعیینِ تکلیفشان کند.
+        //
+        // idempotent: بارِ دوم هیچ ردیفی نمی‌ماند که شرط را برآورده کند.
+        // ═══════════════════════════════════════════════════════════════════
+        private static void NormalizeIdCardStatus(SQLiteConnection con)
+        {
+            // (جدول، ستونِ نوع، ستونِ شماره)
+            var targets = new[]
+            {
+                new[] { "TblCase",   "HeadIdCardType",   "HeadTazkiraNo"   },
+                new[] { "TblFamily", "MemberIdCardType", "MemberTazkiraNo" }
+            };
+
+            foreach (string[] t in targets)
+            {
+                if (!TableExists(con, t[0])) continue;
+                if (!ColumnExists(con, t[0], t[1])) continue;
+                if (!ColumnExists(con, t[0], t[2])) continue;
+
+                using (var cmd = new SQLiteCommand(
+                    "UPDATE " + t[0] + " SET " + t[1] + " = @None " +
+                    " WHERE TRIM(COALESCE(" + t[1] + ", '')) = '' " +
+                    "   AND TRIM(COALESCE(" + t[2] + ", '')) = '';", con))
+                {
+                    cmd.Parameters.AddWithValue("@None", Helpers.IdCardHelper.NoneDisplay);
+                    cmd.ExecuteNonQuery();
+                }
+            }
+        }
+
         private static void BackfillMissingFormNumbers(SQLiteConnection con)
         {
             int next;

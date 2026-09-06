@@ -70,6 +70,14 @@ namespace CaseManagement
 
         // ─── بازطراحی ظاهری داشبورد (طبق عکس نمونه کاربر) ────────────────────
         private TabControl _tabs;
+        // Phase 5.5-C — سنجه‌های مدیریتی (تبِ جدا، بدونِ دست‌زدن به ۱۳ کارتِ موجود).
+        private StatCard _cardMissingDocs, _cardVisits, _cardFundedCases, _cardSponsors,
+                         _cardFundingSources, _cardAssistanceCount;
+        // Phase 5.5-D — ریسک و کیفیت.
+        private StatCard _cardHighRisk, _cardMediumRisk, _cardLowRisk, _cardAvgScore,
+                         _cardUnverifiedDocs, _cardNeedVisit, _cardNeedFunding;
+        private DataGridView _gridRequestTypeDist, _gridServiceStatusDist,
+                             _gridCompletionDist, _gridVulnerabilityDist;
         private SidebarNav _sidebar;
         // تعداد کارت‌های خلاصه — شبکه‌ی summaryPanel از روی همین ساخته می‌شود.
         private const int SummaryCardCount = 13;
@@ -131,7 +139,7 @@ namespace CaseManagement
             _sidebar.AddItem(IconFont.Search, "دستیار هوشمند", delegate { using (var frm = new FrmAiAssistant()) frm.ShowDialog(this); RefreshAll(); });
 
             _sidebar.AddGroup("مالی و حسابداری", startExpanded: false);
-            AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleFinance, IconFont.Money, "مالی", delegate { using (var frm = new FrmFinance()) frm.ShowDialog(this); RefreshAll(); });
+            AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleFinance, IconFont.Money, "مالی", delegate { OpenFinance(); });
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleAccounting, IconFont.Calculator, "حسابداری ایتام", delegate { using (var frm = new CaseManagement.Accounting.FrmAccounting()) frm.ShowDialog(this); });
 
             // ماژول اداری و کارمندان — رخصتی، ماموریت، درخواست استخدام.
@@ -165,6 +173,16 @@ namespace CaseManagement
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleErrors, IconFont.Cancel, "گزارش خطاها", delegate { using (var frm = new CaseManagement.Enterprise.FrmErrorLog()) frm.ShowDialog(this); });
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModulePermissions, IconFont.Shield, "ماتریس مجوزها", delegate { using (var frm = new CaseManagement.Enterprise.FrmPermissionMatrix()) frm.ShowDialog(this); });
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleModules, IconFont.Settings, "مدیریت ماژول‌ها", delegate { using (var frm = new CaseManagement.Enterprise.FrmModules()) frm.ShowDialog(this); });
+
+            // Phase 5.5-C — صفحاتِ مدیریتیِ تأمین مالی و قواعدِ مساعدت.
+            // زیرِ همان گروهِ «هسته سازمانی» و با همان AddModuleNav، پس
+            // کنترلِ دسترسیِ ماژولی عیناً مثلِ بقیه اعمال می‌شود.
+            AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleFinance, IconFont.Settings,
+                "منابع مالی و خیّرین",
+                delegate { using (var frm = new CaseManagement.Helpers.FrmFundingAdmin()) frm.ShowDialog(this); });
+            AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleRules, IconFont.Settings,
+                "قواعد مساعدت",
+                delegate { using (var frm = new CaseManagement.Helpers.FrmAssistanceRuleAdmin()) frm.ShowDialog(this); });
 
             _sidebar.AddGroup("سیستم", startExpanded: false);
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleUsers, IconFont.Shield, "کاربران و دسترسی", OpenUsers);
@@ -208,11 +226,14 @@ namespace CaseManagement
             toolButtons.Controls.Add(CreateToolButton("متقاضیان", "✎", delegate { using (var frm = new FrmApplicant()) frm.ShowDialog(this); RefreshAll(); }));
             toolButtons.Controls.Add(CreateToolButton("جستجوی پیشرفته", "⌕", delegate { using (var frm = new FrmAdvancedSearch()) frm.ShowDialog(this); }));
             toolButtons.Controls.Add(CreateToolButton("دستیار هوشمند", "🤖", delegate { using (var frm = new FrmAiAssistant()) frm.ShowDialog(this); RefreshAll(); }));
-            toolButtons.Controls.Add(CreateToolButton("مالی", "$", delegate { using (var frm = new FrmFinance()) frm.ShowDialog(this); RefreshAll(); }));
+            toolButtons.Controls.Add(CreateToolButton("مالی", "$", delegate { OpenFinance(); }));
             toolButtons.Controls.Add(CreateToolButton("حسابداری ایتام", "💰", delegate { using (var frm = new CaseManagement.Accounting.FrmAccounting()) frm.ShowDialog(this); }));
             toolButtons.Controls.Add(CreateToolButton("کارمندان", "👥", delegate { using (var frm = new FrmEmployees()) frm.ShowDialog(this); }));
             toolButtons.Controls.Add(CreateToolButton("همگام‌سازی", "🔄", delegate { using (var frm = new CaseManagement.Sync.FrmSyncSimple()) frm.ShowDialog(this); RefreshAll(); }));
             toolButtons.Controls.Add(CreateToolButton("تنظیمات", "⚙", OpenSettings));
+            // Feature 1 — کنارِ «تنظیمات» می‌نشیند چون هم‌خانواده‌اش است، ولی
+            // دکمهٔ جدا دارد تا کاربر بداند قواعدِ ایمنی‌اش فرق می‌کند.
+            toolButtons.Controls.Add(CreateToolButton("نوع پرونده و وضعیت", "🗂", OpenReferenceDataSettings));
             toolButtons.Controls.Add(CreateToolButton("جزوه آموزشی", "📘", OpenTrainingManual));
             toolButtons.Controls.Add(CreateToolButton("ارتباط با ما", "☎", OpenContactUs));
             toolButtons.Controls.Add(CreateToolButton("کاربران", "☺", OpenUsers));
@@ -303,6 +324,7 @@ namespace CaseManagement
                 BuildGeographyTab(),          // جغرافیا
                 BuildReminderTab(),           // یادآوری سروی
                 BuildQualityTab(),            // کیفیت داده
+                BuildManagementTab(),         // Phase 5.5-C — سنجه‌های مدیریتی
                 BuildAuditTab()               // گزارش رویدادها
             };
             for (int i = orderedTabPages.Count - 1; i >= 0; i--)
@@ -891,6 +913,223 @@ namespace CaseManagement
                 _lblDonutCenter.BringToFront();
             }
             catch { /* موقعیت‌دهی تزئینی است */ }
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // Phase 5.5-C — تبِ «مدیریت و کیفیت».
+        //
+        // چرا تبِ جدا و نه افزودن به ردیفِ کارت‌های موجود: آن ردیف یک شبکهٔ
+        // ثابت با SummaryCardCount=13 است؛ افزودنِ کارت یعنی تغییرِ هندسهٔ
+        // شبکه‌ای که هیچ آزمونی ندارد و قبلاً هم یک‌بار باگِ «کارت‌های خالی»
+        // داده بود. طبقِ رهنمودِ صریحِ کاربر («تبِ جدا/گروهِ جمع‌شونده، بدونِ
+        // بزرگ‌کردنِ تهاجمیِ داشبورد») بخشِ تازه اینجا می‌نشیند و ۱۳ کارتِ
+        // موجود دست‌نخورده می‌مانند.
+        //
+        // چهار سنجهٔ اولِ درخواستی (کل/فعال/در انتظار/معلق) عمداً اینجا تکرار
+        // *نشده‌اند* — از قبل در ردیفِ اصلی وجود دارند و تکرارشان دو منبعِ
+        // حقیقت می‌ساخت.
+        // ═══════════════════════════════════════════════════════════════════
+        private TabPage BuildManagementTab()
+        {
+            // Phase 5.5-D — کارت‌های ریسک و کیفیت. سه کارتِ باند قابلِ کلیک‌اند
+            // و جستجوی پیشرفته را با همان فیلتر باز می‌کنند (drill-down).
+            _cardHighRisk    = MakeStatCard("پرونده پرخطر",   "", IconFont.Shield,  "#C0392B", "#FBEAE9");
+            _cardMediumRisk  = MakeStatCard("پرونده متوسط",   "", IconFont.Shield,  "#B8860B", "#FCF3DD");
+            _cardLowRisk     = MakeStatCard("پرونده کم‌خطر",  "", IconFont.Shield,  "#1E8449", "#E9F7EF");
+            _cardAvgScore    = MakeStatCard("میانگین امتیاز", "", IconFont.Clock,   "#1F618D", "#EAF2F8");
+            _cardUnverifiedDocs = MakeStatCard("سند تأییدنشده", "", IconFont.Cancel, "#7D3C98", "#F4ECF7");
+            _cardNeedVisit   = MakeStatCard("نیازمند بازدید", "", IconFont.Check,   "#117864", "#E8F6F3");
+            _cardNeedFunding = MakeStatCard("بدون تأمین مالی", "", IconFont.Settings, "#873600", "#FDF2E9");
+
+            AttachCardClick(_cardHighRisk,   delegate { OpenRiskDrillDown("پرخطر"); });
+            AttachCardClick(_cardMediumRisk, delegate { OpenRiskDrillDown("متوسط"); });
+            AttachCardClick(_cardLowRisk,    delegate { OpenRiskDrillDown("کم‌خطر"); });
+
+            _cardMissingDocs     = MakeStatCard("پرونده با سند ناقص", "", IconFont.Cancel,   "#C0392B", "#FBEAE9");
+            // پرونده‌های ناقص = وضعیتِ تکمیلِ «ناقص» در جستجوی پیشرفته.
+            AttachCardClick(_cardMissingDocs, delegate { OpenCompletionDrillDown("ناقص"); });
+            _cardVisits          = MakeStatCard("بازدید میدانی",      "", IconFont.Check,    "#1E8449", "#E9F7EF");
+            _cardFundedCases     = MakeStatCard("پرونده دارای تأمین مالی", "", IconFont.Settings, "#1F618D", "#EAF2F8");
+            _cardFundingSources  = MakeStatCard("منابع مالی فعال",    "", IconFont.Settings, "#7D3C98", "#F4ECF7");
+            _cardSponsors        = MakeStatCard("خیّرین فعال",        "", IconFont.Shield,   "#B8860B", "#FCF3DD");
+            _cardAssistanceCount = MakeStatCard("تعداد مساعدت",       "", IconFont.Clock,    "#117864", "#E8F6F3");
+
+            var cardFlow = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                Height = 140,
+                FlowDirection = FlowDirection.LeftToRight,
+                RightToLeft = RightToLeft.Yes,
+                WrapContents = true,
+                Padding = new Padding(10, 10, 10, 0),
+                BackColor = Color.Transparent
+            };
+
+            StatCard[] cards =
+            {
+                // Phase 5.5-D — ردیفِ ریسک اول می‌آید (مهم‌ترین برای تصمیم‌گیری)،
+                // سپس کیفیتِ داده، سپس سنجه‌های تأمین مالی که از قبل بودند.
+                _cardHighRisk, _cardMediumRisk, _cardLowRisk, _cardAvgScore,
+                _cardMissingDocs, _cardUnverifiedDocs, _cardNeedVisit, _cardNeedFunding,
+                _cardVisits, _cardFundedCases,
+                _cardFundingSources, _cardSponsors, _cardAssistanceCount
+            };
+            foreach (StatCard card in cards) cardFlow.Controls.Add(card);
+
+            _gridRequestTypeDist   = MakeDistributionGrid();
+            _gridServiceStatusDist = MakeDistributionGrid();
+            _gridCompletionDist    = MakeDistributionGrid();
+            _gridVulnerabilityDist = MakeDistributionGrid();
+
+            var distributions = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 2,
+                RowCount = 2,
+                RightToLeft = RightToLeft.Yes,
+                Padding = new Padding(10),
+                BackColor = Color.Transparent
+            };
+            distributions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            distributions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            distributions.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+            distributions.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+
+            distributions.Controls.Add(WrapGrid("توزیع نوع درخواست", _gridRequestTypeDist), 0, 0);
+            distributions.Controls.Add(WrapGrid("توزیع وضعیت خدمات", _gridServiceStatusDist), 1, 0);
+            distributions.Controls.Add(WrapGrid("توزیع وضعیت تکمیل", _gridCompletionDist), 0, 1);
+            distributions.Controls.Add(WrapGrid("توزیع سطح آسیب‌پذیری", _gridVulnerabilityDist), 1, 1);
+
+            var host = new Panel { Dock = DockStyle.Fill, BackColor = UiTheme.Background };
+            host.Controls.Add(distributions);
+            host.Controls.Add(cardFlow);
+
+            var page = new TabPage("مدیریت و کیفیت") { BackColor = UiTheme.Background };
+            page.Controls.Add(host);
+            return page;
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // Phase 5.5-D — drill-down.
+        //
+        // StatCard یک Panel با برچسب‌های فرزند است؛ کلیکِ روی فرزند به والد
+        // bubble نمی‌شود، پس رویداد باید بازگشتی روی همهٔ فرزندان هم بنشیند
+        // (همان کاری که AddFamilySummaryCard برای کارت‌های خانواده می‌کند).
+        private static void AttachCardClick(Control card, EventHandler onClick)
+        {
+            if (card == null || onClick == null) return;
+
+            card.Cursor = Cursors.Hand;
+            card.Click += onClick;
+
+            foreach (Control child in card.Controls)
+                AttachCardClick(child, onClick);
+        }
+
+        // مقصدِ drill-down عمداً «جستجوی پیشرفته» است و نه FrmCase: فیلترهای
+        // سطحِ خطر و وضعیتِ تکمیل از قبل آنجا هستند، پس نه سطحِ عمومیِ تازه‌ای
+        // به FrmCase اضافه می‌شود و نه فیلتری تکرار می‌گردد. کاربر هم می‌تواند
+        // همان‌جا فیلتر را دستی تغییر دهد.
+        private void OpenRiskDrillDown(string bandDisplay)
+        {
+            try
+            {
+                using (var frm = new FrmAdvancedSearch(bandDisplay, ""))
+                    frm.ShowDialog(this);
+            }
+            catch (Exception ex)
+            {
+                Msg.Show("خطا در باز کردن جستجوی فیلترشده: " + ex.Message);
+            }
+        }
+
+        private void OpenCompletionDrillDown(string completionDisplay)
+        {
+            try
+            {
+                using (var frm = new FrmAdvancedSearch("", completionDisplay))
+                    frm.ShowDialog(this);
+            }
+            catch (Exception ex)
+            {
+                Msg.Show("خطا در باز کردن جستجوی فیلترشده: " + ex.Message);
+            }
+        }
+
+        private static Panel WrapGrid(string title, DataGridView grid)
+        {
+            var panel = new Panel { Dock = DockStyle.Fill, BackColor = UiTheme.CardBack, Margin = new Padding(5) };
+            panel.Controls.Add(grid);
+            panel.Controls.Add(new Label
+            {
+                Dock = DockStyle.Top,
+                Height = 28,
+                Text = "  " + title,
+                Font = UiTheme.FontBold(UiTheme.SizeSmall),
+                ForeColor = UiTheme.TextDark,
+                TextAlign = ContentAlignment.MiddleRight
+            });
+            return panel;
+        }
+
+        private static DataGridView MakeDistributionGrid()
+        {
+            var grid = new DataGridView
+            {
+                Dock = DockStyle.Fill,
+                ReadOnly = true,
+                AllowUserToAddRows = false,
+                AllowUserToDeleteRows = false,
+                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
+                SelectionMode = DataGridViewSelectionMode.FullRowSelect,
+                MultiSelect = false,
+                RightToLeft = RightToLeft.Yes,
+                RowTemplate = { Height = 26 }
+            };
+            UiTheme.StyleGrid(grid);
+            return grid;
+        }
+
+        // همهٔ داده از DashboardMetricsService می‌آید — طبقِ خواستهٔ صریح،
+        // هیچ منطقِ تجمیعی داخلِ این فرم نیست.
+        private void LoadManagementMetrics()
+        {
+            if (_cardMissingDocs == null) return;
+
+            int cid = SecurityContext.CenterFilterId;
+
+            try
+            {
+                DashboardManagementMetrics metrics = DashboardMetricsService.GetManagementMetrics(cid);
+
+                // Phase 5.5-D — ریسک و کیفیت. میانگین گرد می‌شود چون StatCard
+                // فقط عدد صحیح نشان می‌دهد.
+                _cardHighRisk.SetValue(metrics.HighRiskCases);
+                _cardMediumRisk.SetValue(metrics.MediumRiskCases);
+                _cardLowRisk.SetValue(metrics.LowRiskCases);
+                _cardAvgScore.SetValue((int)Math.Round(metrics.AverageVulnerabilityScore));
+                _cardUnverifiedDocs.SetValue(metrics.UnverifiedDocuments);
+                _cardNeedVisit.SetValue(metrics.CasesRequiringVisit);
+                _cardNeedFunding.SetValue(metrics.CasesMissingFunding);
+
+                _cardMissingDocs.SetValue(metrics.MissingDocumentCases);
+                _cardVisits.SetValue(metrics.FieldVisitCount);
+                _cardFundedCases.SetValue(metrics.CasesWithFunding);
+                _cardFundingSources.SetValue(metrics.ActiveFundingSources);
+                _cardSponsors.SetValue(metrics.ActiveSponsors);
+                _cardAssistanceCount.SetValue(metrics.AssistanceCount);
+
+                _gridRequestTypeDist.DataSource   = DashboardMetricsService.GetRequestTypeDistribution(cid);
+                _gridServiceStatusDist.DataSource = DashboardMetricsService.GetServiceStatusDistribution(cid);
+                _gridCompletionDist.DataSource    = DashboardMetricsService.GetCompletionDistribution(cid);
+                _gridVulnerabilityDist.DataSource = DashboardMetricsService.GetVulnerabilityBandDistribution(cid);
+            }
+            catch (Exception ex)
+            {
+                // داشبورد نباید به‌خاطر یک سنجه از کار بیفتد — همان قاعدهٔ
+                // بقیهٔ Loadهای این فرم.
+                System.Diagnostics.Debug.WriteLine("LoadManagementMetrics failed: " + ex.Message);
+            }
         }
 
         private TabPage BuildTrendTab()
@@ -2306,6 +2545,10 @@ ORDER BY RemindAt", con))
             LoadReminders();
             LoadQuality();
             LoadAudit();
+            // Phase 5.5-C — سنجه‌های مدیریتی. آخر صدا زده می‌شود چون سنگین‌ترین
+            // کوئری (اسنادِ الزامیِ کم) اینجاست و نباید بارگذاریِ کارت‌های
+            // اصلیِ داشبورد را عقب بیندازد.
+            LoadManagementMetrics();
         }
 
         // آمار نوع تذکره سرپرست (الکترونیکی / کاغذی / بدون تذکره).
@@ -2318,14 +2561,21 @@ ORDER BY RemindAt", con))
 SELECT
     SUM(CASE WHEN HeadIdCardType = @Electronic THEN 1 ELSE 0 END) AS ElectronicCount,
     SUM(CASE WHEN HeadIdCardType = @Paper      THEN 1 ELSE 0 END) AS PaperCount,
-    SUM(CASE WHEN COALESCE(HeadIdCardType, '') = ''
-              AND COALESCE(HeadTazkiraNo,  '') = '' THEN 1 ELSE 0 END) AS NoneCount
+    -- Feature 4 — «بدون تذکره» حالا مقدارِ *ذخیره‌شده* است. شمارشِ قبلی فقط
+    -- ردیف‌های خالی را می‌شمرد، پس بعد از مهاجرتِ سه‌حالتی صفر می‌شد. هر دو
+    -- شکل شمرده می‌شوند تا هم رکوردهای مهاجرت‌شده و هم هر ردیفِ خالیِ
+    -- باقی‌مانده (مثلاً رسیده از همگام‌سازیِ شعبهٔ قدیمی، پیش از اجرای
+    -- مهاجرت در آن نصب) در همین گروه بیایند.
+    SUM(CASE WHEN HeadIdCardType = @None
+               OR (COALESCE(HeadIdCardType, '') = ''
+              AND COALESCE(HeadTazkiraNo,  '') = '') THEN 1 ELSE 0 END) AS NoneCount
 FROM TblCase
 WHERE (@CID = 0 OR CenterID = @CID)" + CaseFilterSqlNoStatus("") + @"", con))
                 {
                     cmd.Parameters.AddWithValue("@CID", cid);
                     cmd.Parameters.AddWithValue("@Electronic", IdCardHelper.Electronic);
                     cmd.Parameters.AddWithValue("@Paper",      IdCardHelper.Paper);
+                    cmd.Parameters.AddWithValue("@None",       IdCardHelper.NoneDisplay);
                     AddCaseFilterParams(cmd);
 
                     con.Open();
@@ -2975,6 +3225,25 @@ ORDER BY LogID DESC", cid);
                 frm.ShowDialog(this);
         }
 
+        // ─── Feature 1: تنظیماتِ دادهٔ مرجع (نوع پرونده / وضعیت خدمات) ─────────
+        // صفحهٔ جدا از «تنظیمات نرم‌افزار»: آن‌جا فهرست‌های سادهٔ TblLookup
+        // مدیریت می‌شوند که حذفشان بی‌خطر است؛ این‌جا دادهٔ مرجعی است که
+        // منطقِ برنامه با Codeاش مقایسه می‌کند و قواعدِ ایمنیِ سخت‌گیرانه‌تری
+        // دارد. توضیحِ کامل در سرآیندِ FrmReferenceDataSettings.
+        private void OpenReferenceDataSettings(object sender, EventArgs e)
+        {
+            if (!CaseManagement.Enterprise.PermissionService.Require(
+                    Helpers.ReferenceDataAdminService.PermissionKey))
+            {
+                UiTheme.ShowWarning(this,
+                    "مدیریتِ «نوع پرونده» و «وضعیت خدمات» فقط برای مدیر سیستم مجاز است.");
+                return;
+            }
+
+            using (var frm = new FrmReferenceDataSettings())
+                frm.ShowDialog(this);
+        }
+
         // ─── بارگذاری ComboBox تغییر مرکز (فقط SuperAdmin) ──────────────────
         private void LoadCenterSwitcher()
         {
@@ -3041,6 +3310,24 @@ WHERE IsActive = 1 ORDER BY CenterCode", con))
             public CenterSwitchItem(int id, string code, string display)
             { CenterId = id; CenterCode = code; Display = display; }
             public override string ToString() { return Display; }
+        }
+
+        // F-45 — فرم مالی دو ورودی داشت: یکی از نوار کناری (فقط با بررسیِ
+        // فعال‌بودنِ ماژول) و یکی از نوار ابزار (بدون هیچ بررسی). هر دو حالا
+        // از همین‌جا عبور می‌کنند تا نتوانند واگرا شوند. «Finance.View» از
+        // قبل تعریف شده و پیش‌فرضش برای هر سه نقش true است، پس امروز هیچ
+        // کاربری دسترسی‌اش را از دست نمی‌دهد — ولی مدیر سیستم از این پس
+        // کلیدی دارد که واقعاً هر دو در را می‌بندد.
+        private void OpenFinance()
+        {
+            if (!CaseManagement.Enterprise.PermissionService.Require("Finance.View"))
+            {
+                UiTheme.ShowWarning(this, "شما به بخش مالی دسترسی ندارید.");
+                return;
+            }
+
+            using (var frm = new FrmFinance()) frm.ShowDialog(this);
+            RefreshAll();
         }
 
         private Button CreateToolButton(string text, string icon, EventHandler handler)

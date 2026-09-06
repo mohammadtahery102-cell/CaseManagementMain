@@ -503,7 +503,11 @@ namespace CaseManagement
 
             txtMemberName.Text = "";
             txtMemberFatherName.Text = "";
-            cmbMemberIdCardType.SelectedIndex = 0;
+            // Feature 4 — پیش‌فرضِ عضوِ تازه «بدون تذکره» است. پیش‌تر
+            // SelectedIndex = 0 یعنی گزینهٔ خالیِ اولِ فهرست بود؛ آن گزینه
+            // حذف شده و اکنون ایندکسِ ۰ «تذکره الکترونیکی» است، پس انتخاب
+            // باید صریح باشد نه بر اساسِ جایگاه.
+            cmbMemberIdCardType.Text = IdCardHelper.NoneDisplay;
             txtMemberTazkiraNo.Text = "";
             txtMemberSadat.SelectedIndex = -1;
             cmbMemberRole.SelectedIndex = -1;

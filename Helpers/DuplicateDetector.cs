@@ -47,6 +47,9 @@ namespace CaseManagement.Helpers
             public string Phone;
             public string Address;
             public int CenterId;
+            // Phase 6 — شناسهٔ خانوارِ ریشه (NULL ⇒ خودِ CasID). برای
+            // کنارگذاشتنِ جفت‌های هم‌خانوار در Merge استفاده می‌شود.
+            public int FamilyGroupId;
 
             // نسخه‌های نرمال‌شده (یک‌بار حساب می‌شوند، نه در هر مقایسه)
             public string NName;
@@ -185,7 +188,8 @@ WHERE TazkiraNo IS NOT NULL AND TazkiraNo <> '' AND (@cid = 0 OR CenterID = @cid
 SELECT CasID, COALESCE(Code,'') AS Code, COALESCE(FormNo,'') AS FormNo,
        COALESCE(HeadFullName,'') AS Nm, COALESCE(HeadFatherName,'') AS Fa,
        COALESCE(HeadTazkiraNo,'') AS Tz, COALESCE(Phone,'') AS Ph,
-       COALESCE(HeadCurrentResidence,'') AS Ad, COALESCE(CenterID,0) AS Cid
+       COALESCE(HeadCurrentResidence,'') AS Ad, COALESCE(CenterID,0) AS Cid,
+       IFNULL(FamilyGroupID, CasID) AS Fg
 FROM TblCase
 WHERE (@CID = 0 OR CenterID = @CID)
   AND IsArchived = 0", con))
@@ -207,7 +211,8 @@ WHERE (@CID = 0 OR CenterID = @CID)
                             Tazkira = Convert.ToString(rd["Tz"]).Trim(),
                             Phone = Convert.ToString(rd["Ph"]).Trim(),
                             Address = Convert.ToString(rd["Ad"]).Trim(),
-                            CenterId = Convert.ToInt32(rd["Cid"])
+                            CenterId = Convert.ToInt32(rd["Cid"]),
+                            FamilyGroupId = Convert.ToInt32(rd["Fg"])
                         };
 
                         r.NName = Normalize(r.Name);
@@ -401,6 +406,21 @@ WHERE (@CID = 0 OR CenterID = @CID)
                                   CaseRow a, CaseRow b, int score, string field, string value)
         {
             if (a.CasId == b.CasId) return;
+
+            // ═══ Phase 6 — سازگاریِ موتورِ تکراری با گروهِ خانواده ═══════════
+            // موتور دست‌نخورده است؛ فقط یک جفتِ «انتظارشده» کنار گذاشته می‌شود.
+            //
+            // چرا لازم است: طبقِ قاعدهٔ «خدماتِ مستقل»، هر عضوی که کمکِ مستقل
+            // می‌گیرد پروندهٔ جدا می‌گیرد. دو خواهر و برادر در یک خانوار
+            // *به‌طور طبیعی* در نامِ پدر، تلفنِ خانوار و آدرسِ خانوار یکسان‌اند
+            // و نامشان هم شبیه است — یعنی دقیقاً همان چیزی که این موتور
+            // «تکراری» می‌نامد. بدونِ این شرط، هر خانوارِ nپرونده‌ای
+            // n×(n−1)/2 هشدارِ نادرست می‌ساخت و صفحهٔ بررسیِ تکراری‌ها
+            // بی‌استفاده می‌شد.
+            //
+            // فقط جفت‌های *هم‌خانوار* رد می‌شوند؛ دو پروندهٔ بی‌ارتباط که
+            // اتفاقاً یک تلفن دارند همچنان مثل قبل علامت می‌خورند.
+            if (a.FamilyGroupId > 0 && a.FamilyGroupId == b.FamilyGroupId) return;
 
             int lo = Math.Min(a.CasId, b.CasId);
             int hi = Math.Max(a.CasId, b.CasId);

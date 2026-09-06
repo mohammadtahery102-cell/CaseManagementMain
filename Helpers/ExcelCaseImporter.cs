@@ -155,7 +155,11 @@ SELECT last_insert_rowid();", con))
                 AddText(cmd, "@HeadFatherName", ReadCell(sheet, columns, rowNumber, "HeadFatherName", "نام پدر سرپرست"));
                 AddText(cmd, "@HeadSadat", ReadCell(sheet, columns, rowNumber, "HeadSadat", "سیادت سرپرست"));
                 AddText(cmd, "@Religion", ReadCell(sheet, columns, rowNumber, "Religion", "مذهب"));
-                AddText(cmd, "@HeadIdCardType", ReadCell(sheet, columns, rowNumber, "HeadIdCardType", "نوع تذکره سرپرست", "نوع تذکره"));
+                // Feature 4 — درون‌ریزی هم تابعِ قاعدهٔ سه‌حالتی است: ستونِ
+                // خالی یا مقدارِ ناشناخته به «بدون تذکره» تبدیل می‌شود، نه
+                // اینکه رکوردِ بدونِ وضعیت بسازد.
+                AddText(cmd, "@HeadIdCardType", IdCardHelper.NormalizeType(
+                    ReadCell(sheet, columns, rowNumber, "HeadIdCardType", "نوع تذکره سرپرست", "نوع تذکره")));
                 AddText(cmd, "@HeadTazkiraNo", ReadCell(sheet, columns, rowNumber, "HeadTazkiraNo", "شماره تذکره سرپرست"));
                 AddText(cmd, "@HeadOriginalResidence", ReadCell(sheet, columns, rowNumber, "HeadOriginalResidence", "سکونت اصلی"));
                 AddText(cmd, "@HeadCurrentResidence", ReadCell(sheet, columns, rowNumber, "HeadCurrentResidence", "سکونت فعلی"));

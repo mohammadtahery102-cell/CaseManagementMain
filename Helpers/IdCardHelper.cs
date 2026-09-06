@@ -27,14 +27,42 @@ namespace CaseManagement.Helpers
         public const string Electronic = "تذکره الکترونیکی";
         public const string Paper      = "تذکره کاغذی";
 
-        // فقط برای نمایش در آمار/گزارش‌ها — در دیتابیس ذخیره نمی‌شود
-        // (نبودِ تذکره = هم نوع و هم شماره خالی).
+        // ⚠ از ۱۴۰۵/۰۶/۰۶ (Feature 4) این مقدار **ذخیره می‌شود**، نه فقط
+        // نمایشی. قاعدهٔ سه‌حالتی: هر رکورد همیشه دقیقاً یکی از
+        // Electronic / Paper / None است و خالی مجاز نیست.
         public const string NoneDisplay = "بدون تذکره";
 
         // رکوردهای قدیمیِ پیش از این قابلیت: شماره دارند ولی نوعشان ثبت نشده.
-        // عمداً «کاغذی» فرض نمی‌شوند (خواسته‌ی صریح: نوع از روی شماره تشخیص
-        // داده نشود)، پس گروه جداگانه‌ی خودشان را دارند.
+        //
+        // ⚠ این حالت **باقی می‌ماند ولی انتخاب‌کردنی نیست** — نه در فرم‌ها و
+        // نه به‌عنوان مقدارِ تازه. فقط یک سطلِ *باقی‌مانده* در آمار است.
+        //
+        // چرا حذف نشد: مهاجرتِ سه‌حالتی رکوردهای «نوعِ خالی» را به «بدون
+        // تذکره» تبدیل می‌کند، ولی فقط وقتی شماره هم خالی باشد. رکوردی که
+        // شمارهٔ تذکره دارد ولی نوعش ثبت نشده، اگر «بدون تذکره» علامت بخورد
+        // داده‌ای خودمتناقض می‌سازد (ادعای نداشتنِ تذکره در کنارِ شمارهٔ
+        // ثبت‌شدهٔ همان تذکره). تصمیم #۴۳ هم صراحتاً می‌گوید نوع از روی شماره
+        // استنتاج نشود. پس این رکوردها دست‌نخورده می‌مانند و آمار صادقانه
+        // نشانشان می‌دهد تا کاربر خودش تعیینِ تکلیف کند.
         public const string UnknownDisplay = "نوع نامشخص";
+
+        // سه حالتِ مجازِ *ورودی* — مرجعِ واحدِ فرم‌ها، جستجو و درون‌ریزی.
+        public static readonly string[] ThreeStates = { Electronic, Paper, NoneDisplay };
+
+        // خالی/نامشخص را به حالتِ پیش‌فرضِ سه‌حالتی می‌برد. هر مسیرِ نوشتن
+        // (فرم، درون‌ریزی، همگام‌سازی) باید از همین عبور کند تا قاعده یک‌جا
+        // بماند.
+        public static string NormalizeType(string cardType)
+        {
+            string type = (cardType ?? "").Trim();
+
+            if (type == Electronic || type == Paper || type == NoneDisplay)
+                return type;
+
+            // «نوع نامشخص» هرگز به‌عنوان مقدارِ تازه نوشته نمی‌شود؛ اگر از
+            // جایی رسید، همان خالی تلقی و به پیش‌فرض برده می‌شود.
+            return NoneDisplay;
+        }
 
         public const int ElectronicDigits = 13;   // ۴ + ۴ + ۵
         public const int ElectronicLength = 15;   // با احتساب دو خط تیره
@@ -51,11 +79,22 @@ namespace CaseManagement.Helpers
             combo.DropDownStyle = ComboBoxStyle.DropDownList;
             combo.Items.Clear();
             if (includeAll) combo.Items.Add("همه");
-            combo.Items.Add("");            // خالی = هنوز مشخص نشده
+
+            // Feature 4 — سه حالت، بدونِ گزینهٔ خالی. پیش‌تر یک آیتمِ ""
+            // اول فهرست بود که یعنی «هنوز مشخص نشده»؛ همان بود که رکوردهای
+            // بدونِ وضعیت می‌ساخت. حالا نبودِ تذکره خودش یک حالتِ صریح است.
+            //
+            // includeNone دیگر اثری بر *بودن* «بدون تذکره» ندارد (همیشه
+            // هست)؛ امضا برای سازگاری با فراخوان‌های موجود حفظ شده است.
             combo.Items.Add(Electronic);
             combo.Items.Add(Paper);
-            if (includeNone) combo.Items.Add(NoneDisplay);
-            combo.SelectedIndex = 0;
+            combo.Items.Add(NoneDisplay);
+
+            // پیش‌فرض:
+            //   • فرمِ جستجو (includeAll) ⇒ «همه» تا نتیجه محدود نشود؛
+            //   • فرمِ ورودِ داده        ⇒ «بدون تذکره» (خواستهٔ صریحِ
+            //     Feature 4: رکوردِ تازه هرگز بدونِ وضعیت نماند).
+            combo.SelectedIndex = includeAll ? 0 : combo.Items.IndexOf(NoneDisplay);
         }
 
         // ─── فقط ارقام (با یکسان‌سازی ارقام فارسی/عربی به لاتین) ──────────────
@@ -111,6 +150,16 @@ namespace CaseManagement.Helpers
 
             string type = (cardType ?? "").Trim();
             string raw  = (number  ?? "").Trim();
+
+            // Feature 4 — «بدون تذکره» یعنی تذکره‌ای وجود ندارد، پس شماره
+            // داشتنش خودمتناقض است. این تنها قاعدهٔ تازه‌ای است که می‌تواند
+            // ذخیره را رد کند؛ بقیهٔ مسیرها دقیقاً مثل قبل‌اند.
+            if (type == NoneDisplay && raw.Length > 0)
+            {
+                error = "برای «" + NoneDisplay + "» نباید شمارهٔ تذکره وارد شود؛ " +
+                        "یا نوع تذکره را تغییر دهید یا شماره را پاک کنید.";
+                return false;
+            }
 
             if (raw.Length == 0)
                 return true;
@@ -288,10 +337,20 @@ namespace CaseManagement.Helpers
         // بدون تذکره» قرار می‌دهد. alias نامِ جدول (یا "") است.
         public static string CategorySql(string typeColumn, string numberColumn)
         {
+            // Feature 4 — «بدون تذکره» حالا مقدارِ ذخیره‌شده است، پس اول
+            // بررسی می‌شود. ترتیب مهم است: رکوردی که صراحتاً «بدون تذکره»
+            // علامت خورده باید همان شمرده شود، نه اینکه از روی شمارهٔ
+            // (احتمالاً باقی‌ماندهٔ) قدیمی در سطلِ «نوع نامشخص» بیفتد.
+            //
+            // سطلِ «نوع نامشخص» فقط برای رکوردهای *قدیمیِ* نوع‌خالی‌ولی
+            // شماره‌دار می‌ماند که مهاجرت عمداً دست‌نزده (توضیح کنارِ خودِ
+            // ثابت). وقتی کاربر تعیینِ تکلیفشان کرد، این سطل خودبه‌خود
+            // خالی می‌شود و آمار دقیقاً سه‌حالتی می‌گردد.
             return
-                "CASE WHEN " + typeColumn + " = '" + Electronic + "' THEN '" + Electronic + "' " +
-                     "WHEN " + typeColumn + " = '" + Paper + "'      THEN '" + Paper + "' " +
-                     "WHEN COALESCE(" + numberColumn + ", '') <> ''  THEN '" + UnknownDisplay + "' " +
+                "CASE WHEN " + typeColumn + " = '" + Electronic + "'  THEN '" + Electronic + "' " +
+                     "WHEN " + typeColumn + " = '" + Paper + "'       THEN '" + Paper + "' " +
+                     "WHEN " + typeColumn + " = '" + NoneDisplay + "' THEN '" + NoneDisplay + "' " +
+                     "WHEN COALESCE(" + numberColumn + ", '') <> ''   THEN '" + UnknownDisplay + "' " +
                      "ELSE '" + NoneDisplay + "' END";
         }
     }

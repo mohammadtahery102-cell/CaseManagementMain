@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -41,6 +41,15 @@ namespace CaseManagement.Helpers
         public const string TplLeaveRequest   = "درخواست رخصتی.docx";
         public const string TplMissionForm    = "فورم شروع و ختم ماموریت.docx";
         public const string TplJobApplication = "فورم درخواست استخدام.docx";
+
+        // ── فورم‌های رسمیِ پرونده (شماره‌گذاریِ خودِ مؤسسه) ────────────────────
+        // این پنج قالب با CaseFormTokens پر می‌شوند و پس از چاپ و امضا،
+        // نسخهٔ اسکن‌شده در اسنادِ پرونده ثبت می‌گردد.
+        public const string TplOrphanRequest    = "فورم ۱ - درخواست ایتام.docx";
+        public const string TplNeedyRequest     = "فورم ۲ - درخواست نیازمندان.docx";
+        public const string TplTreatmentRequest = "فورم ۳ - درخواست درمان.docx";
+        public const string TplSurvey           = "فورم ۴ - تحقیق و بررسی.docx";
+        public const string TplTreatmentFile    = "فورم ۷ - پرونده بخش درمان.docx";
 
         // ── یافتنِ قالب ──────────────────────────────────────────────────────
         public static string ResolveTemplate(string templateFileName)

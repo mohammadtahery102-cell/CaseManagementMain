@@ -177,6 +177,13 @@ namespace CaseManagement
             txtOriginalFileName.ReadOnly = true;
             txtDocFilePath.ReadOnly = true;
 
+            // Phase 3 — دسته‌بندیِ سند از TblDocumentCategory (نه متنِ آزاد).
+            Helpers.ReferenceDataService.FillDocumentCategoryCombo(txtDocCategory);
+
+            // Phase 5.5-A — برچسبِ تأییدکننده با تغییرِ تیک به‌روز می‌شود.
+            chkIsVerified.CheckedChanged -= chkIsVerified_CheckedChanged;
+            chkIsVerified.CheckedChanged += chkIsVerified_CheckedChanged;
+
             ConfigureGrid();
             LoadDocs();
             ClearForm();
@@ -277,8 +284,16 @@ namespace CaseManagement
             txtDocFilePath.Text = "";
             txtRelatedCaseRef.Text = "";
             txtDocDescription.Text = "";
-            txtDocCategory.Text = "";
+            txtDocCategory.SelectedIndex = -1; // Phase 3 — حالا ComboBoxِ DropDownList است
             txtDocTags.Text = "";
+            // Phase 5.5-A — وضعیتِ تأیید هم باید با فرم خالی شود، وگرنه تأییدِ
+            // سندِ قبلی روی سندِ جدید ثبت می‌شد.
+            _loadedIsVerified = false;
+            _loadedVerifiedBy = "";
+            _loadedVerifiedDate = "";
+            chkIsVerified.Checked = false;
+            txtVerificationNotes.Text = "";
+            RefreshVerificationInfo();
             txtDocNo.Text = CurrentCaseId > 0 ? GetNextDocNo() : "";
 
             UpdatePreview("");
@@ -386,6 +401,7 @@ namespace CaseManagement
             if (CurrentCaseId <= 0)
             {
                 dgvDocs.DataSource = null;
+                RefreshMissingDocumentsIndicator();
                 return;
             }
 
@@ -417,6 +433,119 @@ namespace CaseManagement
             catch (Exception ex)
             {
                 Msg.Show("خطا در بارگذاری اسناد: " + ex.Message);
+            }
+
+            // Phase 3 — این تنها نقطه‌ای است که پس از افزودن/ویرایش/حذف سند
+            // (و پس از تعویض پرونده) صدا زده می‌شود، پس یک‌بار اینجا کافی است.
+            RefreshMissingDocumentsIndicator();
+
+            // پیش از فاز ۴ — اسناد بخشی از درصدِ کامل‌بودنِ پرونده‌اند؛ همین‌جا
+            // (نه یک هوکِ جداگانه) دوباره محاسبه و در TblCase کش می‌شود.
+            if (CurrentCaseId > 0)
+                Helpers.CaseCompletionService.RecalculateAndStore(CurrentCaseId);
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // Phase 5.5-A — زیرساختِ تأییدِ سند.
+        //
+        // نام و تاریخِ تأییدکننده *خودکار* از SecurityContext گرفته می‌شود، نه
+        // ورودیِ دستی: تأییدی که کاربر بتواند نامِ دیگری برایش بنویسد بی‌ارزش
+        // است. با برداشتنِ تیک، هر سه فیلد پاک می‌شوند تا رکوردِ گمراه‌کننده
+        // («تأییدنشده ولی تأییدکننده دارد») باقی نماند.
+        // ═══════════════════════════════════════════════════════════════════
+        private void BindVerificationParameters(SQLiteCommand cmd)
+        {
+            bool verified = chkIsVerified.Checked;
+
+            cmd.Parameters.AddWithValue("@IsVerified", verified ? 1 : 0);
+
+            if (!verified)
+            {
+                cmd.Parameters.AddWithValue("@VerifiedBy", DBNull.Value);
+                cmd.Parameters.AddWithValue("@VerifiedDate", DBNull.Value);
+                cmd.Parameters.AddWithValue("@VerificationNotes", DBNull.Value);
+                return;
+            }
+
+            // اگر همین سند قبلاً تأیید شده بود، تأییدکننده/تاریخِ اصلی حفظ
+            // می‌شود؛ فقط تأییدِ تازه مهرِ کاربرِ فعلی را می‌گیرد.
+            cmd.Parameters.AddWithValue("@VerifiedBy",
+                string.IsNullOrWhiteSpace(_loadedVerifiedBy)
+                    ? (object)(SecurityContext.Username ?? "") : _loadedVerifiedBy);
+            cmd.Parameters.AddWithValue("@VerifiedDate",
+                string.IsNullOrWhiteSpace(_loadedVerifiedDate)
+                    ? DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") : _loadedVerifiedDate);
+            cmd.Parameters.AddWithValue("@VerificationNotes",
+                string.IsNullOrWhiteSpace(txtVerificationNotes.Text)
+                    ? (object)DBNull.Value : txtVerificationNotes.Text.Trim());
+        }
+
+        private void chkIsVerified_CheckedChanged(object sender, EventArgs e)
+        {
+            RefreshVerificationInfo();
+        }
+
+        private string _loadedVerifiedBy = "";
+        private string _loadedVerifiedDate = "";
+        private bool _loadedIsVerified;
+
+        private void RefreshVerificationInfo()
+        {
+            if (lblVerifiedInfo == null) return;
+
+            if (chkIsVerified.Checked && !string.IsNullOrWhiteSpace(_loadedVerifiedBy))
+            {
+                lblVerifiedInfo.Text = "تأییدکننده: " + _loadedVerifiedBy +
+                                       "   |   تاریخ تأیید: " + _loadedVerifiedDate;
+                lblVerifiedInfo.ForeColor = UiTheme.Success;
+            }
+            else if (chkIsVerified.Checked)
+            {
+                lblVerifiedInfo.Text = "با ذخیره، تأیید به نام «" + (SecurityContext.Username ?? "") + "» ثبت می‌شود.";
+                lblVerifiedInfo.ForeColor = UiTheme.TextDark;
+            }
+            else
+            {
+                lblVerifiedInfo.Text = "";
+            }
+        }
+
+        // Phase 3 — نوارِ «اسناد الزامیِ کم است»؛ فقط از RequiredDocumentService
+        // می‌خواند (منبعِ واحدِ حقیقت)، هیچ منطقِ تکمیل‌بودنِ دیگری اینجا نیست.
+        private void RefreshMissingDocumentsIndicator()
+        {
+            if (lblMissingDocs == null) return;
+
+            if (CurrentCaseId <= 0)
+            {
+                lblMissingDocs.Visible = false;
+                return;
+            }
+
+            try
+            {
+                var missing = Helpers.RequiredDocumentService.GetMissingRequiredCategories(CurrentCaseId);
+                lblMissingDocs.Visible = true;
+
+                if (missing.Count == 0)
+                {
+                    lblMissingDocs.Text = "✔ همهٔ اسناد الزامی کامل است";
+                    lblMissingDocs.ForeColor = UiTheme.Success;
+                    lblMissingDocs.BackColor = UiTheme.SuccessLight;
+                }
+                else
+                {
+                    var names = missing.ConvertAll(m => m.Name);
+                    lblMissingDocs.Text = "⚠ اسناد الزامیِ کم: " + string.Join("، ", names);
+                    lblMissingDocs.ForeColor = UiTheme.Warning;
+                    lblMissingDocs.BackColor = UiTheme.WarningLight;
+                }
+            }
+            catch
+            {
+                // آموزش — همانند بقیهٔ نوارهای وضعیت: شکستِ این کوئری هرگز نباید
+                // فرم اسناد را غیرقابل استفاده کند.
+                lblMissingDocs.Visible = false;
             }
         }
 
@@ -589,12 +718,14 @@ namespace CaseManagement
                     INSERT INTO TblDocs
                     (
                         CasID, DocType, OriginalFileName, DocFilePath, RelatedCaseRef, DocDescription,
-                        DocCategory, DocTags, DocNo, GlobalID
+                        DocCategory, DocumentCategoryID, DocTags, DocNo,
+                        IsVerified, VerifiedBy, VerifiedDate, VerificationNotes, GlobalID
                     )
                     VALUES
                     (
                         @CasID, @DocType, @OriginalFileName, @DocFilePath, @RelatedCaseRef, @DocDescription,
-                        @DocCategory, @DocTags, @DocNo,
+                        @DocCategory, @DocumentCategoryID, @DocTags, @DocNo,
+                        @IsVerified, @VerifiedBy, @VerifiedDate, @VerificationNotes,
                         lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-' ||
                         lower(hex(randomblob(2))) || '-' || lower(hex(randomblob(2))) || '-' || lower(hex(randomblob(6)))
                     )", con))
@@ -606,8 +737,11 @@ namespace CaseManagement
                     AddNVarChar(cmd, "@RelatedCaseRef", txtRelatedCaseRef.Text.Trim(), RelatedCaseRefLength);
                     AddNVarCharMax(cmd, "@DocDescription", txtDocDescription.Text.Trim());
                     AddNVarChar(cmd, "@DocCategory", txtDocCategory.Text.Trim(), DocCategoryLength);
+                    var newDocCategoryRef = Helpers.ReferenceDataService.FindDocumentCategoryByName(txtDocCategory.Text.Trim());
+                    cmd.Parameters.AddWithValue("@DocumentCategoryID", newDocCategoryRef != null ? (object)newDocCategoryRef.ID : DBNull.Value);
                     AddNVarChar(cmd, "@DocTags", txtDocTags.Text.Trim(), DocTagsLength);
                     AddNVarChar(cmd, "@DocNo", txtDocNo.Text.Trim(), 50);
+                    BindVerificationParameters(cmd);
                     con.Open();
                     cmd.ExecuteNonQuery();
                     // آموزش — رفع نشت resource: این SQLiteCommand قبلاً بدون
@@ -625,6 +759,10 @@ namespace CaseManagement
                 // تاریخچهٔ کاملِ رکورد (عکس فوری همهٔ ستون‌های سند).
                 CaseManagement.Enterprise.VersionService.Capture("TblDocs", currentDocId,
                     CaseManagement.Enterprise.VersionService.OperationInsert);
+
+                // Phase 3 — تایم‌لاینِ مرکزیِ پرونده.
+                Helpers.TimelineService.LogDocumentAdded(CurrentCaseId, currentDocId,
+                    txtDocCategory.Text.Trim(), txtDocType.Text.Trim());
 
                 Msg.Show("سند ذخیره شد");
                 LoadDocs();
@@ -711,7 +849,12 @@ namespace CaseManagement
                         RelatedCaseRef = @RelatedCaseRef,
                         DocDescription = @DocDescription,
                         DocCategory = @DocCategory,
-                        DocTags = @DocTags
+                        DocumentCategoryID = @DocumentCategoryID,
+                        DocTags = @DocTags,
+                        IsVerified = @IsVerified,
+                        VerifiedBy = @VerifiedBy,
+                        VerifiedDate = @VerifiedDate,
+                        VerificationNotes = @VerificationNotes
                     WHERE DocID = @DocID AND CasID = @CasID", con))
                 {
                     AddNVarChar(cmd, "@DocType", txtDocType.Text.Trim(), DocTypeLength);
@@ -720,7 +863,10 @@ namespace CaseManagement
                     AddNVarChar(cmd, "@RelatedCaseRef", txtRelatedCaseRef.Text.Trim(), RelatedCaseRefLength);
                     AddNVarCharMax(cmd, "@DocDescription", txtDocDescription.Text.Trim());
                     AddNVarChar(cmd, "@DocCategory", txtDocCategory.Text.Trim(), DocCategoryLength);
+                    var editDocCategoryRef = Helpers.ReferenceDataService.FindDocumentCategoryByName(txtDocCategory.Text.Trim());
+                    cmd.Parameters.AddWithValue("@DocumentCategoryID", editDocCategoryRef != null ? (object)editDocCategoryRef.ID : DBNull.Value);
                     AddNVarChar(cmd, "@DocTags", txtDocTags.Text.Trim(), DocTagsLength);
+                    BindVerificationParameters(cmd);
                     AddInt(cmd, "@DocID", currentDocId);
                     AddInt(cmd, "@CasID", CurrentCaseId);
 
@@ -735,6 +881,21 @@ namespace CaseManagement
                     DeleteStoredFileSafely(oldPath);
 
                 AuditLogger.Log("ویرایش", "TblDocs", currentDocId, oldAuditText, BuildDocAuditText(finalPath, finalOriginalFileName));
+
+                // Phase 5.5-A — فقط وقتی وضعیتِ تأیید واقعاً عوض شده باشد.
+                if (chkIsVerified.Checked != _loadedIsVerified)
+                {
+                    string docTitle = txtDocCategory.Text.Trim();
+                    if (string.IsNullOrWhiteSpace(docTitle)) docTitle = txtDocType.Text.Trim();
+
+                    if (chkIsVerified.Checked)
+                        Helpers.TimelineService.LogDocumentVerified(CurrentCaseId, currentDocId,
+                            docTitle, txtVerificationNotes.Text.Trim());
+                    else
+                        Helpers.TimelineService.LogDocumentUnverified(CurrentCaseId, currentDocId, docTitle);
+
+                    _loadedIsVerified = chkIsVerified.Checked;
+                }
 
                 CaseManagement.Sync.SyncOutboxService.Capture("TblDocs", currentDocId,
                     CaseManagement.Sync.OfflineSyncInitializer.OperationUpdate);
@@ -787,6 +948,8 @@ namespace CaseManagement
 
             string oldAuditText = GetDocAuditText(currentDocId);
             int archivedDocId = currentDocId;
+            string archivedDocCategory = txtDocCategory.Text.Trim();
+            string archivedDocType = txtDocType.Text.Trim();
 
             try
             {
@@ -826,6 +989,11 @@ namespace CaseManagement
                 CaseManagement.Enterprise.VersionService.Capture("TblDocs", archivedDocId,
                     CaseManagement.Enterprise.VersionService.OperationUpdate);
 
+                // Phase 3 — بایگانی از دیدِ تایم‌لاین معادلِ «حذف سند» است
+                // (سند دیگر جزوِ اسناد فعال/الزامیِ محاسبه‌شده نیست).
+                Helpers.TimelineService.LogDocumentRemoved(CurrentCaseId, archivedDocId,
+                    archivedDocCategory, archivedDocType);
+
                 Msg.Show("سند بایگانی شد");
                 LoadDocs();
                 ClearForm();
@@ -852,6 +1020,22 @@ namespace CaseManagement
             }
 
             PrintHelper.PrintDataTable(this, "اسناد — پرونده " + CurrentCaseCode, table);
+        }
+
+        // چرخهٔ فورمِ رسمی: تکمیل در سیستم ← چاپ ← امضا ← اسکن ← ثبت در همین
+        // فهرست. پس از ضمیمه‌شدنِ سند، LoadDocs صدا زده می‌شود تا اندیکاتورِ
+        // «سندِ مفقود» و درصدِ تکمیلِ پرونده همان لحظه به‌روز شوند — همان
+        // قلّابی که FrmDocs از قبل برای هر افزودن/حذفِ سند دارد.
+        private void btnOfficialForms_Click(object sender, EventArgs e)
+        {
+            if (CurrentCaseId <= 0)
+            {
+                Msg.Show("اول یک پرونده را انتخاب کنید.");
+                return;
+            }
+
+            Helpers.CaseOfficialForms.ShowMenu(btnOfficialForms, db,
+                CurrentCaseId, CurrentCaseCode, LoadDocs);
         }
 
         private void dgvDocs_CellClick(object sender, DataGridViewCellEventArgs e)
@@ -884,7 +1068,8 @@ namespace CaseManagement
                 using (SQLiteConnection con = db.GetConnection())
                 using (SQLiteCommand cmd = new SQLiteCommand(@"
                     SELECT DocID, DocType, OriginalFileName, DocFilePath, RelatedCaseRef, DocDescription,
-                           DocCategory, DocTags, DocNo
+                           DocCategory, DocTags, DocNo,
+                           IsVerified, VerifiedBy, VerifiedDate, VerificationNotes
                     FROM TblDocs
                     WHERE DocID = @DocID AND CasID = @CasID", con))
                 {
@@ -912,6 +1097,16 @@ namespace CaseManagement
                         txtDocCategory.Text = DbString(dr["DocCategory"]);
                         txtDocTags.Text = DbString(dr["DocTags"]);
                         txtDocNo.Text = DbString(dr["DocNo"]);
+
+                        // Phase 5.5-A — وضعیتِ تأیید.
+                        _loadedIsVerified = dr["IsVerified"] != DBNull.Value &&
+                                            Convert.ToInt32(dr["IsVerified"]) != 0;
+                        _loadedVerifiedBy = DbString(dr["VerifiedBy"]);
+                        _loadedVerifiedDate = DbString(dr["VerifiedDate"]);
+                        chkIsVerified.Checked = _loadedIsVerified;
+                        txtVerificationNotes.Text = DbString(dr["VerificationNotes"]);
+                        RefreshVerificationInfo();
+
                         UpdatePreview(storedDocFilePath);
                     }
                 }
@@ -982,8 +1177,16 @@ namespace CaseManagement
             }
 
             string cleanCode = FileHelper.CleanName(CurrentCaseCode.Trim());
-            string cleanDocType = FileHelper.CleanName(txtDocType.Text.Trim());
-            string baseFileName = cleanCode + "-" + cleanDocType;
+
+            // Phase 3 — نامِ فایلِ استانداردِ انگلیسی: به‌جای نوعِ سندِ فارسیِ
+            // آزاد، از کدِ انگلیسیِ دستهٔ انتخاب‌شده (اگر باشد) + شمارهٔ سند
+            // استفاده می‌شود. FileHelper.SaveFileToCaseFolder و منطقِ
+            // جایگزینی/حذفِ فایلِ قبلی کاملاً دست‌نخورده می‌مانند — فقط نامِ
+            // پایه تغییر کرده است.
+            var selectedCategory = Helpers.ReferenceDataService.FindDocumentCategoryByName(txtDocCategory.Text.Trim());
+            string baseFileName = selectedCategory != null
+                ? cleanCode + "-" + selectedCategory.Code + "-" + txtDocNo.Text.Trim()
+                : cleanCode + "-" + FileHelper.CleanName(txtDocType.Text.Trim());
 
             string savedPath = FileHelper.SaveFileToCaseFolder(
                 pendingSourceFilePath,

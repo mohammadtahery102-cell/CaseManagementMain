@@ -1,4 +1,4 @@
-namespace CaseManagement
+﻿namespace CaseManagement
 {
     partial class FrmDocs
     {
@@ -49,6 +49,7 @@ namespace CaseManagement
             this.btnSave = new System.Windows.Forms.Button();
             this.btnNew = new System.Windows.Forms.Button();
             this.btnDelete = new System.Windows.Forms.Button();
+            this.btnOfficialForms = new System.Windows.Forms.Button();
             this.btnPrint = new System.Windows.Forms.Button();
             this.dgvDocs = new System.Windows.Forms.DataGridView();
             this.label1 = new System.Windows.Forms.Label();
@@ -57,7 +58,14 @@ namespace CaseManagement
             this.label4 = new System.Windows.Forms.Label();
             this.btnOpenDoc = new System.Windows.Forms.Button();
             this.picPreview = new System.Windows.Forms.PictureBox();
-            this.txtDocCategory = new System.Windows.Forms.TextBox();
+            this.txtDocCategory = new System.Windows.Forms.ComboBox();
+            this.lblMissingDocs = new System.Windows.Forms.Label();
+            // Phase 5.5-A — زیرساختِ تأیید سند (فقط ثبت؛ هنوز شرطِ فعال‌سازی نیست).
+            this.chkIsVerified = new System.Windows.Forms.CheckBox();
+            this.lblIsVerified = new System.Windows.Forms.Label();
+            this.txtVerificationNotes = new System.Windows.Forms.TextBox();
+            this.lblVerificationNotes = new System.Windows.Forms.Label();
+            this.lblVerifiedInfo = new System.Windows.Forms.Label();
             this.txtDocTags = new System.Windows.Forms.TextBox();
             this.label5 = new System.Windows.Forms.Label();
             this.label6 = new System.Windows.Forms.Label();
@@ -120,6 +128,7 @@ namespace CaseManagement
             this.txtRelatedCaseRef.TabIndex = 3;
             this.txtDocCategory.Name    = "txtDocCategory";
             this.txtDocCategory.TabIndex = 16;
+            this.txtDocCategory.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             this.txtDocTags.Name        = "txtDocTags";
             this.txtDocTags.TabIndex    = 17;
 
@@ -129,6 +138,25 @@ namespace CaseManagement
             AddField(tlpDocFields, this.label5, "دسته‌بندی سند",           this.txtDocCategory);
             AddField(tlpDocFields, this.label6, "برچسب‌ها (با ، جدا کنید)", this.txtDocTags);
             AddField(tlpDocFields, this.label7, "شماره سند (خودکار)",      this.txtDocNo);
+
+            // Phase 5.5-A — تأییدِ سند. «اصل سند دیده شد» به‌عنوان چک‌باکس،
+            // به‌همراه یادداشت؛ نام و تاریخِ تأییدکننده خودکار ثبت می‌شود و در
+            // برچسبِ زیر نمایش داده می‌شود (فقط خواندنی).
+            this.chkIsVerified.Text = "اصل سند دیده شد / تأیید شد";
+            this.chkIsVerified.AutoSize = true;
+            this.chkIsVerified.TabIndex = 19;
+            this.txtVerificationNotes.Name = "txtVerificationNotes";
+            this.txtVerificationNotes.TabIndex = 20;
+            AddField(tlpDocFields, this.lblIsVerified,        "وضعیت تأیید",      this.chkIsVerified);
+            AddField(tlpDocFields, this.lblVerificationNotes, "یادداشت تأیید",    this.txtVerificationNotes);
+
+            this.lblVerifiedInfo.Name      = "lblVerifiedInfo";
+            this.lblVerifiedInfo.Dock      = System.Windows.Forms.DockStyle.Top;
+            this.lblVerifiedInfo.Height    = 26;
+            this.lblVerifiedInfo.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            this.lblVerifiedInfo.Padding   = new System.Windows.Forms.Padding(18, 0, 18, 0);
+            this.lblVerifiedInfo.ForeColor = CaseManagement.Helpers.UiTheme.TextDark;
+            this.lblVerifiedInfo.Text      = "";
 
             // «توضیح سند» — چندخطی و تمام‌عرض، دقیقاً همان الگوی «شرح تفصیلی
             // معلولیت» در FrmFamily و «شرح وضعیت فوری» در FrmCase.
@@ -183,6 +211,18 @@ namespace CaseManagement
             // ترتیبِ افزودن عمدی است (همان قاعدهٔ Dock=Top در FrmCase): کنترلی
             // که آخر اضافه شود بالاتر می‌نشیند ⇒ شبکهٔ فیلدها بالا، بعد توضیح،
             // بعد دکمه‌های فایل.
+            // Phase 3 — نوارِ کوچکِ همیشه‌دیدنیِ «اسناد الزامیِ کم است»؛ منبعِ
+            // داده RequiredDocumentService است (تنها منبعِ حقیقت)، رفرش خودکار
+            // پس از افزودن/ویرایش/حذفِ سند (RefreshMissingDocumentsIndicator
+            // در FrmDocs.cs). عمداً یک Label ساده — بدون داشبورد/گرافیک.
+            this.lblMissingDocs.Name      = "lblMissingDocs";
+            this.lblMissingDocs.Dock      = System.Windows.Forms.DockStyle.Top;
+            this.lblMissingDocs.Height    = 32;
+            this.lblMissingDocs.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            this.lblMissingDocs.Padding   = new System.Windows.Forms.Padding(18, 0, 18, 0);
+            this.lblMissingDocs.Font      = CaseManagement.Helpers.UiTheme.FontBold(CaseManagement.Helpers.UiTheme.SizeSmall);
+            this.lblMissingDocs.AutoEllipsis = true;
+
             var docFieldsContent = new System.Windows.Forms.Panel();
             docFieldsContent.Name         = "docFieldsContent";
             docFieldsContent.Dock         = System.Windows.Forms.DockStyle.Top;
@@ -192,6 +232,8 @@ namespace CaseManagement
             docFieldsContent.Controls.Add(fileButtons);
             docFieldsContent.Controls.Add(descHost);
             docFieldsContent.Controls.Add(tlpDocFields);
+            docFieldsContent.Controls.Add(this.lblVerifiedInfo);
+            docFieldsContent.Controls.Add(this.lblMissingDocs);
 
             var formPanel = MkTabScroller(MkSectionCard("مشخصات سند", docFieldsContent));
             formPanel.Name = "formPanel";
@@ -324,6 +366,12 @@ namespace CaseManagement
             SetActionButton(this.btnPrint,  "btnPrint",  "چاپ فهرست اسناد", 11, this.btnPrint_Click);
             this.btnPrint.Size = new System.Drawing.Size(160, 38);
 
+            // دکمهٔ چرخهٔ «فورم رسمی» — تکمیل در سیستم، چاپ، امضا، و ضمیمهٔ
+            // نسخهٔ اسکن‌شده در همین فهرستِ اسناد.
+            SetActionButton(this.btnOfficialForms, "btnOfficialForms",
+                            "چاپ فورم رسمی", 12, this.btnOfficialForms_Click);
+            this.btnOfficialForms.Size = new System.Drawing.Size(150, 38);
+
             var mainActions = new System.Windows.Forms.FlowLayoutPanel();
             mainActions.Name          = "mainActions";
             mainActions.Dock          = System.Windows.Forms.DockStyle.Fill;
@@ -338,11 +386,12 @@ namespace CaseManagement
             var secondaryActions = new System.Windows.Forms.FlowLayoutPanel();
             secondaryActions.Name          = "secondaryActions";
             secondaryActions.Dock          = System.Windows.Forms.DockStyle.Left;
-            secondaryActions.Width         = 180;
+            secondaryActions.Width         = 340;
             secondaryActions.FlowDirection = System.Windows.Forms.FlowDirection.LeftToRight;
             secondaryActions.WrapContents  = false;
             secondaryActions.BackColor     = System.Drawing.Color.Transparent;
             secondaryActions.Controls.Add(this.btnPrint);
+            secondaryActions.Controls.Add(this.btnOfficialForms);
 
             System.Windows.Forms.Panel buttonBar = new System.Windows.Forms.Panel();
             buttonBar.Name      = "buttonBar";
@@ -549,7 +598,16 @@ namespace CaseManagement
         private System.Windows.Forms.Button btnOpenDoc;
         private System.Windows.Forms.PictureBox picPreview;
         private System.Windows.Forms.Button btnPrint;
-        private System.Windows.Forms.TextBox txtDocCategory;
+        private System.Windows.Forms.Button btnOfficialForms;
+        // Phase 3 — از TextBoxِ آزاد به ComboBoxِ مقیدِ TblDocumentCategory تبدیل شد.
+        private System.Windows.Forms.ComboBox txtDocCategory;
+        private System.Windows.Forms.Label lblMissingDocs;
+        // Phase 5.5-A — زیرساختِ تأیید سند.
+        private System.Windows.Forms.CheckBox chkIsVerified;
+        private System.Windows.Forms.Label lblIsVerified;
+        private System.Windows.Forms.TextBox txtVerificationNotes;
+        private System.Windows.Forms.Label lblVerificationNotes;
+        private System.Windows.Forms.Label lblVerifiedInfo;
         private System.Windows.Forms.TextBox txtDocTags;
         private System.Windows.Forms.Label label5;
         private System.Windows.Forms.Label label6;

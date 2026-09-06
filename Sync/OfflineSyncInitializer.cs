@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Data.SQLite;
 using CaseManagement.DAL;
 
@@ -52,7 +52,35 @@ namespace CaseManagement.Sync
             new[] { "TblCase",       "CasID"        },
             new[] { "TblFamily",     "FamID"        },
             new[] { "TblDocs",       "DocID"        },
-            new[] { "TblAssistance", "AssistanceID" }
+            new[] { "TblAssistance", "AssistanceID" },
+            // Phase 4 — ماژول‌های تخصصی. همه CasID و GlobalID دارند، پس
+            // ResolveParent در SyncApplier آن‌ها را مثل TblFamily/TblDocs به
+            // والدِ محلی وصل می‌کند؛ ترتیبِ اعمال هم به‌همین‌دلیل بعد از
+            // TblCase است (ترتیبِ این آرایه = ترتیبِ اعمال).
+            new[] { "TblOrphan",     "OrphanID"     },
+            new[] { "TblDisability", "DisabilityID" },
+            new[] { "TblMigrant",    "MigrantID"    },
+            // Phase 5 — فقط دادهٔ پرونده‌محور و دفترچهٔ خیّرین.
+            // TblFundingSource/TblAssistanceRule/TblAssistanceRuleCondition
+            // عمداً اینجا نیستند: طبقِ تصمیمِ کاربر پیکربندیِ یک‌طرفهٔ دفترِ
+            // مرکزی‌اند و اگر شعبه‌ها مستقل می‌ساختندشان، Codeهای واگرا
+            // ماتریسِ قواعد را در دو سمت ناسازگار می‌کرد.
+            new[] { "TblSponsor",     "SponsorID"     },
+            new[] { "TblFieldVisit",  "VisitID"       },
+            new[] { "TblCaseFunding", "CaseFundingID" },
+            // Phase 7 — نمایندهٔ قانونی. والدش مستقیماً TblCase است و
+            // CasID + GlobalID دارد، پس ResolveParent دقیقاً مثل
+            // TblFamily/TblDocs کار می‌کند — برخلافِ TblFieldVisitPhoto که
+            // «نوه» است و به‌همین‌دلیل از این فهرست بیرون ماند (تصمیم #۲۵).
+            new[] { "TblCaseRepresentative", "RepresentativeID" }
+            // ⚠ TblFieldVisitPhoto عمداً اینجا *نیست*. والدش TblFieldVisit
+            // است، نه TblCase؛ و ResolveParent در SyncApplier فقط می‌تواند
+            // ParentGlobalID را به CasID ترجمه کند — هیچ مسیری برای ترجمهٔ
+            // VisitIDِ راه دور به VisitIDِ محلی ندارد. ثبتش در این فهرست
+            // باعث می‌شد عکس به بازدیدی بچسبد که اتفاقاً همان شمارهٔ محلی را
+            // دارد (خرابیِ خاموشِ داده). بکاپ/بازیابی عکس‌ها را پوشش می‌دهد
+            // (BackupHelper با visitIdMap)؛ همگام‌سازیِ عکسِ بازدید نیازمندِ
+            // پشتیبانیِ «نوه» در SyncApplier است — کارِ فازِ بعد.
         };
 
         public static void EnsureOfflineSyncObjects()

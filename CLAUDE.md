@@ -109,3 +109,14 @@ Never remove a feature to implement another feature.
 Never simplify by deleting code.
 
 Always extend, never replace, unless explicitly instructed.
+
+## Project Memory
+
+Canonical file: `Project Knowledge/PROJECT_CONTEXT.md`
+
+- Read it before starting any work. It is the primary project reference.
+- It outranks assumptions. If code and it conflict: verify the code, update the file, explain the discrepancy.
+- Update it automatically when architecture, database schema, modules, business rules, build process, deployment process, or coding standards change.
+- Remove obsolete lines; never duplicate what it already holds; keep under 800 lines.
+- A task is not done until PROJECT_CONTEXT.md is checked and updated if needed. Say what was updated, or that no update was required.
+- Never ask the user to update it manually.

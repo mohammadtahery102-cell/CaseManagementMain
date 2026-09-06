@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
@@ -296,15 +296,16 @@ namespace CaseManagement.Helpers
 
         // کمکیِ ضمیمه‌کردنِ سندِ امضاشده به اسنادِ یک پرونده — چند فورم به آن
         // نیاز دارند، پس یک‌جا نوشته شده.
-        public static void AttachToCase(IWin32Window owner, DAL.DatabaseHelper db,
+        public static bool AttachToCase(IWin32Window owner, DAL.DatabaseHelper db,
                                         int caseId, string caseCode, string docType,
-                                        string description, string startFolder)
+                                        string description, string startFolder,
+                                        string documentCategoryCode = null)
         {
-            if (caseId <= 0) { UiTheme.ShowWarning(owner, "پرونده مشخص نیست."); return; }
+            if (caseId <= 0) { UiTheme.ShowWarning(owner, "پرونده مشخص نیست."); return false; }
             if (string.IsNullOrWhiteSpace(caseCode))
             {
                 UiTheme.ShowWarning(owner, "کد اختصاصی پرونده مشخص نیست؛ سند ذخیره نمی‌شود.");
-                return;
+                return false;
             }
 
             using (var ofd = new OpenFileDialog
@@ -316,7 +317,7 @@ namespace CaseManagement.Helpers
                 if (!string.IsNullOrWhiteSpace(startFolder) && Directory.Exists(startFolder))
                     ofd.InitialDirectory = startFolder;
 
-                if (ofd.ShowDialog(owner) != DialogResult.OK) return;
+                if (ofd.ShowDialog(owner) != DialogResult.OK) return false;
 
                 try
                 {
@@ -329,30 +330,73 @@ namespace CaseManagement.Helpers
                     if (string.IsNullOrWhiteSpace(savedPath))
                     {
                         UiTheme.ShowError(owner, "فایل سند ذخیره نشد: " + FileHelper.LastError);
-                        return;
+                        return false;
                     }
 
+                    // آموزش — چرا دستهٔ سند اینجا حتماً نوشته می‌شود: ماتریسِ
+                    // «اسناد اجباری» (TblRequiredDocument) و درصدِ تکمیلِ پرونده
+                    // و گیتِ فعال‌سازی، همگی با DocumentCategoryID می‌شمارند.
+                    // سندی که فقط DocType دارد، از نظرِ آن سه هیچ است — یعنی
+                    // کاربر فورمِ امضاشده را ضمیمه می‌کرد و پرونده همچنان
+                    // «سندِ اجباری ندارد» می‌ماند.
+                    ReferenceOption category =
+                        ReferenceDataService.FindDocumentCategoryByCode(documentCategoryCode);
+
                     long docId = db.ExecuteInsertReturningId(@"
-INSERT INTO TblDocs (CasID, DocType, OriginalFileName, DocFilePath, DocDescription)
-VALUES (@cas, @type, @orig, @path, @desc)",
+INSERT INTO TblDocs (CasID, DocType, OriginalFileName, DocFilePath, DocDescription,
+                     DocCategory, DocumentCategoryID, GlobalID)
+VALUES (@cas, @type, @orig, @path, @desc, @catName, @catId,
+        lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-' ||
+        lower(hex(randomblob(2))) || '-' || lower(hex(randomblob(2))) || '-' ||
+        lower(hex(randomblob(6))))",
                         new System.Data.SQLite.SQLiteParameter("@cas", caseId),
                         new System.Data.SQLite.SQLiteParameter("@type", docType),
                         new System.Data.SQLite.SQLiteParameter("@orig", Path.GetFileName(ofd.FileName)),
                         new System.Data.SQLite.SQLiteParameter("@path", savedPath),
-                        new System.Data.SQLite.SQLiteParameter("@desc", description ?? ""));
+                        new System.Data.SQLite.SQLiteParameter("@desc", description ?? ""),
+                        new System.Data.SQLite.SQLiteParameter("@catName",
+                            category == null ? (object)DBNull.Value : category.Name),
+                        new System.Data.SQLite.SQLiteParameter("@catId",
+                            category == null ? (object)DBNull.Value : category.ID));
 
                     try { AuditLogger.Log("ثبت", "TblDocs", (int)docId, "", docType); }
                     catch { }
 
+                    // همان سه قلّابی که FrmDocs پس از درجِ سند می‌زند — بدونِ
+                    // این‌ها سند نه همگام می‌شود، نه نسخه می‌خورد، نه در
+                    // تایم‌لاینِ پرونده دیده می‌شود.
+                    try
+                    {
+                        CaseManagement.Sync.SyncOutboxService.Capture("TblDocs", (int)docId,
+                            CaseManagement.Sync.OfflineSyncInitializer.OperationCreate);
+                    }
+                    catch { }
+                    try
+                    {
+                        CaseManagement.Enterprise.VersionService.Capture("TblDocs", (int)docId,
+                            CaseManagement.Enterprise.VersionService.OperationInsert);
+                    }
+                    catch { }
+                    try
+                    {
+                        TimelineService.LogDocumentAdded(caseId, (int)docId,
+                            category == null ? "" : category.Name, docType);
+                    }
+                    catch { }
+
                     UiTheme.ShowSuccess(owner,
-                        "سند امضاشده در اسناد پرونده ثبت شد." + Environment.NewLine +
-                        "برای دیدن آن، تب «اسناد» پرونده را تازه کنید.");
+                        "سند امضاشده در اسناد پرونده ثبت شد." +
+                        (category == null ? "" :
+                            Environment.NewLine + "دسته: " + category.Name));
+                    return true;
                 }
                 catch (Exception ex)
                 {
                     UiTheme.ShowError(owner, "خطا در ثبت سند: " + ex.Message);
                 }
             }
+
+            return false;
         }
     }
 }

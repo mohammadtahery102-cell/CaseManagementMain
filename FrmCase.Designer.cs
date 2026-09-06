@@ -52,6 +52,84 @@
             this.txtDisabilityType = new System.Windows.Forms.ComboBox();
             this.txtMigrationCardType = new System.Windows.Forms.TextBox();
             this.txtMaritalStatus = new System.Windows.Forms.ComboBox();
+            // Phase 3 (بازبینی) — بخش‌های اختصاصیِ نوع درخواست (ایتام/معلولیت/مهاجرت).
+            this.label31 = new System.Windows.Forms.Label();
+            this.txtMainResidenceProvince = new System.Windows.Forms.TextBox();
+            this.label32 = new System.Windows.Forms.Label();
+            this.txtMainResidenceDistrict = new System.Windows.Forms.TextBox();
+            this.label33 = new System.Windows.Forms.Label();
+            this.txtMainResidenceVillage = new System.Windows.Forms.TextBox();
+            this.label34 = new System.Windows.Forms.Label();
+            this.txtFatherDeathCause = new System.Windows.Forms.ComboBox();
+            this.label35 = new System.Windows.Forms.Label();
+            this.txtDisabilityCause = new System.Windows.Forms.ComboBox();
+            this.label36 = new System.Windows.Forms.Label();
+            this.txtDisabilityDescription = new System.Windows.Forms.TextBox();
+            this.label37 = new System.Windows.Forms.Label();
+            this.txtSpecialNeeds = new System.Windows.Forms.TextBox();
+            this.label38 = new System.Windows.Forms.Label();
+            this.txtDisabilityCardStatus = new System.Windows.Forms.ComboBox();
+            this.label39 = new System.Windows.Forms.Label();
+            this.txtDisabilityCardNumber = new System.Windows.Forms.TextBox();
+            this.label40 = new System.Windows.Forms.Label();
+            this.txtHasMigrationCard = new System.Windows.Forms.ComboBox();
+            this.label41 = new System.Windows.Forms.Label();
+            this.txtMigrationCardNumber = new System.Windows.Forms.TextBox();
+            this.label42 = new System.Windows.Forms.Label();
+            this.dtpDepartureDate = new CaseManagement.Helpers.PersianDatePicker();
+            this.label43 = new System.Windows.Forms.Label();
+            this.dtpArrivalDate = new CaseManagement.Helpers.PersianDatePicker();
+            this.label44 = new System.Windows.Forms.Label();
+            this.txtAssistanceDurationMonths = new System.Windows.Forms.TextBox();
+            // Phase 4 — فیلدهای ماژولِ تخصصی (TblOrphan/TblDisability/TblMigrant).
+            this.label45 = new System.Windows.Forms.Label();
+            this.txtFatherStatus = new System.Windows.Forms.ComboBox();
+            this.label46 = new System.Windows.Forms.Label();
+            this.dtpFatherDeathDate = new CaseManagement.Helpers.PersianDatePicker();
+            // همان علتِ ریشه‌ایِ تاریخ‌های کارت معلولیت (نگاه کنید پایین‌تر):
+            // بدونِ حالتِ خالی، هر پروندهٔ ایتام تاریخ فوتِ پدر را «امروز» ثبت
+            // می‌کرد. متد مشترکِ SetDatePickerValue هر سه را با هم درست می‌کند.
+            this.dtpFatherDeathDate.ShowCheckBox = true;
+            this.dtpFatherDeathDate.Checked = false;
+            this.label47 = new System.Windows.Forms.Label();
+            this.txtMotherStatus = new System.Windows.Forms.ComboBox();
+            this.label48 = new System.Windows.Forms.Label();
+            this.txtOrphanSchoolName = new System.Windows.Forms.TextBox();
+            this.label49 = new System.Windows.Forms.Label();
+            this.txtOrphanEducationLevel = new System.Windows.Forms.ComboBox();
+            this.chkIsStudent = new System.Windows.Forms.CheckBox();
+            this.lblIsStudent = new System.Windows.Forms.Label();
+            this.label50 = new System.Windows.Forms.Label();
+            this.txtOrphanNotes = new System.Windows.Forms.TextBox();
+            this.label51 = new System.Windows.Forms.Label();
+            this.txtGuardianName = new System.Windows.Forms.TextBox();
+            this.label52 = new System.Windows.Forms.Label();
+            this.lblGuardianPhoto = new System.Windows.Forms.Label();
+            this.txtGuardianRelationship = new System.Windows.Forms.ComboBox();
+            this.label53 = new System.Windows.Forms.Label();
+            this.txtCardIssuer = new System.Windows.Forms.TextBox();
+            this.label54 = new System.Windows.Forms.Label();
+            this.dtpDisabilityIssueDate = new CaseManagement.Helpers.PersianDatePicker();
+            // آموزش — این سه تاریخ *اختیاری*اند: بسیاری از معلولان اصلاً کارتِ
+            // دولتی ندارند (DisabilityCardStatus = «ندارد») و بسیاری از
+            // پرونده‌های ایتام تاریخ فوتِ ثبت‌شده ندارند. بدونِ ShowCheckBox
+            // کنترل هیچ حالتِ «خالی» نداشت، پس ذخیره همیشه تاریخِ *امروز* را
+            // می‌نوشت و هر رکورد ادعا می‌کرد کارتی امروز صادر و امروز منقضی
+            // شده است. چک‌باکس همان قراردادِ DateTimePicker.ShowCheckBox است.
+            this.dtpDisabilityIssueDate.ShowCheckBox = true;
+            this.dtpDisabilityIssueDate.Checked = false;
+            this.label55 = new System.Windows.Forms.Label();
+            this.dtpDisabilityExpiryDate = new CaseManagement.Helpers.PersianDatePicker();
+            this.dtpDisabilityExpiryDate.ShowCheckBox = true;
+            this.dtpDisabilityExpiryDate.Checked = false;
+            this.label56 = new System.Windows.Forms.Label();
+            this.txtDisabilityNotes = new System.Windows.Forms.TextBox();
+            this.label57 = new System.Windows.Forms.Label();
+            this.txtOriginCountry = new System.Windows.Forms.TextBox();
+            this.label58 = new System.Windows.Forms.Label();
+            this.txtDestinationCountry = new System.Windows.Forms.TextBox();
+            this.label59 = new System.Windows.Forms.Label();
+            this.txtMigrantNotes = new System.Windows.Forms.TextBox();
             this.txtEducationLevel = new System.Windows.Forms.ComboBox();
             this.txtServiceStatus = new System.Windows.Forms.ComboBox();
             this.label13 = new System.Windows.Forms.Label();
@@ -69,6 +147,7 @@
             this.btnChooseStorageFolder = new System.Windows.Forms.Button();
             this.btnExportPdf = new System.Windows.Forms.Button();
             this.btnExportWord = new System.Windows.Forms.Button();
+            this.btnExportCaseFile = new System.Windows.Forms.Button();
             this.btnExportExcel = new System.Windows.Forms.Button();
             this.btnBatchExport = new System.Windows.Forms.Button();
             this.btnPrint = new System.Windows.Forms.Button();
@@ -78,6 +157,11 @@
             this.dtpSurveyDate = new CaseManagement.Helpers.PersianDatePicker();
             this.label28 = new System.Windows.Forms.Label();
             this.txtLocationAddress = new System.Windows.Forms.TextBox();
+            // Phase 3 — معرف (Referrer): نام و شمارهٔ تماسِ معرف، برای همهٔ انواع پرونده.
+            this.label29 = new System.Windows.Forms.Label();
+            this.txtReferrerName = new System.Windows.Forms.TextBox();
+            this.label30 = new System.Windows.Forms.Label();
+            this.txtReferrerPhone = new System.Windows.Forms.TextBox();
             this.label25 = new System.Windows.Forms.Label();
             this.txtSurveyors = new System.Windows.Forms.TextBox();
             this.label23 = new System.Windows.Forms.Label();
@@ -287,15 +371,21 @@
             // گروه ۳: مشخصات پرونده
             // ═══════════════════════════════════════════════════════════════════
             var gridCase = MkCaseFieldGrid();
+            // «نوع پرونده» اولین فیلد است چون کلیدِ اصلیِ کل فرم است: همین مقدار
+            // تعیین می‌کند کدام بخش‌های اختصاصی پایین‌تر ظاهر شوند. اگر پایین‌تر
+            // می‌نشست، اپراتور فیلدها را پر می‌کرد و بعد بخش‌های تازه ظاهر
+            // می‌شدند — ترتیبِ وارونه‌ی ورودِ اطلاعات.
+            AddCaseField(gridCase, this.label4,       "نوع پرونده",         this.txtRequestType);
+            // تأکیدِ بصری این فیلد در FrmCase.ApplyCustomTheme اعمال می‌شود،
+            // نه اینجا — چون UiTheme.ApplySweep رنگِ همهٔ Labelها را بازنویسی
+            // می‌کند و هر مقداری که اینجا داده شود از بین می‌رود.
             AddCaseField(gridCase, this.lblCode,      "کد اختصاصی",         this.txtCode);
             AddCaseField(gridCase, this.lblFormNo,    "شماره فرم",          this.txtFormNo);
             AddCaseField(gridCase, this.lblCaseNo,    "شماره پرونده",       this.txtCaseNo);
             AddCaseField(gridCase, this.label1,       "زون",                this.txtZone);
             AddCaseField(gridCase, this.label2,       "ولایت",              this.txtProvince);
             AddCaseField(gridCase, this.label3,       "ولسوالی",            this.txtDistrict);
-            AddCaseField(gridCase, this.label4,       "نوع درخواست",        this.txtRequestType);
             AddCaseField(gridCase, this.label5,       "اولویت‌بندی اقتصادی", this.txtPriorityLevel);
-            AddCaseField(gridCase, this.label21,      "نوع برگه مهاجرت",    this.txtMigrationCardType);
             AddCaseField(gridCase, this.label16,      "تحت پوشش دیگر مؤسسات", this.txtCoveredByOrg);
             // آموزش — «اسامی مؤسسات» فقط وقتی معنی دارد که پاسخِ بالا «بله» باشد،
             // پس مثل «دلیل قطع موقت» در فرم اعضا، خودِ کادر و کانتینرش با هم
@@ -311,6 +401,124 @@
             AddCaseField(gridCase, this.label25,      "آدرس لوکیشن",        this.txtLocationAddress);
             AddCaseField(gridCase, this.label23,      "سروی‌کننده‌ها",      this.txtSurveyors);
             AddCaseField(gridCase, this.label28,      "تاریخ سروی",         this.dtpSurveyDate);
+            AddCaseField(gridCase, this.label29,      "نام معرف",           this.txtReferrerName);
+            AddCaseField(gridCase, this.label30,      "شماره تماس معرف",    this.txtReferrerPhone);
+
+            // ═══ بخش‌های اختصاصیِ نوع درخواست — نمایش/پنهانی با
+            //     UpdateRequestTypeSectionVisibility در FrmCase.cs، بر اساسِ
+            //     پرچم‌های TblRequestType (نه RequestTypeID هاردکد) ══════════
+            this.txtFatherDeathCause.DropDownStyle    = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this.txtDisabilityCause.DropDownStyle     = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this.txtDisabilityCardStatus.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this.txtHasMigrationCard.DropDownStyle    = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            // Phase 4
+            this.txtFatherStatus.DropDownStyle         = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this.txtMotherStatus.DropDownStyle         = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this.txtOrphanEducationLevel.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this.txtGuardianRelationship.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this.chkIsStudent.Text     = "مشغول تحصیل است";
+            this.chkIsStudent.AutoSize = true;
+
+            var gridOrphan = MkCaseFieldGrid();
+            this.orphanSectionFields = new CaseManagement.Helpers.FieldBox[]
+            {
+                AddCaseField(gridOrphan, this.label31, "ولایت اقامتگاه اصلی", this.txtMainResidenceProvince),
+                AddCaseField(gridOrphan, this.label32, "ولسوالی اقامتگاه اصلی", this.txtMainResidenceDistrict),
+                AddCaseField(gridOrphan, this.label33, "قریه اقامتگاه اصلی", this.txtMainResidenceVillage),
+                AddCaseField(gridOrphan, this.label45, "وضعیت پدر", this.txtFatherStatus),
+                AddCaseField(gridOrphan, this.label34, "دلیل فوت پدر", this.txtFatherDeathCause),
+                AddCaseField(gridOrphan, this.label46, "تاریخ فوت پدر", this.dtpFatherDeathDate),
+                AddCaseField(gridOrphan, this.label47, "وضعیت مادر", this.txtMotherStatus),
+                AddCaseField(gridOrphan, this.label48, "نام مکتب", this.txtOrphanSchoolName),
+                AddCaseField(gridOrphan, this.label49, "سطح تحصیلات کودک", this.txtOrphanEducationLevel),
+                AddCaseField(gridOrphan, this.lblIsStudent, "وضعیت تحصیل", this.chkIsStudent),
+                AddCaseField(gridOrphan, this.label50, "یادداشت ایتام", this.txtOrphanNotes)
+            };
+
+            // بخشِ «اطلاعات سرپرست» — جدا از بخشِ ایتام، چون برای سه نوعِ
+            // کودک دیده می‌شود ولی فیلدهای فوتِ پدر/مادر فقط برای ایتام.
+            // داده‌اش در همان TblOrphan ذخیره می‌شود (تصمیمِ صریحِ کاربر).
+            var gridGuardian = MkCaseFieldGrid();
+
+            // Feature 3 — عکسِ سرپرستِ کودک. تنها عکسی بود که مسیرِ ورودِ
+            // دستی نداشت. کنترل‌ها همان الگوی عکسِ سرپرستِ خانوار/نماینده‌اند
+            // (پیش‌نمایش + انتخاب + حذف)، فقط داخلِ گروهِ «اطلاعات سرپرست».
+            this.picGuardianPhoto = new System.Windows.Forms.PictureBox();
+            ((System.ComponentModel.ISupportInitialize)(this.picGuardianPhoto)).BeginInit();
+            this.picGuardianPhoto.Name = "picGuardianPhoto";
+            this.picGuardianPhoto.Size = new System.Drawing.Size(110, 120);
+            this.picGuardianPhoto.SizeMode = System.Windows.Forms.PictureBoxSizeMode.StretchImage;
+            this.picGuardianPhoto.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.picGuardianPhoto.BackColor = System.Drawing.Color.White;
+
+            this.btnGuardianBrowsePhoto = new System.Windows.Forms.Button();
+            this.btnGuardianBrowsePhoto.Name = "btnGuardianBrowsePhoto";
+            this.btnGuardianBrowsePhoto.Text = "انتخاب عکس";
+            this.btnGuardianBrowsePhoto.AutoSize = true;
+            this.btnGuardianBrowsePhoto.Click += new System.EventHandler(this.btnGuardianBrowsePhoto_Click);
+
+            this.btnGuardianClearPhoto = new System.Windows.Forms.Button();
+            this.btnGuardianClearPhoto.Name = "btnGuardianClearPhoto";
+            this.btnGuardianClearPhoto.Text = "حذف عکس";
+            this.btnGuardianClearPhoto.AutoSize = true;
+            this.btnGuardianClearPhoto.Click += new System.EventHandler(this.btnGuardianClearPhoto_Click);
+
+            var guardianPhotoBox = new System.Windows.Forms.FlowLayoutPanel();
+            guardianPhotoBox.Name = "guardianPhotoBox";
+            guardianPhotoBox.FlowDirection = System.Windows.Forms.FlowDirection.TopDown;
+            guardianPhotoBox.RightToLeft = System.Windows.Forms.RightToLeft.Yes;
+            guardianPhotoBox.AutoSize = true;
+            guardianPhotoBox.AutoSizeMode = System.Windows.Forms.AutoSizeMode.GrowAndShrink;
+            guardianPhotoBox.WrapContents = false;
+            guardianPhotoBox.Controls.Add(this.picGuardianPhoto);
+            guardianPhotoBox.Controls.Add(this.btnGuardianBrowsePhoto);
+            guardianPhotoBox.Controls.Add(this.btnGuardianClearPhoto);
+
+            this.guardianSectionFields = new CaseManagement.Helpers.FieldBox[]
+            {
+                AddCaseField(gridGuardian, this.label51, "نام سرپرست کودک", this.txtGuardianName),
+                AddCaseField(gridGuardian, this.label52, "نسبت سرپرست", this.txtGuardianRelationship),
+                AddCaseField(gridGuardian, this.lblGuardianPhoto, "عکس سرپرست کودک", guardianPhotoBox)
+            };
+            ((System.ComponentModel.ISupportInitialize)(this.picGuardianPhoto)).EndInit();
+
+            var gridDisability = MkCaseFieldGrid();
+            this.disabilitySectionFields = new CaseManagement.Helpers.FieldBox[]
+            {
+                AddCaseField(gridDisability, this.label35, "دلیل معلولیت", this.txtDisabilityCause),
+                AddCaseField(gridDisability, this.label36, "شرح معلولیت", this.txtDisabilityDescription),
+                AddCaseField(gridDisability, this.label37, "نیازهای خاص", this.txtSpecialNeeds),
+                AddCaseField(gridDisability, this.label38, "وضعیت کارت معلولیت", this.txtDisabilityCardStatus),
+                AddCaseField(gridDisability, this.label39, "شماره کارت معلولیت", this.txtDisabilityCardNumber),
+                AddCaseField(gridDisability, this.label53, "صادرکننده کارت", this.txtCardIssuer),
+                AddCaseField(gridDisability, this.label54, "تاریخ صدور کارت", this.dtpDisabilityIssueDate),
+                AddCaseField(gridDisability, this.label55, "تاریخ انقضای کارت", this.dtpDisabilityExpiryDate),
+                AddCaseField(gridDisability, this.label56, "یادداشت معلولیت", this.txtDisabilityNotes)
+            };
+
+            var gridMigrant = MkCaseFieldGrid();
+            // «نوع برگه مهاجرت» حالا داخل کارتِ مهاجرت می‌نشیند — قبلاً میان
+            // فیلدهای عمومی بود و برای هر شش نوع پرونده دیده می‌شد.
+            this.fieldMigrationCardType = AddCaseField(
+                gridMigrant, this.label21, "نوع برگه مهاجرت", this.txtMigrationCardType);
+            this.migrantSectionFields = new CaseManagement.Helpers.FieldBox[]
+            {
+                this.fieldMigrationCardType,
+                AddCaseField(gridMigrant, this.label40, "دارای کارت مهاجرت", this.txtHasMigrationCard),
+                AddCaseField(gridMigrant, this.label41, "شماره کارت مهاجرت", this.txtMigrationCardNumber),
+                AddCaseField(gridMigrant, this.label42, "تاریخ خروج", this.dtpDepartureDate),
+                AddCaseField(gridMigrant, this.label43, "تاریخ ورود", this.dtpArrivalDate),
+                AddCaseField(gridMigrant, this.label44, "مدت مساعدت (ماه)", this.txtAssistanceDurationMonths),
+                AddCaseField(gridMigrant, this.label57, "کشور مبدأ", this.txtOriginCountry),
+                AddCaseField(gridMigrant, this.label58, "کشور مقصد", this.txtDestinationCountry),
+                AddCaseField(gridMigrant, this.label59, "یادداشت مهاجرت", this.txtMigrantNotes)
+            };
+
+            // آموزش — «وضعیت تأهل» عمداً کنترلِ تازه‌ای نگرفت: txtMaritalStatus
+            // موجود در بخشِ عمومی از قبل همین فیلد است و در گزارشِ RDLC/جستجو
+            // خوانده می‌شود. دو کنترل برای یک واقعیت = دو مقدارِ واگرا؛ پس
+            // CaseModuleService مقدارِ همان کنترل را در TblMigrant.MaritalStatus
+            // آینه می‌کند (یک‌طرفه: TblCase → TblMigrant).
 
             // «دلیل تعلیق» (الزامی) و «یادداشت تعلیق» (اختیاری، همان کنترل قدیمی
             // StopReason) هر دو پنهان‌اند تا وضعیت خدمات «قطع» یا «قطع موقت» شود
@@ -359,6 +567,21 @@
             this.grpCase.Text = "";
             this.grpCase.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
             var cardCase = MkCaseCard("مشخصات پرونده", caseHost, this.grpCase);
+
+            // ═══════════════════════════════════════════════════════════════════
+            // کارت‌های اختصاصیِ نوع پرونده — هرکدام قابِ مستقلِ خود را دارند تا
+            // اپراتور ببیند کجا «اطلاعاتِ همیشگی» تمام و «اطلاعاتِ وابسته به نوع
+            // پرونده» شروع می‌شود. قبلاً همهٔ این فیلدها در همان شبکهٔ عمومی
+            // بودند و مرزی دیده نمی‌شد.
+            //
+            // نکتهٔ مهم: خودِ کارت هم پنهان/آشکار می‌شود، نه فقط فیلدهایش —
+            // وگرنه برای نوعِ نامربوط یک کارتِ خالی با سربرگ باقی می‌ماند.
+            // منطقِ آن در FrmCase.cs → UpdateRequestTypeSectionVisibility است.
+            // ═══════════════════════════════════════════════════════════════════
+            this.cardDisabilityInfo = MkCaseCard("اطلاعات معلولیت",       gridDisability, new System.Windows.Forms.GroupBox());
+            this.cardOrphanInfo     = MkCaseCard("اطلاعات ایتام",         gridOrphan,     new System.Windows.Forms.GroupBox());
+            this.cardGuardianInfo   = MkCaseCard("اطلاعات سرپرست کودک",   gridGuardian,   new System.Windows.Forms.GroupBox());
+            this.cardMigrantInfo    = MkCaseCard("اطلاعات مهاجرت",        gridMigrant,    new System.Windows.Forms.GroupBox());
 
             // ═══ تب «خلاصه پرونده» (فاز A3) — خلاصهٔ خواندنیِ کل پرونده در یک
             // نگاه. آموزش — همان الگوی MkCaseFieldGrid/AddCaseField/FieldBox که
@@ -480,6 +703,37 @@
             statsRow.Controls.Add(MkSummaryStat("آخرین کمک دریافتی", this.lblStatLastAid, "افغانی", CaseManagement.Helpers.UiTheme.Success),  4, 0);
             statsRow.Controls.Add(MkSummaryStat("تعداد اعضای خانواده", this.lblStatMembers, "نفر", CaseManagement.Helpers.UiTheme.TextDark),  5, 0);
 
+            // ─── ردیفِ دومِ کارت‌ها: وضعیتِ محاسبه‌شدهٔ پرونده (Phase 5.5-C) ────
+            // آموزش — هر پنج عدد *محاسبه‌شده* است و از سرویس‌های موجود می‌آید،
+            // نه ورودیِ کاربر: تکمیل و امتیاز از ستون‌های کشِ TblCase،
+            // مبلغِ پیشنهادی از AssistanceRuleService، و شمارشِ تأییدِ اسناد از
+            // TblDocs. هیچ‌کدام قابلِ ویرایش از این صفحه نیستند — خواستهٔ صریح
+            // «read-only from case screen».
+            this.lblStatCompletionPct    = new System.Windows.Forms.Label();
+            this.lblStatCompletionStatus = new System.Windows.Forms.Label();
+            this.lblStatVulnScore        = new System.Windows.Forms.Label();
+            this.lblStatSuggestedAid     = new System.Windows.Forms.Label();
+            this.lblStatVerifiedDocs     = new System.Windows.Forms.Label();
+
+            System.Windows.Forms.TableLayoutPanel statusRow = new System.Windows.Forms.TableLayoutPanel();
+            statusRow.Name = "summaryStatusRow";
+            statusRow.Dock = System.Windows.Forms.DockStyle.Top;
+            statusRow.Height = 116;
+            statusRow.ColumnCount = 5;
+            statusRow.RowCount = 1;
+            statusRow.BackColor = System.Drawing.Color.Transparent;
+            statusRow.Padding = new System.Windows.Forms.Padding(14, 0, 14, 8);
+            for (int statusCol = 0; statusCol < 5; statusCol++)
+                statusRow.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(
+                    System.Windows.Forms.SizeType.Percent, 100F / 5F));
+            statusRow.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
+
+            statusRow.Controls.Add(MkSummaryStat("درصد تکمیل",          this.lblStatCompletionPct,    "٪",     CaseManagement.Helpers.UiTheme.Primary),      0, 0);
+            statusRow.Controls.Add(MkSummaryStat("وضعیت تکمیل",         this.lblStatCompletionStatus, "",      CaseManagement.Helpers.UiTheme.PrimaryLight), 1, 0);
+            statusRow.Controls.Add(MkSummaryStat("امتیاز آسیب‌پذیری",   this.lblStatVulnScore,        "از ۱۰۰", CaseManagement.Helpers.UiTheme.Warning),     2, 0);
+            statusRow.Controls.Add(MkSummaryStat("مبلغ پیشنهادی مساعدت", this.lblStatSuggestedAid,    "افغانی", CaseManagement.Helpers.UiTheme.Success),     3, 0);
+            statusRow.Controls.Add(MkSummaryStat("اسناد تأییدشده",      this.lblStatVerifiedDocs,     "سند",   CaseManagement.Helpers.UiTheme.TextDark),     4, 0);
+
             System.Windows.Forms.Panel summaryHost = new System.Windows.Forms.Panel();
             summaryHost.Dock = System.Windows.Forms.DockStyle.Top;
             summaryHost.AutoSize = true;
@@ -489,6 +743,9 @@
             // قاعده‌ی اثبات‌شده‌ی این فایل (کنترلی که آخر اضافه شود، بالاترین جا
             // را در Dock=Top می‌گیرد)، پس کارت‌های آماری بالای فیلدها می‌نشینند.
             summaryHost.Controls.Add(gridSummary);
+            // Phase 5.5-C — ردیفِ وضعیت زیرِ ردیفِ آمار می‌نشیند (کنترلی که
+            // دیرتر اضافه شود بالاتر می‌رود؛ همان قاعدهٔ اثبات‌شدهٔ این فایل).
+            summaryHost.Controls.Add(statusRow);
             summaryHost.Controls.Add(statsRow);
 
             var cardSummary = MkCaseCard("خلاصه پرونده", summaryHost, new System.Windows.Forms.GroupBox());
@@ -554,6 +811,475 @@
             tabDocs.Padding   = System.Windows.Forms.Padding.Empty;
             tabDocs.Controls.Add(this.tabDocsHost);
 
+            // ═══ تب «تأمین مالی» (Phase 5.5-C) ══════════════════════════════
+            // همان الگوی تبِ بازدید میدانی: گریدِ سوابق + نوارِ دکمه. تخصیص از
+            // طریقِ دیالوگِ EntPrompt انجام می‌شود تا فرمِ تازه‌ای لازم نشود.
+            this.dgvCaseFunding = new System.Windows.Forms.DataGridView();
+            ((System.ComponentModel.ISupportInitialize)(this.dgvCaseFunding)).BeginInit();
+            this.dgvCaseFunding.Name = "dgvCaseFunding";
+            this.dgvCaseFunding.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.dgvCaseFunding.ReadOnly = true;
+            this.dgvCaseFunding.AllowUserToAddRows = false;
+            this.dgvCaseFunding.AllowUserToDeleteRows = false;
+            this.dgvCaseFunding.MultiSelect = false;
+            this.dgvCaseFunding.SelectionMode = System.Windows.Forms.DataGridViewSelectionMode.FullRowSelect;
+            this.dgvCaseFunding.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+            this.dgvCaseFunding.AutoSizeColumnsMode = System.Windows.Forms.DataGridViewAutoSizeColumnsMode.Fill;
+            this.dgvCaseFunding.RightToLeft = System.Windows.Forms.RightToLeft.Yes;
+
+            this.btnFundingAssign = new System.Windows.Forms.Button();
+            this.btnFundingAssign.Name = "btnFundingAssign";
+            this.btnFundingAssign.Text = "تخصیص منبع مالی";
+            this.btnFundingAssign.Size = new System.Drawing.Size(150, 38);
+            this.btnFundingAssign.Click += new System.EventHandler(this.btnFundingAssign_Click);
+
+            this.btnFundingRemove = new System.Windows.Forms.Button();
+            this.btnFundingRemove.Name = "btnFundingRemove";
+            this.btnFundingRemove.Text = "حذف تخصیص";
+            this.btnFundingRemove.Size = new System.Drawing.Size(130, 38);
+            this.btnFundingRemove.Click += new System.EventHandler(this.btnFundingRemove_Click);
+
+            var fundingButtons = new System.Windows.Forms.FlowLayoutPanel();
+            fundingButtons.Name = "fundingButtons";
+            fundingButtons.Dock = System.Windows.Forms.DockStyle.Top;
+            fundingButtons.Height = 50;
+            fundingButtons.FlowDirection = System.Windows.Forms.FlowDirection.LeftToRight;
+            fundingButtons.WrapContents = false;
+            fundingButtons.Padding = new System.Windows.Forms.Padding(16, 2, 16, 6);
+            fundingButtons.BackColor = System.Drawing.Color.Transparent;
+            fundingButtons.Controls.Add(this.btnFundingAssign);
+            fundingButtons.Controls.Add(this.btnFundingRemove);
+
+            var fundingGridHost = new System.Windows.Forms.Panel();
+            fundingGridHost.Name = "fundingGridHost";
+            fundingGridHost.Dock = System.Windows.Forms.DockStyle.Fill;
+            fundingGridHost.Padding = new System.Windows.Forms.Padding(10, 4, 10, 10);
+            fundingGridHost.BackColor = System.Drawing.Color.Transparent;
+            fundingGridHost.Controls.Add(this.dgvCaseFunding);
+
+            var fundingSplit = new System.Windows.Forms.Panel();
+            fundingSplit.Name = "fundingSplit";
+            fundingSplit.Dock = System.Windows.Forms.DockStyle.Fill;
+            fundingSplit.Controls.Add(fundingGridHost);
+            fundingSplit.Controls.Add(fundingButtons);
+
+            this.tabFunding = new System.Windows.Forms.TabPage("تأمین مالی");
+            this.tabFunding.BackColor = CaseManagement.Helpers.UiTheme.CardBack;
+            this.tabFunding.Padding = System.Windows.Forms.Padding.Empty;
+            this.tabFunding.Controls.Add(fundingSplit);
+            ((System.ComponentModel.ISupportInitialize)(this.dgvCaseFunding)).EndInit();
+
+            // ═══ بخشِ امتیاز آسیب‌پذیری (Phase 5.5-B) — فقط‌خواندنی ═════════
+            // خواستهٔ صریح: نمایشِ برجسته، بدونِ امکانِ ویرایش از صفحهٔ پرونده.
+            // هیچ کنترلِ ورودی‌ای اینجا نیست — امتیاز فقط محاسبه می‌شود.
+            this.lblVulnScoreValue = new System.Windows.Forms.Label();
+            this.lblVulnScoreValue.Name = "lblVulnScoreValue";
+            this.lblVulnScoreValue.Dock = System.Windows.Forms.DockStyle.Top;
+            this.lblVulnScoreValue.Height = 44;
+            this.lblVulnScoreValue.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            this.lblVulnScoreValue.Padding = new System.Windows.Forms.Padding(18, 0, 18, 0);
+            this.lblVulnScoreValue.Font = CaseManagement.Helpers.UiTheme.FontBold(CaseManagement.Helpers.UiTheme.SizeLarge);
+            this.lblVulnScoreValue.ForeColor = CaseManagement.Helpers.UiTheme.TextDark;
+
+            this.lblVulnScoreDate = new System.Windows.Forms.Label();
+            this.lblVulnScoreDate.Name = "lblVulnScoreDate";
+            this.lblVulnScoreDate.Dock = System.Windows.Forms.DockStyle.Top;
+            this.lblVulnScoreDate.Height = 28;
+            this.lblVulnScoreDate.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            this.lblVulnScoreDate.Padding = new System.Windows.Forms.Padding(18, 0, 18, 0);
+            this.lblVulnScoreDate.Font = CaseManagement.Helpers.UiTheme.Font(CaseManagement.Helpers.UiTheme.SizeSmall);
+            this.lblVulnScoreDate.ForeColor = CaseManagement.Helpers.UiTheme.TextMuted;
+
+            this.dgvVulnBreakdown = new System.Windows.Forms.DataGridView();
+            ((System.ComponentModel.ISupportInitialize)(this.dgvVulnBreakdown)).BeginInit();
+            this.dgvVulnBreakdown.Name = "dgvVulnBreakdown";
+            this.dgvVulnBreakdown.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.dgvVulnBreakdown.ReadOnly = true;
+            this.dgvVulnBreakdown.AllowUserToAddRows = false;
+            this.dgvVulnBreakdown.AllowUserToDeleteRows = false;
+            this.dgvVulnBreakdown.MultiSelect = false;
+            this.dgvVulnBreakdown.SelectionMode = System.Windows.Forms.DataGridViewSelectionMode.FullRowSelect;
+            this.dgvVulnBreakdown.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+            this.dgvVulnBreakdown.AutoSizeColumnsMode = System.Windows.Forms.DataGridViewAutoSizeColumnsMode.Fill;
+            this.dgvVulnBreakdown.RightToLeft = System.Windows.Forms.RightToLeft.Yes;
+
+            var vulnGridHost = new System.Windows.Forms.Panel();
+            vulnGridHost.Name = "vulnGridHost";
+            vulnGridHost.Dock = System.Windows.Forms.DockStyle.Fill;
+            vulnGridHost.Padding = new System.Windows.Forms.Padding(10, 4, 10, 10);
+            vulnGridHost.BackColor = System.Drawing.Color.Transparent;
+            vulnGridHost.Controls.Add(this.dgvVulnBreakdown);
+
+            var vulnTop = new System.Windows.Forms.Panel();
+            vulnTop.Name = "vulnTop";
+            vulnTop.Dock = System.Windows.Forms.DockStyle.Top;
+            vulnTop.Height = 76;
+            vulnTop.BackColor = System.Drawing.Color.Transparent;
+            vulnTop.Controls.Add(this.lblVulnScoreDate);
+            vulnTop.Controls.Add(this.lblVulnScoreValue);
+
+            var vulnSplit = new System.Windows.Forms.Panel();
+            vulnSplit.Name = "vulnSplit";
+            vulnSplit.Dock = System.Windows.Forms.DockStyle.Fill;
+            vulnSplit.Controls.Add(vulnGridHost);
+            vulnSplit.Controls.Add(vulnTop);
+
+            this.tabVulnerability = new System.Windows.Forms.TabPage("امتیاز آسیب‌پذیری");
+            this.tabVulnerability.BackColor = CaseManagement.Helpers.UiTheme.CardBack;
+            this.tabVulnerability.Padding = System.Windows.Forms.Padding.Empty;
+            this.tabVulnerability.Controls.Add(vulnSplit);
+            ((System.ComponentModel.ISupportInitialize)(this.dgvVulnBreakdown)).EndInit();
+
+            // ═══ تب «خانواده» (Phase 6) — حداقلی، طبقِ خواستهٔ صریح ═════════
+            // فقط: نمایشِ شناسهٔ خانوار، فهرستِ پرونده‌های همان خانوار، و دو
+            // دکمهٔ پیوند/جدا کردن. هیچ ماژولِ مدیریتِ خانوادهٔ جداگانه‌ای.
+            this.lblFamilyGroupValue = new System.Windows.Forms.Label();
+            this.lblFamilyGroupValue.Name = "lblFamilyGroupValue";
+            this.lblFamilyGroupValue.Dock = System.Windows.Forms.DockStyle.Top;
+            this.lblFamilyGroupValue.Height = 34;
+            this.lblFamilyGroupValue.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            this.lblFamilyGroupValue.Padding = new System.Windows.Forms.Padding(18, 0, 18, 0);
+            this.lblFamilyGroupValue.Font = CaseManagement.Helpers.UiTheme.FontBold(CaseManagement.Helpers.UiTheme.SizeSmall);
+            this.lblFamilyGroupValue.ForeColor = CaseManagement.Helpers.UiTheme.TextDark;
+
+            this.dgvFamilyCases = new System.Windows.Forms.DataGridView();
+            ((System.ComponentModel.ISupportInitialize)(this.dgvFamilyCases)).BeginInit();
+            this.dgvFamilyCases.Name = "dgvFamilyCases";
+            this.dgvFamilyCases.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.dgvFamilyCases.ReadOnly = true;
+            this.dgvFamilyCases.AllowUserToAddRows = false;
+            this.dgvFamilyCases.AllowUserToDeleteRows = false;
+            this.dgvFamilyCases.MultiSelect = false;
+            this.dgvFamilyCases.SelectionMode = System.Windows.Forms.DataGridViewSelectionMode.FullRowSelect;
+            this.dgvFamilyCases.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+            this.dgvFamilyCases.AutoSizeColumnsMode = System.Windows.Forms.DataGridViewAutoSizeColumnsMode.Fill;
+            this.dgvFamilyCases.RightToLeft = System.Windows.Forms.RightToLeft.Yes;
+
+            this.btnFamilyLink = new System.Windows.Forms.Button();
+            this.btnFamilyLink.Name = "btnFamilyLink";
+            this.btnFamilyLink.Text = "پیوند به خانواده موجود";
+            this.btnFamilyLink.Size = new System.Drawing.Size(180, 38);
+            this.btnFamilyLink.Click += new System.EventHandler(this.btnFamilyLink_Click);
+
+            this.btnFamilyUnlink = new System.Windows.Forms.Button();
+            this.btnFamilyUnlink.Name = "btnFamilyUnlink";
+            this.btnFamilyUnlink.Text = "جدا کردن از خانواده";
+            this.btnFamilyUnlink.Size = new System.Drawing.Size(160, 38);
+            this.btnFamilyUnlink.Click += new System.EventHandler(this.btnFamilyUnlink_Click);
+
+            var familyButtons = new System.Windows.Forms.FlowLayoutPanel();
+            familyButtons.Name = "familyButtons";
+            familyButtons.Dock = System.Windows.Forms.DockStyle.Top;
+            familyButtons.Height = 50;
+            familyButtons.FlowDirection = System.Windows.Forms.FlowDirection.LeftToRight;
+            familyButtons.WrapContents = false;
+            familyButtons.Padding = new System.Windows.Forms.Padding(16, 2, 16, 6);
+            familyButtons.BackColor = System.Drawing.Color.Transparent;
+            familyButtons.Controls.Add(this.btnFamilyLink);
+            familyButtons.Controls.Add(this.btnFamilyUnlink);
+
+            var familyGridHost = new System.Windows.Forms.Panel();
+            familyGridHost.Name = "familyGridHost";
+            familyGridHost.Dock = System.Windows.Forms.DockStyle.Fill;
+            familyGridHost.Padding = new System.Windows.Forms.Padding(10, 4, 10, 10);
+            familyGridHost.BackColor = System.Drawing.Color.Transparent;
+            familyGridHost.Controls.Add(this.dgvFamilyCases);
+
+            var familyTop = new System.Windows.Forms.Panel();
+            familyTop.Name = "familyTop";
+            familyTop.Dock = System.Windows.Forms.DockStyle.Top;
+            familyTop.Height = 90;
+            familyTop.BackColor = System.Drawing.Color.Transparent;
+            familyTop.Controls.Add(familyButtons);
+            familyTop.Controls.Add(this.lblFamilyGroupValue);
+
+            var familySplit = new System.Windows.Forms.Panel();
+            familySplit.Name = "familySplit";
+            familySplit.Dock = System.Windows.Forms.DockStyle.Fill;
+            familySplit.Controls.Add(familyGridHost);
+            familySplit.Controls.Add(familyTop);
+
+            this.tabFamilyGroup = new System.Windows.Forms.TabPage("خانواده");
+            this.tabFamilyGroup.BackColor = CaseManagement.Helpers.UiTheme.CardBack;
+            this.tabFamilyGroup.Padding = System.Windows.Forms.Padding.Empty;
+            this.tabFamilyGroup.Controls.Add(familySplit);
+            ((System.ComponentModel.ISupportInitialize)(this.dgvFamilyCases)).EndInit();
+
+            // ═══ تب «بازدید میدانی» (Phase 5) ═══════════════════════════════
+            // برخلافِ تب‌های اعضاء/اسناد که فرمِ جداگانه‌ای را جاسازی می‌کنند،
+            // این تب سبک است: یک گرید + چند فیلدِ ورودی، همه در همین فرم.
+            // دلیل: بازدید فقط شش فیلد دارد و ساختنِ FrmFieldVisit مجزا برای
+            // آن، بدونِ نیازِ ثابت‌شده، پیچیدگیِ اضافه بود.
+            this.grpVisitEntry = new System.Windows.Forms.GroupBox();
+            this.grpVisitEntry.Text = "";
+            this.grpVisitEntry.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+
+            this.dgvVisits = new System.Windows.Forms.DataGridView();
+            ((System.ComponentModel.ISupportInitialize)(this.dgvVisits)).BeginInit();
+            this.dgvVisits.Name = "dgvVisits";
+            this.dgvVisits.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.dgvVisits.ReadOnly = true;
+            this.dgvVisits.AllowUserToAddRows = false;
+            this.dgvVisits.AllowUserToDeleteRows = false;
+            this.dgvVisits.MultiSelect = false;
+            this.dgvVisits.SelectionMode = System.Windows.Forms.DataGridViewSelectionMode.FullRowSelect;
+            this.dgvVisits.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+            this.dgvVisits.AutoSizeColumnsMode = System.Windows.Forms.DataGridViewAutoSizeColumnsMode.Fill;
+            this.dgvVisits.RightToLeft = System.Windows.Forms.RightToLeft.Yes;
+            this.dgvVisits.CellClick += new System.Windows.Forms.DataGridViewCellEventHandler(this.dgvVisits_CellClick);
+
+            this.dtpVisitDate = new CaseManagement.Helpers.PersianDatePicker();
+            this.txtVisitorName = new System.Windows.Forms.TextBox();
+            this.txtVisitResult = new System.Windows.Forms.ComboBox();
+            this.txtVisitResult.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this.txtVisitRecommendation = new System.Windows.Forms.ComboBox();
+            this.txtVisitRecommendation.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this.txtVisitNotes = new System.Windows.Forms.TextBox();
+            this.txtVisitNotes.Multiline = true;
+            this.txtVisitNotes.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
+            this.txtVisitNotes.RightToLeft = System.Windows.Forms.RightToLeft.Yes;
+            this.lblVisitDate = new System.Windows.Forms.Label();
+            this.lblVisitorName = new System.Windows.Forms.Label();
+            this.lblVisitResult = new System.Windows.Forms.Label();
+            this.lblVisitRecommendation = new System.Windows.Forms.Label();
+            this.lblVisitNotes = new System.Windows.Forms.Label();
+
+            var gridVisitFields = MkCaseFieldGrid();
+            AddCaseField(gridVisitFields, this.lblVisitDate,           "تاریخ بازدید",   this.dtpVisitDate);
+            AddCaseField(gridVisitFields, this.lblVisitorName,         "بازدیدکننده",    this.txtVisitorName);
+            AddCaseField(gridVisitFields, this.lblVisitResult,         "نتیجه بازدید",   this.txtVisitResult);
+            AddCaseField(gridVisitFields, this.lblVisitRecommendation, "توصیه",          this.txtVisitRecommendation);
+            AddCaseField(gridVisitFields, this.lblVisitNotes,          "یادداشت",        this.txtVisitNotes);
+
+            this.btnVisitNew = new System.Windows.Forms.Button();
+            this.btnVisitNew.Name = "btnVisitNew";
+            this.btnVisitNew.Text = "بازدید جدید";
+            this.btnVisitNew.Size = new System.Drawing.Size(132, 38);
+            this.btnVisitNew.Click += new System.EventHandler(this.btnVisitNew_Click);
+
+            this.btnVisitSave = new System.Windows.Forms.Button();
+            this.btnVisitSave.Name = "btnVisitSave";
+            this.btnVisitSave.Text = "ذخیره بازدید";
+            this.btnVisitSave.Size = new System.Drawing.Size(132, 38);
+            this.btnVisitSave.Click += new System.EventHandler(this.btnVisitSave_Click);
+
+            this.btnVisitDelete = new System.Windows.Forms.Button();
+            this.btnVisitDelete.Name = "btnVisitDelete";
+            this.btnVisitDelete.Text = "حذف بازدید";
+            this.btnVisitDelete.Size = new System.Drawing.Size(132, 38);
+            this.btnVisitDelete.Click += new System.EventHandler(this.btnVisitDelete_Click);
+
+            var visitButtons = new System.Windows.Forms.FlowLayoutPanel();
+            visitButtons.Name = "visitButtons";
+            visitButtons.Dock = System.Windows.Forms.DockStyle.Top;
+            visitButtons.Height = 50;
+            visitButtons.FlowDirection = System.Windows.Forms.FlowDirection.LeftToRight;
+            visitButtons.WrapContents = false;
+            visitButtons.Padding = new System.Windows.Forms.Padding(16, 2, 16, 6);
+            visitButtons.BackColor = System.Drawing.Color.Transparent;
+            visitButtons.Controls.Add(this.btnVisitNew);
+            visitButtons.Controls.Add(this.btnVisitSave);
+            visitButtons.Controls.Add(this.btnVisitDelete);
+
+            var visitFormContent = new System.Windows.Forms.Panel();
+            visitFormContent.Name = "visitFormContent";
+            visitFormContent.Dock = System.Windows.Forms.DockStyle.Top;
+            visitFormContent.AutoSize = true;
+            visitFormContent.AutoSizeMode = System.Windows.Forms.AutoSizeMode.GrowAndShrink;
+            visitFormContent.BackColor = System.Drawing.Color.Transparent;
+            visitFormContent.Controls.Add(visitButtons);
+            visitFormContent.Controls.Add(gridVisitFields);
+
+            // گرید پایین (Fill) و فرمِ ورودی بالا (Top) — همان قاعدهٔ Dock که
+            // بقیهٔ تب‌ها استفاده می‌کنند: کنترلی که آخر اضافه شود بالاتر می‌نشیند.
+            var visitGridHost = new System.Windows.Forms.Panel();
+            visitGridHost.Name = "visitGridHost";
+            visitGridHost.Dock = System.Windows.Forms.DockStyle.Fill;
+            visitGridHost.Padding = new System.Windows.Forms.Padding(10, 4, 10, 10);
+            visitGridHost.BackColor = System.Drawing.Color.Transparent;
+            visitGridHost.Controls.Add(this.dgvVisits);
+
+            var visitFormHost = new System.Windows.Forms.Panel();
+            visitFormHost.Name = "visitFormHost";
+            visitFormHost.Dock = System.Windows.Forms.DockStyle.Top;
+            visitFormHost.AutoSize = true;
+            visitFormHost.AutoSizeMode = System.Windows.Forms.AutoSizeMode.GrowAndShrink;
+            visitFormHost.Padding = new System.Windows.Forms.Padding(10, 10, 10, 4);
+            visitFormHost.BackColor = System.Drawing.Color.Transparent;
+            visitFormHost.Controls.Add(MkCaseCard("ثبت بازدید میدانی", visitFormContent, this.grpVisitEntry));
+
+            var visitSplit = new System.Windows.Forms.Panel();
+            visitSplit.Name = "visitSplit";
+            visitSplit.Dock = System.Windows.Forms.DockStyle.Fill;
+            visitSplit.Controls.Add(visitGridHost);
+            visitSplit.Controls.Add(visitFormHost);
+
+            this.tabVisits = new System.Windows.Forms.TabPage("بازدید میدانی");
+            this.tabVisits.BackColor = CaseManagement.Helpers.UiTheme.CardBack;
+            this.tabVisits.Padding = System.Windows.Forms.Padding.Empty;
+            this.tabVisits.Controls.Add(visitSplit);
+            ((System.ComponentModel.ISupportInitialize)(this.dgvVisits)).EndInit();
+
+            // ─── تبِ تاریخچه ─────────────────────────────────────────────────
+            // TblCaseTimeline از فاز ۳ نوشته می‌شد ولی هیچ صفحه‌ای آن را نشان
+            // نمی‌داد. این تب فقط *خواندنی* است: همان الگوی گرید تبِ بازدید،
+            // بدونِ فرمِ ورودی — تاریخچه هرگز دستی ویرایش نمی‌شود.
+            this.dgvTimeline = new System.Windows.Forms.DataGridView();
+            ((System.ComponentModel.ISupportInitialize)(this.dgvTimeline)).BeginInit();
+            this.dgvTimeline.Name = "dgvTimeline";
+            this.dgvTimeline.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.dgvTimeline.ReadOnly = true;
+            this.dgvTimeline.AllowUserToAddRows = false;
+            this.dgvTimeline.AllowUserToDeleteRows = false;
+            this.dgvTimeline.MultiSelect = false;
+            this.dgvTimeline.SelectionMode = System.Windows.Forms.DataGridViewSelectionMode.FullRowSelect;
+            this.dgvTimeline.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+            this.dgvTimeline.AutoSizeColumnsMode = System.Windows.Forms.DataGridViewAutoSizeColumnsMode.Fill;
+            this.dgvTimeline.RightToLeft = System.Windows.Forms.RightToLeft.Yes;
+
+            var timelineGridHost = new System.Windows.Forms.Panel();
+            timelineGridHost.Name = "timelineGridHost";
+            timelineGridHost.Dock = System.Windows.Forms.DockStyle.Fill;
+            timelineGridHost.Padding = new System.Windows.Forms.Padding(10, 10, 10, 10);
+            timelineGridHost.BackColor = System.Drawing.Color.Transparent;
+            timelineGridHost.Controls.Add(this.dgvTimeline);
+
+            this.tabTimeline = new System.Windows.Forms.TabPage("تاریخچه");
+            this.tabTimeline.BackColor = CaseManagement.Helpers.UiTheme.CardBack;
+            this.tabTimeline.Padding = System.Windows.Forms.Padding.Empty;
+            this.tabTimeline.Controls.Add(timelineGridHost);
+            ((System.ComponentModel.ISupportInitialize)(this.dgvTimeline)).EndInit();
+
+            // ═══ تب «نمایندهٔ قانونی» (Phase 7) ═══════════════
+            // دو کارتِ هم‌شکل زیرِ هم، هرکدام یک نماینده. چیدمان از دلِ یک
+            // سازندهٔ مشترک (MkRepresentativeCard) می‌آید نه دو بلوکِ کپی‌شده:
+            // خواستهٔ صریحِ «ساختارِ تکراری نساز» فقط دربارهٔ جدول نبود،
+            // دربارهٔ خودِ فرم هم هست — با دو بلوکِ کپی، اولین تغییرِ چیدمان
+            // در یکی اعمال می‌شد و در دیگری جا می‌ماند.
+            this.grpRepresentative1 = new System.Windows.Forms.GroupBox();
+            this.grpRepresentative2 = new System.Windows.Forms.GroupBox();
+
+            this.txtRep1Name = new System.Windows.Forms.TextBox();
+            this.txtRep1Relationship = new System.Windows.Forms.ComboBox();
+            this.cmbRep1IdCardType = new System.Windows.Forms.ComboBox();
+            this.txtRep1NationalID = new System.Windows.Forms.TextBox();
+            this.txtRep1Phone = new System.Windows.Forms.TextBox();
+            this.txtRep1Phone2 = new System.Windows.Forms.TextBox();
+            this.txtRep1Address = new System.Windows.Forms.TextBox();
+            this.txtRep1Notes = new System.Windows.Forms.TextBox();
+            this.picRep1Photo = new System.Windows.Forms.PictureBox();
+            this.btnRep1BrowsePhoto = new System.Windows.Forms.Button();
+            this.btnRep1ClearPhoto = new System.Windows.Forms.Button();
+            this.lblRep1Name = new System.Windows.Forms.Label();
+            this.lblRep1Relationship = new System.Windows.Forms.Label();
+            this.lblRep1IdCardType = new System.Windows.Forms.Label();
+            this.lblRep1NationalID = new System.Windows.Forms.Label();
+            this.lblRep1Phone = new System.Windows.Forms.Label();
+            this.lblRep1Phone2 = new System.Windows.Forms.Label();
+            this.lblRep1Address = new System.Windows.Forms.Label();
+            this.lblRep1Notes = new System.Windows.Forms.Label();
+
+            this.txtRep2Name = new System.Windows.Forms.TextBox();
+            this.txtRep2Relationship = new System.Windows.Forms.ComboBox();
+            this.cmbRep2IdCardType = new System.Windows.Forms.ComboBox();
+            this.txtRep2NationalID = new System.Windows.Forms.TextBox();
+            this.txtRep2Phone = new System.Windows.Forms.TextBox();
+            this.txtRep2Phone2 = new System.Windows.Forms.TextBox();
+            this.txtRep2Address = new System.Windows.Forms.TextBox();
+            this.txtRep2Notes = new System.Windows.Forms.TextBox();
+            this.picRep2Photo = new System.Windows.Forms.PictureBox();
+            this.btnRep2BrowsePhoto = new System.Windows.Forms.Button();
+            this.btnRep2ClearPhoto = new System.Windows.Forms.Button();
+            this.btnRep2Clear = new System.Windows.Forms.Button();
+            this.lblRep2Name = new System.Windows.Forms.Label();
+            this.lblRep2Relationship = new System.Windows.Forms.Label();
+            this.lblRep2IdCardType = new System.Windows.Forms.Label();
+            this.lblRep2NationalID = new System.Windows.Forms.Label();
+            this.lblRep2Phone = new System.Windows.Forms.Label();
+            this.lblRep2Phone2 = new System.Windows.Forms.Label();
+            this.lblRep2Address = new System.Windows.Forms.Label();
+            this.lblRep2Notes = new System.Windows.Forms.Label();
+
+            ((System.ComponentModel.ISupportInitialize)(this.picRep1Photo)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.picRep2Photo)).BeginInit();
+
+            this.btnRep1BrowsePhoto.Click += new System.EventHandler(this.btnRep1BrowsePhoto_Click);
+            this.btnRep1ClearPhoto.Click += new System.EventHandler(this.btnRep1ClearPhoto_Click);
+            this.btnRep2BrowsePhoto.Click += new System.EventHandler(this.btnRep2BrowsePhoto_Click);
+            this.btnRep2ClearPhoto.Click += new System.EventHandler(this.btnRep2ClearPhoto_Click);
+
+            this.btnRep2Clear.Name = "btnRep2Clear";
+            this.btnRep2Clear.Text = "حذف نمایندهٔ دوم";
+            this.btnRep2Clear.Size = new System.Drawing.Size(150, 36);
+            this.btnRep2Clear.Click += new System.EventHandler(this.btnRep2Clear_Click);
+
+            var repCard1 = MkRepresentativeCard(
+                "نمایندهٔ اول (الزامی)", this.grpRepresentative1,
+                this.lblRep1Name, this.txtRep1Name,
+                this.lblRep1Relationship, this.txtRep1Relationship,
+                this.lblRep1IdCardType, this.cmbRep1IdCardType,
+                this.lblRep1NationalID, this.txtRep1NationalID,
+                this.lblRep1Phone, this.txtRep1Phone,
+                this.lblRep1Phone2, this.txtRep1Phone2,
+                this.lblRep1Address, this.txtRep1Address,
+                this.lblRep1Notes, this.txtRep1Notes,
+                this.picRep1Photo, this.btnRep1BrowsePhoto, this.btnRep1ClearPhoto, null);
+
+            var repCard2 = MkRepresentativeCard(
+                "نمایندهٔ دوم (اختیاری)", this.grpRepresentative2,
+                this.lblRep2Name, this.txtRep2Name,
+                this.lblRep2Relationship, this.txtRep2Relationship,
+                this.lblRep2IdCardType, this.cmbRep2IdCardType,
+                this.lblRep2NationalID, this.txtRep2NationalID,
+                this.lblRep2Phone, this.txtRep2Phone,
+                this.lblRep2Phone2, this.txtRep2Phone2,
+                this.lblRep2Address, this.txtRep2Address,
+                this.lblRep2Notes, this.txtRep2Notes,
+                this.picRep2Photo, this.btnRep2BrowsePhoto, this.btnRep2ClearPhoto, this.btnRep2Clear);
+
+            // راهنمای بالای تب — کاربر باید بداند چرا این بخش اینجاست و
+            // کِی الزامی است، بدونِ اینکه لازم باشد ذخیره کند تا خطا ببیند.
+            this.lblRepresentativeHint = new System.Windows.Forms.Label();
+            this.lblRepresentativeHint.Dock = System.Windows.Forms.DockStyle.Top;
+            this.lblRepresentativeHint.Height = 46;
+            this.lblRepresentativeHint.Text =
+                "نمایندهٔ قانونی (وکیل/قیّم) کسی است که امور اداری، مالی و حقوقیِ ذینفع را انجام می‌دهد." +
+                " ثبتِ «نمایندهٔ اول» الزامی است؛ «نمایندهٔ دوم» اختیاری است.";
+            this.lblRepresentativeHint.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            this.lblRepresentativeHint.Padding = new System.Windows.Forms.Padding(18, 0, 18, 0);
+            this.lblRepresentativeHint.ForeColor = CaseManagement.Helpers.UiTheme.TextDark;
+            this.lblRepresentativeHint.BackColor = System.Drawing.Color.Transparent;
+            this.lblRepresentativeHint.RightToLeft = System.Windows.Forms.RightToLeft.Yes;
+
+            var repContent = new System.Windows.Forms.Panel();
+            repContent.Name = "repContent";
+            repContent.Dock = System.Windows.Forms.DockStyle.Top;
+            repContent.AutoSize = true;
+            repContent.AutoSizeMode = System.Windows.Forms.AutoSizeMode.GrowAndShrink;
+            repContent.Padding = new System.Windows.Forms.Padding(10, 6, 10, 10);
+            repContent.BackColor = System.Drawing.Color.Transparent;
+            // ترتیبِ افزودن معکوسِ ترتیبِ بصری است (قاعدهٔ Dock.Top): آخرین
+            // کنترلِ افزوده‌شده بالاترین می‌نشیند.
+            repContent.Controls.Add(repCard2);
+            repContent.Controls.Add(repCard1);
+            repContent.Controls.Add(this.lblRepresentativeHint);
+
+            // کارت‌ها روی صفحه‌های کوتاه‌تر باید اسکرول شوند، نه بریده.
+            var repScroller = new System.Windows.Forms.Panel();
+            repScroller.Name = "repScroller";
+            repScroller.Dock = System.Windows.Forms.DockStyle.Fill;
+            repScroller.AutoScroll = true;
+            repScroller.BackColor = System.Drawing.Color.Transparent;
+            repScroller.Controls.Add(repContent);
+
+            this.tabRepresentative = new System.Windows.Forms.TabPage("نمایندهٔ قانونی");
+            this.tabRepresentative.BackColor = CaseManagement.Helpers.UiTheme.CardBack;
+            this.tabRepresentative.Padding = System.Windows.Forms.Padding.Empty;
+            this.tabRepresentative.RightToLeft = System.Windows.Forms.RightToLeft.Yes;
+            this.tabRepresentative.Controls.Add(repScroller);
+            ((System.ComponentModel.ISupportInitialize)(this.picRep1Photo)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.picRep2Photo)).EndInit();
+
             this.tabsCase = new RtlTabControl();
             this.tabsCase.Name              = "tabsCase";
             this.tabsCase.Dock              = System.Windows.Forms.DockStyle.Fill;
@@ -568,10 +1294,28 @@
             // هیچ فیلدِ قابلِ تایپی نمی‌بیند (باگی که کاربر گزارش کرد).
             this.tabHeadInfo = MkCaseTab("مشخصات کلی سرپرست", cardHead);
             this.tabsCase.TabPages.Add(this.tabHeadInfo);
-            this.tabsCase.TabPages.Add(MkCaseTab("مشخصات جسمی", cardPhysical));
-            this.tabsCase.TabPages.Add(MkCaseTab("مشخصات پرونده", cardCase));
+            // «مشخصات جسمی» تبِ جدا ندارد و به‌صورت کارتِ مستقل داخل همین تب
+            // می‌نشیند (خواستهٔ صریح کاربر). ترتیب از بالا: اطلاعاتِ عمومیِ
+            // پرونده، سپس وضعیت جسمی، سپس کارت‌های وابسته به نوع پرونده.
+            this.tabsCase.TabPages.Add(MkCaseTab("مشخصات پرونده",
+                cardCase,
+                cardPhysical,
+                this.cardDisabilityInfo,
+                this.cardOrphanInfo,
+                this.cardGuardianInfo,
+                this.cardMigrantInfo));
             this.tabsCase.TabPages.Add(tabMembers);
             this.tabsCase.TabPages.Add(tabDocs);
+            // Phase 7 — پیش از تبِ بازدید: نماینده دادهٔ هویتیِ پرونده
+            // است، نه رویدادِ کاری. نمایش/پنهانی‌اش را
+            // UpdateRequestTypeSectionVisibility اداره می‌کند (پیش‌فرض: فقط «معلول»).
+            this.tabsCase.TabPages.Add(this.tabRepresentative);
+            this.tabsCase.TabPages.Add(this.tabVisits);
+            this.tabsCase.TabPages.Add(this.tabFamilyGroup);
+            this.tabsCase.TabPages.Add(this.tabFunding);
+            this.tabsCase.TabPages.Add(this.tabVulnerability);
+            // تاریخچه عمداً آخرین تب است: خواندنی، مرورِ گذشته، نه ورودِ داده.
+            this.tabsCase.TabPages.Add(this.tabTimeline);
             this.tabsCase.SelectedIndexChanged += new System.EventHandler(this.tabsCase_SelectedIndexChanged);
 
             System.Windows.Forms.Panel fieldsPanel = new System.Windows.Forms.Panel();
@@ -843,6 +1587,10 @@
             StyleBtn(this.btnExportPdf, "پی دی اف", 100, 32); this.btnExportPdf.Click += new System.EventHandler(this.btnExportPdf_Click);
             StyleBtn(this.btnExportExcel, "اکسل", 62, 32); this.btnExportExcel.Click += new System.EventHandler(this.btnExportExcel_Click);
             StyleBtn(this.btnBatchExport, "خروجی جمعی", 104, 32); this.btnBatchExport.Click += new System.EventHandler(this.btnBatchExport_Click);
+            // Phase 5.5-C — «پروندهٔ کامل»: همهٔ بخش‌ها (تایم‌لاین/بازدید/تأمین
+            // مالی/امتیاز/اسناد) در یک فایل. متفاوت با «اکسل» که گزارشِ
+            // چندپرونده‌ای است.
+            StyleBtn(this.btnExportCaseFile, "پرونده کامل", 104, 32); this.btnExportCaseFile.Click += new System.EventHandler(this.btnExportCaseFile_Click);
             StyleBtn(this.btnChooseStorageFolder, "محل ذخیره", 96, 32); this.btnChooseStorageFolder.Click += new System.EventHandler(this.btnChooseStorageFolder_Click);
             // آموزش — برچسبِ گروه، هم‌سبکِ «خروجی‌ها:». بدونِ آن، این چهار دکمه
             // با دکمه‌های «عضو/سند»ِ داخلِ تب‌ها هم‌شکل دیده می‌شدند و معلوم
@@ -870,6 +1618,7 @@
             bottomActionsRow.Controls.Add(this.btnExportExcel);
             bottomActionsRow.Controls.Add(this.btnPrint);
             bottomActionsRow.Controls.Add(this.btnBatchExport);
+            bottomActionsRow.Controls.Add(this.btnExportCaseFile);
             bottomActionsRow.Controls.Add(this.btnExportWord);
             bottomActionsRow.Controls.Add(this.btnChooseStorageFolder);
 
@@ -1026,6 +1775,140 @@
 
         }
 
+        // ─── کارتِ یک نمایندهٔ قانونی (Phase 7) ─────────────────
+        // یک سازنده برای هر دو نماینده. هر تغییرِ چیدمان یک‌جا اعمال
+        // می‌شود و دو کارت هرگز از هم واگرا نمی‌شوند.
+        //
+        // چیدمان: ستونِ عکس (چپ) + شبکهٔ سه‌ستونهٔ فیلدها (راست)،
+        // درونِ همان SectionCardِ سفیدِ گردگوشهٔ بقیهٔ فرم — پس
+        // جداییِ بصریِ دو نماینده از خودِ کارت می‌آید، نه از خط‌کشیِ دستی.
+        private System.Windows.Forms.Control MkRepresentativeCard(
+            string title, System.Windows.Forms.GroupBox host,
+            System.Windows.Forms.Label lblName, System.Windows.Forms.TextBox txtName,
+            System.Windows.Forms.Label lblRelationship, System.Windows.Forms.ComboBox cmbRelationship,
+            System.Windows.Forms.Label lblIdCardType, System.Windows.Forms.ComboBox cmbIdCardType,
+            System.Windows.Forms.Label lblNationalId, System.Windows.Forms.TextBox txtNationalId,
+            System.Windows.Forms.Label lblPhone, System.Windows.Forms.TextBox txtPhone,
+            System.Windows.Forms.Label lblPhone2, System.Windows.Forms.TextBox txtPhone2,
+            System.Windows.Forms.Label lblAddress, System.Windows.Forms.TextBox txtAddress,
+            System.Windows.Forms.Label lblNotes, System.Windows.Forms.TextBox txtNotes,
+            System.Windows.Forms.PictureBox picPhoto,
+            System.Windows.Forms.Button btnBrowsePhoto,
+            System.Windows.Forms.Button btnClearPhoto,
+            System.Windows.Forms.Button btnClearAll)
+        {
+            // واژگانِ بسته → DropDownList؛ متنِ آزاد → TextBox.
+            // همان قاعدهٔ UI Standards در PROJECT_CONTEXT.
+            cmbRelationship.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+
+            // نوعِ تذکره + شماره: همان رفتارِ هوشمندِ فرمِ پرونده/اعضا
+            // (درجِ خودکارِ خط تیره، فقط رقم، سقفِ طول) — دوباره نوشته
+            // نمی‌شود، همان IdCardHelper وصل می‌شود.
+            CaseManagement.Helpers.IdCardHelper.FillCombo(cmbIdCardType);
+            CaseManagement.Helpers.IdCardHelper.Attach(cmbIdCardType, txtNationalId);
+
+            txtAddress.Multiline = true;
+            txtAddress.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
+            txtAddress.Height = 58;
+            txtAddress.RightToLeft = System.Windows.Forms.RightToLeft.Yes;
+
+            txtNotes.Multiline = true;
+            txtNotes.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
+            txtNotes.Height = 58;
+            txtNotes.RightToLeft = System.Windows.Forms.RightToLeft.Yes;
+
+            var grid = MkCaseFieldGrid();
+            AddCaseField(grid, lblName,         "نام کامل",          txtName);
+            AddCaseField(grid, lblRelationship, "نسبت با ذینفع",    cmbRelationship);
+            AddCaseField(grid, lblIdCardType,   "نوع تذکره",         cmbIdCardType);
+            AddCaseField(grid, lblNationalId,   "شماره تذکره",       txtNationalId);
+            AddCaseField(grid, lblPhone,        "شماره تماس",        txtPhone);
+            AddCaseField(grid, lblPhone2,       "شماره تماس دوم",   txtPhone2);
+            AddCaseField(grid, lblAddress,      "آدرس",              txtAddress);
+            AddCaseField(grid, lblNotes,        "یادداشت",           txtNotes);
+
+            // ─── ستونِ عکس ───────────────────────────────────
+            picPhoto.BorderStyle = System.Windows.Forms.BorderStyle.None;
+            picPhoto.Dock = System.Windows.Forms.DockStyle.Fill;
+            picPhoto.SizeMode = System.Windows.Forms.PictureBoxSizeMode.Zoom;
+            picPhoto.BackColor = CaseManagement.Helpers.UiTheme.Background;
+            picPhoto.TabStop = false;
+
+            var photoFrame = new System.Windows.Forms.Panel();
+            photoFrame.Dock = System.Windows.Forms.DockStyle.Fill;
+            photoFrame.Padding = new System.Windows.Forms.Padding(1);
+            photoFrame.BackColor = CaseManagement.Helpers.UiTheme.Border;
+            photoFrame.Controls.Add(picPhoto);
+
+            btnBrowsePhoto.Text = "انتخاب عکس";
+            btnBrowsePhoto.Size = new System.Drawing.Size(112, 32);
+            btnClearPhoto.Text = "حذف عکس";
+            btnClearPhoto.Size = new System.Drawing.Size(96, 32);
+
+            var photoButtons = new System.Windows.Forms.FlowLayoutPanel();
+            photoButtons.Dock = System.Windows.Forms.DockStyle.Bottom;
+            photoButtons.Height = 42;
+            photoButtons.FlowDirection = System.Windows.Forms.FlowDirection.LeftToRight;
+            photoButtons.WrapContents = false;
+            photoButtons.Padding = new System.Windows.Forms.Padding(0, 5, 0, 0);
+            photoButtons.BackColor = System.Drawing.Color.Transparent;
+            photoButtons.Controls.Add(btnBrowsePhoto);
+            photoButtons.Controls.Add(btnClearPhoto);
+
+            var photoCaption = new System.Windows.Forms.Label();
+            photoCaption.Dock = System.Windows.Forms.DockStyle.Top;
+            photoCaption.Height = 20;
+            photoCaption.Text = "عکس نماینده";
+            photoCaption.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            photoCaption.Font = CaseManagement.Helpers.UiTheme.FontBold(
+                CaseManagement.Helpers.UiTheme.SizeSmall - 0.5F);
+            photoCaption.ForeColor = CaseManagement.Helpers.UiTheme.TextDark;
+            photoCaption.BackColor = System.Drawing.Color.Transparent;
+
+            var photoColumn = new System.Windows.Forms.Panel();
+            photoColumn.Dock = System.Windows.Forms.DockStyle.Left;
+            photoColumn.Width = 190;
+            photoColumn.Padding = new System.Windows.Forms.Padding(14, 8, 8, 10);
+            photoColumn.BackColor = System.Drawing.Color.Transparent;
+            photoColumn.Controls.Add(photoFrame);
+            photoColumn.Controls.Add(photoButtons);
+            photoColumn.Controls.Add(photoCaption);
+
+            var body = new System.Windows.Forms.Panel();
+            body.Dock = System.Windows.Forms.DockStyle.Top;
+            body.AutoSize = true;
+            body.AutoSizeMode = System.Windows.Forms.AutoSizeMode.GrowAndShrink;
+            body.MinimumSize = new System.Drawing.Size(0, 230);
+            body.BackColor = System.Drawing.Color.Transparent;
+            body.Controls.Add(grid);
+            body.Controls.Add(photoColumn);
+
+            var content = new System.Windows.Forms.Panel();
+            content.Dock = System.Windows.Forms.DockStyle.Top;
+            content.AutoSize = true;
+            content.AutoSizeMode = System.Windows.Forms.AutoSizeMode.GrowAndShrink;
+            content.BackColor = System.Drawing.Color.Transparent;
+
+            // دکمهٔ «حذف نمایندهٔ دوم» فقط روی کارتِ دوم معنا دارد؛
+            // کارتِ اول null می‌فرستد چون نمایندهٔ اول الزامی است و
+            // حذفِ تکیِ آن پرونده را نامعتبر می‌کرد.
+            if (btnClearAll != null)
+            {
+                var clearRow = new System.Windows.Forms.FlowLayoutPanel();
+                clearRow.Dock = System.Windows.Forms.DockStyle.Top;
+                clearRow.Height = 46;
+                clearRow.FlowDirection = System.Windows.Forms.FlowDirection.LeftToRight;
+                clearRow.WrapContents = false;
+                clearRow.Padding = new System.Windows.Forms.Padding(14, 2, 14, 6);
+                clearRow.BackColor = System.Drawing.Color.Transparent;
+                clearRow.Controls.Add(btnClearAll);
+                content.Controls.Add(clearRow);
+            }
+
+            content.Controls.Add(body);
+            return MkCaseCard(title, content, host);
+        }
+
         // برچسب فیلد کوتاه: تنظیم متن/محل/اندازه/تراز در یک خط (بدون Dock/Anchor
         // ژنریک) — هر تماس مستقل و صریح است، مطابق سبک کلاسیک Designer.
         // آموزش — رفع باگ چیدمان: قبلاً MiddleRight بود، یعنی متن به لبه دور
@@ -1134,15 +2017,22 @@
         }
 
         // یک تب با پانلِ اسکرولِ اختصاصی که کارتِ داده‌شده را در خود دارد.
+        // چند کارت در یک تب: کارت‌ها Dock=Top و AutoSize هستند و از قبل
+        // Margin پایین دارند، پس روی‌هم‌چیدنشان همان الگوی جاافتادهٔ این فایل
+        // است. ترتیبِ افزودن عمداً معکوس است — طبق قاعدهٔ اثبات‌شدهٔ این فایل،
+        // کنترلی که آخر اضافه شود در Dock=Top بالاترین جا را می‌گیرد؛ پس
+        // برای نمایشِ cards[0] در بالا باید از انتها به ابتدا افزوده شوند.
         private static System.Windows.Forms.TabPage MkCaseTab(
-            string title, System.Windows.Forms.Control card)
+            string title, params System.Windows.Forms.Control[] cards)
         {
             FieldsScrollPanel scroller = new FieldsScrollPanel();
             scroller.Dock = System.Windows.Forms.DockStyle.Fill;
             scroller.AutoScroll = true;
             scroller.Padding = new System.Windows.Forms.Padding(10, 10, 10, 10);
             scroller.BackColor = System.Drawing.Color.Transparent;
-            scroller.Controls.Add(card);
+            for (int i = cards.Length - 1; i >= 0; i--)
+                if (cards[i] != null)
+                    scroller.Controls.Add(cards[i]);
 
             System.Windows.Forms.TabPage page = new System.Windows.Forms.TabPage(title);
             page.BackColor = CaseManagement.Helpers.UiTheme.CardBack;
@@ -1412,6 +2302,12 @@
         private System.Windows.Forms.TextBox txtCoveredByOrgNames;
         private System.Windows.Forms.Label lblCoveredByOrgNames;
         private CaseManagement.Helpers.FieldBox fieldCoveredByOrgNames;
+        private CaseManagement.Helpers.FieldBox fieldMigrationCardType;
+        // کارت‌های اختصاصیِ نوع پرونده (در تبِ «مشخصات پرونده»).
+        private System.Windows.Forms.Panel cardDisabilityInfo;
+        private System.Windows.Forms.Panel cardOrphanInfo;
+        private System.Windows.Forms.Panel cardGuardianInfo;
+        private System.Windows.Forms.Panel cardMigrantInfo;
         private System.Windows.Forms.TextBox txtJob;
         private System.Windows.Forms.TextBox txtSkill;
         private System.Windows.Forms.ComboBox txtDisabilityDegree;
@@ -1456,6 +2352,171 @@
         private CaseManagement.Helpers.PersianDatePicker dtpSurveyDate;
         private System.Windows.Forms.Label label28;
         private System.Windows.Forms.TextBox txtLocationAddress;
+        // Phase 3 — معرف
+        private System.Windows.Forms.Label label29;
+        private System.Windows.Forms.TextBox txtReferrerName;
+        private System.Windows.Forms.Label label30;
+        private System.Windows.Forms.TextBox txtReferrerPhone;
+        // Phase 3 (بازبینی) — بخش‌های اختصاصیِ نوع درخواست
+        private System.Windows.Forms.Label label31;
+        private System.Windows.Forms.TextBox txtMainResidenceProvince;
+        private System.Windows.Forms.Label label32;
+        private System.Windows.Forms.TextBox txtMainResidenceDistrict;
+        private System.Windows.Forms.Label label33;
+        private System.Windows.Forms.TextBox txtMainResidenceVillage;
+        private System.Windows.Forms.Label label34;
+        private System.Windows.Forms.ComboBox txtFatherDeathCause;
+        private System.Windows.Forms.Label label35;
+        private System.Windows.Forms.ComboBox txtDisabilityCause;
+        private System.Windows.Forms.Label label36;
+        private System.Windows.Forms.TextBox txtDisabilityDescription;
+        private System.Windows.Forms.Label label37;
+        private System.Windows.Forms.TextBox txtSpecialNeeds;
+        private System.Windows.Forms.Label label38;
+        private System.Windows.Forms.ComboBox txtDisabilityCardStatus;
+        private System.Windows.Forms.Label label39;
+        private System.Windows.Forms.TextBox txtDisabilityCardNumber;
+        private System.Windows.Forms.Label label40;
+        private System.Windows.Forms.ComboBox txtHasMigrationCard;
+        private System.Windows.Forms.Label label41;
+        private System.Windows.Forms.TextBox txtMigrationCardNumber;
+        private System.Windows.Forms.Label label42;
+        private CaseManagement.Helpers.PersianDatePicker dtpDepartureDate;
+        private System.Windows.Forms.Label label43;
+        private CaseManagement.Helpers.PersianDatePicker dtpArrivalDate;
+        private System.Windows.Forms.Label label44;
+        private System.Windows.Forms.TextBox txtAssistanceDurationMonths;
+
+        // ─── Phase 7 — نمایندهٔ قانونی ───────────────────────────
+        private System.Windows.Forms.TabPage tabRepresentative;
+        private System.Windows.Forms.Label lblRepresentativeHint;
+        private System.Windows.Forms.GroupBox grpRepresentative1;
+        private System.Windows.Forms.GroupBox grpRepresentative2;
+
+        private System.Windows.Forms.Label lblRep1Name;
+        private System.Windows.Forms.TextBox txtRep1Name;
+        private System.Windows.Forms.Label lblRep1Relationship;
+        private System.Windows.Forms.ComboBox txtRep1Relationship;
+        private System.Windows.Forms.Label lblRep1IdCardType;
+        private System.Windows.Forms.ComboBox cmbRep1IdCardType;
+        private System.Windows.Forms.Label lblRep1NationalID;
+        private System.Windows.Forms.TextBox txtRep1NationalID;
+        private System.Windows.Forms.Label lblRep1Phone;
+        private System.Windows.Forms.TextBox txtRep1Phone;
+        private System.Windows.Forms.Label lblRep1Phone2;
+        private System.Windows.Forms.TextBox txtRep1Phone2;
+        private System.Windows.Forms.Label lblRep1Address;
+        private System.Windows.Forms.TextBox txtRep1Address;
+        private System.Windows.Forms.Label lblRep1Notes;
+        private System.Windows.Forms.TextBox txtRep1Notes;
+        private System.Windows.Forms.PictureBox picRep1Photo;
+        private System.Windows.Forms.Button btnRep1BrowsePhoto;
+        private System.Windows.Forms.Button btnRep1ClearPhoto;
+
+        private System.Windows.Forms.Label lblRep2Name;
+        private System.Windows.Forms.TextBox txtRep2Name;
+        private System.Windows.Forms.Label lblRep2Relationship;
+        private System.Windows.Forms.ComboBox txtRep2Relationship;
+        private System.Windows.Forms.Label lblRep2IdCardType;
+        private System.Windows.Forms.ComboBox cmbRep2IdCardType;
+        private System.Windows.Forms.Label lblRep2NationalID;
+        private System.Windows.Forms.TextBox txtRep2NationalID;
+        private System.Windows.Forms.Label lblRep2Phone;
+        private System.Windows.Forms.TextBox txtRep2Phone;
+        private System.Windows.Forms.Label lblRep2Phone2;
+        private System.Windows.Forms.TextBox txtRep2Phone2;
+        private System.Windows.Forms.Label lblRep2Address;
+        private System.Windows.Forms.TextBox txtRep2Address;
+        private System.Windows.Forms.Label lblRep2Notes;
+        private System.Windows.Forms.TextBox txtRep2Notes;
+        private System.Windows.Forms.PictureBox picRep2Photo;
+        private System.Windows.Forms.Button btnRep2BrowsePhoto;
+        private System.Windows.Forms.Button btnRep2ClearPhoto;
+        private System.Windows.Forms.Button btnRep2Clear;
+
+        private CaseManagement.Helpers.FieldBox[] orphanSectionFields;
+        private CaseManagement.Helpers.FieldBox[] disabilitySectionFields;
+        private CaseManagement.Helpers.FieldBox[] migrantSectionFields;
+        // Phase 4 — بخشِ سرپرست + فیلدهای ماژول‌های تخصصی.
+        private CaseManagement.Helpers.FieldBox[] guardianSectionFields;
+        // Feature 3 — عکسِ سرپرستِ کودک.
+        private System.Windows.Forms.PictureBox picGuardianPhoto;
+        private System.Windows.Forms.Button btnGuardianBrowsePhoto;
+        private System.Windows.Forms.Button btnGuardianClearPhoto;
+        private System.Windows.Forms.Label lblGuardianPhoto;
+        private System.Windows.Forms.Label label45;
+        private System.Windows.Forms.ComboBox txtFatherStatus;
+        private System.Windows.Forms.Label label46;
+        private CaseManagement.Helpers.PersianDatePicker dtpFatherDeathDate;
+        private System.Windows.Forms.Label label47;
+        private System.Windows.Forms.ComboBox txtMotherStatus;
+        private System.Windows.Forms.Label label48;
+        private System.Windows.Forms.TextBox txtOrphanSchoolName;
+        private System.Windows.Forms.Label label49;
+        private System.Windows.Forms.ComboBox txtOrphanEducationLevel;
+        private System.Windows.Forms.Label lblIsStudent;
+        private System.Windows.Forms.CheckBox chkIsStudent;
+        private System.Windows.Forms.Label label50;
+        private System.Windows.Forms.TextBox txtOrphanNotes;
+        private System.Windows.Forms.Label label51;
+        private System.Windows.Forms.TextBox txtGuardianName;
+        private System.Windows.Forms.Label label52;
+        private System.Windows.Forms.ComboBox txtGuardianRelationship;
+        private System.Windows.Forms.Label label53;
+        private System.Windows.Forms.TextBox txtCardIssuer;
+        private System.Windows.Forms.Label label54;
+        private CaseManagement.Helpers.PersianDatePicker dtpDisabilityIssueDate;
+        private System.Windows.Forms.Label label55;
+        private CaseManagement.Helpers.PersianDatePicker dtpDisabilityExpiryDate;
+        private System.Windows.Forms.Label label56;
+        private System.Windows.Forms.TextBox txtDisabilityNotes;
+        private System.Windows.Forms.Label label57;
+        private System.Windows.Forms.TextBox txtOriginCountry;
+        private System.Windows.Forms.Label label58;
+        private System.Windows.Forms.TextBox txtDestinationCountry;
+        private System.Windows.Forms.Label label59;
+        private System.Windows.Forms.TextBox txtMigrantNotes;
+        // Phase 5 — تب بازدید میدانی.
+        private System.Windows.Forms.TabPage tabVisits;
+        private System.Windows.Forms.GroupBox grpVisitEntry;
+        private System.Windows.Forms.DataGridView dgvVisits;
+        private System.Windows.Forms.DataGridView dgvTimeline;
+        private System.Windows.Forms.TabPage tabTimeline;
+        private CaseManagement.Helpers.PersianDatePicker dtpVisitDate;
+        private System.Windows.Forms.Label lblVisitDate;
+        private System.Windows.Forms.TextBox txtVisitorName;
+        private System.Windows.Forms.Label lblVisitorName;
+        private System.Windows.Forms.ComboBox txtVisitResult;
+        private System.Windows.Forms.Label lblVisitResult;
+        private System.Windows.Forms.ComboBox txtVisitRecommendation;
+        private System.Windows.Forms.Label lblVisitRecommendation;
+        private System.Windows.Forms.TextBox txtVisitNotes;
+        private System.Windows.Forms.Label lblVisitNotes;
+        private System.Windows.Forms.Button btnVisitNew;
+        private System.Windows.Forms.Button btnVisitSave;
+        private System.Windows.Forms.Button btnVisitDelete;
+        // Phase 5.5-C — کارت‌های وضعیتِ محاسبه‌شده + تب تأمین مالی + خروجی کامل.
+        private System.Windows.Forms.Label lblStatCompletionPct;
+        private System.Windows.Forms.Label lblStatCompletionStatus;
+        private System.Windows.Forms.Label lblStatVulnScore;
+        private System.Windows.Forms.Label lblStatSuggestedAid;
+        private System.Windows.Forms.Label lblStatVerifiedDocs;
+        private System.Windows.Forms.TabPage tabFunding;
+        private System.Windows.Forms.DataGridView dgvCaseFunding;
+        private System.Windows.Forms.Button btnFundingAssign;
+        private System.Windows.Forms.Button btnFundingRemove;
+        private System.Windows.Forms.Button btnExportCaseFile;
+        // Phase 5.5-B — تب امتیاز آسیب‌پذیری (فقط‌خواندنی).
+        private System.Windows.Forms.TabPage tabVulnerability;
+        private System.Windows.Forms.Label lblVulnScoreValue;
+        private System.Windows.Forms.Label lblVulnScoreDate;
+        private System.Windows.Forms.DataGridView dgvVulnBreakdown;
+        // Phase 6 — تب خانواده.
+        private System.Windows.Forms.TabPage tabFamilyGroup;
+        private System.Windows.Forms.Label lblFamilyGroupValue;
+        private System.Windows.Forms.DataGridView dgvFamilyCases;
+        private System.Windows.Forms.Button btnFamilyLink;
+        private System.Windows.Forms.Button btnFamilyUnlink;
         private System.Windows.Forms.Label label25;
         private System.Windows.Forms.TextBox txtSurveyors;
         private System.Windows.Forms.Label label23;

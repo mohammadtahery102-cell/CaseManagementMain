@@ -34,6 +34,19 @@ namespace CaseManagement.GuardianCardIntegration
         public string IssueDate { get; set; }
         public string ExpiryDate { get; set; }
 
+        // آموزش — نوع و درجهٔ معلولیت. CaseCardRepository این دو را از قبل از
+        // دیتابیس می‌خواند (در CaseModel)، ولی هیچ‌وقت به این کلاس منتقل
+        // نمی‌شدند؛ یعنی حتی اگر یک قالب هم می‌خواست آن‌ها را چاپ کند، در
+        // JSONِ کارت وجود نداشتند.
+        //
+        // این دو فقط *در دسترس* می‌شوند، نه خودبه‌خود چاپ: قالب‌های کارت HTML
+        // ذخیره‌شده در دیتابیس‌اند و تا وقتی عنصری با همین کلید نداشته باشند
+        // هیچ تغییری در ظاهرِ هیچ کارتِ موجودی رخ نمی‌دهد. عمداً به
+        // CardFieldCatalog اضافه *نشده‌اند*: طراح نباید فیلدی را پیشنهاد دهد
+        // که قالب پشتیبانی‌اش نمی‌کند و تنظیمش بی‌صدا نادیده گرفته می‌شود.
+        public string DisabilityType { get; set; }
+        public string DisabilityDegree { get; set; }
+
         public string Province { get; set; }
         public string District { get; set; }
         public string Village { get; set; }

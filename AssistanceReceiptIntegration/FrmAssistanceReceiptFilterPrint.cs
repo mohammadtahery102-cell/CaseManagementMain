@@ -18,6 +18,7 @@ namespace CaseManagement.AssistanceReceiptIntegration
     // ─────────────────────────────────────────────────────────────────────────
     public class FrmAssistanceReceiptFilterPrint : Form
     {
+        private CoreWebView2Environment _env;
         private WebView2 _webView;
         private Panel _toolbar;
         private ComboBox _cmbProvince;
@@ -166,8 +167,26 @@ namespace CaseManagement.AssistanceReceiptIntegration
                 "CaseManagement", "WebView2UserData");
             Directory.CreateDirectory(userDataFolder);
 
-            CoreWebView2Environment env = await CoreWebView2Environment.CreateAsync(null, userDataFolder);
-            await _webView.EnsureCoreWebView2Async(env);
+            // F-40 — نگاه کنید FrmAssistanceReceiptSinglePrint: محیط نگه داشته
+            // می‌شود چون تنظیماتِ چاپ فقط از روی آن ساخته می‌شود.
+            _env = await CoreWebView2Environment.CreateAsync(null, userDataFolder);
+            await _webView.EnsureCoreWebView2Async(_env);
+        }
+
+        // F-40 — همان تنظیماتِ A4 که در چاپِ تکی توضیح داده شد. اینجا اهمیتش
+        // بیشتر است، چون چاپِ گروهی ده‌ها برگ پشت سر هم تولید می‌کند و یک
+        // اندازهٔ صفحهٔ اشتباه، همهٔ آن‌ها را خراب می‌کند.
+        private CoreWebView2PrintSettings BuildA4PrintSettings()
+        {
+            if (_env == null) return null;
+
+            CoreWebView2PrintSettings settings = _env.CreatePrintSettings();
+            settings.PageWidth  = 210d / 25.4d;
+            settings.PageHeight = 297d / 25.4d;
+            settings.MarginTop = 0; settings.MarginBottom = 0;
+            settings.MarginLeft = 0; settings.MarginRight = 0;
+            settings.ShouldPrintBackgrounds = true;
+            return settings;
         }
 
         // آموزش — رفعِ باگِ بالقوه: NavigationCompleted فقط یعنی سندِ HTML
@@ -372,7 +391,7 @@ namespace CaseManagement.AssistanceReceiptIntegration
                 try
                 {
                     SetStatus("در حال ساخت PDF...");
-                    bool ok = await _webView.CoreWebView2.PrintToPdfAsync(sfd.FileName);
+                    bool ok = await _webView.CoreWebView2.PrintToPdfAsync(sfd.FileName, BuildA4PrintSettings());
                     SetStatus("");
                     if (ok)
                         UiTheme.ShowSuccess(this, "فایل PDF ذخیره شد:\n" + sfd.FileName);

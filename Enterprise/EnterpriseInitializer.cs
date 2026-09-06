@@ -733,10 +733,15 @@ CREATE TABLE IF NOT EXISTS EntUserPermission (
             AddPermission(con, "GuardianCard.Template.Delete",   "حذف قالب کارت",         "کارت شناسایی", 424, true, false, false);
             AddPermission(con, "GuardianCard.Template.Activate", "فعال/غیرفعال‌سازی قالب کارت", "کارت شناسایی", 425, true, false, false);
 
-            // توجه: «AssistanceReceipt.Print» عمداً در Sprint 0A افزوده نشده.
-            // چاپ رسید مساعدت از FrmFinance.cs فراخوانی می‌شود و طبق محدودیت
-            // صریح این اسپرینت («Do not touch Finance») دست‌نخورده باقی مانده؛
-            // نامزد Sprint 0B/بعدی است (نگاه کنید گزارش تکمیل Sprint 0A).
+            // ─── ممیزی تحویل (F-45) — «AssistanceReceipt.Print» که در Sprint 0A
+            // عمداً به تعویق افتاده بود، اینجا افزوده می‌شود. برخلاف بقیهٔ
+            // کلیدهای «Print»، این عملیات یک *نوشتن مالی* است نه یک خواندن:
+            // چاپ، شمارهٔ رسید را برای همیشه تخصیص می‌دهد و PrintedAt را مهر
+            // می‌کند. پس پیش‌فرضش عمداً هم‌سطحِ Finance.Edit است (نه هم‌سطحِ
+            // GuardianCard.Print)، یعنی Viewer نمی‌تواند شمارهٔ رسید صادر کند.
+            // این تنها کلیدی است که پیش‌فرضش رفتارِ قبلی را عیناً بازتولید
+            // نمی‌کند — و دقیقاً همان شکافی است که باید بسته می‌شد.
+            AddPermission(con, "AssistanceReceipt.Print", "چاپ برگه دریافت مساعدت", "مالی", 441, true, true, false);
 
             // ─── نسخهٔ ۱٫۰ / فاز ۳ (موج ۴) — مالی و حسابداری. مقادیر پیش‌فرض
             // دقیقاً همان دسترسی فعلیِ بر پایهٔ SecurityContext را بازتولید
@@ -765,6 +770,20 @@ CREATE TABLE IF NOT EXISTS EntUserPermission (
             // خودشان می‌توانند یادآوری بسازند (Operator به بالا).
             AddPermission(con, "AI.Search",           "جستجوی هوشمند (زبان طبیعی)",   "دستیار هوشمند", 610, true, true, true);
             AddPermission(con, "AI.Reminders.Create", "ایجاد یادآوری با دستور طبیعی", "دستیار هوشمند", 611, true, true, false);
+
+            // ─── Phase 7 — نمایندهٔ قانونی ───────────────────────────────────
+            // چرا مجوزِ اختصاصی و نه تکیه بر Case.*: دادهٔ نماینده مشخصاتِ
+            // هویتیِ یک *شخص ثالث* است (تذکره، تلفن، آدرس، عکس) که خودش
+            // ذینفعِ مؤسسه نیست. سطحِ دسترسیِ آن باید جدا از پروندهٔ ذینفع
+            // قابلِ تنظیم باشد.
+            //
+            // پیش‌فرض‌ها عمداً همان سطحِ Case.* هم‌نام‌اند، پس رفتارِ امروز
+            // برای هیچ نقشی تغییر نمی‌کند؛ فقط از این پس *قابلِ محدودکردن*
+            // است (مثلاً گرفتنِ View از Viewer، بدونِ دست‌زدن به بقیهٔ پرونده).
+            AddPermission(con, "Representative.View",   "مشاهدهٔ نمایندهٔ قانونی", "نمایندهٔ قانونی", 620, true, true,  true);
+            AddPermission(con, "Representative.Edit",   "ویرایش نمایندهٔ قانونی",  "نمایندهٔ قانونی", 621, true, true,  false);
+            AddPermission(con, "Representative.Delete", "حذف نمایندهٔ قانونی",     "نمایندهٔ قانونی", 622, true, false, false);
+            AddPermission(con, "Representative.Print",  "چاپ نمایندهٔ قانونی",     "نمایندهٔ قانونی", 623, true, true,  true);
         }
 
         private static void AddPermission(SQLiteConnection con, string key, string name,

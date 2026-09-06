@@ -84,6 +84,23 @@ namespace CaseManagement.Helpers
                 LoadTable(con, dataSet, "TblFamily",    "SELECT * FROM TblFamily");
                 LoadTable(con, dataSet, "TblDocs",      "SELECT * FROM TblDocs");
                 LoadTable(con, dataSet, "TblAssistance","SELECT * FROM TblAssistance");
+                // Phase 4 — ماژول‌های تخصصی: هم در بکاپ و هم در بازیابی
+                // (merge و جایگزینیِ کامل) پوشش داده شده‌اند.
+                LoadTable(con, dataSet, "TblOrphan",     "SELECT * FROM TblOrphan");
+                LoadTable(con, dataSet, "TblDisability", "SELECT * FROM TblDisability");
+                LoadTable(con, dataSet, "TblMigrant",    "SELECT * FROM TblMigrant");
+                // Phase 5 — بازدید/عکس/تأمین مالی + دفترچه‌های مرجع.
+                LoadTable(con, dataSet, "TblVulnerabilityCriteria", "SELECT * FROM TblVulnerabilityCriteria");
+                LoadTable(con, dataSet, "TblVulnerabilityRule",     "SELECT * FROM TblVulnerabilityRule");
+                LoadTable(con, dataSet, "TblVulnerabilityScore",       "SELECT * FROM TblVulnerabilityScore");
+                LoadTable(con, dataSet, "TblVulnerabilityScoreDetail", "SELECT * FROM TblVulnerabilityScoreDetail");
+                LoadTable(con, dataSet, "TblFieldVisit",      "SELECT * FROM TblFieldVisit");
+                LoadTable(con, dataSet, "TblFieldVisitPhoto", "SELECT * FROM TblFieldVisitPhoto");
+                LoadTable(con, dataSet, "TblCaseFunding",     "SELECT * FROM TblCaseFunding");
+                // Phase 7 — نمایندهٔ قانونی (فرزندِ مستقیمِ پرونده).
+                LoadTable(con, dataSet, "TblCaseRepresentative", "SELECT * FROM TblCaseRepresentative");
+                LoadTable(con, dataSet, "TblFundingSource",   "SELECT * FROM TblFundingSource");
+                LoadTable(con, dataSet, "TblSponsor",         "SELECT * FROM TblSponsor");
                 // فاز ۲ — پرونده‌های مرتبط و تاریخچه بایگانی؛ بدون این دو، بکاپ
                 // این داده‌ها را بی‌صدا از دست می‌داد.
                 LoadTable(con, dataSet, "TblCaseRelation",  "SELECT * FROM TblCaseRelation");
@@ -98,6 +115,13 @@ namespace CaseManagement.Helpers
                 LoadTable(con, dataSet, "TblAppSettings",       "SELECT * FROM TblAppSettings");
                 LoadTable(con, dataSet, "TblAuditLog",          "SELECT * FROM TblAuditLog");
                 LoadTable(con, dataSet, "TblCaseStatusHistory", "SELECT * FROM TblCaseStatusHistory");
+                // Phase 3 — تایم‌لاین در بکاپ *گنجانده* می‌شود (برای بازرسی/حسابرسی)
+                // ولی هنوز در بازیابی merge/insert نمی‌شود؛ برخلافِ
+                // TblCaseStatusHistory یک متدِ اختصاصیِ remap ندارد. رویدادهای
+                // تایم‌لاین از رویِ جداولِ منبع (که خودشان بازیابی می‌شوند) قابلِ
+                // بازسازی نیستند، پس این خلأ آگاهانه برای فازِ بعدی گزارش شد
+                // (نه سکوت) — نه یک باگِ کشف‌نشده.
+                LoadTable(con, dataSet, "TblCaseTimeline", "SELECT * FROM TblCaseTimeline");
 
                 // آموزش — رفعِ افتِ بی‌صدای داده (ادامهٔ همان باگ بالا): سه جدولِ
                 // زیر هرگز در بکاپ نبودند، پس بازیابیِ فاجعه تاریخچهٔ وضعیت و نقشِ
@@ -365,6 +389,47 @@ namespace CaseManagement.Helpers
                             if (dataSet.Tables.Contains("TblAssistance"))
                                 MergeChildTable(con, tr, dataSet.Tables["TblAssistance"], "AssistanceID", casIdMap);
 
+                            // Phase 4 — ماژول‌های تخصصی. شکلشان دقیقاً همان
+                            // TblDocs است (CasID + PK + GlobalID)، پس همان
+                            // MergeChildTable عمومی کار می‌کند؛ شرطِ Contains
+                            // برای بکاپ‌های قدیمی‌تر است که این جداول را ندارند.
+                            if (dataSet.Tables.Contains("TblOrphan"))
+                                MergeChildTable(con, tr, dataSet.Tables["TblOrphan"],     "OrphanID",     casIdMap);
+                            if (dataSet.Tables.Contains("TblDisability"))
+                                MergeChildTable(con, tr, dataSet.Tables["TblDisability"], "DisabilityID", casIdMap);
+                            if (dataSet.Tables.Contains("TblMigrant"))
+                                MergeChildTable(con, tr, dataSet.Tables["TblMigrant"],    "MigrantID",    casIdMap);
+
+                            // Phase 5 — بازدید میدانی و تأمین مالی.
+                            // عکسِ بازدید «نوه» است: اول باید VisitIDهای تازه
+                            // ساخته شوند تا نگاشتِ قدیم→جدید در دست باشد،
+                            // وگرنه عکس به بازدیدِ اشتباه می‌چسبید.
+                            var visitIdMap = new Dictionary<int, int>();
+                            if (dataSet.Tables.Contains("TblFieldVisit"))
+                                MergeChildTable(con, tr, dataSet.Tables["TblFieldVisit"], "VisitID", casIdMap, visitIdMap);
+                            if (dataSet.Tables.Contains("TblFieldVisitPhoto"))
+                                MergeFamilyHistory(con, tr, dataSet.Tables["TblFieldVisitPhoto"],
+                                    "TblFieldVisitPhoto", "VisitID", visitIdMap);
+                            if (dataSet.Tables.Contains("TblCaseFunding"))
+                                MergeChildTable(con, tr, dataSet.Tables["TblCaseFunding"], "CaseFundingID", casIdMap);
+
+                            // Phase 7 — نماینده: شکلش دقیقاً همان TblDocs است
+                            // (CasID + PK + GlobalID)، پس همان MergeChildTable
+                            // عمومی کار می‌کند؛ شرطِ Contains برای بکاپ‌های
+                            // قدیمی‌تر است که این جدول را ندارند.
+                            if (dataSet.Tables.Contains("TblCaseRepresentative"))
+                                MergeChildTable(con, tr, dataSet.Tables["TblCaseRepresentative"], "RepresentativeID", casIdMap);
+
+                            // Phase 5.5-B — امتیاز و ریزِ آن. ریز «نوه» است،
+                            // پس مثلِ عکسِ بازدید اول باید ScoreIDهای تازه
+                            // ساخته شوند تا نگاشتِ قدیم→جدید در دست باشد.
+                            var scoreIdMap = new Dictionary<int, int>();
+                            if (dataSet.Tables.Contains("TblVulnerabilityScore"))
+                                MergeChildTable(con, tr, dataSet.Tables["TblVulnerabilityScore"], "ScoreID", casIdMap, scoreIdMap);
+                            if (dataSet.Tables.Contains("TblVulnerabilityScoreDetail"))
+                                MergeFamilyHistory(con, tr, dataSet.Tables["TblVulnerabilityScoreDetail"],
+                                    "TblVulnerabilityScoreDetail", "ScoreID", scoreIdMap);
+
                             // آموزش — تاریخچه وضعیت فاقد GlobalID است (کلید تشخیص
                             // تکراری ندارد)، پس فقط برای پرونده‌های تازه‌درج‌شده منتقل
                             // می‌شود؛ برای پرونده‌های از‌قبل‌موجود (Skip شده) وارد
@@ -431,6 +496,28 @@ namespace CaseManagement.Helpers
                             InsertTable(con, tr, "TblDocs",   dataSet.Tables["TblDocs"]);
                             if (dataSet.Tables.Contains("TblAssistance"))
                                 InsertTable(con, tr, "TblAssistance", dataSet.Tables["TblAssistance"]);
+                            // Phase 4 — ماژول‌های تخصصی (حالتِ جایگزینیِ کامل).
+                            if (dataSet.Tables.Contains("TblOrphan"))
+                                InsertTable(con, tr, "TblOrphan", dataSet.Tables["TblOrphan"]);
+                            if (dataSet.Tables.Contains("TblDisability"))
+                                InsertTable(con, tr, "TblDisability", dataSet.Tables["TblDisability"]);
+                            if (dataSet.Tables.Contains("TblMigrant"))
+                                InsertTable(con, tr, "TblMigrant", dataSet.Tables["TblMigrant"]);
+                            // Phase 5 — در حالتِ جایگزینیِ کامل شناسه‌ها عیناً
+                            // حفظ می‌شوند، پس ارجاعِ عکس→بازدید سالم می‌ماند.
+                            // ترتیب مهم است: بازدید پیش از عکسِ آن.
+                            if (dataSet.Tables.Contains("TblVulnerabilityScore"))
+                                InsertTable(con, tr, "TblVulnerabilityScore", dataSet.Tables["TblVulnerabilityScore"]);
+                            if (dataSet.Tables.Contains("TblVulnerabilityScoreDetail"))
+                                InsertTable(con, tr, "TblVulnerabilityScoreDetail", dataSet.Tables["TblVulnerabilityScoreDetail"]);
+                            if (dataSet.Tables.Contains("TblFieldVisit"))
+                                InsertTable(con, tr, "TblFieldVisit", dataSet.Tables["TblFieldVisit"]);
+                            if (dataSet.Tables.Contains("TblFieldVisitPhoto"))
+                                InsertTable(con, tr, "TblFieldVisitPhoto", dataSet.Tables["TblFieldVisitPhoto"]);
+                            if (dataSet.Tables.Contains("TblCaseFunding"))
+                                InsertTable(con, tr, "TblCaseFunding", dataSet.Tables["TblCaseFunding"]);
+                            if (dataSet.Tables.Contains("TblCaseRepresentative"))
+                                InsertTable(con, tr, "TblCaseRepresentative", dataSet.Tables["TblCaseRepresentative"]);
                             if (dataSet.Tables.Contains("TblCaseStatusHistory"))
                             {
                                 ExecuteNonQuery(con, tr, "DELETE FROM TblCaseStatusHistory");
@@ -1364,8 +1451,13 @@ VALUES
                         string col = table.Columns[i].ColumnName;
 
                         // کلیدِ اصلی از AUTOINCREMENT دوباره ساخته می‌شود.
+                        // Phase 5 — PhotoID هم افزوده شد: عکسِ بازدید همان شکلِ
+                        // «نوه» را دارد (والدش TblFieldVisit است، نه TblCase)،
+                        // پس از همین متد استفاده می‌کند با visitIdMap.
                         if (string.Equals(col, "FamStatusID",   StringComparison.OrdinalIgnoreCase) ||
-                            string.Equals(col, "RoleHistoryID", StringComparison.OrdinalIgnoreCase))
+                            string.Equals(col, "RoleHistoryID", StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(col, "PhotoID",       StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(col, "DetailID",      StringComparison.OrdinalIgnoreCase))
                             continue;
 
                         cols.Add("[" + col + "]");
@@ -1651,6 +1743,22 @@ VALUES (@CasID, @Action, @ActionAt, @ActionBy)", con, tr))
             ExecuteNonQuery(con, tr, "DELETE FROM TblArchiveHistory");
             ExecuteNonQuery(con, tr, "DELETE FROM TblAssistance");
             ExecuteNonQuery(con, tr, "DELETE FROM TblDocs");
+            // Phase 4 — ماژول‌های تخصصی، پیش از والد (همان قاعدهٔ «فرزند اول»).
+            ExecuteNonQuery(con, tr, "DELETE FROM TblOrphan");
+            ExecuteNonQuery(con, tr, "DELETE FROM TblDisability");
+            ExecuteNonQuery(con, tr, "DELETE FROM TblMigrant");
+            // Phase 5 — نوه پیش از فرزند: عکس پیش از بازدید.
+            // دفترچه‌های TblFundingSource/TblSponsor عمداً پاک *نمی‌شوند*
+            // (دادهٔ مرجع‌اند، نه دادهٔ پرونده) — هم‌سو با TblLookup/TblCenter.
+            // Phase 5.5-B — نوه پیش از فرزند. جدول‌های پیکربندی
+            // (Criteria/Rule) عمداً پاک نمی‌شوند: دادهٔ مرجع‌اند.
+            ExecuteNonQuery(con, tr, "DELETE FROM TblVulnerabilityScoreDetail");
+            ExecuteNonQuery(con, tr, "DELETE FROM TblVulnerabilityScore");
+            ExecuteNonQuery(con, tr, "DELETE FROM TblFieldVisitPhoto");
+            ExecuteNonQuery(con, tr, "DELETE FROM TblFieldVisit");
+            ExecuteNonQuery(con, tr, "DELETE FROM TblCaseFunding");
+            // Phase 7 — نماینده، پیش از والد (همان قاعدهٔ «فرزند اول»).
+            ExecuteNonQuery(con, tr, "DELETE FROM TblCaseRepresentative");
             ExecuteNonQuery(con, tr, "DELETE FROM TblFamily");
             ExecuteNonQuery(con, tr, "DELETE FROM TblCase");
         }

@@ -1799,7 +1799,12 @@ WHERE CenterID = @ID", con))
                 // دسته‌های جدید (بخش کنترل سنتر)
                 "CoveredByOrg", "Madhab", "HeadSadat", "MemberSadat", "DisabilityDegree",
                 "HeadEducationLevel", "MemberEducation", "MemberGender", "PhysicalStatus",
-                "StudyYear", "GradeLevel", "AssistanceType", "DocType"
+                "StudyYear", "GradeLevel", "AssistanceType", "DocType",
+                // این دو دسته در DatabaseInitializer seed می‌شدند و FrmCase
+                // combo هایش را از آن‌ها پر می‌کند، ولی از این فهرست جا مانده
+                // بودند — یعنی تنها دو dropdown معلولیت که مدیرِ سیستم اصلاً
+                // نمی‌توانست ویرایششان کند.
+                "DisabilityCause", "DisabilityCardStatus"
             });
             _cmbCategory.SelectedIndex = 0;
             _cmbCategory.SelectedIndexChanged += delegate { _editingLookupId = 0; _txtLookupValue.Text = ""; LoadLookup(); };

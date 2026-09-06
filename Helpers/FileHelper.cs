@@ -13,6 +13,18 @@ namespace CaseManagement.Helpers
         public const string SectionFamilyPhoto = "FamilyPhoto";
         public const string SectionMemberPhotos = "MemberPhotos";
         public const string SectionDocs = "Docs";
+        // Phase 5 — عکس‌های بازدید میدانی، در همان ساختارِ بخش‌بندیِ موجود.
+        public const string SectionVisitPhotos = "VisitPhotos";
+        // Phase 7 — عکسِ نمایندهٔ قانونی. بخشِ جدا و نه SectionHeadPhoto:
+        // عکسِ سرپرست یک فایلِ ثابت به‌ازای هر پرونده است و نامِ فایلش
+        // «<کد>-Head» است؛ نماینده چند فایل دارد و باید مستقلاً جایگزین/حذف
+        // شود بدونِ اینکه عکسِ سرپرست را لمس کند.
+        public const string SectionRepresentativePhotos = "RepresentativePhotos";
+
+        // Feature 3 — عکسِ سرپرستِ کودک (TblOrphan.GuardianPhotoPath). بخشِ
+        // جدا از SectionHeadPhoto: سرپرستِ کودک با سرپرستِ خانوار یکی نیست
+        // و باید مستقلاً جایگزین/حذف شود.
+        public const string SectionGuardianPhotos = "GuardianPhotos";
 
         private const int MaxSegmentLength = 100;
         private const int MaxFullPathLength = 240;
@@ -59,7 +71,10 @@ namespace CaseManagement.Helpers
                 SectionHeadPhoto,
                 SectionFamilyPhoto,
                 SectionMemberPhotos,
-                SectionDocs
+                SectionDocs,
+                SectionVisitPhotos,
+                SectionRepresentativePhotos,
+                SectionGuardianPhotos
             };
 
         private static readonly HashSet<string> AllowedPhotoExtensions =
@@ -317,6 +332,59 @@ namespace CaseManagement.Helpers
                 SetLastError("خطا در گرفتن مسیر بخش پرونده.", ex);
                 return "";
             }
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // Phase 3 — پوشهٔ دسته‌بندیِ سند (زیرِ همان بخشِ Docs موجود، نه یک
+        // ساختارِ تازه). categoryFolderName از TblDocumentCategory.FolderName
+        // می‌آید و از قبل انگلیسی/امن است (Code-محور)، پس فقط CleanName روی آن
+        // اجرا می‌شود تا از ورودیِ نامعتبر محافظت کند.
+        // مسیر: <Root>/<CaseCode>/<CaseCode>-Docs/<CategoryFolderName>/
+        // ═══════════════════════════════════════════════════════════════════
+        public static string GetDocumentCategoryFolder(string caseCode, string categoryFolderName)
+        {
+            try
+            {
+                string docsFolder = GetSectionFolder(caseCode, SectionDocs);
+                if (string.IsNullOrEmpty(docsFolder))
+                    return "";
+
+                string cleanCategory = CleanName(categoryFolderName);
+                string categoryFolder = Path.Combine(docsFolder, cleanCategory);
+
+                if (!IsPathInsideFolder(categoryFolder, docsFolder))
+                {
+                    SetLastError("مسیر دستهٔ سند نامعتبر است.", null);
+                    return "";
+                }
+
+                if (categoryFolder.Length >= MaxFullPathLength)
+                {
+                    SetLastError("مسیر پوشهٔ دستهٔ سند بیش از حد طولانی است.", null);
+                    return "";
+                }
+
+                Directory.CreateDirectory(categoryFolder);
+                return categoryFolder;
+            }
+            catch (Exception ex)
+            {
+                SetLastError("خطا در گرفتن پوشهٔ دستهٔ سند.", ex);
+                return "";
+            }
+        }
+
+        // نامِ فایلِ استانداردِ انگلیسی روی دیسک — نامِ اصلیِ فارسی/آزادِ کاربر
+        // فقط در دیتابیس (OriginalFileName/DocDescription) نگه داشته می‌شود.
+        // الگو: {CaseCode}_{CategoryCode}_{DocID}_{yyyyMMdd}.{ext}
+        public static string BuildAsciiDocumentFileName(string caseCode, string categoryCode, int docId, string extension)
+        {
+            string cleanCase = CleanName(caseCode);
+            string cleanCategory = string.IsNullOrWhiteSpace(categoryCode) ? "GENERAL" : categoryCode.Trim().ToUpperInvariant();
+            string ext = (extension ?? "").TrimStart('.');
+            string datePart = DateTime.Now.ToString("yyyyMMdd");
+
+            return string.Format("{0}_{1}_{2}_{3}.{4}", cleanCase, cleanCategory, docId, datePart, ext);
         }
 
         public static string SaveFileToCaseFolder(
@@ -627,7 +695,14 @@ namespace CaseManagement.Helpers
         {
             return string.Equals(sectionName, SectionHeadPhoto, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(sectionName, SectionFamilyPhoto, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(sectionName, SectionMemberPhotos, StringComparison.OrdinalIgnoreCase);
+                || string.Equals(sectionName, SectionMemberPhotos, StringComparison.OrdinalIgnoreCase)
+                // Phase 7 — عکسِ نماینده هم تصویر است، پس همان بررسیِ پسوند و
+                // هدرِ واقعیِ فایل بر آن اعمال می‌شود؛ بدونِ این خط یک فایلِ
+                // دلخواه با پسوندِ jpg پذیرفته می‌شد.
+                || string.Equals(sectionName, SectionRepresentativePhotos, StringComparison.OrdinalIgnoreCase)
+                // Feature 3 — عکسِ سرپرستِ کودک، به همان دلیل: بدونِ این خط
+                // بررسیِ پسوند و هدرِ واقعیِ تصویر روی آن اجرا نمی‌شد.
+                || string.Equals(sectionName, SectionGuardianPhotos, StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool LooksLikeImageFile(string path, string extension)

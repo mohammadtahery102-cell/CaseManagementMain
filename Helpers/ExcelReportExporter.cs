@@ -188,6 +188,58 @@ namespace CaseManagement.Helpers
                     c.Skill AS [مهارت],
                     c.DisabilityDegree AS [درجه معلولیت],
                     c.DisabilityType AS [نوع معلولیت],
+                    -- نُه فیلدِ معلولیت که تا امروز در هیچ خروجی‌ای نبودند.
+                    -- پنج‌تای اول ستونِ آینه روی TblCase دارند؛ چهارتای آخر فقط
+                    -- در TblDisability هستند و از راهِ LEFT JOIN پایین می‌آیند
+                    -- (UNIQUE(CasID) مانع تکثیرِ ردیف است).
+                    c.DisabilityCause AS [دلیل معلولیت],
+                    c.DisabilityDescription AS [شرح معلولیت],
+                    c.SpecialNeeds AS [نیازهای خاص],
+                    c.DisabilityCardStatus AS [وضعیت کارت معلولیت],
+                    c.DisabilityCardNumber AS [شماره کارت معلولیت],
+                    dis.CardIssuer AS [صادرکننده کارت معلولیت],
+                    dis.IssueDate AS [تاریخ صدور کارت معلولیت],
+                    dis.ExpiryDate AS [تاریخ انقضای کارت معلولیت],
+                    dis.Notes AS [یادداشت معلولیت],
+                    -- Phase 7 — نمایندهٔ قانونی. تنها خروجی‌ای بود که نماینده
+                    -- را نشان نمی‌داد (ورد/PDF/RDLC از قبل داشتند).
+                    --
+                    -- زیرکوئریِ اسکالر و نه JOIN: TblCaseRepresentative رابطهٔ
+                    -- ۱:N با پرونده دارد و جوین ردیفِ هر پرونده را دو برابر
+                    -- می‌کرد — یعنی شمارشِ «تعداد کل پرونده‌ها» در شیتِ خلاصه
+                    -- هم غلط می‌شد. IsActive = 1 و RepresentativeOrder همان
+                    -- قاعده‌ای است که RdlcExportHelper.RepresentativeSummarySql
+                    -- به‌کار می‌برد، تا اکسل و گزارشِ چاپی یک چیز بگویند.
+                    (SELECT r.FullName FROM TblCaseRepresentative r
+                      WHERE r.CasID = c.CasID AND r.IsActive = 1
+                        AND r.RepresentativeOrder = 1) AS [نام نمایندهٔ اول],
+                    (SELECT r.RelationshipToBeneficiary FROM TblCaseRepresentative r
+                      WHERE r.CasID = c.CasID AND r.IsActive = 1
+                        AND r.RepresentativeOrder = 1) AS [نسبت نمایندهٔ اول],
+                    (SELECT r.NationalID FROM TblCaseRepresentative r
+                      WHERE r.CasID = c.CasID AND r.IsActive = 1
+                        AND r.RepresentativeOrder = 1) AS [تذکرهٔ نمایندهٔ اول],
+                    (SELECT r.Phone FROM TblCaseRepresentative r
+                      WHERE r.CasID = c.CasID AND r.IsActive = 1
+                        AND r.RepresentativeOrder = 1) AS [تماس نمایندهٔ اول],
+                    (SELECT r.Address FROM TblCaseRepresentative r
+                      WHERE r.CasID = c.CasID AND r.IsActive = 1
+                        AND r.RepresentativeOrder = 1) AS [آدرس نمایندهٔ اول],
+                    (SELECT r.FullName FROM TblCaseRepresentative r
+                      WHERE r.CasID = c.CasID AND r.IsActive = 1
+                        AND r.RepresentativeOrder = 2) AS [نام نمایندهٔ دوم],
+                    (SELECT r.RelationshipToBeneficiary FROM TblCaseRepresentative r
+                      WHERE r.CasID = c.CasID AND r.IsActive = 1
+                        AND r.RepresentativeOrder = 2) AS [نسبت نمایندهٔ دوم],
+                    (SELECT r.NationalID FROM TblCaseRepresentative r
+                      WHERE r.CasID = c.CasID AND r.IsActive = 1
+                        AND r.RepresentativeOrder = 2) AS [تذکرهٔ نمایندهٔ دوم],
+                    (SELECT r.Phone FROM TblCaseRepresentative r
+                      WHERE r.CasID = c.CasID AND r.IsActive = 1
+                        AND r.RepresentativeOrder = 2) AS [تماس نمایندهٔ دوم],
+                    (SELECT r.Address FROM TblCaseRepresentative r
+                      WHERE r.CasID = c.CasID AND r.IsActive = 1
+                        AND r.RepresentativeOrder = 2) AS [آدرس نمایندهٔ دوم],
                     c.PhysicalStatusNotes AS [یادداشت وضعیت جسمی],
                     c.MigrationCardType AS [نوع برگه مهاجرت],
                     c.MaritalStatus AS [وضعیت تأهل],
@@ -196,6 +248,35 @@ namespace CaseManagement.Helpers
                     c.LocationAddress AS [آدرس لوکیشن],
                     c.EducationLevel AS [تحصیلات],
                     c.ServiceStatus AS [وضعیت خدمات],
+                    -- Phase 5.5-D — وضعیتِ محاسبه‌شده. همه از ستون‌های کش‌شده
+                    -- خوانده می‌شوند (نه محاسبهٔ زنده)، پس این گزارشِ
+                    -- چندپرونده‌ای با افزودنشان کندتر نمی‌شود.
+                    c.CompletionPercent AS [درصد تکمیل],
+                    CASE IFNULL(c.CompletionStatusCode, '')
+                         WHEN 'COMPLETE'    THEN 'کامل'
+                         WHEN 'IN_PROGRESS' THEN 'در حال تکمیل'
+                         WHEN 'INCOMPLETE'  THEN 'ناقص'
+                         ELSE '' END AS [وضعیت تکمیل],
+                    c.VulnerabilityScore AS [امتیاز آسیب‌پذیری],
+                    CASE IFNULL(c.VulnerabilityBand, '')
+                         WHEN 'HIGH'   THEN 'پرخطر'
+                         WHEN 'MEDIUM' THEN 'متوسط'
+                         WHEN 'LOW'    THEN 'کم‌خطر'
+                         ELSE '' END AS [سطح آسیب‌پذیری],
+                    (SELECT GROUP_CONCAT(fs.Name, ' ، ')
+                       FROM TblCaseFunding cf
+                       JOIN TblFundingSource fs ON fs.FundingSourceID = cf.FundingSourceID
+                      WHERE cf.CasID = c.CasID AND cf.IsActive = 1) AS [منابع تأمین مالی],
+                    (SELECT GROUP_CONCAT(sp.Name, ' ، ')
+                       FROM TblCaseFunding cf
+                       JOIN TblSponsor sp ON sp.SponsorID = cf.SponsorID
+                      WHERE cf.CasID = c.CasID AND cf.IsActive = 1) AS [خیّرین],
+                    (SELECT COALESCE(SUM(a.Amount), 0) FROM TblAssistance a
+                      WHERE a.CasID = c.CasID) AS [مجموع مساعدت],
+                    (SELECT CAST(SUM(CASE WHEN IFNULL(d.IsVerified,0) = 1 THEN 1 ELSE 0 END) AS TEXT)
+                            || ' / ' || CAST(COUNT(*) AS TEXT)
+                       FROM TblDocs d
+                      WHERE d.CasID = c.CasID AND IFNULL(d.IsArchived,0) = 0) AS [اسناد تأییدشده],
                     c.UrgentSituation AS [شرح وضعیت فوری],
                     CASE WHEN NULLIF(c.PhotoPath, '') IS NULL THEN 'ندارد' ELSE 'دارد' END AS [عکس سرپرست],
                     CASE WHEN NULLIF(c.FamilyPhotoPath, '') IS NULL THEN 'ندارد' ELSE 'دارد' END AS [عکس جمعی],
@@ -217,6 +298,7 @@ namespace CaseManagement.Helpers
                     END AS [تعداد ایتام],
                     (SELECT COUNT(1) FROM TblDocs d WHERE d.CasID = c.CasID) AS [تعداد اسناد]
                 FROM TblCase c
+                LEFT JOIN TblDisability dis ON dis.CasID = c.CasID
                 WHERE (@CID = 0 OR c.CenterID = @CID)
                   AND (@Svc = '' OR c.ServiceStatus = @Svc)" + AdvancedFilterSql + @"
                 ORDER BY c.CasID DESC";
