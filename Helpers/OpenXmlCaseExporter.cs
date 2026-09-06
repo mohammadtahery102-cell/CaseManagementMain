@@ -199,6 +199,10 @@ WHERE c.CasID = @CasID", caseId);
                 { "{{Zone}}", GetValue(row, "Zone") },
                 { "{{Province}}", GetValue(row, "Province") },
                 { "{{District}}", GetValue(row, "District") },
+                // الزام نسخهٔ تحویلی (مورد ۷) — «سایت». قالبی که این
+                // placeholder را ندارد بی‌اثر می‌ماند (نگاشتِ بدونِ متناظر
+                // بی‌ضرر است)، پس هیچ خروجیِ موجودی تغییر نمی‌کند.
+                { "{{Site}}", GetValue(row, "Site") },
                 { "{{RequestType}}", GetValue(row, "RequestType") },
                 { "{{PriorityLevel}}", GetValue(row, "PriorityLevel") },
                 { "{{HeadFullName}}", GetValue(row, "HeadFullName") },

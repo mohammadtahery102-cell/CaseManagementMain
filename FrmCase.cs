@@ -476,6 +476,7 @@ namespace CaseManagement
             txtZone.TabIndex = c++;
             txtProvince.TabIndex = c++;
             txtDistrict.TabIndex = c++;
+            txtSite.TabIndex = c++;
             txtRequestType.TabIndex = c++;
             txtPriorityLevel.TabIndex = c++;
             txtMigrationCardType.TabIndex = c++;
@@ -2604,6 +2605,7 @@ namespace CaseManagement
             txtProvince.Text = "";
             txtDistrict.Items.Clear();
             txtDistrict.Text = "";
+            txtSite.Text = "";
             txtRequestType.Text = "";
             txtPriorityLevel.Text = "";
             txtHeadFullName.Text = "";
@@ -2910,6 +2912,7 @@ namespace CaseManagement
             AddStringParameter(cmd, "@Zone", txtZone.Text.Trim());
             AddStringParameter(cmd, "@Province", txtProvince.Text.Trim());
             AddStringParameter(cmd, "@District", txtDistrict.Text.Trim());
+            AddStringParameter(cmd, "@Site", txtSite.Text.Trim());
             AddStringParameter(cmd, "@RequestType", txtRequestType.Text.Trim());
             // Phase 3 — هویتِ مرجعِ تازه، در کنارِ ستونِ متنیِ قدیمی (dual-write).
             // ValidateForm از قبل تضمین می‌کند این مقدار پیدا می‌شود.
@@ -3716,6 +3719,63 @@ namespace CaseManagement
             }
         }
 
+        // الزام نسخهٔ تحویلی (مورد ۱) — هشدارِ «پروندهٔ مشابه» پیش از ذخیره.
+        // خروجی true یعنی «ادامه بده».
+        //
+        // هشدار عمداً *نرم* است، نه مانعِ قطعی: دو مددجوی هم‌نامِ واقعی در این
+        // جامعه کاملاً محتمل‌اند و مسدودکردنِ ثبت، دادهٔ درست را غیرقابلِ ورود
+        // می‌کرد. ولی کاربر باید آگاهانه تصمیم بگیرد و ردِ تصمیمش بماند —
+        // برای همین تأییدِ ادامه در حسابرسی ثبت می‌شود.
+        private bool ConfirmNoSimilarCase(int excludeCasId)
+        {
+            List<Helpers.DuplicateMatch> similar;
+            try
+            {
+                similar = Helpers.DuplicateDetector.FindSimilarCases(
+                    txtHeadFullName.Text, txtHeadFatherName.Text,
+                    txtPhone.Text, txtHeadCurrentResidence.Text, excludeCasId);
+            }
+            catch
+            {
+                return true;   // هشدار نباید ذخیره را بشکند.
+            }
+
+            if (similar == null || similar.Count == 0) return true;
+
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("پروندهٔ زیر با اطلاعات واردشده شباهت بالا دارد:");
+            sb.AppendLine();
+
+            foreach (var m in similar.Take(5))
+            {
+                sb.Append("• ").Append(m.SimilarityPercent).Append("٪ — ");
+                sb.Append(string.IsNullOrWhiteSpace(m.CodeB) ? ("فرم " + m.FormNoB) : ("کد " + m.CodeB));
+                sb.Append(" — ").Append(m.NameB);
+                if (!string.IsNullOrWhiteSpace(m.FatherB)) sb.Append(" فرزند ").Append(m.FatherB);
+                sb.Append("   (تطابق: ").Append(string.Join(" + ", m.MatchedFields)).AppendLine(")");
+            }
+
+            if (similar.Count > 5)
+                sb.AppendLine("• … و " + (similar.Count - 5) + " مورد دیگر");
+
+            sb.AppendLine();
+            sb.Append("اگر این همان شخص است، پروندهٔ موجود را ویرایش کنید نه اینکه پروندهٔ تازه بسازید." +
+                      Environment.NewLine + "آیا مطمئن هستید که می‌خواهید ادامه دهید؟");
+
+            if (!UiTheme.ShowConfirm(this, sb.ToString(), "احتمال پروندهٔ تکراری"))
+                return false;
+
+            try
+            {
+                AuditLogger.Log("ثبت با وجود شباهت", "TblCase", excludeCasId, "",
+                    string.Join(" | ", similar.Take(5).Select(
+                        m => m.SimilarityPercent + "% => " + m.CodeB + " " + m.NameB)));
+            }
+            catch { /* حسابرسی نباید ذخیره را بشکند. */ }
+
+            return true;
+        }
+
         private void btnSave_Click(object sender, EventArgs e)
         {
             if (!CaseManagement.Enterprise.PermissionService.Require("Case.Edit"))
@@ -3784,6 +3844,14 @@ namespace CaseManagement
                     tazkiraAuditNote = "تذکره " + txtHeadTazkiraNo.Text.Trim() + " => " + string.Join(" | ", tazkiraMatches);
                 }
 
+                // الزام نسخهٔ تحویلی (مورد ۱) — هشدارِ پروندهٔ مشابه.
+                // مکملِ بررسیِ تذکره بالا، نه جایگزینِ آن: تذکره مقایسهٔ دقیق
+                // است و این یکی شباهت. پروندهٔ تکراری معمولاً تذکره ندارد یا
+                // تذکره‌اش با یک رقم اختلاف وارد شده، پس دقیقاً از کنارِ آن
+                // بررسی رد می‌شد.
+                if (!ConfirmNoSimilarCase(0))
+                    return;
+
                 SaveSelectedPhotos();
 
                 using (SQLiteConnection con = db.GetConnection())
@@ -3791,7 +3859,7 @@ namespace CaseManagement
                     string query = @"INSERT INTO TblCase
                     (
                         FormNo, Code, CaseNo, CaseDate,
-                        Zone, Province, District, RequestType, RequestTypeID, PriorityLevel,
+                        Zone, Province, District, Site, RequestType, RequestTypeID, PriorityLevel,
                         HeadFullName, HeadFatherName, HeadSadat, Religion, HeadTazkiraNo, HeadIdCardType,
                         HeadOriginalResidence, HeadCurrentResidence, RelationshipToFamily,
                         Phone, RelativePhone, CoveredByOrg, CoveredByOrgNames, Job, Skill,
@@ -3806,7 +3874,7 @@ namespace CaseManagement
                     VALUES
                     (
                         @FormNo, @Code, @CaseNo, @CaseDate,
-                        @Zone, @Province, @District, @RequestType, @RequestTypeID, @PriorityLevel,
+                        @Zone, @Province, @District, @Site, @RequestType, @RequestTypeID, @PriorityLevel,
                         @HeadFullName, @HeadFatherName, @HeadSadat, @Religion, @HeadTazkiraNo, @HeadIdCardType,
                         @HeadOriginalResidence, @HeadCurrentResidence, @RelationshipToFamily,
                         @Phone, @RelativePhone, @CoveredByOrg, @CoveredByOrgNames, @Job, @Skill,
@@ -3983,6 +4051,12 @@ namespace CaseManagement
                     tazkiraAuditNote = "تذکره " + txtHeadTazkiraNo.Text.Trim() + " => " + string.Join(" | ", tazkiraMatches);
                 }
 
+                // الزام نسخهٔ تحویلی (مورد ۱) — همان هشدارِ شباهت در مسیرِ ویرایش.
+                // رکوردِ جاری از مقایسه کنار گذاشته می‌شود تا پرونده با خودش
+                // مشابه گزارش نشود.
+                if (!ConfirmNoSimilarCase(currentCaseId))
+                    return false;
+
                 SaveSelectedPhotos();
 
                 using (SQLiteConnection con = db.GetConnection())
@@ -3994,6 +4068,7 @@ namespace CaseManagement
                         Zone = @Zone,
                         Province = @Province,
                         District = @District,
+                        Site = @Site,
                         RequestType = @RequestType,
                         RequestTypeID = @RequestTypeID,
                         PriorityLevel = @PriorityLevel,
@@ -4616,6 +4691,7 @@ WHERE CasID = @CasID", con))
             txtDistrict.Items.Clear();
             txtDistrict.Items.AddRange(Helpers.AfghanGeoData.GetDistricts(txtProvince.Text));
             txtDistrict.Text = GetDbString(dr, "District");
+            txtSite.Text = GetDbString(dr, "Site");
             txtRequestType.Text = GetDbString(dr, "RequestType");
             txtPriorityLevel.Text = GetDbString(dr, "PriorityLevel");
             txtHeadFullName.Text = GetDbString(dr, "HeadFullName");

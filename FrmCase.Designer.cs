@@ -157,6 +157,17 @@
             this.dtpSurveyDate = new CaseManagement.Helpers.PersianDatePicker();
             this.label28 = new System.Windows.Forms.Label();
             this.txtLocationAddress = new System.Windows.Forms.TextBox();
+            // الزام نسخهٔ تحویلی (مورد ۷) — «سایت»: محلِ میدانیِ ارائهٔ خدمت.
+            // ComboBox با DropDownStyle = DropDown (نه DropDownList): مقادیرِ
+            // شناخته‌شده پیشنهاد می‌شوند ولی سایتِ تازه هم تایپ‌شدنی است، چون
+            // فهرست هنوز تثبیت نشده و بستنِ آن، ثبتِ پروندهٔ یک سایتِ جدید را
+            // غیرممکن می‌کرد.
+            this.lblSite = new System.Windows.Forms.Label();
+            this.txtSite = new System.Windows.Forms.ComboBox();
+            this.txtSite.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDown;
+            this.txtSite.AutoCompleteMode = System.Windows.Forms.AutoCompleteMode.SuggestAppend;
+            this.txtSite.AutoCompleteSource = System.Windows.Forms.AutoCompleteSource.ListItems;
+
             // Phase 3 — معرف (Referrer): نام و شمارهٔ تماسِ معرف، برای همهٔ انواع پرونده.
             this.label29 = new System.Windows.Forms.Label();
             this.txtReferrerName = new System.Windows.Forms.TextBox();
@@ -385,6 +396,9 @@
             AddCaseField(gridCase, this.label1,       "زون",                this.txtZone);
             AddCaseField(gridCase, this.label2,       "ولایت",              this.txtProvince);
             AddCaseField(gridCase, this.label3,       "ولسوالی",            this.txtDistrict);
+            // مورد ۷ — بلافاصله بعد از ولسوالی، چون «سایت» ریزترین سطحِ
+            // مکانی است و کاربر همان‌جا ذهنش روی موقعیت است.
+            AddCaseField(gridCase, this.lblSite,      "سایت",               this.txtSite);
             AddCaseField(gridCase, this.label5,       "اولویت‌بندی اقتصادی", this.txtPriorityLevel);
             AddCaseField(gridCase, this.label16,      "تحت پوشش دیگر مؤسسات", this.txtCoveredByOrg);
             // آموزش — «اسامی مؤسسات» فقط وقتی معنی دارد که پاسخِ بالا «بله» باشد،
@@ -2353,6 +2367,8 @@
         private System.Windows.Forms.Label label28;
         private System.Windows.Forms.TextBox txtLocationAddress;
         // Phase 3 — معرف
+        private System.Windows.Forms.Label lblSite;
+        private System.Windows.Forms.ComboBox txtSite;
         private System.Windows.Forms.Label label29;
         private System.Windows.Forms.TextBox txtReferrerName;
         private System.Windows.Forms.Label label30;

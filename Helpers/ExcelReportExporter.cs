@@ -1,4 +1,4 @@
-using CaseManagement.DAL;
+﻿using CaseManagement.DAL;
 using ClosedXML.Excel;
 using System;
 using System.Data;
@@ -169,6 +169,7 @@ namespace CaseManagement.Helpers
                     c.Zone AS [زون],
                     c.Province AS [ولایت],
                     c.District AS [ولسوالی],
+                    c.Site AS [سایت],
                     c.RequestType AS [نوع درخواست],
                     c.PriorityLevel AS [اولویت بندی اقتصادی],
                     c.HeadFullName AS [نام سرپرست],
@@ -316,6 +317,7 @@ namespace CaseManagement.Helpers
                     c.CaseNo AS [شماره پرونده],
                     c.Province AS [ولایت],
                     c.District AS [ولسوالی],
+                    c.Site AS [سایت],
                     c.HeadFullName AS [نام سرپرست],
                     c.Phone AS [شماره تماس سرپرست],
                     -- نوع درخواستِ پرونده روی هر سطرِ عضو تکرار می‌شود تا در

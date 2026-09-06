@@ -177,6 +177,162 @@ WHERE TazkiraNo IS NOT NULL AND TazkiraNo <> '' AND (@cid = 0 OR CenterID = @cid
             return results;
         }
 
+        // ─────────────────────────────────────────────────────────────────────
+        // الزام نسخهٔ تحویلی (مورد ۱) — هشدارِ «پروندهٔ مشابه» در لحظهٔ ذخیره.
+        //
+        // تا امروز فقط تذکرهٔ تکراری هنگام ذخیره بررسی می‌شد؛ موتورِ شباهت
+        // (Detect) فقط از صفحهٔ گزارشِ تکراری‌ها صدا زده می‌شد، یعنی کاربری
+        // که پروندهٔ تکراری می‌ساخت هیچ هشداری نمی‌دید و کشفِ آن به بازبینیِ
+        // بعدی موکول می‌شد.
+        //
+        // چرا متدِ تازه و نه Detect(): آن یکی همهٔ پرونده‌ها را با همه مقایسه
+        // می‌کند (گزارشِ دسته‌ای)؛ اینجا فقط *یک* رکوردِ در حالِ ثبت با بقیه
+        // سنجیده می‌شود. موتور همان است — Normalize/Similarity عیناً همان
+        // توابعِ این کلاس‌اند، پس هرگز دو تعریفِ متفاوت از «شباهت» پیدا نمی‌شود
+        // (همان قاعده‌ای که تصمیم #۳۱ برای Compare گذاشت).
+        //
+        // قواعدِ حفظ‌شده از موتورِ موجود:
+        //   • فیلترِ مرکز و کنارگذاشتنِ بایگانی‌شده‌ها، دقیقاً مثلِ Load().
+        //   • جفت‌های هم‌خانوار نادیده گرفته می‌شوند — بدونِ این، خواهر و
+        //     برادرهایی که طبقِ قاعدهٔ «خدمتِ مستقل» پروندهٔ جدا دارند و
+        //     نامِ پدر و آدرس و تلفنِ مشترک دارند، همیشه «تکراری» گزارش
+        //     می‌شدند (همان دامی که در موتورِ دسته‌ای هم رفع شده بود).
+        //   • رکوردِ در حالِ ویرایش هرگز با خودش مقایسه نمی‌شود.
+        //
+        // امتیازدهی: نامِ سرپرست پایه است؛ نامِ پدر و آدرس و تلفنِ یکسان
+        // امتیاز را بالا می‌برند. آستانهٔ پیش‌فرض ۹۰ است (خواستهٔ صریحِ نسخهٔ
+        // تحویلی)، ولی پارامتر است تا در آزمون و تنظیمات قابلِ تغییر بماند.
+        // ─────────────────────────────────────────────────────────────────────
+        public const int SaveTimeSimilarityThreshold = 90;
+
+        public static List<DuplicateMatch> FindSimilarCases(
+            string headFullName, string headFatherName, string phone, string address,
+            int excludeCasId, int minSimilarity = SaveTimeSimilarityThreshold)
+        {
+            var results = new List<DuplicateMatch>();
+
+            string nName = Normalize(headFullName);
+            if (nName.Length == 0) return results;   // بدونِ نام، شباهت بی‌معناست.
+
+            string nFather = Normalize(headFatherName);
+            string nPhone = NormalizeIdentifier(phone);
+            string nAddress = Normalize(address);
+
+            int centerFilter = SecurityContext.CenterFilterId;
+
+            // گروهِ خانوارِ رکوردِ در حالِ ویرایش، برای کنارگذاشتنِ هم‌خانوارها.
+            int myFamilyGroup = 0;
+
+            try
+            {
+                using (SQLiteConnection con = new DatabaseHelper().GetConnection())
+                {
+                    con.Open();
+
+                    if (excludeCasId > 0)
+                    {
+                        using (var fg = new SQLiteCommand(
+                            "SELECT IFNULL(FamilyGroupID, CasID) FROM TblCase WHERE CasID = @Id", con))
+                        {
+                            fg.Parameters.AddWithValue("@Id", excludeCasId);
+                            object v = fg.ExecuteScalar();
+                            if (v != null && v != DBNull.Value) myFamilyGroup = Convert.ToInt32(v);
+                        }
+                    }
+
+                    using (var cmd = new SQLiteCommand(@"
+SELECT CasID, COALESCE(Code,'') AS Code, COALESCE(FormNo,'') AS FormNo,
+       COALESCE(HeadFullName,'') AS Nm, COALESCE(HeadFatherName,'') AS Fa,
+       COALESCE(Phone,'') AS Ph, COALESCE(HeadCurrentResidence,'') AS Ad,
+       IFNULL(FamilyGroupID, CasID) AS Fg
+FROM TblCase
+WHERE (@CID = 0 OR CenterID = @CID)
+  AND IsArchived = 0
+  AND CasID <> @Exclude
+  AND IFNULL(TRIM(HeadFullName),'') <> ''", con))
+                    {
+                        cmd.Parameters.AddWithValue("@CID", centerFilter);
+                        cmd.Parameters.AddWithValue("@Exclude", excludeCasId);
+
+                        using (SQLiteDataReader rd = cmd.ExecuteReader())
+                        {
+                            while (rd.Read())
+                            {
+                                int otherFg = Convert.ToInt32(rd["Fg"]);
+                                if (myFamilyGroup != 0 && otherFg == myFamilyGroup)
+                                    continue;   // هم‌خانوار — تکراری نیست.
+
+                                string oName = Normalize(Convert.ToString(rd["Nm"]));
+                                int nameScore = Similarity(nName, oName);
+                                if (nameScore < minSimilarity) continue;
+
+                                // نام به‌تنهایی کافی نیست: امتیاز نهایی با
+                                // شواهدِ تأییدی بالا می‌رود و بدونِ هیچ شاهدی
+                                // کمی پایین می‌آید، تا هم‌نام‌های واقعی
+                                // (که در این جامعه فراوان‌اند) سیل هشدار نسازند.
+                                string oFather = Normalize(Convert.ToString(rd["Fa"]));
+                                string oPhone = NormalizeIdentifier(Convert.ToString(rd["Ph"]));
+                                string oAddress = Normalize(Convert.ToString(rd["Ad"]));
+
+                                int score = nameScore;
+                                var reasons = new List<string> { "نام" };
+
+                                if (nFather.Length > 0 && oFather.Length > 0)
+                                {
+                                    int fatherScore = Similarity(nFather, oFather);
+                                    if (fatherScore >= minSimilarity)
+                                    {
+                                        score = Math.Min(100, score + 5);
+                                        reasons.Add("نام پدر");
+                                    }
+                                }
+
+                                if (nPhone.Length > 0 && nPhone == oPhone)
+                                {
+                                    score = Math.Min(100, score + 4);
+                                    reasons.Add("شماره تماس");
+                                }
+
+                                if (nAddress.Length > 0 && oAddress.Length > 0 &&
+                                    Similarity(nAddress, oAddress) >= minSimilarity)
+                                {
+                                    score = Math.Min(100, score + 3);
+                                    reasons.Add("آدرس");
+                                }
+
+                                if (score < minSimilarity) continue;
+
+                                results.Add(new DuplicateMatch
+                                {
+                                    CasIdA = excludeCasId,
+                                    CasIdB = Convert.ToInt32(rd["CasID"]),
+                                    CodeB = Convert.ToString(rd["Code"]).Trim(),
+                                    FormNoB = Convert.ToString(rd["FormNo"]).Trim(),
+                                    NameB = Convert.ToString(rd["Nm"]).Trim(),
+                                    FatherB = Convert.ToString(rd["Fa"]).Trim(),
+                                    PhoneB = Convert.ToString(rd["Ph"]).Trim(),
+                                    SimilarityPercent = score,
+                                    MatchedFields = reasons
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // هشدارِ شباهت هرگز نباید ذخیرهٔ معتبر را به خطا تبدیل کند —
+                // همان قاعده‌ای که بقیهٔ نویسنده‌های جانبی (حسابرسی/تایم‌لاین)
+                // رعایت می‌کنند. در بدترین حالت کاربر هشدار نمی‌بیند.
+                return new List<DuplicateMatch>();
+            }
+
+            return results
+                .OrderByDescending(m => m.SimilarityPercent)
+                .ThenBy(m => m.CodeB, StringComparer.Ordinal)
+                .ToList();
+        }
+
         // ─── خواندن از دیتابیس (فقط SELECT) ─────────────────────────────────
         private List<CaseRow> Load()
         {

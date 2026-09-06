@@ -113,6 +113,9 @@ namespace CaseManagement.Helpers
             cases.Columns.Add(new ReportColumn("Phone", "شماره تماس", "c.Phone", ReportColumnType.Text));
             cases.Columns.Add(new ReportColumn("Province", "ولایت", "c.Province", ReportColumnType.Text));
             cases.Columns.Add(new ReportColumn("District", "ولسوالی", "c.District", ReportColumnType.Text));
+            // مورد ۷ — «سایت» به گزارش‌سازِ پویا. فقط افزودنی است، پس
+            // قالب‌های ذخیره‌شدهٔ کاربران دست‌نخورده کار می‌کنند.
+            cases.Columns.Add(new ReportColumn("Site", "سایت", "c.Site", ReportColumnType.Text));
             cases.Columns.Add(new ReportColumn("ServiceStatus", "وضعیت خدمات", "c.ServiceStatus", ReportColumnType.Text));
             cases.Columns.Add(new ReportColumn("RequestType", "نوع درخواست", "c.RequestType", ReportColumnType.Text));
             cases.Columns.Add(new ReportColumn("PriorityLevel", "اولویت بندی اقتصادی", "c.PriorityLevel", ReportColumnType.Text));

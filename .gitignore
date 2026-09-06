@@ -7,3 +7,6 @@ packages/
 *.db
 Saves/
 TestResults/
+
+# پشتیبان‌های محلی پیش از تغییرات پرریسک — نباید کامیت شوند.
+.backup/

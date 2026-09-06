@@ -34,6 +34,8 @@ namespace CaseManagement
 
         // ─── تب ۱: جستجوی سرپرست ─────────────────────────────────────────────
         private TextBox txtHCode, txtHFormNo, txtHName, txtHFatherName, txtHTazkira, txtHPhone, txtHDistrict, txtHJob;
+        // الزام نسخهٔ تحویلی (مورد ۷) — فیلترِ «سایت» روی جستجوی پرونده.
+        private TextBox txtHSite;
         // «تحت پوشش دیگر مؤسسات» (بله/خیر) و «اسامی مؤسسات تحت پوشش» (جستجوی متنی).
         private ComboBox cmbHCoveredByOrg;
         private TextBox txtHCoveredByOrgNames;
@@ -180,6 +182,7 @@ namespace CaseManagement
             txtHTazkira = new TextBox();
             txtHPhone = new TextBox();
             txtHDistrict = new TextBox();
+            txtHSite = new TextBox();
             txtHJob = new TextBox();
             txtHCoveredByOrgNames = new TextBox();
 
@@ -235,6 +238,7 @@ namespace CaseManagement
                 new KeyValuePair<string, Control>("شماره تماس", txtHPhone),
                 new KeyValuePair<string, Control>("ولایت", cmbHProvince),
                 new KeyValuePair<string, Control>("ولسوالی", txtHDistrict),
+                new KeyValuePair<string, Control>("سایت", txtHSite),
                 new KeyValuePair<string, Control>("نوع درخواست", cmbHRequestType),
                 new KeyValuePair<string, Control>("اولویت‌بندی اقتصادی", cmbHPriority),
                 new KeyValuePair<string, Control>("تحت پوشش دیگر مؤسسات", cmbHCoveredByOrg),
@@ -310,6 +314,18 @@ namespace CaseManagement
             dgvHeadResults.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
             UiTheme.StyleGrid(dgvHeadResults);
             UiTheme.ApplyPersianDateColumns(dgvHeadResults, "CaseDate");
+
+            // الزام نسخهٔ تحویلی (مورد ۱۲) — «باز کردن مستقیم پرونده و رفع
+            // نواقص». کارت‌های نواقصِ داشبورد از قبل به همین فرم می‌آمدند، ولی
+            // اینجا بن‌بست بود: کاربر فهرستِ پرونده‌های ناقص را می‌دید و برای
+            // اصلاح باید فرم پرونده را جدا باز می‌کرد و کد را دستی می‌جست.
+            // سازندهٔ FrmCase(int) از قبل وجود داشت و هیچ فرمی از آن استفاده
+            // نمی‌کرد؛ فقط همین سیم‌کشی کم بود.
+            dgvHeadResults.CellDoubleClick += OpenSelectedCase;
+            dgvHeadResults.KeyDown += delegate (object s, KeyEventArgs e)
+            {
+                if (e.KeyCode == Keys.Enter) { OpenSelectedCase(s, null); e.Handled = true; }
+            };
 
             // صفحه‌بندیِ نتایج — جستجوی بدونِ فیلتر می‌تواند کلِ جدول را برگرداند؛
             // با صدهزار پرونده این یعنی چند ثانیه انتظار و ده‌ها مگابایت حافظه.
@@ -408,7 +424,7 @@ namespace CaseManagement
         {
             const string headSelect = @"
 SELECT CasID, FormNo, Code, CaseNo, HeadFullName, HeadFatherName, HeadIdCardType, HeadTazkiraNo, Phone,
-       Province, District, RequestType, PriorityLevel, HeadSadat, Religion, MaritalStatus,
+       Province, District, Site, RequestType, PriorityLevel, HeadSadat, Religion, MaritalStatus,
        EducationLevel, Job, DisabilityType, CoveredByOrg, CoveredByOrgNames, ServiceStatus, CaseDate
 FROM TblCase
 WHERE 1 = 1 AND IsArchived = 0";
@@ -431,6 +447,7 @@ WHERE 1 = 1 AND IsArchived = 0";
                 AddLikeFilter(sql, cmd, "HeadTazkiraNo", "@Tazkira", txtHTazkira.Text);
                 AddLikeFilter(sql, cmd, "Phone", "@Phone", txtHPhone.Text);
                 AddLikeFilter(sql, cmd, "District", "@District", txtHDistrict.Text);
+                AddLikeFilter(sql, cmd, "Site", "@Site", txtHSite.Text);
                 AddLikeFilter(sql, cmd, "Job", "@Job", txtHJob.Text);
                 AddLikeFilter(sql, cmd, "CoveredByOrgNames", "@CovNames", txtHCoveredByOrgNames.Text);
 
@@ -508,6 +525,35 @@ WHERE 1 = 1 AND IsArchived = 0";
             ApplyHeadGridHeaders();
         }
 
+        // مورد ۱۲ — بازکردنِ پروندهٔ ردیفِ انتخاب‌شده. پس از بستنِ فرمِ پرونده،
+        // جستجو دوباره اجرا می‌شود تا نقصی که همان لحظه رفع شد، از فهرستِ
+        // نواقص حذف گردد — وگرنه کاربر نمی‌داند کارش اثر کرده یا نه.
+        private void OpenSelectedCase(object sender, DataGridViewCellEventArgs e)
+        {
+            if (dgvHeadResults.CurrentRow == null) return;
+
+            object raw = null;
+            try { raw = dgvHeadResults.CurrentRow.Cells["CasID"].Value; }
+            catch { return; }
+
+            int casId;
+            if (raw == null || raw == DBNull.Value ||
+                !int.TryParse(raw.ToString(), out casId) || casId <= 0) return;
+
+            try
+            {
+                using (var frm = new FrmCase(casId))
+                    frm.ShowDialog(this);
+            }
+            catch (Exception ex)
+            {
+                Msg.Show("باز کردن پرونده ممکن نشد: " + ex.Message);
+                return;
+            }
+
+            LoadHeadResults();
+        }
+
         private void ApplyHeadGridHeaders()
         {
             SetHeader(dgvHeadResults, "FormNo", "شماره فرم");
@@ -520,6 +566,7 @@ WHERE 1 = 1 AND IsArchived = 0";
             SetHeader(dgvHeadResults, "Phone", "شماره تماس");
             SetHeader(dgvHeadResults, "Province", "ولایت");
             SetHeader(dgvHeadResults, "District", "ولسوالی");
+            SetHeader(dgvHeadResults, "Site", "سایت");
             SetHeader(dgvHeadResults, "RequestType", "نوع درخواست");
             SetHeader(dgvHeadResults, "PriorityLevel", "اولویت‌بندی اقتصادی");
             SetHeader(dgvHeadResults, "HeadSadat", "سیادت");

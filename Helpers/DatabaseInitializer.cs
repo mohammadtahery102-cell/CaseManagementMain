@@ -2102,6 +2102,19 @@ CREATE TABLE IF NOT EXISTS TblCaseTimeline (
             EnsureColumn(con, "TblCase", "ServiceStatusID",    "INTEGER NOT NULL DEFAULT 1");
             EnsureColumn(con, "TblCase", "ReferrerName",       "TEXT NULL");
             EnsureColumn(con, "TblCase", "ReferrerPhone",      "TEXT NULL");
+
+            // الزام نسخهٔ تحویلی (مورد ۷) — «سایت»: محلِ میدانیِ ارائهٔ خدمت،
+            // مستقل از ولایت/ولسوالی و مستقل از مرکزِ ثبت‌کننده. برای هر شش
+            // نوعِ پرونده معنی دارد، پس ستونِ مسطح روی TblCase است نه یکی از
+            // جدول‌های ماژولِ تخصصی (همان استدلالِ تصمیم #۱۹).
+            //
+            // متن آزاد است نه کلیدِ خارجی: فهرستِ سایت‌ها هنوز تثبیت نشده و
+            // ساختنِ جدولِ مرجعی که خالی بماند، فقط یک دروازهٔ اضافی سرِ راهِ
+            // کاربر می‌گذاشت. مقادیرِ پیشنهادی از TblLookup می‌آیند (دستهٔ
+            // «Site») تا وقتی فهرست پایدار شد، مهاجرت به کلیدِ خارجی بدونِ
+            // ازدست‌رفتنِ داده ممکن باشد.
+            EnsureColumn(con, "TblCase", "Site",               "TEXT NULL");
+            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblCase_Site ON TblCase(Site);");
             EnsureColumn(con, "TblCase", "EntrySourceCode",    "TEXT NOT NULL DEFAULT 'MANUAL'");
             EnsureColumn(con, "TblCase", "CreatedByUserId",    "INTEGER NULL");
             EnsureColumn(con, "TblCase", "CreatedByUsername",  "TEXT NULL");
