@@ -25,7 +25,7 @@ namespace CaseManagement.Helpers
             using (PrintDocument doc = new PrintDocument())
             {
                 doc.DocumentName = title;
-                doc.BeginPrint += delegate { index = 0; };
+                doc.BeginPrint += delegate { index = 0; _printPage = 0; };
                 doc.PrintPage += delegate (object s, PrintPageEventArgs e)
                 {
                     index = DrawKeyValuePage(e, title, fields, index);
@@ -76,7 +76,7 @@ namespace CaseManagement.Helpers
             using (PrintDocument doc = new PrintDocument())
             {
                 doc.DocumentName = title;
-                doc.BeginPrint += delegate { rowIndex = 0; };
+                doc.BeginPrint += delegate { rowIndex = 0; _printPage = 0; };
                 doc.PrintPage += delegate (object s, PrintPageEventArgs e)
                 {
                     rowIndex = DrawTablePage(e, title, table, rowIndex);
@@ -147,7 +147,7 @@ namespace CaseManagement.Helpers
             using (PrintDocument doc = new PrintDocument())
             {
                 doc.DocumentName = title;
-                doc.BeginPrint += delegate { rowIndex = 0; headBlockDrawn = false; };
+                doc.BeginPrint += delegate { rowIndex = 0; headBlockDrawn = false; _printPage = 0; };
                 doc.PrintPage += delegate (object s, PrintPageEventArgs e)
                 {
                     Graphics g = e.Graphics;
@@ -255,6 +255,12 @@ namespace CaseManagement.Helpers
                     new RectangleF(e.MarginBounds.Left, y, e.MarginBounds.Width, 24), sfCenter);
                 y += 24;
             }
+            if (ProductMode.IsErp)
+            {
+                g.DrawString(ProductBranding.CommercialName, FooterFont, Brushes.DimGray,
+                    new RectangleF(e.MarginBounds.Left, y, e.MarginBounds.Width, 16), sfCenter);
+                y += 16;
+            }
 
             g.DrawString(title, TitleFont, Brushes.Black,
                 new RectangleF(e.MarginBounds.Left, y, e.MarginBounds.Width, 34), sfCenter);
@@ -264,12 +270,19 @@ namespace CaseManagement.Helpers
             y += 12;
         }
 
+        private static int _printPage;
+
         private static void DrawFooter(Graphics g, PrintPageEventArgs e)
         {
-            string footer = "چاپ‌شده در " + PersianDateHelper.ToPersianDateTimeString(DateTime.Now);
+            _printPage++;
+            string footer = (ProductMode.IsErp ? ProductBranding.CommercialName + "  ·  " : "")
+                + "چاپ‌شده در " + PersianDateHelper.ToPersianDateTimeString(DateTime.Now);
             StringFormat sf = new StringFormat { Alignment = StringAlignment.Center };
             g.DrawString(footer, FooterFont, Brushes.Gray,
-                new RectangleF(e.MarginBounds.Left, e.MarginBounds.Bottom + 8, e.MarginBounds.Width, 18), sf);
+                new RectangleF(e.MarginBounds.Left, e.MarginBounds.Bottom + 8, e.MarginBounds.Width - 80, 18), sf);
+            g.DrawString("صفحه " + _printPage, FooterFont, Brushes.Gray,
+                new RectangleF(e.MarginBounds.Right - 80, e.MarginBounds.Bottom + 8, 80, 18),
+                new StringFormat { Alignment = StringAlignment.Far });
 
             int stampX = e.MarginBounds.Left;
             if (SettingsHelper.GetInt(SettingsHelper.ShowStamp, 0) == 1)

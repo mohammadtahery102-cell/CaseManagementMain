@@ -1012,14 +1012,54 @@ namespace CaseManagement
                 return;
             }
 
-            DataTable table = dgvDocs.DataSource as DataTable;
-            if (table == null || table.Rows.Count == 0)
+            if (CurrentCaseId <= 0)
+            {
+                Msg.Show("اول یک پرونده را انتخاب کنید.");
+                return;
+            }
+
+            // آموزش — چرا دیگر dgvDocs.DataSource مستقیم چاپ نمی‌شود: آن جدول
+            // برای گرید ساخته شده (ستونِ داخلیِ DocID، بدونِ دستهٔ واقعیِ سند،
+            // بدونِ وضعیتِ فایل). گزارش داده‌اش را خودش می‌خواند؛ از گرید فقط
+            // «کدام ردیف‌ها الان دیده می‌شوند» گرفته می‌شود تا فیلترِ جستجوی
+            // کاربر در برگهٔ چاپی هم رعایت گردد.
+            var visibleIds = new List<int>();
+            try
+            {
+                foreach (DataGridViewRow row in dgvDocs.Rows)
+                {
+                    if (row.IsNewRow) continue;
+                    object value = row.Cells["DocID"].Value;
+                    if (value != null && value != DBNull.Value)
+                        visibleIds.Add(Convert.ToInt32(value));
+                }
+            }
+            catch { visibleIds.Clear(); }
+
+            if (visibleIds.Count == 0)
             {
                 Msg.Show("داده‌ای برای چاپ وجود ندارد");
                 return;
             }
 
-            PrintHelper.PrintDataTable(this, "اسناد — پرونده " + CurrentCaseCode, table);
+            try
+            {
+                Cursor previous = Cursor;
+                Cursor = Cursors.WaitCursor;
+                ReportDoc report;
+                try
+                {
+                    report = Helpers.CaseDocumentListReport.Build(
+                        db, CurrentCaseId, CurrentCaseCode, visibleIds, txtSearch.Text);
+                }
+                finally { Cursor = previous; }
+
+                report.Preview(this);
+            }
+            catch (Exception ex)
+            {
+                Msg.Show("خطا در ساخت فهرست چاپی اسناد: " + ex.Message);
+            }
         }
 
         // چرخهٔ فورمِ رسمی: تکمیل در سیستم ← چاپ ← امضا ← اسکن ← ثبت در همین

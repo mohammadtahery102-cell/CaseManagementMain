@@ -36,13 +36,16 @@ namespace CaseManagement
 
         private void BuildUi()
         {
-            Text = "اداری و کارمندان  —  " + SecurityContext.CenterDisplay;
+            Text = ProductMode.IsErp
+                ? "کارگزینی  —  " + SecurityContext.CenterDisplay
+                : "اداری و کارمندان  —  " + SecurityContext.CenterDisplay;
             RightToLeft = RightToLeft.Yes;
             RightToLeftLayout = true;
             StartPosition = FormStartPosition.CenterScreen;
             ClientSize = new Size(1040, 650);
             BackColor = UiTheme.Background;
             Font = UiTheme.Font(UiTheme.SizeBody);
+            UiTheme.MakeMainWindow(this, 1040, 650);
 
             var tabs = new TabControl { Dock = DockStyle.Fill, RightToLeft = RightToLeft.Yes, RightToLeftLayout = true };
             tabs.TabPages.Add(BuildEmployeesTab());
@@ -50,6 +53,8 @@ namespace CaseManagement
             tabs.TabPages.Add(BuildMissionTab());
             tabs.TabPages.Add(BuildJobApplicationTab());
             Controls.Add(tabs);
+            if (ProductMode.IsErp)
+                Controls.Add(ErpFormChrome.Header("کارگزینی"));
         }
 
         // ═══════════════════════════════════════════════════════════════════
@@ -100,7 +105,7 @@ namespace CaseManagement
                 Padding = new Padding(8, 8, 8, 8)
             };
 
-            page.Controls.Add(grid);
+            page.Controls.Add(ErpFormChrome.WrapGrid(grid, ProductBranding.EmptyList));
             page.Controls.Add(editors);
             page.Controls.Add(buttons);
 

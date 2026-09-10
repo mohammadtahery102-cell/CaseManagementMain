@@ -33,6 +33,7 @@ namespace CaseManagement
 
             BuildLayout();
             LoadHistory();
+            ErpAccess.BlockCharityScreenInErp(this);
         }
 
         private void BuildLayout()

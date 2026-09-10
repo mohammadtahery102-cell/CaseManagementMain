@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using CaseManagement.Accounting.Ledger.Domain;
 using CaseManagement.Accounting.Ledger.Infrastructure;
+using CaseManagement.Trade;
 
 namespace CaseManagement.Accounting.Ledger.Application
 {
@@ -75,7 +76,16 @@ namespace CaseManagement.Accounting.Ledger.Application
         {
             if (identity == null || !identity.HasPermission(LedgerPermissions.View))
                 return new OutboxSnapshot { Recent = new List<AccOutboxRow>() };
-            return _store.Snapshot();
+            OutboxSnapshot snap = _store.Snapshot();
+            List<AccOutboxRow> recent = new List<AccOutboxRow>();
+            IList<AccOutboxRow> src = snap.Recent ?? new List<AccOutboxRow>();
+            for (int i = 0; i < src.Count; i++)
+            {
+                if (VisibleOutbox(identity, src[i]))
+                    recent.Add(src[i]);
+            }
+            snap.Recent = recent;
+            return snap;
         }
 
         public LedgerResult Requeue(long outboxId, ILedgerIdentity identity)
@@ -98,6 +108,8 @@ namespace CaseManagement.Accounting.Ledger.Application
             for (int i = 0; i < due.Count; i++)
             {
                 AccOutboxRow row = due[i];
+                if (!VisibleOutbox(identity, row))
+                    continue;
                 if (!_store.Claim(row.OutboxId, identity.UserName, identity.UtcNow))
                     continue;
 
@@ -137,6 +149,13 @@ namespace CaseManagement.Accounting.Ledger.Application
                 }
             }
             return done;
+        }
+
+        private static bool VisibleOutbox(ILedgerIdentity identity, AccOutboxRow row)
+        {
+            if (row == null) return false;
+            return TradeIsolation.CanSeeCompany(identity, row.CompanyId)
+                && TradeIsolation.CanSeeCenter(identity, row.CenterId);
         }
 
         private IOutboxHandler Find(string module)

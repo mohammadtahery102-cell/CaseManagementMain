@@ -17,10 +17,16 @@ namespace CaseManagement.Crm.Adapters
         private ComboBox _cmb;
 
         public FrmCrm()
+            : this(null)
+        {
+        }
+
+        public FrmCrm(string startKind)
         {
             _identity = DesktopLedgerIdentity.FromSession();
             _reports = new CrmReporting();
-            Text = "CRM";
+            ErpAccess.RequirePermission(this, "CRM.View");
+            Text = ProductMode.IsErp ? "ارتباط با مشتریان" : "CRM";
             RightToLeft = RightToLeft.Yes;
             RightToLeftLayout = true;
             BackColor = UiTheme.Background;
@@ -32,17 +38,17 @@ namespace CaseManagement.Crm.Adapters
                 SelectionMode = DataGridViewSelectionMode.FullRowSelect, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill
             };
             UiTheme.StyleGrid(_grid);
-            FlowLayoutPanel flow = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 44, RightToLeft = RightToLeft.Yes };
+            FlowLayoutPanel flow = ErpFormChrome.Toolbar();
             _cmb = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 240 };
             _cmb.Items.AddRange(new object[] { "پایپلاین سرنخ", "پایپلاین فرصت", "قیف فروش", "فعالیت مشتری", "پیگیری" });
             _cmb.SelectedIndex = 0;
             _cmb.SelectedIndexChanged += delegate { Reload(); };
             flow.Controls.Add(_cmb);
-            Button b = UiTheme.CreateButton("تازه‌سازی", "", UiTheme.PrimaryLight);
-            b.Click += delegate { Reload(); };
-            flow.Controls.Add(b);
-            Controls.Add(_grid);
+            flow.Controls.Add(ErpFormChrome.RefreshButton(delegate { Reload(); }));
+            Controls.Add(ErpFormChrome.WrapGrid(_grid, ProductBranding.EmptyList));
             Controls.Add(flow);
+            Controls.Add(ErpFormChrome.Header("ارتباط با مشتریان"));
+            ErpFormChrome.SelectListItem(_cmb, startKind);
             Reload();
         }
 

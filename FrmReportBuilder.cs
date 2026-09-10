@@ -44,7 +44,7 @@ namespace CaseManagement
 
         private void BuildUi()
         {
-            Text = "گزارش‌ساز پویا";
+            Text = ProductMode.IsErp ? "گزارش‌ساز" : "گزارش‌ساز پویا";
             RightToLeft = RightToLeft.Yes;
             RightToLeftLayout = true;
             BackColor = UiTheme.Background;
@@ -54,7 +54,7 @@ namespace CaseManagement
             Panel header = new Panel { Dock = DockStyle.Top, Height = 56, BackColor = UiTheme.PrimaryDark };
             header.Controls.Add(new Label
             {
-                Dock = DockStyle.Fill, Text = "گزارش‌ساز پویا",
+                Dock = DockStyle.Fill, Text = ProductMode.IsErp ? "گزارش‌ساز" : "گزارش‌ساز پویا",
                 ForeColor = Color.White, Font = UiTheme.FontBold(UiTheme.SizeLarge),
                 TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(0, 0, 20, 0)
             });
@@ -106,6 +106,8 @@ namespace CaseManagement
                 _cmbSource.Items.Add(s.DisplayName);
             if (_cmbSource.Items.Count > 0)
                 _cmbSource.SelectedIndex = 0;
+            else if (ProductMode.IsErp)
+                _lblSummary.Text = ProductBranding.EmptyList + " گزارش‌های مالی را از دفتر کل یا صندوق باز کنید.";
             _cmbSource.SelectedIndexChanged += delegate { OnSourceChanged(); };
             col1.Controls.Add(_cmbSource);
             col1.Controls.Add(new Label { Text = "ستون‌ها:", Dock = DockStyle.Top, Height = 20, Font = UiTheme.Font(UiTheme.SizeSmall), Margin = new Padding(0, 6, 0, 0) });

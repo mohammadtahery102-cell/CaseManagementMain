@@ -32,10 +32,31 @@ namespace CaseManagement.GuardianCardIntegration
         public const string VirtualHostName = "guardiancard.local";
 
         // پوشه اصلیِ فریزشده — کنار exe دیپلوی می‌شود (Content در csproj)؛
-        // هرگز نوشته/تغییر داده نمی‌شود.
+        // هرگز نوشته/تغییر داده نمی‌شود. اولین کاندیدای معتبر برگردانده می‌شود؛
+        // اگر هیچ‌کدام نبود، مسیرِ پیش‌فرضِ کنارِ برنامه (برای پیام خطا).
         private static string BundledSourceFolder
         {
-            get { return Path.Combine(Application.StartupPath, "GuardianCard"); }
+            get
+            {
+                foreach (string folder in CandidateFolders())
+                    if (IsPackageFolder(folder)) return folder;
+
+                return Path.Combine(Application.StartupPath, "GuardianCard");
+            }
+        }
+
+        // BaseDirectory و StartupPath هر دو بررسی می‌شوند: در برنامه یکی‌اند،
+        // ولی در محیط آزمون StartupPath پوشهٔ نصبِ vstest.console است نه پوشهٔ
+        // خروجیِ آزمون — همان الگوی DocxFormExport.CandidateFolders().
+        private static IEnumerable<string> CandidateFolders()
+        {
+            yield return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "GuardianCard");
+            yield return Path.Combine(Application.StartupPath, "GuardianCard");
+        }
+
+        private static bool IsPackageFolder(string folder)
+        {
+            return Directory.Exists(folder) && File.Exists(Path.Combine(folder, "index.html"));
         }
 
         // پوشه کاریِ یک‌بارمصرف — هر بار رندر یک کارت، از نو ساخته می‌شود تا هیچ
@@ -47,7 +68,7 @@ namespace CaseManagement.GuardianCardIntegration
 
         public bool IsBundledPackagePresent()
         {
-            return Directory.Exists(BundledSourceFolder) && File.Exists(Path.Combine(BundledSourceFolder, "index.html"));
+            return IsPackageFolder(BundledSourceFolder);
         }
 
         // کپی کامل بسته + نوشتن JSON واقعی این پرونده + کپی تصاویر اختصاصی
@@ -1130,7 +1151,8 @@ namespace CaseManagement.GuardianCardIntegration
         {
             if (!IsBundledPackagePresent())
                 throw new DirectoryNotFoundException(
-                    "پوشه GuardianCard کنار برنامه پیدا نشد: " + BundledSourceFolder +
+                    "پوشه GuardianCard کنار برنامه پیدا نشد: " +
+                    string.Join("، ", CandidateFolders()) +
                     "\nاین پوشه باید همراه نصب برنامه دیپلوی شده باشد.");
         }
 

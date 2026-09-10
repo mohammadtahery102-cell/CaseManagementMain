@@ -132,6 +132,7 @@ namespace CaseManagement
         private Panel _pnlFontColorSwatch;
         private Color _selectedFontColor = UiTheme.TextDark;
         private ComboBox _cmbDashboardRows;
+        private ComboBox _cmbErpTheme, _cmbErpDensity, _cmbErpFontScale, _cmbErpSidebar;
         private PictureBox _picLogoPreview;
         // آموزش — امضا/مهر مؤسسه (برای کارت شناسایی سرپرست و اسناد چاپی):
         // فیلدهای _txtSignaturePath/_txtStampPath از قبل برای یک تب «چاپ و
@@ -160,11 +161,14 @@ namespace CaseManagement
             // ذخیره‌ی *تبِ نمایان* را پیدا می‌کند. بستنش به دکمه‌ای مشخص یعنی
             // ذخیره‌شدنِ تنظیماتِ تبی که کاربر اصلاً در آن نیست.
             Helpers.FormShortcuts.For(this).SaveVisible();
+            ErpAccess.RequirePermission(this, "Settings.Manage");
         }
 
         private void BuildUi()
         {
-            Text              = "تنظیمات نرم‌افزار — مرکز مدیریت";
+            Text              = ProductMode.IsErp
+                ? "تنظیمات — " + ProductBranding.CommercialName
+                : "تنظیمات نرم‌افزار — مرکز مدیریت";
             RightToLeft       = RightToLeft.Yes;
             RightToLeftLayout = true;
             BackColor         = UiTheme.Background;
@@ -241,9 +245,9 @@ namespace CaseManagement
             // آموزش — برچسب‌ها عمداً کوتاه‌اند تا هر ۱۱ تب در یک ردیف جا شوند
             // (با برچسب‌های بلند، نوار به دو ردیف می‌شکست و نامرتب می‌شد) —
             // همان الگوی عکسِ نمونه که برچسب‌های تک‌کلمه‌ای دارد.
-            addPage("مؤسسه", tabGeneral);
+            addPage(ProductMode.IsErp ? "سازمان" : "مؤسسه", tabGeneral);
 
-            if (SecurityContext.IsSuperAdmin())
+            if (SecurityContext.IsSuperAdmin() && ProductMode.IsCharity)
             {
                 Panel tabProductMode = new Panel { BackColor = UiTheme.Background };
                 BuildProductModeTab(tabProductMode);
@@ -811,8 +815,8 @@ LIMIT " + MaxDeleteGridRows, con))
 
             Label lblHint = new Label
             {
-                Text = "Charity: همهٔ ماژول‌های پرونده، مساعدت، ایتام، سرپرست و آسیب‌پذیری دیده می‌شوند.\r\n" +
-                       "ERP: آن بخش‌ها از منو و گزارش‌ساز پنهان می‌شوند؛ هیچ فایلی حذف نمی‌شود.",
+                Text = "حالت تجاری: پوستهٔ «سیستم کسب و کار گنجینه» و منوهای مالی/عملیاتی.\r\n" +
+                       "حالت خدمات اجتماعی: منوهای پرونده و خدمات اجتماعی نمایش داده می‌شوند. هیچ داده‌ای حذف نمی‌شود.",
                 AutoSize = false, Width = 700, Height = 56,
                 Font = UiTheme.Font(UiTheme.SizeSmall), ForeColor = UiTheme.TextMuted,
                 TextAlign = ContentAlignment.TopRight
@@ -821,7 +825,7 @@ LIMIT " + MaxDeleteGridRows, con))
 
             RadioButton radCharity = new RadioButton
             {
-                Text = "Charity — مدیریت پرونده و خیریه",
+                Text = "خدمات اجتماعی",
                 AutoSize = true,
                 Checked = ProductMode.IsCharity,
                 Font = UiTheme.Font(UiTheme.SizeBody),
@@ -829,7 +833,7 @@ LIMIT " + MaxDeleteGridRows, con))
             };
             RadioButton radErp = new RadioButton
             {
-                Text = "ERP — هسته سازمانی و حسابداری",
+                Text = "تجاری — سیستم کسب و کار گنجینه",
                 AutoSize = true,
                 Checked = ProductMode.IsErp,
                 Font = UiTheme.Font(UiTheme.SizeBody),
@@ -1190,19 +1194,60 @@ LIMIT " + MaxDeleteGridRows, con))
             fontColorRow.Controls.Add(_pnlFontColorSwatch);
             appFlow.Controls.Add(fontColorRow);
 
-            appFlow.Controls.Add(new Label
+            if (ProductMode.IsCharity)
             {
-                Text = "چیدمان کارت‌های آماری داشبورد", AutoSize = false, Width = 320, Height = 22,
-                TextAlign = ContentAlignment.MiddleRight, Font = UiTheme.FontBold(UiTheme.SizeSmall),
-                ForeColor = UiTheme.TextDark, Margin = new Padding(0, 8, 0, 4)
-            });
-            _cmbDashboardRows = new ComboBox
+                appFlow.Controls.Add(new Label
+                {
+                    Text = "چیدمان کارت‌های آماری داشبورد", AutoSize = false, Width = 320, Height = 22,
+                    TextAlign = ContentAlignment.MiddleRight, Font = UiTheme.FontBold(UiTheme.SizeSmall),
+                    ForeColor = UiTheme.TextDark, Margin = new Padding(0, 8, 0, 4)
+                });
+                _cmbDashboardRows = new ComboBox
+                {
+                    DropDownStyle = ComboBoxStyle.DropDownList, Width = 320, Height = 30,
+                    Font = UiTheme.Font(UiTheme.SizeBody), Margin = new Padding(0, 0, 0, 8)
+                };
+                _cmbDashboardRows.Items.AddRange(new object[] { "۲ ردیف (فشرده‌تر)", "۳ ردیف", "۴ ردیف (کارت‌های بزرگ‌تر)" });
+                appFlow.Controls.Add(_cmbDashboardRows);
+            }
+
+            if (ProductMode.IsErp)
             {
-                DropDownStyle = ComboBoxStyle.DropDownList, Width = 320, Height = 30,
-                Font = UiTheme.Font(UiTheme.SizeBody), Margin = new Padding(0, 0, 0, 8)
-            };
-            _cmbDashboardRows.Items.AddRange(new object[] { "۲ ردیف (فشرده‌تر)", "۳ ردیف", "۴ ردیف (کارت‌های بزرگ‌تر)" });
-            appFlow.Controls.Add(_cmbDashboardRows);
+                appFlow.Controls.Add(MakeSettingsCaption("پوسته داشبورد ERP"));
+                _cmbErpTheme = MakeSettingsCombo(320);
+                _cmbErpTheme.Items.AddRange(new object[]
+                {
+                    "Classic Light", "Classic Dark", "Modern Blue", "Modern Green", "Business Gold", "Executive Gray"
+                });
+                appFlow.Controls.Add(_cmbErpTheme);
+
+                appFlow.Controls.Add(MakeSettingsCaption("حالت نوار کناری"));
+                _cmbErpSidebar = MakeSettingsCombo(320);
+                _cmbErpSidebar.Items.AddRange(new object[] { "باز", "جمع‌شده (فقط آیکون)" });
+                appFlow.Controls.Add(_cmbErpSidebar);
+
+                appFlow.Controls.Add(MakeSettingsCaption("مقیاس فونت داشبورد"));
+                _cmbErpFontScale = MakeSettingsCombo(320);
+                _cmbErpFontScale.Items.AddRange(new object[] { "کوچک (۹۰٪)", "عادی (۱۰۰٪)", "بزرگ (۱۱۰٪)" });
+                appFlow.Controls.Add(_cmbErpFontScale);
+
+                appFlow.Controls.Add(MakeSettingsCaption("تراکم داشبورد"));
+                _cmbErpDensity = MakeSettingsCombo(320);
+                _cmbErpDensity.Items.AddRange(new object[] { "فشرده", "متعادل", "گسترده" });
+                appFlow.Controls.Add(_cmbErpDensity);
+
+                appFlow.Controls.Add(MakeSettingsCaption("مدیریت دکمه‌های سریع"));
+                Button btnQuick = UiTheme.CreateButton("ویرایش دکمه‌های دسترسی سریع", "", UiTheme.Primary);
+                btnQuick.Width = 320;
+                btnQuick.Height = 36;
+                btnQuick.Margin = new Padding(0, 0, 0, 8);
+                btnQuick.Click += delegate
+                {
+                    using (var frm = new FrmErpQuickActions())
+                        frm.ShowDialog(this);
+                };
+                appFlow.Controls.Add(btnQuick);
+            }
 
             cardAppearance.Content.Controls.Add(appFlow);
             rightHost.Controls.Add(cardAppearance);
@@ -1232,6 +1277,25 @@ LIMIT " + MaxDeleteGridRows, con))
         {
             foreach (ColorSwatchButton swatch in _themeColorSwatches)
                 swatch.Selected = swatch.SwatchColor.ToArgb() == _selectedThemeColor.ToArgb();
+        }
+
+        private Label MakeSettingsCaption(string text)
+        {
+            return new Label
+            {
+                Text = text, AutoSize = false, Width = 320, Height = 22,
+                TextAlign = ContentAlignment.MiddleRight, Font = UiTheme.FontBold(UiTheme.SizeSmall),
+                ForeColor = UiTheme.TextDark, Margin = new Padding(0, 8, 0, 4)
+            };
+        }
+
+        private ComboBox MakeSettingsCombo(int width)
+        {
+            return new ComboBox
+            {
+                DropDownStyle = ComboBoxStyle.DropDownList, Width = width, Height = 30,
+                Font = UiTheme.Font(UiTheme.SizeBody), Margin = new Padding(0, 0, 0, 8)
+            };
         }
 
         private TextBox NewStyledTextBox()
@@ -1436,7 +1500,18 @@ LIMIT " + MaxDeleteGridRows, con))
             _pnlFontColorSwatch.BackColor = _selectedFontColor;
 
             int dashRows = SettingsHelper.GetInt(SettingsHelper.DashboardSummaryRows, 2);
-            _cmbDashboardRows.SelectedIndex = dashRows == 3 ? 1 : (dashRows == 4 ? 2 : 0);
+            if (_cmbDashboardRows != null)
+                _cmbDashboardRows.SelectedIndex = dashRows == 3 ? 1 : (dashRows == 4 ? 2 : 0);
+
+            if (_cmbErpTheme != null)
+            {
+                string theme = ErpUiPrefs.Theme;
+                _cmbErpTheme.SelectedIndex = theme == "dark" ? 1 : theme == "blue" ? 2 : theme == "green" ? 3 : theme == "gold" ? 4 : theme == "gray" ? 5 : 0;
+                _cmbErpSidebar.SelectedIndex = ErpUiPrefs.SidebarCollapsed ? 1 : 0;
+                _cmbErpFontScale.SelectedIndex = ErpUiPrefs.FontScale >= 110 ? 2 : ErpUiPrefs.FontScale <= 90 ? 0 : 1;
+                string dens = ErpUiPrefs.Density;
+                _cmbErpDensity.SelectedIndex = dens == "comfortable" ? 1 : dens == "spacious" ? 2 : 0;
+            }
 
             ShowImagePreview(_picLogoPreview, _txtLogoPath.Text);
             ShowImagePreview(_picSignaturePreview, _txtSignaturePath.Text);
@@ -1464,10 +1539,25 @@ LIMIT " + MaxDeleteGridRows, con))
             SettingsHelper.Set(SettingsHelper.ThemeColor, ColorTranslator.ToHtml(_selectedThemeColor));
             SettingsHelper.Set(SettingsHelper.FontColor, ColorTranslator.ToHtml(_selectedFontColor));
 
-            int dashRowsToSave = _cmbDashboardRows.SelectedIndex == 1 ? 3 : (_cmbDashboardRows.SelectedIndex == 2 ? 4 : 2);
-            SettingsHelper.Set(SettingsHelper.DashboardSummaryRows, dashRowsToSave.ToString());
+            if (_cmbDashboardRows != null)
+            {
+                int dashRowsToSave = _cmbDashboardRows.SelectedIndex == 1 ? 3 : (_cmbDashboardRows.SelectedIndex == 2 ? 4 : 2);
+                SettingsHelper.Set(SettingsHelper.DashboardSummaryRows, dashRowsToSave.ToString());
+            }
 
-            UiTheme.ShowSuccess(this, "تنظیمات مؤسسه ذخیره شد. برای اعمال کامل رنگ‌ها/فونت/چیدمان داشبورد روی همه پنجره‌ها، برنامه را دوباره باز کنید.");
+            if (_cmbErpTheme != null)
+            {
+                string[] themes = { "light", "dark", "blue", "green", "gold", "gray" };
+                int ti = _cmbErpTheme.SelectedIndex;
+                ErpUiPrefs.Theme = (ti >= 0 && ti < themes.Length) ? themes[ti] : "light";
+                ErpUiPrefs.SidebarCollapsed = _cmbErpSidebar.SelectedIndex == 1;
+                ErpUiPrefs.FontScale = _cmbErpFontScale.SelectedIndex == 0 ? 90 : (_cmbErpFontScale.SelectedIndex == 2 ? 110 : 100);
+                ErpUiPrefs.Density = _cmbErpDensity.SelectedIndex == 1 ? "comfortable" : (_cmbErpDensity.SelectedIndex == 2 ? "spacious" : "compact");
+            }
+
+            UiTheme.ShowSuccess(this, ProductMode.IsErp
+                ? "تنظیمات سازمان ذخیره شد. برای اعمال کامل رنگ‌ها برنامه را دوباره باز کنید."
+                : "تنظیمات مؤسسه ذخیره شد. برای اعمال کامل رنگ‌ها/فونت/چیدمان داشبورد روی همه پنجره‌ها، برنامه را دوباره باز کنید.");
         }
 
         // ══════════════════════════════════════════════════════════════════
@@ -1831,7 +1921,9 @@ WHERE CenterID = @ID", con))
             if (caseCount > 0)
             {
                 UiTheme.ShowWarning(this,
-                    "این مرکز " + caseCount + " پرونده دارد و قابل حذف نیست.\n" +
+                    (ProductMode.IsErp
+                        ? "این مرکز دارای " + caseCount + " رکورد مرتبط است و قابل حذف نیست.\n"
+                        : "این مرکز " + caseCount + " پرونده دارد و قابل حذف نیست.\n") +
                     "به‌جای حذف می‌توانید آن را «غیرفعال» کنید.");
                 return;
             }
@@ -2281,7 +2373,9 @@ ORDER BY SortOrder, Value", con))
 
             Label note = new Label
             {
-                Text = "محل اصلی ذخیره پرونده‌ها/عکس‌ها/اسناد از دکمه «⚙» در فرم پرونده تنظیم می‌شود. مسیرهای زیر جداگانه و مکمل آن هستند:",
+                Text = ProductMode.IsErp
+                    ? "مسیر پشتیبان، تصاویر، گزارش‌ها و لاگ‌ها:"
+                    : "محل اصلی ذخیره پرونده‌ها/عکس‌ها/اسناد از دکمه «⚙» در فرم پرونده تنظیم می‌شود. مسیرهای زیر جداگانه و مکمل آن هستند:",
                 AutoSize = false, Size = new Size(880, 26), ForeColor = UiTheme.TextMuted, Font = UiTheme.Font(UiTheme.SizeSmall),
                 TextAlign = ContentAlignment.MiddleRight
             };
@@ -2318,14 +2412,17 @@ ORDER BY SortOrder, Value", con))
             // رفتار پیش‌فرض هیچ تغییری نمی‌کند.
             _txtManualPath = new TextBox { ReadOnly = true };
             UiTheme.StyleTextBox(_txtManualPath);
-            flow.Controls.Add(MakeBrowseFieldPanel("فایل جزوه آموزشی (PDF یا Word)", _txtManualPath,
-                BtnBrowseManual_Click));
+            if (ProductMode.IsCharity)
+            {
+                flow.Controls.Add(MakeBrowseFieldPanel("فایل جزوه آموزشی (PDF یا Word)", _txtManualPath,
+                    BtnBrowseManual_Click));
 
-            Button btnResetManual = UiTheme.CreateSecondaryButton("بازگشت به جزوه پیش‌فرض", "↺");
-            btnResetManual.Size = new Size(210, 30);
-            btnResetManual.Margin = new Padding(6, 26, 6, 4);
-            btnResetManual.Click += delegate { _txtManualPath.Text = ""; };
-            flow.Controls.Add(btnResetManual);
+                Button btnResetManual = UiTheme.CreateSecondaryButton("بازگشت به جزوه پیش‌فرض", "↺");
+                btnResetManual.Size = new Size(210, 30);
+                btnResetManual.Margin = new Padding(6, 26, 6, 4);
+                btnResetManual.Click += delegate { _txtManualPath.Text = ""; };
+                flow.Controls.Add(btnResetManual);
+            }
 
             // ─── قالب‌های خروجی Word ─────────────────────────────────────────
             // قابلیت «چند قالب» از قبل کار می‌کند: هر فایل .docx داخل پوشه‌ی
@@ -2347,7 +2444,8 @@ ORDER BY SortOrder, Value", con))
                 TextAlign = ContentAlignment.MiddleRight, Margin = new Padding(6, 2, 6, 4)
             });
 
-            flow.Controls.Add(BuildCaseGridColumnsPanel());
+            if (ProductMode.IsCharity)
+                flow.Controls.Add(BuildCaseGridColumnsPanel());
 
             tab.Controls.Add(flow);
             tab.Controls.Add(bottomBar);
@@ -2541,26 +2639,18 @@ ORDER BY SortOrder, Value", con))
             btnIntegrity.Click += BtnCheckIntegrity_Click;
             buttonFlow.Controls.Add(btnIntegrity);
 
+            if (ProductMode.IsCharity)
+            {
             Button btnMissingFiles = UiTheme.CreateSecondaryButton("بررسی فایل‌های گمشده", "⌕");
             btnMissingFiles.Size = new Size(180, 38);
             btnMissingFiles.Click += BtnCheckMissingFiles_Click;
             buttonFlow.Controls.Add(btnMissingFiles);
 
-            // الزامات نسخهٔ تحویلی (موارد ۵، ۱۱، ۱۲، ۱۳) — نقطهٔ فراخوانِ
-            // بازمحاسبهٔ گروهی.
-            //
-            // چرا لازم شد: `CaseCompletionService.RecalculateAll` و
-            // `VulnerabilityScoreService.RecalculateAll` هر دو از مدت‌ها پیش
-            // نوشته شده بودند ولی **هیچ فراخوان‌کننده‌ای نداشتند**. ستون‌های
-            // کشِ درصدِ تکمیل و امتیازِ آسیب‌پذیری فقط وقتی پر می‌شوند که
-            // پرونده ذخیره شود، پس روی دادهٔ موجود (۱٬۶۶۱ پرونده) هر دو NULL
-            // بودند. نتیجه: کارت‌های کیفیت و ریسکِ داشبورد، فیلترهای جستجوی
-            // پیشرفته و بلوکِ وضعیت در گزارشِ تفصیلی همگی برای کلِ جمعیتِ
-            // موجود خالی درمی‌آمدند — کد بی‌عیب بود، فقط هرگز اجرا نمی‌شد.
             Button btnRecalcAll = UiTheme.CreateSecondaryButton("بازمحاسبهٔ تکمیل و امتیاز", "∑");
             btnRecalcAll.Size = new Size(210, 38);
             btnRecalcAll.Click += BtnRecalculateAll_Click;
             buttonFlow.Controls.Add(btnRecalcAll);
+            }
 
             _txtMaintenanceOutput = new TextBox
             {
@@ -2610,13 +2700,24 @@ ORDER BY SortOrder, Value", con))
                     string lastBackup = SettingsHelper.Get(SettingsHelper.LastBackupDate, "");
                     string lastRestore = SettingsHelper.Get(SettingsHelper.LastRestoreDate, "");
 
-                    // قالب کامل تا ترجمه‌پذیر باشد (توضیح در GridPager/UpdateInfo).
+                    if (ProductMode.IsErp)
+                    {
+                        _lblMaintenanceStats.Text =
+                            "حجم دیتابیس: " + (dbSizeBytes / 1024.0 / 1024.0).ToString("N2") + " مگابایت" +
+                            "     |     کاربران: " + users +
+                            "     |     مراکز: " + centers +
+                            "\nآخرین پشتیبان: " + (string.IsNullOrEmpty(lastBackup) ? "—" : lastBackup) +
+                            "     |     آخرین بازیابی: " + (string.IsNullOrEmpty(lastRestore) ? "—" : lastRestore);
+                    }
+                    else
+                    {
                     _lblMaintenanceStats.Text = string.Format(
                         Lang.T("حجم دیتابیس: {0} مگابایت     |     تعداد پرونده‌ها: {1}     |     تعداد اعضای خانواده: {2}     |     تعداد اسناد: {3}\nتعداد کاربران: {4}     |     تعداد مراکز: {5}     |     آخرین Backup: {6}     |     آخرین Restore: {7}"),
                         (dbSizeBytes / 1024.0 / 1024.0).ToString("N2"),
                         cases, families, docs, users, centers,
                         string.IsNullOrEmpty(lastBackup) ? "—" : lastBackup,
                         string.IsNullOrEmpty(lastRestore) ? "—" : lastRestore);
+                    }
                 }
             }
             catch (Exception ex)
@@ -3366,11 +3467,14 @@ WHERE UserID = @ID", con))
 
             _chkNotifyBackupMissing     = MakeNotifyCheckbox(flow, "بکاپ امروز گرفته نشده");
             _chkNotifyLowDisk           = MakeNotifyCheckbox(flow, "فضای دیسک کم است");
-            _chkNotifyIncompleteCase    = MakeNotifyCheckbox(flow, "پرونده ناقص است");
-            _chkNotifyNoPhoto           = MakeNotifyCheckbox(flow, "عکس ندارد");
-            _chkNotifyNoDocs            = MakeNotifyCheckbox(flow, "سند ندارد");
-            _chkNotifyIncompleteFamily  = MakeNotifyCheckbox(flow, "اعضای خانواده ناقص هستند");
-            _chkNotifyIncompleteFinance = MakeNotifyCheckbox(flow, "اطلاعات مالی ناقص است (پرونده فعال بدون هیچ کمک ثبت‌شده)");
+            if (ProductMode.IsCharity)
+            {
+                _chkNotifyIncompleteCase    = MakeNotifyCheckbox(flow, "پرونده ناقص است");
+                _chkNotifyNoPhoto           = MakeNotifyCheckbox(flow, "عکس ندارد");
+                _chkNotifyNoDocs            = MakeNotifyCheckbox(flow, "سند ندارد");
+                _chkNotifyIncompleteFamily  = MakeNotifyCheckbox(flow, "اعضای خانواده ناقص هستند");
+                _chkNotifyIncompleteFinance = MakeNotifyCheckbox(flow, "اطلاعات مالی ناقص است (پرونده فعال بدون هیچ کمک ثبت‌شده)");
+            }
 
             tab.Controls.Add(flow);
             tab.Controls.Add(bottomBar);
@@ -3832,22 +3936,28 @@ WHERE UserID = @ID", con))
         {
             _chkNotifyBackupMissing.Checked     = SettingsHelper.GetInt(SettingsHelper.Notify_BackupMissing, 1) == 1;
             _chkNotifyLowDisk.Checked           = SettingsHelper.GetInt(SettingsHelper.Notify_LowDisk, 1) == 1;
-            _chkNotifyIncompleteCase.Checked    = SettingsHelper.GetInt(SettingsHelper.Notify_IncompleteCase, 1) == 1;
-            _chkNotifyNoPhoto.Checked           = SettingsHelper.GetInt(SettingsHelper.Notify_NoPhoto, 1) == 1;
-            _chkNotifyNoDocs.Checked            = SettingsHelper.GetInt(SettingsHelper.Notify_NoDocs, 1) == 1;
-            _chkNotifyIncompleteFamily.Checked  = SettingsHelper.GetInt(SettingsHelper.Notify_IncompleteFamily, 1) == 1;
-            _chkNotifyIncompleteFinance.Checked = SettingsHelper.GetInt(SettingsHelper.Notify_IncompleteFinance, 1) == 1;
+            if (_chkNotifyIncompleteCase != null)
+            {
+                _chkNotifyIncompleteCase.Checked    = SettingsHelper.GetInt(SettingsHelper.Notify_IncompleteCase, 1) == 1;
+                _chkNotifyNoPhoto.Checked           = SettingsHelper.GetInt(SettingsHelper.Notify_NoPhoto, 1) == 1;
+                _chkNotifyNoDocs.Checked            = SettingsHelper.GetInt(SettingsHelper.Notify_NoDocs, 1) == 1;
+                _chkNotifyIncompleteFamily.Checked  = SettingsHelper.GetInt(SettingsHelper.Notify_IncompleteFamily, 1) == 1;
+                _chkNotifyIncompleteFinance.Checked = SettingsHelper.GetInt(SettingsHelper.Notify_IncompleteFinance, 1) == 1;
+            }
         }
 
         private void BtnSaveNotifications_Click(object sender, EventArgs e)
         {
             SettingsHelper.Set(SettingsHelper.Notify_BackupMissing, _chkNotifyBackupMissing.Checked ? "1" : "0");
             SettingsHelper.Set(SettingsHelper.Notify_LowDisk, _chkNotifyLowDisk.Checked ? "1" : "0");
-            SettingsHelper.Set(SettingsHelper.Notify_IncompleteCase, _chkNotifyIncompleteCase.Checked ? "1" : "0");
-            SettingsHelper.Set(SettingsHelper.Notify_NoPhoto, _chkNotifyNoPhoto.Checked ? "1" : "0");
-            SettingsHelper.Set(SettingsHelper.Notify_NoDocs, _chkNotifyNoDocs.Checked ? "1" : "0");
-            SettingsHelper.Set(SettingsHelper.Notify_IncompleteFamily, _chkNotifyIncompleteFamily.Checked ? "1" : "0");
-            SettingsHelper.Set(SettingsHelper.Notify_IncompleteFinance, _chkNotifyIncompleteFinance.Checked ? "1" : "0");
+            if (_chkNotifyIncompleteCase != null)
+            {
+                SettingsHelper.Set(SettingsHelper.Notify_IncompleteCase, _chkNotifyIncompleteCase.Checked ? "1" : "0");
+                SettingsHelper.Set(SettingsHelper.Notify_NoPhoto, _chkNotifyNoPhoto.Checked ? "1" : "0");
+                SettingsHelper.Set(SettingsHelper.Notify_NoDocs, _chkNotifyNoDocs.Checked ? "1" : "0");
+                SettingsHelper.Set(SettingsHelper.Notify_IncompleteFamily, _chkNotifyIncompleteFamily.Checked ? "1" : "0");
+                SettingsHelper.Set(SettingsHelper.Notify_IncompleteFinance, _chkNotifyIncompleteFinance.Checked ? "1" : "0");
+            }
             UiTheme.ShowSuccess(this, "تنظیمات اعلان‌ها ذخیره شد.");
         }
 

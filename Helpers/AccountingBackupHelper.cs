@@ -51,7 +51,8 @@ namespace CaseManagement.Helpers
             "FaSetting", "FaCategory", "FaLocation", "FaCustodian", "FaAsset",
             "FaAcquisition", "FaTransfer", "FaDisposal", "FaDepreciation", "FaDepreciationLine",
             "PrSetting", "PrDepartment", "PrPosition", "PrEmployee", "PrPeriod", "PrRun", "PrRunLine",
-            "PosSetting", "PosTerminal", "PosDrawer", "PosSale", "PosSaleLine", "PosReturn", "PosReturnLine"
+            "PosSetting", "PosTerminal", "PosDrawer", "PosSale", "PosSaleLine", "PosReturn", "PosReturnLine",
+            "AipSetting", "AipConversation", "AipMessage", "AipAuditLog"
         };
 
         // ─── گرفتن بکاپ: همه‌ی جداول Acc* (همه‌ی مراکز، نه فقط مرکز جاری —

@@ -23,6 +23,10 @@ namespace CaseManagement.Accounting.Ledger.Application
 
         public LedgerResult CreateYear(CreateFiscalYearCommand command, ILedgerIdentity identity)
         {
+            if (identity == null)
+                return LedgerResult.Fail(LedgerErrorCodes.PermissionDenied, LedgerPermissions.Create);
+            if (command == null)
+                return LedgerResult.Fail(LedgerErrorCodes.Validation, "Fiscal year command is required.");
             if (!identity.HasPermission(LedgerPermissions.CloseYear) && !identity.HasPermission(LedgerPermissions.ManageCoA)
                 && !identity.HasPermission(LedgerPermissions.Create))
             {
@@ -66,6 +70,10 @@ namespace CaseManagement.Accounting.Ledger.Application
 
         public LedgerResult AddPeriod(CreateFiscalPeriodCommand command, ILedgerIdentity identity)
         {
+            if (identity == null)
+                return LedgerResult.Fail(LedgerErrorCodes.PermissionDenied, LedgerPermissions.ClosePeriod);
+            if (command == null)
+                return LedgerResult.Fail(LedgerErrorCodes.Validation, "Fiscal period command is required.");
             GlFiscalYear y = _repo.GetYear(command.FiscalYearId);
             if (y == null || y.IsDeleted)
                 return LedgerResult.Fail(LedgerErrorCodes.Validation, "Fiscal year not found.");
@@ -102,22 +110,28 @@ namespace CaseManagement.Accounting.Ledger.Application
 
         public LedgerResult ClosePeriod(CalendarStatusCommand command, ILedgerIdentity identity)
         {
-            if (!identity.HasPermission(LedgerPermissions.ClosePeriod))
+            if (identity == null || !identity.HasPermission(LedgerPermissions.ClosePeriod))
                 return LedgerResult.Fail(LedgerErrorCodes.PermissionDenied, LedgerPermissions.ClosePeriod);
+            if (command == null)
+                return LedgerResult.Fail(LedgerErrorCodes.Validation, "Period command is required.");
             return SetPeriodStatus(command, identity, LedgerCodes.StatusClosed);
         }
 
         public LedgerResult LockPeriod(CalendarStatusCommand command, ILedgerIdentity identity)
         {
-            if (!identity.HasPermission(LedgerPermissions.ClosePeriod))
+            if (identity == null || !identity.HasPermission(LedgerPermissions.ClosePeriod))
                 return LedgerResult.Fail(LedgerErrorCodes.PermissionDenied, LedgerPermissions.ClosePeriod);
+            if (command == null)
+                return LedgerResult.Fail(LedgerErrorCodes.Validation, "Period command is required.");
             return SetPeriodStatus(command, identity, LedgerCodes.StatusLocked);
         }
 
         public LedgerResult CloseYear(CalendarStatusCommand command, ILedgerIdentity identity)
         {
-            if (!identity.HasPermission(LedgerPermissions.CloseYear))
+            if (identity == null || !identity.HasPermission(LedgerPermissions.CloseYear))
                 return LedgerResult.Fail(LedgerErrorCodes.PermissionDenied, LedgerPermissions.CloseYear);
+            if (command == null)
+                return LedgerResult.Fail(LedgerErrorCodes.Validation, "Year command is required.");
 
             GlFiscalYear y = _repo.GetYear(command.EntityId);
             if (y == null || y.IsDeleted)
@@ -144,8 +158,11 @@ namespace CaseManagement.Accounting.Ledger.Application
 
         public LedgerResult LockYear(CalendarStatusCommand command, ILedgerIdentity identity)
         {
-            if (!identity.HasPermission(LedgerPermissions.UnlockYear) && !identity.HasPermission(LedgerPermissions.CloseYear))
+            if (identity == null ||
+                (!identity.HasPermission(LedgerPermissions.UnlockYear) && !identity.HasPermission(LedgerPermissions.CloseYear)))
                 return LedgerResult.Fail(LedgerErrorCodes.PermissionDenied, LedgerPermissions.CloseYear);
+            if (command == null)
+                return LedgerResult.Fail(LedgerErrorCodes.Validation, "Year command is required.");
 
             GlFiscalYear y = _repo.GetYear(command.EntityId);
             if (y == null || y.IsDeleted)
@@ -165,8 +182,10 @@ namespace CaseManagement.Accounting.Ledger.Application
 
         public LedgerResult ReopenYear(CalendarStatusCommand command, ILedgerIdentity identity)
         {
-            if (!identity.HasPermission(LedgerPermissions.ReopenYear))
+            if (identity == null || !identity.HasPermission(LedgerPermissions.ReopenYear))
                 return LedgerResult.Fail(LedgerErrorCodes.PermissionDenied, LedgerPermissions.ReopenYear);
+            if (command == null)
+                return LedgerResult.Fail(LedgerErrorCodes.Validation, "Year command is required.");
 
             GlFiscalYear y = _repo.GetYear(command.EntityId);
             if (y == null || y.IsDeleted)
@@ -188,8 +207,10 @@ namespace CaseManagement.Accounting.Ledger.Application
 
         public LedgerResult UnlockYear(CalendarStatusCommand command, ILedgerIdentity identity)
         {
-            if (!identity.HasPermission(LedgerPermissions.UnlockYear))
+            if (identity == null || !identity.HasPermission(LedgerPermissions.UnlockYear))
                 return LedgerResult.Fail(LedgerErrorCodes.PermissionDenied, LedgerPermissions.UnlockYear);
+            if (command == null)
+                return LedgerResult.Fail(LedgerErrorCodes.Validation, "Year command is required.");
 
             GlFiscalYear y = _repo.GetYear(command.EntityId);
             if (y == null || y.IsDeleted)
@@ -212,6 +233,8 @@ namespace CaseManagement.Accounting.Ledger.Application
         {
             if (identity == null || !identity.HasPermission(LedgerPermissions.ClosePeriod))
                 return LedgerResult.Fail(LedgerErrorCodes.PermissionDenied, LedgerPermissions.ClosePeriod);
+            if (command == null)
+                return LedgerResult.Fail(LedgerErrorCodes.Validation, "Period command is required.");
             return SetPeriodStatus(command, identity, LedgerCodes.StatusOpen);
         }
 

@@ -59,6 +59,10 @@ namespace CaseManagement.Helpers
         public const string SuccessColor   = "SuccessColor";
         public const string DangerColor    = "DangerColor";
         public const string ThemeMode      = "ThemeMode"; // "Light" یا "Dark" — فقط بعد از ری‌استارت اعمال می‌شود
+        public const string ErpUiTheme     = ErpUiPrefs.ThemeKey;
+        public const string ErpSidebarCollapsed = ErpUiPrefs.SidebarKey;
+        public const string ErpFontScale   = ErpUiPrefs.FontScaleKey;
+        public const string ErpDashboardDensity = ErpUiPrefs.DensityKey;
         public const string FontFamily     = "FontFamily";
         public const string FontSize       = "FontSize";
         public const string FontColor      = "FontColor";

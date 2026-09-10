@@ -26,32 +26,36 @@ namespace CaseManagement
             Font              = UiTheme.Font(UiTheme.SizeBody);
             UiTheme.MakeFixedSize(this, 440, 560);
 
-            PictureBox picLogo = new PictureBox();
-            picLogo.Image = LogoHelper.GetLogoImage();
-            picLogo.SizeMode = PictureBoxSizeMode.Zoom;
-            picLogo.Size = new Size(104, 104);
-            picLogo.Location = new Point((ClientSize.Width - 104) / 2, 24);
-            UiTheme.RoundCorners(picLogo, 104);
-            Controls.Add(picLogo);
-
-            string orgName = SettingsHelper.Get(SettingsHelper.OrgName);
+            Image uploadedLogo = ProductMode.IsErp ? LogoHelper.TryGetUploadedLogo() : LogoHelper.GetLogoImage();
+            int nameTop = 24;
+            if (uploadedLogo != null)
+            {
+                PictureBox picLogo = new PictureBox();
+                picLogo.Image = uploadedLogo;
+                picLogo.SizeMode = PictureBoxSizeMode.Zoom;
+                picLogo.Size = new Size(104, 104);
+                picLogo.Location = new Point((ClientSize.Width - 104) / 2, 24);
+                UiTheme.RoundCorners(picLogo, 104);
+                Controls.Add(picLogo);
+                nameTop = 138;
+            }
 
             Label lblAppName = new Label();
-            lblAppName.Text = string.IsNullOrWhiteSpace(orgName) ? "سیستم مدیریت پرونده‌ها" : orgName;
+            lblAppName.Text = ProductBranding.AboutProductName;
             lblAppName.Font = UiTheme.FontBold(UiTheme.SizeTitle);
             lblAppName.ForeColor = UiTheme.PrimaryDark;
             lblAppName.AutoSize = false;
             lblAppName.TextAlign = ContentAlignment.MiddleCenter;
-            lblAppName.SetBounds(20, 138, ClientSize.Width - 40, 30);
+            lblAppName.SetBounds(20, nameTop, ClientSize.Width - 40, 32);
             Controls.Add(lblAppName);
 
             Label lblSubtitle = new Label();
-            lblSubtitle.Text = "سیستم مدیریت پرونده‌های اجتماعی";
+            lblSubtitle.Text = ProductBranding.AboutSubtitle;
             lblSubtitle.Font = UiTheme.Font(UiTheme.SizeMedium);
             lblSubtitle.ForeColor = UiTheme.TextMuted;
             lblSubtitle.AutoSize = false;
             lblSubtitle.TextAlign = ContentAlignment.MiddleCenter;
-            lblSubtitle.SetBounds(20, 170, ClientSize.Width - 40, 24);
+            lblSubtitle.SetBounds(20, nameTop + 32, ClientSize.Width - 40, 24);
             Controls.Add(lblSubtitle);
 
             Version version = Assembly.GetExecutingAssembly().GetName().Version;
@@ -61,12 +65,12 @@ namespace CaseManagement
             lblVersion.ForeColor = UiTheme.TextMuted;
             lblVersion.AutoSize = false;
             lblVersion.TextAlign = ContentAlignment.MiddleCenter;
-            lblVersion.SetBounds(20, 196, ClientSize.Width - 40, 22);
+            lblVersion.SetBounds(20, nameTop + 56, ClientSize.Width - 40, 22);
             Controls.Add(lblVersion);
 
             // ─── کارت لایسنس ─────────────────────────────────────────────────
             Panel licenseCard = new Panel();
-            licenseCard.SetBounds(20, 228, ClientSize.Width - 40, 156);
+            licenseCard.SetBounds(20, nameTop + 88, ClientSize.Width - 40, 156);
             licenseCard.BackColor = UiTheme.Background;
             licenseCard.BorderStyle = BorderStyle.FixedSingle;
             Controls.Add(licenseCard);
@@ -123,12 +127,14 @@ namespace CaseManagement
             RefreshLicenseStatus();
 
             // ─── تماس ────────────────────────────────────────────────────────
+            string orgName = SettingsHelper.Get(SettingsHelper.OrgName);
             string address = SettingsHelper.Get(SettingsHelper.Address);
             string phone   = SettingsHelper.Get(SettingsHelper.Phone);
             string email   = SettingsHelper.Get(SettingsHelper.Email);
 
             Label lblContact = new Label();
             lblContact.Text =
+                (string.IsNullOrWhiteSpace(orgName) ? "" : "شرکت: " + orgName + Environment.NewLine) +
                 (string.IsNullOrWhiteSpace(address) ? "" : "آدرس: " + address + Environment.NewLine) +
                 (string.IsNullOrWhiteSpace(phone)   ? "" : "تلفن: " + phone + Environment.NewLine) +
                 (string.IsNullOrWhiteSpace(email)   ? "" : "ایمیل: " + email);

@@ -24,7 +24,7 @@ namespace CaseManagement.Sales.Application
                 return TradeResult.Fail("PERMISSION", SalesPermissions.Create);
             if (customer == null || string.IsNullOrWhiteSpace(customer.Code) || string.IsNullOrWhiteSpace(customer.Name))
                 return TradeResult.Fail("VALIDATION", "Customer code and name are required.");
-            customer.CompanyId = customer.CompanyId > 0 ? customer.CompanyId : identity.CompanyId;
+            customer.CompanyId = TradeIsolation.ResolveCompany(identity, customer.CompanyId);
             if (customer.CompanyId <= 0) customer.CompanyId = LedgerCodes.DefaultCompanyId;
             if (customer.CategoryId <= 0) customer.CategoryId = _store.DefaultCategoryId(customer.CompanyId);
             long id = _store.InsertCustomer(customer, LedgerTime.UtcNow(identity.UtcNow), identity.UserName);
@@ -79,6 +79,9 @@ VALUES (@v, @c, @n, 0, 1, @now, @now, @u, @u);",
             if (Convert.ToString(row["Status"]) != from)
                 return TradeResult.Fail("INVALID_STATUS", "Expected " + from);
             int center = Convert.ToInt32(row["CenterID"]);
+            int company = Convert.ToInt32(row["CompanyID"]);
+            TradeResult iso = TradeIsolation.DenyIfCrossTenant(identity, company, center);
+            if (!iso.Ok) return iso;
             if (!_store.UpdateStatusSimple(table, idCol, id, to, Convert.ToInt64(row["RowVersion"]), LedgerTime.UtcNow(identity.UtcNow), identity.UserName))
                 return TradeResult.Fail("CONCURRENCY", "RowVersion mismatch.");
             DocumentWorkflowService.MoveTo(entity, id, center, wfCode, identity);
@@ -142,6 +145,8 @@ VALUES (@v, @c, @n, 0, 1, @now, @now, @u, @u);",
                 return TradeResult.Fail("PERMISSION", SalesPermissions.Post);
             SalOrder o = _store.GetOrder(orderId);
             if (o == null) return TradeResult.Fail("NOT_FOUND", "Order not found.");
+            TradeResult iso = TradeIsolation.DenyIfCrossTenant(identity, o.CompanyId, o.CenterId);
+            if (!iso.Ok) return iso;
             if (!CanPost(o.CompanyId, o.Status))
                 return TradeResult.Fail("INVALID_STATUS", "Order must be Approved.");
             if (!_store.UpdateStatusSimple("SalOrder", "OrderID", orderId, TradeCodes.Posted, o.RowVersion,
@@ -158,6 +163,8 @@ VALUES (@v, @c, @n, 0, 1, @now, @now, @u, @u);",
             SalOrder o = _store.GetOrder(orderId);
             if (o == null || o.Status != TradeCodes.Posted)
                 return TradeResult.Fail("INVALID_STATUS", "Order must be Posted before delivery.");
+            TradeResult isoDn = TradeIsolation.DenyIfCrossTenant(identity, o.CompanyId, o.CenterId);
+            if (!isoDn.Ok) return isoDn;
             IList<SalLine> lines = _store.ListLines("SalOrderLine", "OrderID", orderId);
             long newId = 0;
             string now = LedgerTime.UtcNow(identity.UtcNow);
@@ -189,6 +196,8 @@ VALUES (@v, @c, @n, 0, 1, @now, @now, @u, @u);",
                 return TradeResult.Fail("PERMISSION", SalesPermissions.Post);
             SalDelivery dn = _store.GetDelivery(deliveryId);
             if (dn == null) return TradeResult.Fail("NOT_FOUND", "Delivery not found.");
+            TradeResult isoPostDn = TradeIsolation.DenyIfCrossTenant(identity, dn.CompanyId, dn.CenterId);
+            if (!isoPostDn.Ok) return isoPostDn;
             if (!CanPost(dn.CompanyId, dn.Status))
                 return TradeResult.Fail("INVALID_STATUS", "Delivery must be Approved.");
             GlFiscalPeriod period = _calendar.Resolve(dn.CompanyId, dn.PostingDate);
@@ -237,6 +246,8 @@ VALUES (@v, @c, @n, 0, 1, @now, @now, @u, @u);",
             SalDelivery dn = _store.GetDelivery(deliveryId);
             if (dn == null || dn.Status != TradeCodes.Posted)
                 return TradeResult.Fail("INVALID_STATUS", "Delivery must be Posted.");
+            TradeResult isoInvCreate = TradeIsolation.DenyIfCrossTenant(identity, dn.CompanyId, dn.CenterId);
+            if (!isoInvCreate.Ok) return isoInvCreate;
             IList<SalLine> lines = _store.ListLines("SalDeliveryLine", "DeliveryID", deliveryId);
             long amount = 0;
             for (int i = 0; i < lines.Count; i++) amount += lines[i].Qty * lines[i].UnitPriceMinor;
@@ -271,6 +282,8 @@ VALUES (@v, @c, @n, 0, 1, @now, @now, @u, @u);",
                 return TradeResult.Fail("PERMISSION", SalesPermissions.Post);
             SalInvoice inv = _store.GetInvoice(invoiceId);
             if (inv == null) return TradeResult.Fail("NOT_FOUND", "Invoice not found.");
+            TradeResult isoInv = TradeIsolation.DenyIfCrossTenant(identity, inv.CompanyId, inv.CenterId);
+            if (!isoInv.Ok) return isoInv;
             if (!CanPost(inv.CompanyId, inv.Status))
                 return TradeResult.Fail("INVALID_STATUS", "Invoice must be Approved.");
             GlFiscalPeriod period = _calendar.Resolve(inv.CompanyId, inv.InvoiceDate);
@@ -328,7 +341,7 @@ VALUES (@v, @c, @n, 0, 1, @now, @now, @u, @u);",
                 return TradeResult.Fail("PERMISSION", "Cross-branch sales is not allowed.");
             if (_store.GetCustomer(cmd.CustomerId) == null)
                 return TradeResult.Fail("VALIDATION", "Customer not found.");
-            int companyId = cmd.CompanyId > 0 ? cmd.CompanyId : identity.CompanyId;
+            int companyId = TradeIsolation.ResolveCompany(identity, cmd.CompanyId);
             if (companyId <= 0) companyId = LedgerCodes.DefaultCompanyId;
             int center = cmd.CenterId > 0 ? cmd.CenterId : (identity.CenterId > 0 ? identity.CenterId : 1);
             string date = string.IsNullOrEmpty(cmd.Date) ? identity.UtcNow.ToString("yyyy-MM-dd") : cmd.Date;

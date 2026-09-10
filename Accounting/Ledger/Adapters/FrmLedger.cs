@@ -24,6 +24,7 @@ namespace CaseManagement.Accounting.Ledger.Adapters
         private readonly ILedgerReporting _reports;
         private readonly int _minorUnits;
 
+        private TabControl _tabs;
         private TreeView _tree;
         private DataGridView _gridYears;
         private DataGridView _gridPeriods;
@@ -39,7 +40,22 @@ namespace CaseManagement.Accounting.Ledger.Adapters
         private TextBox _txtCenter;
         private Label _lblReportNote;
 
+        public const int TabCoa = 0;
+        public const int TabCalendar = 1;
+        public const int TabJournals = 2;
+        public const int TabReports = 3;
+        public const string ReportGl = "دفتر کل";
+        public const string ReportTrial = "تراز آزمایشی";
+        public const string ReportBalance = "ترازنامه";
+        public const string ReportPnl = "سود و زیان";
+        public const string ReportFx = "موقعیت ارزی";
+
         public FrmLedger()
+            : this("دفتر کل", TabCoa, null)
+        {
+        }
+
+        public FrmLedger(string title, int startTab, string reportKind)
         {
             _identity = DesktopLedgerIdentity.FromSession();
             _gl = new PostingEngine();
@@ -51,46 +67,54 @@ namespace CaseManagement.Accounting.Ledger.Adapters
             GlCompany company = _coa.GetCompany(_identity.CompanyId > 0 ? _identity.CompanyId : LedgerCodes.DefaultCompanyId);
             _minorUnits = company != null ? company.MinorUnits : 2;
 
-            BuildUi();
+            BuildUi(title);
             ReloadCoa();
             ReloadCalendar();
             ReloadJournals();
             ReloadReportFilters();
+            if (_tabs != null && startTab >= 0 && startTab < _tabs.TabPages.Count)
+                _tabs.SelectedIndex = startTab;
+            SelectReport(reportKind);
+            ErpAccess.RequirePermission(this, "Ledger.View");
         }
 
-        private void BuildUi()
+        private void SelectReport(string reportKind)
         {
-            Text = "دفتر کل  —  " + SecurityContext.CenterDisplay;
+            if (_cmbReport == null || string.IsNullOrWhiteSpace(reportKind)) return;
+            int idx = _cmbReport.Items.IndexOf(reportKind);
+            if (idx >= 0)
+                _cmbReport.SelectedIndex = idx;
+        }
+
+        private void BuildUi(string title)
+        {
+            string heading = string.IsNullOrWhiteSpace(title) ? "دفتر کل" : title;
+            Text = ProductMode.IsErp
+                ? heading + "  ·  " + ProductBranding.CommercialName + "  —  " + SecurityContext.CenterDisplay
+                : heading + "  —  " + SecurityContext.CenterDisplay;
             RightToLeft = RightToLeft.Yes;
             RightToLeftLayout = true;
             BackColor = UiTheme.Background;
             Font = UiTheme.Font(UiTheme.SizeBody);
             UiTheme.MakeMainWindow(this, 1280, 760);
 
-            Panel banner = new Panel { Dock = DockStyle.Top, Height = 54, BackColor = UiTheme.PrimaryDark };
-            banner.Controls.Add(new Label
-            {
-                Text = "دفتر کل",
-                Dock = DockStyle.Fill,
-                ForeColor = Color.White,
-                Font = UiTheme.FontBold(15F),
-                TextAlign = ContentAlignment.MiddleRight,
-                Padding = new Padding(0, 0, 20, 0)
-            });
+            Panel banner = ProductMode.IsErp
+                ? ErpFormChrome.Header(heading + "  ·  " + ProductBranding.CommercialName)
+                : ErpFormChrome.Header(heading);
 
-            TabControl tabs = new TabControl
+            _tabs = new TabControl
             {
                 Dock = DockStyle.Fill,
                 RightToLeft = RightToLeft.Yes,
                 RightToLeftLayout = true,
                 Font = UiTheme.FontBold(10F)
             };
-            tabs.TabPages.Add(BuildCoaTab());
-            tabs.TabPages.Add(BuildCalendarTab());
-            tabs.TabPages.Add(BuildJournalTab());
-            tabs.TabPages.Add(BuildReportTab());
+            _tabs.TabPages.Add(BuildCoaTab());
+            _tabs.TabPages.Add(BuildCalendarTab());
+            _tabs.TabPages.Add(BuildJournalTab());
+            _tabs.TabPages.Add(BuildReportTab());
 
-            Controls.Add(tabs);
+            Controls.Add(_tabs);
             Controls.Add(banner);
         }
 

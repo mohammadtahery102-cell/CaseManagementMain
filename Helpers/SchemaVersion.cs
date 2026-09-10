@@ -28,6 +28,7 @@ namespace CaseManagement.Helpers
         public const string ComponentFixedAssets = "FixedAssets";
         public const string ComponentPayroll    = "Payroll";
         public const string ComponentPos        = "Pos";
+        public const string ComponentAiPlatform = "AiPlatform";
 
         public static void Ensure()
         {

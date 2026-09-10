@@ -109,6 +109,32 @@ namespace CaseManagement.Helpers
             return CharityModules.Contains(moduleKey);
         }
 
+        public static bool IsCharityPermission(string permKey)
+        {
+            if (string.IsNullOrWhiteSpace(permKey)) return false;
+            if (IsCharityModule(permKey)) return true;
+
+            string key = permKey.Trim();
+            return Starts(key, "Case.")
+                || Starts(key, "Family.")
+                || Starts(key, "Docs.")
+                || Starts(key, "Applicant.")
+                || Starts(key, "CaseRelation.")
+                || Starts(key, "Archive.")
+                || Starts(key, "Representative.")
+                || Starts(key, "GuardianCard.")
+                || Starts(key, "AssistanceReceipt.")
+                || string.Equals(key, "AI.Search", StringComparison.OrdinalIgnoreCase)
+                || Starts(key, "AI.Reminders.")
+                || Starts(key, "Barcode.")
+                || Starts(key, "Finance.");
+        }
+
+        private static bool Starts(string key, string prefix)
+        {
+            return key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
+        }
+
         public static bool HidesNavTitle(string title)
         {
             if (!IsErp || string.IsNullOrWhiteSpace(title)) return false;

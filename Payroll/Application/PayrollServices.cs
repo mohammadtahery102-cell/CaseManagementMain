@@ -91,7 +91,13 @@ namespace CaseManagement.Payroll.Application
                 return TradeResult.Fail("PERMISSION", PayrollPermissions.Create);
             int companyId = Co(identity);
             int center = identity.CenterId > 0 ? identity.CenterId : 1;
-            IList<PrEmployee> emps = _store.ActiveEmployees(companyId);
+            IList<PrEmployee> all = _store.ActiveEmployees(companyId);
+            List<PrEmployee> emps = new List<PrEmployee>();
+            for (int i = 0; i < all.Count; i++)
+            {
+                if (TradeIsolation.CanSeeCenter(identity, all[i].CenterId))
+                    emps.Add(all[i]);
+            }
             if (emps.Count == 0) return TradeResult.Fail("VALIDATION", "No active employees.");
             long total = 0;
             for (int i = 0; i < emps.Count; i++) total += emps[i].GrossMinor;
@@ -120,6 +126,8 @@ namespace CaseManagement.Payroll.Application
                 return TradeResult.Fail("PERMISSION", PayrollPermissions.Post);
             PrRun run = _store.GetRun(id);
             if (run == null) return TradeResult.Fail("NOT_FOUND", "Payroll run not found.");
+            TradeResult iso = TradeIsolation.DenyIfCrossTenant(identity, run.CompanyId, run.CenterId);
+            if (!iso.Ok) return iso;
             if (run.Status != TradeCodes.Approved && !(!_store.RequiresApproval(run.CompanyId) && run.Status == TradeCodes.Draft))
                 return TradeResult.Fail("INVALID_STATUS", "Run must be Approved.");
             if (run.TotalMinor <= 0) return TradeResult.Fail("VALIDATION", "Run total must be greater than zero.");
@@ -144,6 +152,9 @@ namespace CaseManagement.Payroll.Application
         public IList<PayrollRegisterRow> Register(long runId, ILedgerIdentity identity)
         {
             if (identity == null || !identity.HasPermission(PayrollPermissions.View)) return new List<PayrollRegisterRow>();
+            PrRun run = _store.GetRun(runId);
+            if (run == null || !TradeIsolation.CanSeeCompany(identity, run.CompanyId) || !TradeIsolation.CanSeeCenter(identity, run.CenterId))
+                return new List<PayrollRegisterRow>();
             return _store.Register(runId);
         }
 
@@ -153,6 +164,8 @@ namespace CaseManagement.Payroll.Application
                 return TradeResult.Fail("PERMISSION", perm);
             PrRun run = _store.GetRun(id);
             if (run == null) return TradeResult.Fail("NOT_FOUND", "Payroll run not found.");
+            TradeResult iso = TradeIsolation.DenyIfCrossTenant(identity, run.CompanyId, run.CenterId);
+            if (!iso.Ok) return iso;
             if (run.Status != from) return TradeResult.Fail("INVALID_STATUS", "Expected " + from);
             if (!_store.UpdateStatus(id, to, run.RowVersion, LedgerTime.UtcNow(identity.UtcNow), identity.UserName))
                 return TradeResult.Fail("CONCURRENCY", "RowVersion mismatch.");

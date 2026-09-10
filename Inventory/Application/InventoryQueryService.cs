@@ -3,6 +3,7 @@ using CaseManagement.Accounting.Ledger.Application;
 using CaseManagement.Accounting.Ledger.Infrastructure;
 using CaseManagement.Inventory.Domain;
 using CaseManagement.Inventory.Infrastructure;
+using CaseManagement.Trade;
 
 namespace CaseManagement.Inventory.Application
 {
@@ -40,12 +41,16 @@ namespace CaseManagement.Inventory.Application
         public InvDocument GetDocument(long id, ILedgerIdentity identity)
         {
             if (!CanView(identity)) return null;
-            return _store.GetDocument(id);
+            InvDocument doc = _store.GetDocument(id);
+            if (doc == null) return null;
+            if (!TradeIsolation.CanSeeCompany(identity, doc.CompanyId) || !TradeIsolation.CanSeeCenter(identity, doc.CenterId))
+                return null;
+            return doc;
         }
 
         public IList<InvDocumentLine> ListLines(long documentId, ILedgerIdentity identity)
         {
-            if (!CanView(identity)) return new List<InvDocumentLine>();
+            if (GetDocument(documentId, identity) == null) return new List<InvDocumentLine>();
             return _store.ListLines(documentId);
         }
 

@@ -387,6 +387,15 @@
     <Compile Include="Pos\Adapters\FrmPos.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="AiPlatform\Domain\AiPlatformContracts.cs" />
+    <Compile Include="AiPlatform\Infrastructure\AiPlatformInitializer.cs" />
+    <Compile Include="AiPlatform\Infrastructure\AiPlatformStore.cs" />
+    <Compile Include="AiPlatform\Infrastructure\AiProviders.cs" />
+    <Compile Include="AiPlatform\Application\AiPlatformServices.cs" />
+    <Compile Include="AiPlatform\Application\AiIntelligence.cs" />
+    <Compile Include="AiPlatform\Adapters\FrmAiPlatform.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="GuardianCardIntegration\CardDesigner\DemoCardData.cs" />
     <Compile Include="GuardianCardIntegration\CardDesigner\CardFieldCatalog.cs" />
     <Compile Include="GuardianCardIntegration\CardDesigner\TemplateHealthCheck.cs" />
@@ -610,6 +619,26 @@
     <Compile Include="Helpers\ReportFilterCriteria.cs" />
     <Compile Include="Helpers\SettingsHelper.cs" />
     <Compile Include="Helpers\ProductMode.cs" />
+    <Compile Include="Helpers\ProductBranding.cs" />
+    <Compile Include="Helpers\ErpFormChrome.cs" />
+    <Compile Include="Helpers\ErpAccess.cs" />
+    <Compile Include="Helpers\FrmErpPlaceholder.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Helpers\ReportingCatalog.cs" />
+    <Compile Include="Helpers\FrmReportingCenter.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Helpers\ErpWorkspace.cs" />
+    <Compile Include="Helpers\ErpQuickActions.cs" />
+    <Compile Include="Helpers\FrmErpQuickActions.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Helpers\ErpUiPrefs.cs" />
+    <Compile Include="Helpers\ErpDashboardMetrics.cs" />
+    <Compile Include="Helpers\ErpDashboardHost.cs">
+      <SubType>Component</SubType>
+    </Compile>
     <Compile Include="Helpers\SchemaVersion.cs" />
     <Compile Include="Helpers\SqlHelpers.cs" />
     <Compile Include="Helpers\UiTheme.cs" />
@@ -755,6 +784,18 @@
       <DependentUpon>Settings.settings</DependentUpon>
       <DesignTimeSharedInput>True</DesignTimeSharedInput>
     </Compile>
+    <Content Include="Ui\ErpDashboard\index.html">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Ui\ErpDashboard\tokens.css">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Ui\ErpDashboard\dashboard.css">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Ui\ErpDashboard\dashboard.js">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
     <Content Include="Templates\FullCaseTemplate.docx">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>

@@ -25,6 +25,7 @@ namespace CaseManagement.Enterprise
         {
             BuildUi();
             LoadGlobal();
+            ErpAccess.RequirePermission(this, "Module.Manage");
         }
 
         private void BuildUi()
@@ -48,7 +49,7 @@ namespace CaseManagement.Enterprise
                 Dock      = DockStyle.Fill,
                 ForeColor = Color.FromArgb(0xCF, 0xDD, 0xEE),
                 Font      = UiTheme.Font(UiTheme.SizeSmall),
-                TextAlign = ContentAlignment.TopLeft,
+                TextAlign = ContentAlignment.TopRight,
                 Padding   = new Padding(0, 0, 20, 0),
                 Text      = "تغییرات پس از باز کردن دوباره برنامه در منوی کناری اعمال می‌شود. ماژول‌های پایه قابل خاموش کردن نیستند."
             });
@@ -59,7 +60,7 @@ namespace CaseManagement.Enterprise
                 Height    = 38,
                 ForeColor = Color.White,
                 Font      = UiTheme.FontBold(UiTheme.SizeLarge),
-                TextAlign = ContentAlignment.MiddleLeft,
+                TextAlign = ContentAlignment.MiddleRight,
                 Padding   = new Padding(0, 6, 20, 0)
             });
             Controls.Add(header);
@@ -92,7 +93,7 @@ namespace CaseManagement.Enterprise
 
         private void LoadGlobal()
         {
-            _gridGlobal.DataSource = ModuleService.GetModules();
+            _gridGlobal.DataSource = ProductBranding.ApplyErpAdminPresentation(ModuleService.GetModules());
             HideId(_gridGlobal);
         }
 
@@ -148,7 +149,8 @@ namespace CaseManagement.Enterprise
 
         private void LoadRoleModules()
         {
-            _gridRoleModules.DataSource = ModuleService.GetRoleModules(SelectedRole());
+            _gridRoleModules.DataSource = ProductBranding.ApplyErpAdminPresentation(
+                ModuleService.GetRoleModules(SelectedRole()));
             HideId(_gridRoleModules);
         }
 
@@ -226,7 +228,8 @@ namespace CaseManagement.Enterprise
 
             _gridUserModules.DataSource = userId <= 0
                 ? null
-                : ModuleService.GetUserModules(userId, SelectedUserRole());
+                : ProductBranding.ApplyErpAdminPresentation(
+                    ModuleService.GetUserModules(userId, SelectedUserRole()));
 
             HideId(_gridUserModules);
         }

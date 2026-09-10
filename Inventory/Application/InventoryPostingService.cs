@@ -7,6 +7,7 @@ using CaseManagement.Accounting.Ledger.Domain;
 using CaseManagement.Accounting.Ledger.Infrastructure;
 using CaseManagement.Inventory.Domain;
 using CaseManagement.Inventory.Infrastructure;
+using CaseManagement.Trade;
 
 namespace CaseManagement.Inventory.Application
 {
@@ -33,7 +34,7 @@ namespace CaseManagement.Inventory.Application
                 return perm;
             if (item == null || string.IsNullOrWhiteSpace(item.Code) || string.IsNullOrWhiteSpace(item.Name))
                 return InventoryResult.Fail("VALIDATION", "Item code and name are required.");
-            int companyId = item.CompanyId > 0 ? item.CompanyId : identity.CompanyId;
+            int companyId = TradeIsolation.ResolveCompany(identity, item.CompanyId);
             if (companyId <= 0) companyId = LedgerCodes.DefaultCompanyId;
             item.CompanyId = companyId;
             if (item.CategoryId <= 0) item.CategoryId = _store.DefaultCategoryId(companyId);
@@ -64,8 +65,9 @@ namespace CaseManagement.Inventory.Application
             InventoryResult perm = _validation.GuardIdentity(identity, permKey);
             if (!perm.Ok) return perm;
 
-            int companyId = command.CompanyId > 0 ? command.CompanyId : identity.CompanyId;
+            int companyId = TradeIsolation.ResolveCompany(identity, command.CompanyId);
             if (companyId <= 0) companyId = LedgerCodes.DefaultCompanyId;
+            command.CompanyId = companyId;
             InvWarehouse warehouse = _store.GetWarehouse(command.WarehouseId);
             if (warehouse == null)
             {

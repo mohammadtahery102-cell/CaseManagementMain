@@ -19,6 +19,7 @@ namespace CaseManagement.Accounting
     public class AccReports
     {
         private readonly AccountingRepo _repo;
+        private int _printPage;
 
         public AccReports(AccountingRepo repo) { _repo = repo; }
 
@@ -58,7 +59,7 @@ namespace CaseManagement.Accounting
             using (PrintDocument doc = new PrintDocument())
             {
                 doc.DocumentName = model.Title;
-                doc.BeginPrint += delegate { summaryDone = 0; summaryFinished = false; rowIndex = 0; };
+                doc.BeginPrint += delegate { summaryDone = 0; summaryFinished = false; rowIndex = 0; _printPage = 0; };
                 doc.PrintPage += delegate (object s, PrintPageEventArgs e)
                 {
                     int y = e.MarginBounds.Top;
@@ -105,6 +106,12 @@ namespace CaseManagement.Accounting
             {
                 g.DrawString(orgName, OrgFont, Brushes.Black, new RectangleF(e.MarginBounds.Left, y, e.MarginBounds.Width, 24), sfCenter);
                 y += 24;
+            }
+            if (ProductMode.IsErp)
+            {
+                g.DrawString(ProductBranding.CommercialName, ValueFont, Brushes.DimGray,
+                    new RectangleF(e.MarginBounds.Left, y, e.MarginBounds.Width, 18), sfCenter);
+                y += 18;
             }
             if (!string.IsNullOrWhiteSpace(headerText))
             {
@@ -200,7 +207,8 @@ namespace CaseManagement.Accounting
 
             DrawSignatureBlock(g, e.MarginBounds.Right - colW, y, colW, "امضاء ترتیب‌کننده", prepSign);
             DrawSignatureBlock(g, e.MarginBounds.Right - colW * 2, y, colW, "امضاء حسابدار", accSign);
-            DrawSignatureBlock(g, e.MarginBounds.Left, y, colW, "امضاء مسئول ایتام", mgrSign);
+            DrawSignatureBlock(g, e.MarginBounds.Left, y, colW,
+                ProductMode.IsErp ? "امضاء مدیر" : "امضاء مسئول ایتام", mgrSign);
         }
 
         private void DrawSignatureBlock(Graphics g, int x, int y, int width, string label, string signaturePath)
@@ -219,11 +227,16 @@ namespace CaseManagement.Accounting
         private void DrawFooter(Graphics g, PrintPageEventArgs e)
         {
             string footerText = _repo.GetSetting("FooterText");
+            string brand = ProductMode.IsErp ? (ProductBranding.CommercialName + "  ·  ") : "";
             string text = string.IsNullOrWhiteSpace(footerText)
-                ? "چاپ‌شده در " + PersianDateHelper.ToPersianDateTimeString(DateTime.Now)
-                : footerText + "   —   " + PersianDateHelper.ToPersianDateTimeString(DateTime.Now);
+                ? brand + "چاپ‌شده در " + PersianDateHelper.ToPersianDateTimeString(DateTime.Now)
+                : brand + footerText + "   —   " + PersianDateHelper.ToPersianDateTimeString(DateTime.Now);
             StringFormat sf = new StringFormat { Alignment = StringAlignment.Center };
-            g.DrawString(text, FooterFont, Brushes.Gray, new RectangleF(e.MarginBounds.Left, e.MarginBounds.Bottom + 6, e.MarginBounds.Width, 16), sf);
+            g.DrawString(text, FooterFont, Brushes.Gray, new RectangleF(e.MarginBounds.Left, e.MarginBounds.Bottom + 6, e.MarginBounds.Width - 80, 16), sf);
+            _printPage++;
+            g.DrawString("صفحه " + _printPage, FooterFont, Brushes.Gray,
+                new RectangleF(e.MarginBounds.Right - 80, e.MarginBounds.Bottom + 6, 80, 16),
+                new StringFormat { Alignment = StringAlignment.Far });
 
             string stampPath = _repo.GetSetting("StampPath");
             Image stamp = TryLoadImage(stampPath);
@@ -314,6 +327,7 @@ namespace CaseManagement.Accounting
             using (PrintDocument doc = new PrintDocument())
             {
                 doc.DocumentName = docTitle + " " + row["DocNo"];
+                doc.BeginPrint += delegate { _printPage = 0; };
                 doc.PrintPage += delegate (object s, PrintPageEventArgs e)
                 {
                     Graphics g = e.Graphics;
@@ -332,7 +346,7 @@ namespace CaseManagement.Accounting
                     pairs.Add(new KeyValuePair<string, string>("نوع سند", income ? "دریافت" : "پرداخت"));
                     pairs.Add(new KeyValuePair<string, string>("صندوق", GetStr(row, "FundName")));
                     pairs.Add(new KeyValuePair<string, string>(income ? "دریافت از" : "پرداخت به", GetStr(row, "PartyName")));
-                    pairs.Add(new KeyValuePair<string, string>("دسته‌بندی", GetStr(row, "CategoryName")));
+                    pairs.Add(new KeyValuePair<string, string>("دسته‌بندی", ProductBranding.CategoryDisplayName(GetStr(row, "CategoryName"))));
                     if (row["Qty"] != DBNull.Value && !string.IsNullOrWhiteSpace(row["Qty"].ToString()))
                         pairs.Add(new KeyValuePair<string, string>("تعداد/مقدار", GetStr(row, "Qty")));
                     if (row["DollarAmount"] != DBNull.Value)
@@ -416,6 +430,7 @@ namespace CaseManagement.Accounting
             using (PrintDocument doc = new PrintDocument())
             {
                 doc.DocumentName = docTitle;
+                doc.BeginPrint += delegate { _printPage = 0; };
                 doc.PrintPage += delegate (object s, PrintPageEventArgs e)
                 {
                     Graphics g = e.Graphics;
@@ -650,7 +665,9 @@ namespace CaseManagement.Accounting
             }
             double rate = dollarSum > 0 ? afghaniFromDollar / dollarSum : 0;
 
-            var model = new ReportModel { Title = "صورت حساب کلی ایتام  —  " + SecurityContext.CenterDisplay + "  بابت " + periodTitle };
+            var model = new ReportModel { Title = (ProductMode.IsErp
+                ? "خلاصه دریافت و پرداخت  —  "
+                : "صورت حساب کلی ایتام  —  ") + SecurityContext.CenterDisplay + "  بابت " + periodTitle };
             model.SummaryRows.Add(new KeyValuePair<string, string>("نام مرکز", SecurityContext.CenterDisplay));
             model.SummaryRows.Add(new KeyValuePair<string, string>("دوره", periodTitle));
             model.SummaryRows.Add(new KeyValuePair<string, string>("تاریخ گزارش", PersianDateHelper.ToPersianDateTimeString(DateTime.Now)));
@@ -677,11 +694,11 @@ namespace CaseManagement.Accounting
 
             model.ColumnHeaders = new[] { "عنوان", "مرکز", "مبلغ (افغانی)" };
             model.ColumnWeights = new float[] { 2, 1.5f, 1.5f };
-            AddIfNonZero(model, "شهریه ایتام", stipend);
+                AddIfNonZero(model, ProductMode.IsErp ? "شهریه" : "شهریه ایتام", stipend);
             AddIfNonZero(model, "حقوق پرسنل", salary);
             DataTable catSummary = _repo.GetExpenseCategorySummary(periodId);
             foreach (DataRow r in catSummary.Rows)
-                AddIfNonZero(model, r["عنوان"].ToString(), Convert.ToDouble(r["مبلغ"]));
+                AddIfNonZero(model, ProductBranding.CategoryDisplayName(r["عنوان"].ToString()), Convert.ToDouble(r["مبلغ"]));
             model.BoldRows.Add(model.Rows.Count);
             model.Rows.Add(new[] { "جمع کل", SecurityContext.CenterDisplay, N(totalPayment) });
 
@@ -695,7 +712,7 @@ namespace CaseManagement.Accounting
             AddExpenseLine(model, "شهریه", stipend);
             AddExpenseLine(model, "حقوق پرسنل", salary);
             foreach (DataRow r in catSummary.Rows)
-                AddExpenseLine(model, r["عنوان"].ToString(), Convert.ToDouble(r["مبلغ"]));
+                AddExpenseLine(model, ProductBranding.CategoryDisplayName(r["عنوان"].ToString()), Convert.ToDouble(r["مبلغ"]));
             // باقیمانده‌ی پرداخت‌هایی که در دسته‌بندی هزینه نیامده‌اند تا جمعِ
             // جدولِ قالب دقیقاً برابر «مجموع پرداختی و مصارف» شود.
             double listedExpense = 0;
@@ -881,7 +898,9 @@ namespace CaseManagement.Accounting
         private ReportModel BuildDetailedStatement(int? periodId)
         {
             string periodTitle = periodId.HasValue ? _repo.GetPeriodTitle(periodId.Value) : "همه دوره‌ها";
-            var model = new ReportModel { Title = "صورت حساب جزیی ایتام  —  " + SecurityContext.CenterDisplay + "  بابت " + periodTitle };
+            var model = new ReportModel { Title = (ProductMode.IsErp
+                ? "خلاصه صندوق — جزئی  —  "
+                : "صورت حساب جزیی ایتام  —  ") + SecurityContext.CenterDisplay + "  بابت " + periodTitle };
             model.SummaryRows.Add(new KeyValuePair<string, string>("مرکز", SecurityContext.CenterDisplay));
             model.SummaryRows.Add(new KeyValuePair<string, string>("دوره", periodTitle));
 
@@ -1154,7 +1173,10 @@ namespace CaseManagement.Accounting
             {
                 double amt = Convert.ToDouble(r["TotalPaid"]);
                 balance -= amt;
-                model.Rows.Add(new[] { "", "", "شهریه ایتام — " + r["SadatType"] + " (" + r["FamilySize"] + " نفره)", "", amt.ToString("N0"), N(balance) });
+                string stipendDescription = ProductMode.IsErp
+                    ? "پرداخت دوره‌ای"
+                    : "شهریه ایتام — " + r["SadatType"] + " (" + r["FamilySize"] + " نفره)";
+                model.Rows.Add(new[] { "", "", stipendDescription, "", amt.ToString("N0"), N(balance) });
             }
             DataTable salaries = _repo.GetSalariesByFund(fundId, periodId);
             foreach (DataRow r in salaries.Rows)

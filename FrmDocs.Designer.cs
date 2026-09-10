@@ -369,7 +369,7 @@
             // دکمهٔ چرخهٔ «فورم رسمی» — تکمیل در سیستم، چاپ، امضا، و ضمیمهٔ
             // نسخهٔ اسکن‌شده در همین فهرستِ اسناد.
             SetActionButton(this.btnOfficialForms, "btnOfficialForms",
-                            "چاپ فورم رسمی", 12, this.btnOfficialForms_Click);
+                            "فورم‌های رسمی", 12, this.btnOfficialForms_Click);
             this.btnOfficialForms.Size = new System.Drawing.Size(150, 38);
 
             var mainActions = new System.Windows.Forms.FlowLayoutPanel();

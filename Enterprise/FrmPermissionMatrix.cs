@@ -22,6 +22,7 @@ namespace CaseManagement.Enterprise
         {
             BuildUi();
             LoadMatrix();
+            ErpAccess.RequirePermission(this, "Permission.Manage");
         }
 
         private void BuildUi()
@@ -44,7 +45,7 @@ namespace CaseManagement.Enterprise
                 Dock      = DockStyle.Fill,
                 ForeColor = Color.FromArgb(0xCF, 0xDD, 0xEE),
                 Font      = UiTheme.Font(UiTheme.SizeSmall),
-                TextAlign = ContentAlignment.TopLeft,
+                TextAlign = ContentAlignment.TopRight,
                 Padding   = new Padding(0, 0, 20, 0),
                 Text      = "تیک هر خانه را بزنید تا مجوز آن نقش تغییر کند. مجوزهای «مدیر کل» قابل تغییر نیست."
             };
@@ -56,7 +57,7 @@ namespace CaseManagement.Enterprise
                 Height    = 38,
                 ForeColor = Color.White,
                 Font      = UiTheme.FontBold(UiTheme.SizeLarge),
-                TextAlign = ContentAlignment.MiddleLeft,
+                TextAlign = ContentAlignment.MiddleRight,
                 Padding   = new Padding(0, 6, 20, 0)
             });
             Controls.Add(header);
@@ -104,7 +105,7 @@ namespace CaseManagement.Enterprise
         {
             _gridMatrix.CellValueChanged -= Matrix_CellValueChanged;
 
-            _gridMatrix.DataSource = PermissionService.GetRoleMatrix();
+            _gridMatrix.DataSource = ProductBranding.ApplyErpAdminPresentation(PermissionService.GetRoleMatrix());
 
             if (_gridMatrix.Columns.Contains("کلید"))
                 _gridMatrix.Columns["کلید"].ReadOnly = true;
@@ -220,7 +221,8 @@ namespace CaseManagement.Enterprise
                 return;
             }
 
-            _gridUserPerms.DataSource = PermissionService.GetUserOverrides(userId, SelectedUserRole());
+            _gridUserPerms.DataSource = ProductBranding.ApplyErpAdminPresentation(
+                PermissionService.GetUserOverrides(userId, SelectedUserRole()));
         }
 
         private void SetOverride(bool? granted)

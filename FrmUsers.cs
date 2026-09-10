@@ -23,6 +23,7 @@ namespace CaseManagement
         public FrmUsers()
         {
             BuildUi();
+            ErpAccess.RequirePermission(this, "User.Manage");
         }
 
         private void BuildUi()

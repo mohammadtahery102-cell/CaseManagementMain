@@ -22,12 +22,28 @@ namespace CaseManagement.Inventory.Adapters
         private DataGridView _gridReport;
         private ComboBox _cmbReport;
 
+        public const int TabItems = 0;
+        public const int TabDocuments = 1;
+        public const int TabReports = 2;
+        public const string ReportStockOnHand = "موجودی انبار";
+        public const string ReportValuation = "ارزش‌گذاری";
+        public const string ReportKardex = "دفتر موجودی";
+        public const string ReportReorder = "نقطه سفارش";
+        public const string ReportVsGl = "مغایرت موجودی و دفتر کل";
+
         public FrmInventory()
+            : this("موجودی کالا", TabItems, null)
+        {
+        }
+
+        public FrmInventory(string title, int startTab, string reportKind)
         {
             _identity = DesktopLedgerIdentity.FromSession();
             _posting = new InventoryPostingService();
             _query = new InventoryQueryService();
-            Text = "موجودی کالا";
+            ErpAccess.RequirePermission(this, "Inventory.View");
+            string heading = string.IsNullOrWhiteSpace(title) ? "موجودی کالا" : title;
+            Text = heading;
             RightToLeft = RightToLeft.Yes;
             RightToLeftLayout = true;
             BackColor = UiTheme.Background;
@@ -38,20 +54,32 @@ namespace CaseManagement.Inventory.Adapters
             tabs.TabPages.Add(BuildItemsTab());
             tabs.TabPages.Add(BuildDocsTab());
             tabs.TabPages.Add(BuildReportTab());
+            if (startTab >= 0 && startTab < tabs.TabPages.Count)
+                tabs.SelectedIndex = startTab;
+            SelectReport(reportKind);
             Controls.Add(tabs);
+            Controls.Add(ErpFormChrome.Header(heading));
             ReloadItems();
             ReloadDocs();
             ReloadReport();
+        }
+
+        private void SelectReport(string reportKind)
+        {
+            if (_cmbReport == null || string.IsNullOrWhiteSpace(reportKind)) return;
+            int idx = _cmbReport.Items.IndexOf(reportKind);
+            if (idx >= 0)
+                _cmbReport.SelectedIndex = idx;
         }
 
         private TabPage BuildItemsTab()
         {
             TabPage p = new TabPage("کالا");
             _gridItems = Grid();
-            p.Controls.Add(_gridItems);
-            FlowLayoutPanel flow = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 44, RightToLeft = RightToLeft.Yes };
+            FlowLayoutPanel flow = ErpFormChrome.Toolbar();
             flow.Controls.Add(Btn("کالای جدید", NewItem));
-            flow.Controls.Add(Btn("تازه‌سازی", ReloadItems));
+            flow.Controls.Add(ErpFormChrome.RefreshButton(delegate { ReloadItems(); }));
+            p.Controls.Add(ErpFormChrome.WrapGrid(_gridItems, ProductBranding.EmptyList));
             p.Controls.Add(flow);
             return p;
         }
@@ -60,13 +88,13 @@ namespace CaseManagement.Inventory.Adapters
         {
             TabPage p = new TabPage("اسناد");
             _gridDocs = Grid();
-            p.Controls.Add(_gridDocs);
-            FlowLayoutPanel flow = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 44, RightToLeft = RightToLeft.Yes };
+            FlowLayoutPanel flow = ErpFormChrome.Toolbar();
             flow.Controls.Add(Btn("رسید", delegate { NewDoc(InventoryCodes.TypeReceipt); }));
             flow.Controls.Add(Btn("حواله", delegate { NewDoc(InventoryCodes.TypeIssue); }));
             flow.Controls.Add(Btn("تعدیل", delegate { NewDoc(InventoryCodes.TypeAdjustment); }));
             flow.Controls.Add(Btn("ثبت قطعی", PostSelected));
-            flow.Controls.Add(Btn("تازه‌سازی", ReloadDocs));
+            flow.Controls.Add(ErpFormChrome.RefreshButton(delegate { ReloadDocs(); }));
+            p.Controls.Add(ErpFormChrome.WrapGrid(_gridDocs, ProductBranding.EmptyList));
             p.Controls.Add(flow);
             return p;
         }
@@ -75,18 +103,18 @@ namespace CaseManagement.Inventory.Adapters
         {
             TabPage p = new TabPage("گزارش");
             _gridReport = Grid();
-            p.Controls.Add(_gridReport);
-            FlowLayoutPanel flow = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 44, RightToLeft = RightToLeft.Yes };
+            FlowLayoutPanel flow = ErpFormChrome.Toolbar();
             _cmbReport = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 220 };
-            _cmbReport.Items.Add("موجودی انبار");
-            _cmbReport.Items.Add("ارزش‌گذاری");
-            _cmbReport.Items.Add("دفتر موجودی");
-            _cmbReport.Items.Add("نقطه سفارش");
-            _cmbReport.Items.Add("مغایرت موجودی و دفتر کل");
+            _cmbReport.Items.Add(ReportStockOnHand);
+            _cmbReport.Items.Add(ReportValuation);
+            _cmbReport.Items.Add(ReportKardex);
+            _cmbReport.Items.Add(ReportReorder);
+            _cmbReport.Items.Add(ReportVsGl);
             _cmbReport.SelectedIndex = 0;
             _cmbReport.SelectedIndexChanged += delegate { ReloadReport(); };
             flow.Controls.Add(_cmbReport);
-            flow.Controls.Add(Btn("تازه‌سازی", ReloadReport));
+            flow.Controls.Add(ErpFormChrome.RefreshButton(delegate { ReloadReport(); }));
+            p.Controls.Add(ErpFormChrome.WrapGrid(_gridReport, ProductBranding.EmptyList));
             p.Controls.Add(flow);
             return p;
         }
@@ -154,8 +182,15 @@ namespace CaseManagement.Inventory.Adapters
                     long q;
                     long c;
                     if (it == null || !long.TryParse(qty.Text.Trim(), out q) || !long.TryParse(cost.Text.Trim(), out c))
+                    {
+                        UiTheme.ShowWarning(dlg, "مقدار و بهای واحد را به‌صورت عدد معتبر وارد کنید.");
                         return;
-                    if (type == InventoryCodes.TypeAdjustment && q == 0) return;
+                    }
+                    if (type == InventoryCodes.TypeAdjustment && q == 0)
+                    {
+                        UiTheme.ShowWarning(dlg, "مقدار تعدیل نمی‌تواند صفر باشد.");
+                        return;
+                    }
                     InventoryPostCommand cmd = new InventoryPostCommand();
                     cmd.CompanyId = Company();
                     cmd.DocumentType = type;
@@ -224,8 +259,8 @@ namespace CaseManagement.Inventory.Adapters
         private void ReloadReport()
         {
             DataTable t = new DataTable();
-            string kind = _cmbReport.SelectedItem == null ? "موجودی انبار" : _cmbReport.SelectedItem.ToString();
-            if (kind == "دفتر موجودی")
+            string kind = _cmbReport.SelectedItem == null ? ReportStockOnHand : _cmbReport.SelectedItem.ToString();
+            if (kind == ReportKardex)
             {
                 t.Columns.Add("کالا", typeof(long));
                 t.Columns.Add("نوع");
@@ -236,7 +271,7 @@ namespace CaseManagement.Inventory.Adapters
                 for (int i = 0; i < rows.Count; i++)
                     t.Rows.Add(rows[i].ItemId, rows[i].DocumentType, rows[i].QtyBase, rows[i].ValueMinor, rows[i].PostingDate);
             }
-            else if (kind == "نقطه سفارش")
+            else if (kind == ReportReorder)
             {
                 t.Columns.Add("کد");
                 t.Columns.Add("نام");
@@ -246,7 +281,7 @@ namespace CaseManagement.Inventory.Adapters
                 for (int i = 0; i < rows.Count; i++)
                     t.Rows.Add(rows[i].ItemCode, rows[i].ItemName, rows[i].MinQtyBase, rows[i].QuantityOnHand);
             }
-            else if (kind == "مغایرت موجودی و دفتر کل")
+            else if (kind == ReportVsGl)
             {
                 t.Columns.Add("حساب");
                 t.Columns.Add("ارزش موجودی", typeof(long));
@@ -280,7 +315,7 @@ namespace CaseManagement.Inventory.Adapters
         private void ShowInv(InventoryResult r)
         {
             if (r == null) return;
-            if (r.Ok) UiTheme.ShowSuccess(this, "انجام شد.");
+            if (r.Ok) UiTheme.ShowSuccess(this, ProductBranding.SavedOk);
             else UiTheme.ShowWarning(this, r.ErrorCode + " " + r.Message);
         }
 

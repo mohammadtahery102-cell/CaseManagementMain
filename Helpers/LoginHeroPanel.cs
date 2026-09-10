@@ -34,22 +34,37 @@ namespace CaseManagement.Helpers
             public Feature(string glyph, string title) { Glyph = glyph; Title = title; }
         }
 
-        // پنج قابلیت اصلی (خواسته‌ی کاربر)
-        private static readonly Feature[] Features =
+        // پنج قابلیت اصلی — در حالت ERP ماژول‌های تجاری، در Charity پرونده.
+        private static Feature[] CurrentFeatures()
         {
-            new Feature(IconFont.Folder,   "مدیریت پرونده‌ها"),
-            new Feature(IconFont.People,   "اعضای خانواده"),
-            new Feature(IconFont.Document, "اسناد و مدارک"),
-            new Feature(IconFont.Search,   "جستجوی پیشرفته"),
-            new Feature(IconFont.Chart,    "گزارش‌گیری"),
-        };
+            if (ProductMode.IsErp)
+            {
+                return new[]
+                {
+                    new Feature(IconFont.Calculator, "حسابداری و دفتر کل"),
+                    new Feature(IconFont.Folder,     "موجودی کالا"),
+                    new Feature(IconFont.Money,      "خرید و فروش"),
+                    new Feature(IconFont.People,     "ارتباط با مشتریان"),
+                    new Feature(IconFont.Chart,      "گزارش‌های مالی"),
+                };
+            }
+            return new[]
+            {
+                new Feature(IconFont.Folder,   "مدیریت پرونده‌ها"),
+                new Feature(IconFont.People,   "اعضای خانواده"),
+                new Feature(IconFont.Document, "اسناد و مدارک"),
+                new Feature(IconFont.Search,   "جستجوی پیشرفته"),
+                new Feature(IconFont.Chart,    "گزارش‌گیری"),
+            };
+        }
 
         public LoginHeroPanel()
         {
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint |
                       ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
             Dock = DockStyle.Fill;
-            try { _logo = LogoHelper.GetLogoImage(); } catch { _logo = null; }
+            try { _logo = ProductMode.IsErp ? LogoHelper.TryGetUploadedLogo() : LogoHelper.GetLogoImage(); }
+            catch { _logo = null; }
         }
 
         // ─── حافظه‌ی نهانِ تصویر ──────────────────────────────────────────────
@@ -112,8 +127,15 @@ namespace CaseManagement.Helpers
             int pad = ResponsiveLayout.Scale(48);
             int y = ResponsiveLayout.Scale(56);
 
-            y = PaintEmblem(g, w, y);
-            y += ResponsiveLayout.Scale(26);
+            if (_logo != null)
+            {
+                y = PaintEmblem(g, w, y);
+                y += ResponsiveLayout.Scale(26);
+            }
+            else
+            {
+                y += ResponsiveLayout.Scale(12);
+            }
             y = PaintTitles(g, w, pad, y);
             y += ResponsiveLayout.Scale(30);
             y = PaintFeatures(g, w, pad, y, h);
@@ -226,11 +248,11 @@ namespace CaseManagement.Helpers
         // ─── عنوان بزرگ + شعار ───────────────────────────────────────────────
         private static int PaintTitles(Graphics g, int w, int pad, int y)
         {
-            var area = new RectangleF(pad, y, w - pad * 2, ResponsiveLayout.Scale(44));
+            var area = new RectangleF(pad, y, w - pad * 2, ResponsiveLayout.Scale(56));
             using (var f = UiTheme.FontBold(ScaleFont(19f)))
             using (var b = new SolidBrush(Color.White))
             using (var sf = Center())
-                g.DrawString("سیستم مدیریت پرونده گنجینه", f, b, area, sf);
+                g.DrawString(ProductBranding.LoginTitle, f, b, area, sf);
 
             y = (int)area.Bottom + ResponsiveLayout.Scale(6);
 
@@ -238,7 +260,7 @@ namespace CaseManagement.Helpers
             using (var f = UiTheme.Font(ScaleFont(10.5f)))
             using (var b = new SolidBrush(TextDim))
             using (var sf = Center())
-                g.DrawString("راهکار یکپارچه‌ی ثبت، پیگیری و گزارش‌گیریِ پرونده‌های ایتام", f, b, subArea, sf);
+                g.DrawString(ProductBranding.LoginTagline, f, b, subArea, sf);
 
             return (int)subArea.Bottom;
         }
@@ -253,10 +275,11 @@ namespace CaseManagement.Helpers
             // اگر ارتفاع کم بود، ردیف‌ها فشرده می‌شوند تا هرگز روی جعبه‌ی امنیت
             // نیفتند (روی نمایشگرهای کوتاه یا مقیاس ۲۰۰٪).
             int available = h - y - ResponsiveLayout.Scale(150);
-            if (available < rowH * Features.Length)
-                rowH = Math.Max(ResponsiveLayout.Scale(30), available / Features.Length);
+            Feature[] features = CurrentFeatures();
+            if (available < rowH * features.Length)
+                rowH = Math.Max(ResponsiveLayout.Scale(30), available / features.Length);
 
-            foreach (Feature f in Features)
+            foreach (Feature f in features)
             {
                 int iconX = w - pad - iconBox;          // آیکون سمت راست (RTL)
                 var iconRect = new Rectangle(iconX, y + (rowH - iconBox) / 2, iconBox, iconBox);

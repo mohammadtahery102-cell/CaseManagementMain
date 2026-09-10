@@ -79,7 +79,7 @@ namespace CaseManagement
             // showMaximize:false — چون صفحه‌ی ورود اندازه‌ی ثابت دارد، دکمه‌ی
             // بیشینه‌سازی هم نباید نمایش داده شود (وگرنه دکمه‌ای که کاری
             // نمی‌کند روی نوار عنوان می‌ماند).
-            ModernTitleBar titleBar = new ModernTitleBar(this, "سیستم مدیریت پرونده گنجینه", CanvasTop, showMaximize: false);
+            ModernTitleBar titleBar = new ModernTitleBar(this, ProductBranding.LoginTitle, CanvasTop, showMaximize: false);
             Controls.Add(titleBar);
 
             // ═══ چیدمان دو ستونه، کاملاً واکنش‌گرا ═══════════════════════════
@@ -364,7 +364,7 @@ namespace CaseManagement
                 if (!string.IsNullOrWhiteSpace(org)) return org;
             }
             catch { }
-            return "پشتیبانی فنی سامانه گنجینه";
+            return ProductBranding.SupportFallback;
         }
 
         // کارت سفیدِ گردگوشه با سایه‌ی نرم — پس‌زمینه‌ی ناحیه‌ی ورود.
@@ -759,6 +759,7 @@ WHERE  UserID = @id", con))
 
             // ─── ورود موفق — SignIn ثبت‌نام در SecurityContext ─────────────
             SecurityContext.SignIn(userId, username, role);
+            StampErpLastLogin();
 
             // ویژگی ۷ — ممیزی امنیتی: ورود موفق ثبت می‌شود.
             CaseManagement.Enterprise.SecurityAudit.LoginSucceeded(userId, username, role);
@@ -805,6 +806,17 @@ WHERE  UserID = @id", con))
             AuditLogger.Log("ورود", "TblUsers", userId, "", username + " / " + SecurityContext.CenterDisplay);
             DialogResult = DialogResult.OK;
             Close();
+        }
+
+        private static void StampErpLastLogin()
+        {
+            try
+            {
+                string prev = SettingsHelper.Get("ErpLastLoginAt", "");
+                SettingsHelper.Set("ErpLastLoginPrev", prev ?? "");
+                SettingsHelper.Set("ErpLastLoginAt", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture));
+            }
+            catch { }
         }
 
         private void ApplySelectedCenter()

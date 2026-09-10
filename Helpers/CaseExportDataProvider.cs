@@ -248,6 +248,23 @@ WHERE c.CasID = @CasID AND rd.IsMandatory = 1
 ORDER BY dc.SortOrder;", caseId);
         }
 
+        // ─── عکس‌های بازدید میدانی ──────────────────────────────────────────
+        // آموزش — تا امروز عکسِ بازدید در هیچ خروجی‌ای نمی‌آمد. ستونِ «مسیر
+        // فایل» عمداً در جدول هست: خروجیِ اکسل به آن نیاز دارد (تا کاربر فایل
+        // را پیدا کند) و سندِ چاپی از همان مسیر خودِ عکس را می‌کشد.
+        public static DataTable GetFieldVisitPhotos(int caseId)
+        {
+            return Query(@"
+SELECT v.VisitDate                    AS [تاریخ بازدید],
+       IFNULL(v.VisitorName, '')      AS [بازدیدکننده],
+       IFNULL(p.Description, '')      AS [توضیح],
+       IFNULL(p.FilePath, '')         AS [مسیر فایل]
+FROM TblFieldVisitPhoto p
+JOIN TblFieldVisit v ON v.VisitID = p.VisitID
+WHERE p.CasID = @CasID
+ORDER BY v.VisitDate DESC, p.PhotoID;", caseId);
+        }
+
         // ─── خلاصهٔ وضعیتِ پرونده (یک ردیف) ─────────────────────────────────
         // همان فیلدهایی که الزاماتِ Word/PDF/Excel می‌خواهند: نوع درخواست،
         // وضعیت خدمات، کامل‌بودن، امتیاز آسیب‌پذیری — با نامِ نمایشی، نه

@@ -38,6 +38,14 @@ namespace CaseManagement.Enterprise
         public const string ModuleArchive     = "Archive";
         public const string ModuleAuditReport = "AuditReport";
         public const string ModuleReportBuilder = "ReportBuilder";
+        public const string ModuleInventory   = "Inventory";
+        public const string ModulePurchase    = "Purchase";
+        public const string ModuleSales       = "Sales";
+        public const string ModuleCrm         = "CRM";
+        public const string ModuleAssets      = "Assets";
+        public const string ModulePayroll     = "Payroll";
+        public const string ModulePos         = "POS";
+        public const string ModuleAiPlatform  = "AiPlatform";
 
         public const string ModuleWorkflow    = "Workflow";
         public const string ModuleApprovals   = "Approvals";
@@ -119,9 +127,15 @@ namespace CaseManagement.Enterprise
                     string key = EntDb.ToText(module["ModuleKey"]);
 
                     // ۲) ماژول پایه و ۳) مدیر کل
-                    if (EntDb.ToBool(module["IsCore"]) || isSuperAdmin)
+                    if (isSuperAdmin)
                     {
                         map[key] = true;
+                        continue;
+                    }
+
+                    if (EntDb.ToBool(module["IsCore"]))
+                    {
+                        map[key] = SecurityContext.IsAdmin();
                         continue;
                     }
 

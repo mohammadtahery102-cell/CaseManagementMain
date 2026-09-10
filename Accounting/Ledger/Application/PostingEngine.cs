@@ -29,7 +29,7 @@ namespace CaseManagement.Accounting.Ledger.Application
             GlJournal j = _repo.GetJournal(journalId);
             if (j == null || j.IsDeleted)
                 return LedgerResult.Fail(LedgerErrorCodes.JournalMissing, "Journal not found.");
-            if (!CanSeeCenter(identity, j.CenterId))
+            if (!CanSeeCompany(identity, j.CompanyId) || !CanSeeCenter(identity, j.CenterId))
                 return LedgerResult.Fail(LedgerErrorCodes.CenterDenied, "Center denied.");
 
             LedgerResult r = LedgerResult.Success(j.JournalId, j.RowVersion);
@@ -58,7 +58,12 @@ namespace CaseManagement.Accounting.Ledger.Application
             LedgerResult gate = GuardCenter(command.CenterId, identity);
             if (!gate.Ok) return gate;
 
-            LedgerResult prepared = PrepareLines(command.CompanyId > 0 ? command.CompanyId : identity.CompanyId,
+            int saveCompany = command.CompanyId > 0 ? command.CompanyId : identity.CompanyId;
+            if (!CanSeeCompany(identity, saveCompany))
+                return LedgerResult.Fail(LedgerErrorCodes.PermissionDenied, "Company denied.");
+            command.CompanyId = saveCompany;
+
+            LedgerResult prepared = PrepareLines(saveCompany,
                 command.PostingDate, command.Lines, identity);
             if (!prepared.Ok) return prepared;
 
@@ -225,6 +230,8 @@ namespace CaseManagement.Accounting.Ledger.Application
 
             LedgerResult center = GuardCenter(journal.CenterId, identity);
             if (!center.Ok) return center;
+            if (!CanSeeCompany(identity, journal.CompanyId))
+                return LedgerResult.Fail(LedgerErrorCodes.PermissionDenied, "Company denied.");
 
             GlLedgerSetting setting = _repo.GetSetting(journal.CompanyId);
             bool requiresApproval = setting != null && setting.RequiresJournalApproval;
@@ -278,6 +285,8 @@ namespace CaseManagement.Accounting.Ledger.Application
 
             LedgerResult center = GuardCenter(original.CenterId, identity);
             if (!center.Ok) return center;
+            if (!CanSeeCompany(identity, original.CompanyId))
+                return LedgerResult.Fail(LedgerErrorCodes.PermissionDenied, "Company denied.");
 
             string postingDate = string.IsNullOrWhiteSpace(command.PostingDate)
                 ? original.PostingDate : LedgerTime.DateOnly(command.PostingDate);
@@ -703,6 +712,11 @@ namespace CaseManagement.Accounting.Ledger.Application
                     }
                     LedgerResult c = GuardCenter(j.CenterId, identity);
                     if (!c.Ok) { result = c; throw new LedgerAbortException(c); }
+                    if (!CanSeeCompany(identity, j.CompanyId))
+                    {
+                        result = LedgerResult.Fail(LedgerErrorCodes.PermissionDenied, "Company denied.");
+                        throw new LedgerAbortException(result);
+                    }
 
                     string now = LedgerTime.UtcNow(identity.UtcNow);
                     LedgerResult fail = mutate(j, now);
@@ -772,10 +786,20 @@ namespace CaseManagement.Accounting.Ledger.Application
             return identity.HasPermission(permission);
         }
 
+        private static bool CanSeeCompany(ILedgerIdentity identity, int companyId)
+        {
+            if (identity == null) return false;
+            if (identity.IsSuperAdmin) return true;
+            if (identity.CompanyId <= 0 || companyId <= 0) return false;
+            return identity.CompanyId == companyId;
+        }
+
         private static bool CanSeeCenter(ILedgerIdentity identity, int centerId)
         {
+            if (identity == null) return false;
             if (identity.IsSuperAdmin && identity.CenterId == 0) return true;
-            return identity.CenterId == 0 || identity.CenterId == centerId;
+            if (identity.CenterId <= 0) return false;
+            return identity.CenterId == centerId;
         }
 
         private static LedgerResult GuardCenter(int centerId, ILedgerIdentity identity)

@@ -103,6 +103,8 @@ namespace CaseManagement.Pos.Application
                 return TradeResult.Fail("PERMISSION", PosPermissions.Post);
             PosSale s = _store.GetSale(id);
             if (s == null) return TradeResult.Fail("NOT_FOUND", "Sale not found.");
+            TradeResult isoSale = TradeIsolation.DenyIfCrossTenant(identity, s.CompanyId, s.CenterId);
+            if (!isoSale.Ok) return isoSale;
             if (s.Status != TradeCodes.Approved && !(!_store.RequiresApproval(s.CompanyId) && s.Status == TradeCodes.Draft))
                 return TradeResult.Fail("INVALID_STATUS", "Sale must be Approved.");
             long customerId = EnsureWalkIn(s, identity);
@@ -193,6 +195,8 @@ namespace CaseManagement.Pos.Application
                 return TradeResult.Fail("PERMISSION", PosPermissions.Post);
             PosReturnDoc d = _store.GetReturn(id);
             if (d == null) return TradeResult.Fail("NOT_FOUND", "Return not found.");
+            TradeResult isoRet = TradeIsolation.DenyIfCrossTenant(identity, d.CompanyId, d.CenterId);
+            if (!isoRet.Ok) return isoRet;
             if (d.Status != TradeCodes.Approved && !(!_store.RequiresApproval(d.CompanyId) && d.Status == TradeCodes.Draft))
                 return TradeResult.Fail("INVALID_STATUS", "Return must be Approved.");
             PosSale s = _store.GetSale(d.SaleId);
@@ -272,6 +276,8 @@ namespace CaseManagement.Pos.Application
             if (identity == null || !identity.HasPermission(perm)) return TradeResult.Fail("PERMISSION", perm);
             PosSale s = _store.GetSale(id);
             if (s == null) return TradeResult.Fail("NOT_FOUND", "Sale not found.");
+            TradeResult iso = TradeIsolation.DenyIfCrossTenant(identity, s.CompanyId, s.CenterId);
+            if (!iso.Ok) return iso;
             if (s.Status != from) return TradeResult.Fail("INVALID_STATUS", "Expected " + from);
             if (!_store.UpdateSaleStatus(id, to, s.RowVersion, LedgerTime.UtcNow(identity.UtcNow), identity.UserName))
                 return TradeResult.Fail("CONCURRENCY", "RowVersion mismatch.");
@@ -284,6 +290,8 @@ namespace CaseManagement.Pos.Application
             if (identity == null || !identity.HasPermission(perm)) return TradeResult.Fail("PERMISSION", perm);
             PosReturnDoc d = _store.GetReturn(id);
             if (d == null) return TradeResult.Fail("NOT_FOUND", "Return not found.");
+            TradeResult iso = TradeIsolation.DenyIfCrossTenant(identity, d.CompanyId, d.CenterId);
+            if (!iso.Ok) return iso;
             if (d.Status != from) return TradeResult.Fail("INVALID_STATUS", "Expected " + from);
             if (!_store.UpdateReturnStatus(id, to, d.RowVersion, LedgerTime.UtcNow(identity.UtcNow), identity.UserName))
                 return TradeResult.Fail("CONCURRENCY", "RowVersion mismatch.");

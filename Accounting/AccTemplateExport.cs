@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using ClosedXML.Excel;
+using CaseManagement.Helpers;
 
 namespace CaseManagement.Accounting
 {
@@ -78,7 +79,9 @@ namespace CaseManagement.Accounting
                 // عنوان: در قالب فورمولی است که «برج» و «سال» را از خانه‌های
                 // ماه/سال می‌سازد. اینجا دوره یک عنوان آمادهٔ متنی است، پس
                 // عنوان به‌صورت ثابت نوشته می‌شود تا کلمهٔ «برج» تکرار نشود.
-                ws.Cell(3, 1).Value = "صورت حساب کلی ایتام   –   " + Safe(d.PeriodTitle);
+                ws.Cell(3, 1).Value = (ProductMode.IsErp
+                    ? "خلاصه دریافت و پرداخت   –   "
+                    : "صورت حساب کلی ایتام   –   ") + Safe(d.PeriodTitle);
 
                 // ── ۱) مشخصات سند ──
                 Put(wb, ws, "GL_Center", Safe(d.Center));

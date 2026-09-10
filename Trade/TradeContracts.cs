@@ -22,6 +22,42 @@ namespace CaseManagement.Trade
         }
     }
 
+    public static class TradeIsolation
+    {
+        public static bool CanSeeCompany(ILedgerIdentity identity, int companyId)
+        {
+            if (identity == null) return false;
+            if (identity.IsSuperAdmin) return true;
+            if (identity.CompanyId <= 0 || companyId <= 0) return identity.CompanyId <= 0;
+            return identity.CompanyId == companyId;
+        }
+
+        public static bool CanSeeCenter(ILedgerIdentity identity, int centerId)
+        {
+            if (identity == null) return false;
+            if (identity.IsSuperAdmin && identity.CenterId == 0) return true;
+            if (identity.CenterId <= 0) return identity.IsSuperAdmin;
+            if (centerId <= 0) return false;
+            return identity.CenterId == centerId;
+        }
+
+        public static TradeResult DenyIfCrossTenant(ILedgerIdentity identity, int companyId, int centerId)
+        {
+            if (!CanSeeCompany(identity, companyId) || !CanSeeCenter(identity, centerId))
+                return TradeResult.Fail("PERMISSION", "Cross-company or cross-branch access is not allowed.");
+            return TradeResult.Success(0, 0);
+        }
+
+        public static int ResolveCompany(ILedgerIdentity identity, int requested)
+        {
+            if (identity != null && !identity.IsSuperAdmin && identity.CompanyId > 0)
+                return identity.CompanyId;
+            if (requested > 0) return requested;
+            if (identity != null && identity.CompanyId > 0) return identity.CompanyId;
+            return CaseManagement.Accounting.Ledger.Domain.LedgerCodes.DefaultCompanyId;
+        }
+    }
+
     public static class TradeCodes
     {
         public const string Draft = "Draft";

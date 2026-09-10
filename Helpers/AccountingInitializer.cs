@@ -279,6 +279,7 @@ ON AccOutbox(SourceModule, DocumentType, DocumentID, Operation);");
             CaseManagement.Assets.Infrastructure.AssetInitializer.Ensure();
             CaseManagement.Payroll.Infrastructure.PayrollInitializer.Ensure();
             CaseManagement.Pos.Infrastructure.PosInitializer.Ensure();
+            CaseManagement.AiPlatform.Infrastructure.AiPlatformInitializer.Ensure();
             SchemaVersion.SetIfNewer(
                 SchemaVersion.ComponentAccounting, 6, "Accounting V1: year-end close and FX");
         }

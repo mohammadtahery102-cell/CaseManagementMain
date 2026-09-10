@@ -20,6 +20,7 @@ namespace CaseManagement.Pos.Adapters
         {
             _identity = DesktopLedgerIdentity.FromSession();
             _svc = new PosService();
+            ErpAccess.RequirePermission(this, "POS.View");
             Text = "صندوق فروش";
             RightToLeft = RightToLeft.Yes;
             RightToLeftLayout = true;
@@ -32,17 +33,16 @@ namespace CaseManagement.Pos.Adapters
                 SelectionMode = DataGridViewSelectionMode.FullRowSelect, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill
             };
             UiTheme.StyleGrid(_grid);
-            FlowLayoutPanel flow = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 44, RightToLeft = RightToLeft.Yes };
+            FlowLayoutPanel flow = ErpFormChrome.Toolbar();
             _cmb = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 220 };
             _cmb.Items.AddRange(new object[] { "فروش روزانه", "خلاصه نقد", "تراکنش‌ها" });
             _cmb.SelectedIndex = 0;
             _cmb.SelectedIndexChanged += delegate { Reload(); };
             flow.Controls.Add(_cmb);
-            Button b = UiTheme.CreateButton("تازه‌سازی", "", UiTheme.PrimaryLight);
-            b.Click += delegate { Reload(); };
-            flow.Controls.Add(b);
-            Controls.Add(_grid);
+            flow.Controls.Add(ErpFormChrome.RefreshButton(delegate { Reload(); }));
+            Controls.Add(ErpFormChrome.WrapGrid(_grid, ProductBranding.EmptyList));
             Controls.Add(flow);
+            Controls.Add(ErpFormChrome.Header("صندوق فروش"));
             Reload();
         }
 

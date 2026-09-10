@@ -112,6 +112,8 @@ namespace CaseManagement.Assets.Application
             FaAsset a = _store.GetAsset(assetId);
             if (a == null || a.Status != AssetCodes.StatusActive)
                 return TradeResult.Fail("VALIDATION", "Active asset is required.");
+            TradeResult isoDisp = TradeIsolation.DenyIfCrossTenant(identity, a.CompanyId, a.CenterId);
+            if (!isoDisp.Ok) return isoDisp;
             string now = LedgerTime.UtcNow(identity.UtcNow);
             long newId = 0;
             _store.ExecuteInTransaction(delegate (SQLiteConnection con, SQLiteTransaction tr)
@@ -182,6 +184,9 @@ namespace CaseManagement.Assets.Application
             if (row == null) return TradeResult.Fail("NOT_FOUND", table);
             if (Convert.ToString(row["Status"]) != from) return TradeResult.Fail("INVALID_STATUS", "Expected " + from);
             int center = Convert.ToInt32(row["CenterID"]);
+            int company = Convert.ToInt32(row["CompanyID"]);
+            TradeResult iso = TradeIsolation.DenyIfCrossTenant(identity, company, center);
+            if (!iso.Ok) return iso;
             if (!_store.UpdateStatus(table, idCol, id, to, Convert.ToInt64(row["RowVersion"]), LedgerTime.UtcNow(identity.UtcNow), identity.UserName))
                 return TradeResult.Fail("CONCURRENCY", "RowVersion mismatch.");
             DocumentWorkflowService.MoveTo(entity, id, center, wf, identity);
@@ -196,9 +201,11 @@ namespace CaseManagement.Assets.Application
             if (row == null) return TradeResult.Fail("NOT_FOUND", table);
             string status = Convert.ToString(row["Status"]);
             int companyId = Convert.ToInt32(row["CompanyID"]);
+            int center = Convert.ToInt32(row["CenterID"]);
+            TradeResult iso = TradeIsolation.DenyIfCrossTenant(identity, companyId, center);
+            if (!iso.Ok) return iso;
             if (status != TradeCodes.Approved && !(!_store.RequiresApproval(companyId) && status == TradeCodes.Draft))
                 return TradeResult.Fail("INVALID_STATUS", "Document must be Approved.");
-            int center = Convert.ToInt32(row["CenterID"]);
             _store.ExecuteInTransaction(delegate (SQLiteConnection con, SQLiteTransaction tr)
             {
                 AccOutboxWriter.Enqueue(con, tr, LedgerCodes.SourceFixedAsset, docType, id, LedgerCodes.OutboxPost, companyId, center, identity.UserName);

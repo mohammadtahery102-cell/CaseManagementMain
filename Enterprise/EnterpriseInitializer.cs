@@ -834,6 +834,15 @@ CREATE TABLE IF NOT EXISTS EntUserPermission (
             AddPermission(con, "POS.Approve", "تأیید صندوق", "صندوق", 603, true, false, false);
             AddPermission(con, "POS.Post", "ثبت قطعی صندوق", "صندوق", 604, true, false, false);
 
+            AddPermission(con, "AI.View", "مشاهده دستیار هوشمند گنجینه", "هوش مصنوعی", 630, true, true, true);
+            AddPermission(con, "AI.Chat", "گفتگو با هوش مصنوعی", "هوش مصنوعی", 631, true, true, false);
+            AddPermission(con, "AI.Analytics", "تحلیل هوشمند ERP", "هوش مصنوعی", 632, true, true, false);
+            AddPermission(con, "AI.Executive", "داشبورد و بینش مدیریتی", "هوش مصنوعی", 633, true, false, false);
+            AddPermission(con, "AI.Settings", "تنظیمات هوش مصنوعی", "هوش مصنوعی", 634, true, false, false);
+            AddPermission(con, "AI.License.Free", "مجوز هوش مصنوعی رایگان", "هوش مصنوعی", 635, true, true, true);
+            AddPermission(con, "AI.License.Pro", "مجوز هوش مصنوعی حرفه‌ای", "هوش مصنوعی", 636, true, false, false);
+            AddPermission(con, "AI.License.Executive", "مجوز هوش مصنوعی مدیریتی", "هوش مصنوعی", 637, true, false, false);
+
             // ─── نسخهٔ ۱٫۰ / فاز ۴ (موج ۵) — کاربران/تنظیمات/پشتیبان‌گیری/
             // همگام‌سازی/مراکز/ماژول‌ها. «User.Manage» و «Module.Manage» از
             // قبل (پایهٔ اولیهٔ PermissionService) تعریف شده بودند ولی به هیچ
@@ -948,6 +957,13 @@ CREATE TABLE IF NOT EXISTS EntUserModule (
             AddModule(con, ModuleService.ModuleArchive,    "بایگانی",           0,  78);
             AddModule(con, ModuleService.ModuleAuditReport,"گزارش رویدادها",    0,  80);
             AddModule(con, ModuleService.ModuleReportBuilder, "گزارش‌ساز پویا", 0,  85);
+            AddModule(con, ModuleService.ModuleInventory,  "انبار و کالا",      0, 210);
+            AddModule(con, ModuleService.ModulePurchase,   "خرید",              0, 220);
+            AddModule(con, ModuleService.ModuleSales,      "فروش",              0, 230);
+            AddModule(con, ModuleService.ModuleCrm,        "ارتباط با مشتریان", 0, 240);
+            AddModule(con, ModuleService.ModuleAssets,     "دارایی ثابت",       0, 250);
+            AddModule(con, ModuleService.ModulePayroll,    "حقوق و دستمزد",     0, 260);
+            AddModule(con, ModuleService.ModulePos,        "صندوق فروش",        0, 270);
 
             AddModule(con, ModuleService.ModuleWorkflow,   "گردش‌کار",          0,  90);
             AddModule(con, ModuleService.ModuleApprovals,  "تأییدها",           0, 100);

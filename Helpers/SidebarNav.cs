@@ -22,13 +22,19 @@ namespace CaseManagement.Helpers
     // ─────────────────────────────────────────────────────────────────────────
     public class SidebarNav : Panel
     {
-        public static readonly Color BackDark   = ColorTranslator.FromHtml("#16213E");
-        public static readonly Color BackDarker = ColorTranslator.FromHtml("#101A31");
+        public static readonly Color BackDark   = ColorTranslator.FromHtml("#162231");
+        public static readonly Color BackDarker = ColorTranslator.FromHtml("#1D2A3A");
         public static readonly Color ItemText   = ColorTranslator.FromHtml("#B9C2D8");
         public static readonly Color GroupText  = ColorTranslator.FromHtml("#6C7A99");
 
         private readonly Panel _itemsHost;
         private readonly List<NavItem> _items = new List<NavItem>();
+        private readonly List<Control> _groupHeaders = new List<Control>();
+        private Panel _brandTitles;
+        private Label _footerLabel;
+        private bool _collapsed;
+        private bool _enterprise;
+        private Timer _widthAnim;
         private int _activeIndex = -1;
 
         // گروهِ جاری که AddItem بعدی باید داخلش قرار بگیرد (برای آکاردئون).
@@ -42,7 +48,7 @@ namespace CaseManagement.Helpers
             RightToLeft = RightToLeft.Yes;
 
             // ── سربرگ برند ──
-            Panel brand = new Panel { Dock = DockStyle.Top, Height = 84, BackColor = BackDark, Padding = new Padding(14, 16, 14, 12) };
+            Panel brand = new Panel { Dock = DockStyle.Top, Height = 80, BackColor = BackDark, Padding = new Padding(16, 14, 16, 10) };
 
             BrandIcon icon = new BrandIcon { Dock = DockStyle.Right, Width = 52 };
 
@@ -50,7 +56,7 @@ namespace CaseManagement.Helpers
             Label lblSub = new Label
             {
                 Text = brandSubtitle, Dock = DockStyle.Top, Height = 18, BackColor = Color.Transparent,
-                Font = UiTheme.Font(UiTheme.SizeSmall - 2F), ForeColor = GroupText,
+                Font = UiTheme.Font(UiTheme.SizeSmall - 2F), ForeColor = ColorTranslator.FromHtml("#94A3B8"),
                 TextAlign = ContentAlignment.MiddleRight
             };
             Label lblTitle = new Label
@@ -59,6 +65,7 @@ namespace CaseManagement.Helpers
                 Font = UiTheme.FontBold(UiTheme.SizeLarge), ForeColor = Color.White,
                 TextAlign = ContentAlignment.MiddleRight
             };
+            _brandTitles = titles;
             titles.Controls.Add(lblTitle);
             titles.Controls.Add(lblSub);
 
@@ -70,6 +77,113 @@ namespace CaseManagement.Helpers
 
             Controls.Add(_itemsHost);
             Controls.Add(brand);
+        }
+
+        public void ApplyEnterpriseChrome()
+        {
+            _enterprise = true;
+            Width = ErpUiPrefs.ExpandedWidth;
+            _itemsHost.Padding = new Padding(12, 8, 12, 12);
+
+            Button collapse = new Button
+            {
+                Dock = DockStyle.Bottom,
+                Height = 36,
+                FlatStyle = FlatStyle.Flat,
+                BackColor = BackDarker,
+                ForeColor = Color.White,
+                Text = "جمع کردن منو  »",
+                Font = UiTheme.Font(UiTheme.SizeSmall),
+                Cursor = Cursors.Hand,
+                TabStop = true
+            };
+            collapse.FlatAppearance.BorderSize = 0;
+            collapse.Click += delegate { SetCollapsed(!_collapsed, animate: true, persist: true); };
+            new ToolTip().SetToolTip(collapse, "جمع/باز کردن نوار کناری");
+            collapse.Tag = "collapse";
+            Controls.Add(collapse);
+
+            Panel foot = new Panel
+            {
+                Dock = DockStyle.Bottom,
+                Height = 44,
+                BackColor = BackDark,
+                Padding = new Padding(12, 6, 12, 6)
+            };
+            _footerLabel = new Label
+            {
+                Dock = DockStyle.Fill,
+                Text = "● آنلاین   ·   v1.0.0",
+                ForeColor = ColorTranslator.FromHtml("#94A3B8"),
+                Font = UiTheme.Font(UiTheme.SizeSmall - 1F),
+                TextAlign = ContentAlignment.MiddleRight
+            };
+            foot.Controls.Add(_footerLabel);
+            Controls.Add(foot);
+            _itemsHost.BringToFront();
+            SetCollapsed(ErpUiPrefs.SidebarCollapsed, animate: false, persist: false);
+        }
+
+        public void SetCollapsed(bool collapsed, bool animate, bool persist)
+        {
+            if (!_enterprise) return;
+            _collapsed = collapsed;
+            if (persist) ErpUiPrefs.SidebarCollapsed = collapsed;
+            ApplyCollapsedVisuals();
+            int target = collapsed ? ErpUiPrefs.CollapsedWidth : ErpUiPrefs.ExpandedWidth;
+            if (!animate || Width == target)
+            {
+                Width = target;
+                return;
+            }
+            if (_widthAnim != null)
+            {
+                _widthAnim.Stop();
+                _widthAnim.Dispose();
+            }
+            int from = Width;
+            int steps = 10;
+            int n = 0;
+            _widthAnim = new Timer { Interval = 18 };
+            _widthAnim.Tick += delegate
+            {
+                n++;
+                double t = n / (double)steps;
+                if (t >= 1)
+                {
+                    Width = target;
+                    _widthAnim.Stop();
+                    return;
+                }
+                double e = 1 - Math.Pow(1 - t, 3);
+                Width = from + (int)Math.Round((target - from) * e);
+            };
+            _widthAnim.Start();
+        }
+
+        private void ApplyCollapsedVisuals()
+        {
+            if (_brandTitles != null) _brandTitles.Visible = !_collapsed;
+            if (_footerLabel != null)
+                _footerLabel.Text = _collapsed ? "●" : "● آنلاین   ·   v1.0.0";
+            _itemsHost.Padding = _collapsed ? new Padding(6, 8, 6, 8) : new Padding(12, 8, 12, 12);
+            foreach (Control h in _groupHeaders)
+                h.Visible = !_collapsed;
+            if (_collapsed)
+            {
+                foreach (Control c in _itemsHost.Controls)
+                {
+                    if (c is Panel && !_groupHeaders.Contains(c))
+                        c.Visible = true;
+                }
+            }
+            foreach (Control c in Controls)
+            {
+                Button b = c as Button;
+                if (b != null && (c.Tag as string) == "collapse")
+                    b.Text = _collapsed ? "«" : "جمع کردن منو  »";
+            }
+            Invalidate(true);
         }
 
         // عنوان گروه (مثل «اصلی»، «مالی و حسابداری» در طرح تصویری) — حالا
@@ -90,8 +204,38 @@ namespace CaseManagement.Helpers
 
             AddToHost(header);
             AddToHost(groupItems);
+            _groupHeaders.Add(header);
 
             _currentGroupPanel = groupItems;
+        }
+
+        public void EndGroup()
+        {
+            _currentGroupPanel = null;
+        }
+
+        public void AddCaption(string text)
+        {
+            Label cap = new Label
+            {
+                Text = text,
+                Dock = DockStyle.Top,
+                Height = 22,
+                BackColor = Color.Transparent,
+                ForeColor = GroupText,
+                Font = UiTheme.FontBold(UiTheme.SizeSmall - 1F),
+                TextAlign = ContentAlignment.MiddleRight,
+                Padding = new Padding(10, 0, 8, 0)
+            };
+            _groupHeaders.Add(cap);
+            if (_currentGroupPanel != null)
+            {
+                _currentGroupPanel.Controls.Add(cap);
+                cap.SendToBack();
+                _currentGroupPanel.Height += cap.Height;
+            }
+            else
+                AddToHost(cap);
         }
 
         public int AddItem(string glyph, string text, EventHandler onClick)
@@ -108,7 +252,7 @@ namespace CaseManagement.Helpers
             if (_currentGroupPanel != null)
             {
                 _currentGroupPanel.Controls.Add(item);
-                item.BringToFront();
+                item.SendToBack();
                 _currentGroupPanel.Height += item.Height;
             }
             else
@@ -124,7 +268,7 @@ namespace CaseManagement.Helpers
         private void AddToHost(Control c)
         {
             _itemsHost.Controls.Add(c);
-            c.BringToFront();
+            c.SendToBack();
         }
 
         public void SetActive(int index)
@@ -148,7 +292,7 @@ namespace CaseManagement.Helpers
                 Text = text;
                 SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint |
                           ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
-                Height = 42;
+                Height = 40;
                 Cursor = Cursors.Hand;
                 BackColor = BackDark;
             }
@@ -173,9 +317,11 @@ namespace CaseManagement.Helpers
                 Rectangle pill = new Rectangle(2, 3, Width - 5, Height - 7);
                 if (_active)
                 {
-                    using (GraphicsPath path = StatCard.RoundedRect(pill, 9))
-                    using (Brush b = new SolidBrush(UiTheme.Primary))
+                    using (GraphicsPath path = StatCard.RoundedRect(pill, 10))
+                    using (Brush b = new SolidBrush(Color.FromArgb(41, 37, 99, 235)))
                         g.FillPath(b, path);
+                    using (Brush bar = new SolidBrush(ColorTranslator.FromHtml("#2563EB")))
+                        g.FillRectangle(bar, Width - 6, 10, 4, Height - 20);
                 }
                 else if (_hover)
                 {
@@ -186,17 +332,21 @@ namespace CaseManagement.Helpers
 
                 Color fg = _active ? Color.White : ItemText;
 
-                // آیکون سمت راست (شروعِ خواندن در RTL)
+                RectangleF iconBox = Width < 100
+                    ? new RectangleF(0, 0, Width, Height)
+                    : new RectangleF(Width - 40, 0, 30, Height);
                 using (Font f = IconFont.Get(12.5F))
                 using (Brush b = new SolidBrush(fg))
                 using (StringFormat sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
-                    g.DrawString(_glyph, f, b, new RectangleF(Width - 40, 0, 30, Height), sf);
+                    g.DrawString(_glyph, f, b, iconBox, sf);
 
-                // متن، راست‌چین در فضای باقی‌مانده
-                using (Font f = _active ? UiTheme.FontBold(UiTheme.SizeBody + 1F) : UiTheme.Font(UiTheme.SizeBody + 1F))
-                using (Brush b = new SolidBrush(fg))
-                using (StringFormat sf = new StringFormat { Alignment = StringAlignment.Far, LineAlignment = StringAlignment.Center, FormatFlags = StringFormatFlags.NoWrap })
-                    g.DrawString(Text, f, b, new RectangleF(10, 0, Width - 52, Height), sf);
+                if (Width >= 100)
+                {
+                    using (Font f = _active ? UiTheme.FontBold(UiTheme.SizeBody + 1F) : UiTheme.Font(UiTheme.SizeBody + 1F))
+                    using (Brush b = new SolidBrush(fg))
+                    using (StringFormat sf = new StringFormat { Alignment = StringAlignment.Far, LineAlignment = StringAlignment.Center, FormatFlags = StringFormatFlags.NoWrap, Trimming = StringTrimming.EllipsisCharacter })
+                        g.DrawString(Text, f, b, new RectangleF(10, 0, Width - 52, Height), sf);
+                }
             }
         }
 
@@ -212,9 +362,10 @@ namespace CaseManagement.Helpers
             public GroupHeader(string title)
             {
                 _title = title;
+                Text = title;
                 SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint |
                           ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
-                Height = 32;
+                Height = 36;
                 Cursor = Cursors.Hand;
                 BackColor = BackDark;
             }

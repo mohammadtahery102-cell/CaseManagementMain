@@ -22,6 +22,7 @@ namespace CaseManagement.Assets.Adapters
             _identity = DesktopLedgerIdentity.FromSession();
             _svc = new AssetService();
             _dep = new DepreciationService();
+            ErpAccess.RequirePermission(this, "Assets.View");
             Text = "دارایی ثابت";
             RightToLeft = RightToLeft.Yes;
             RightToLeftLayout = true;
@@ -34,17 +35,16 @@ namespace CaseManagement.Assets.Adapters
                 SelectionMode = DataGridViewSelectionMode.FullRowSelect, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill
             };
             UiTheme.StyleGrid(_grid);
-            FlowLayoutPanel flow = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 44, RightToLeft = RightToLeft.Yes };
+            FlowLayoutPanel flow = ErpFormChrome.Toolbar();
             _cmb = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 240 };
             _cmb.Items.AddRange(new object[] { "ثبت دارایی", "گزارش استهلاک", "حرکت دارایی" });
             _cmb.SelectedIndex = 0;
             _cmb.SelectedIndexChanged += delegate { Reload(); };
             flow.Controls.Add(_cmb);
-            Button b = UiTheme.CreateButton("تازه‌سازی", "", UiTheme.PrimaryLight);
-            b.Click += delegate { Reload(); };
-            flow.Controls.Add(b);
-            Controls.Add(_grid);
+            flow.Controls.Add(ErpFormChrome.RefreshButton(delegate { Reload(); }));
+            Controls.Add(ErpFormChrome.WrapGrid(_grid, ProductBranding.EmptyList));
             Controls.Add(flow);
+            Controls.Add(ErpFormChrome.Header("دارایی ثابت"));
             Reload();
         }
 

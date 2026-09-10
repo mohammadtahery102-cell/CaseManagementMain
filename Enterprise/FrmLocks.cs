@@ -20,6 +20,7 @@ namespace CaseManagement.Enterprise
         {
             BuildUi();
             LoadLocks();
+            ErpAccess.RequirePermission(this, "Lock.Override");
         }
 
         private void BuildUi()

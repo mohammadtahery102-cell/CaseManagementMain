@@ -13,9 +13,7 @@ namespace CaseManagement.Enterprise
     //      تنظیم اشتباهی نتواند کل سیستم را برای همیشه قفل کند.
     //   ۲. استثنای کاربر (EntUserPermission) → اجازه یا منع صریح.
     //   ۳. مجوز نقش (EntRolePermission).
-    //   ۴. اگر مجوز اصلاً در سیستم تعریف نشده باشد → رفتار قدیمی
-    //      SecurityContext (سازگاری کامل عقب‌رو؛ کلید ناشناخته باعث قفل شدن
-    //      قابلیت‌های موجود نمی‌شود).
+    //   ۴. اگر کلید در ماتریس نباشد → رد (fail-closed). کلید خالی هم رد است.
     //
     // نتیجه‌ها برای هر کاربر یک‌بار خوانده و در حافظه نگه داشته می‌شوند، چون
     // در فرم‌ها ممکن است ده‌ها بار پشت سر هم پرسیده شوند.
@@ -37,7 +35,7 @@ namespace CaseManagement.Enterprise
         // ─── پرسش اصلی ────────────────────────────────────────────────────
         public static bool HasPermission(string permissionKey)
         {
-            if (string.IsNullOrWhiteSpace(permissionKey)) return true;
+            if (string.IsNullOrWhiteSpace(permissionKey)) return false;
 
             // ۱) مدیر کل همیشه مجاز است.
             if (SecurityContext.IsSuperAdmin()) return true;
@@ -50,13 +48,11 @@ namespace CaseManagement.Enterprise
                 if (cache.TryGetValue(permissionKey, out granted))
                     return granted;
 
-                // ۴) مجوز ناشناخته → رفتار قدیمی بر پایه نقش.
-                return LegacyFallback(permissionKey);
+                return false;
             }
             catch
             {
-                // در صورت هر خطا، رفتار قدیمی ملاک است تا کاربر بی‌دلیل مسدود نشود.
-                return LegacyFallback(permissionKey);
+                return false;
             }
         }
 

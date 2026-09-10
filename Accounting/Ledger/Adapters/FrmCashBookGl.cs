@@ -30,7 +30,7 @@ namespace CaseManagement.Accounting.Ledger.Adapters
             IntegrationOutboxProcessor box = new IntegrationOutboxProcessor();
             _outbox = box;
             _monitor = box;
-            Text = "صندوق → دفتر کل";
+            Text = ProductMode.IsErp ? "اتصال صندوق به دفتر کل" : "صندوق → دفتر کل";
             RightToLeft = RightToLeft.Yes;
             RightToLeftLayout = true;
             BackColor = UiTheme.Background;
@@ -42,20 +42,23 @@ namespace CaseManagement.Accounting.Ledger.Adapters
             tabs.TabPages.Add(BuildMapTab());
             tabs.TabPages.Add(BuildOutboxTab());
             Controls.Add(tabs);
+            if (ProductMode.IsErp)
+                Controls.Add(ErpFormChrome.Header("اتصال صندوق به دفتر کل"));
             ReloadTxn();
             ReloadMap();
             ReloadOutbox();
+            ErpAccess.RequirePermission(this, "Ledger.View");
         }
 
         private TabPage BuildTxnTab()
         {
             TabPage p = new TabPage("اسناد صندوق");
             _gridTxn = Grid();
-            p.Controls.Add(_gridTxn);
-            FlowLayoutPanel flow = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 44, RightToLeft = RightToLeft.Yes };
+            p.Controls.Add(ErpFormChrome.WrapGrid(_gridTxn, ProductBranding.EmptyList));
+            FlowLayoutPanel flow = ErpFormChrome.Toolbar();
             flow.Controls.Add(Btn("ارسال به دفتر کل", PostSelected));
             flow.Controls.Add(Btn("برگشت در صورت ابطال", ReverseSelected));
-            flow.Controls.Add(Btn("تازه‌سازی", ReloadTxn));
+            flow.Controls.Add(ErpFormChrome.RefreshButton(delegate { ReloadTxn(); }));
             p.Controls.Add(flow);
             return p;
         }
@@ -64,8 +67,8 @@ namespace CaseManagement.Accounting.Ledger.Adapters
         {
             TabPage p = new TabPage("نگاشت حساب");
             _gridMap = Grid();
-            p.Controls.Add(_gridMap);
-            FlowLayoutPanel flow = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 44, RightToLeft = RightToLeft.Yes };
+            p.Controls.Add(ErpFormChrome.WrapGrid(_gridMap, ProductBranding.EmptyList));
+            FlowLayoutPanel flow = ErpFormChrome.Toolbar();
             _cmbKind = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 180 };
             _cmbKind.Items.Add(LedgerCodes.MapFund);
             _cmbKind.Items.Add(LedgerCodes.MapIncome);
@@ -84,12 +87,12 @@ namespace CaseManagement.Accounting.Ledger.Adapters
             TabPage p = new TabPage("صف ارسال");
             _gridOutbox = Grid();
             _lblOutbox = new Label { Dock = DockStyle.Bottom, Height = 28, TextAlign = ContentAlignment.MiddleRight };
-            p.Controls.Add(_gridOutbox);
+            p.Controls.Add(ErpFormChrome.WrapGrid(_gridOutbox, ProductBranding.EmptyList));
             p.Controls.Add(_lblOutbox);
-            FlowLayoutPanel flow = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 44, RightToLeft = RightToLeft.Yes };
+            FlowLayoutPanel flow = ErpFormChrome.Toolbar();
             flow.Controls.Add(Btn("پردازش صف", DrainOutbox));
             flow.Controls.Add(Btn("تلاش مجدد", RequeueSelected));
-            flow.Controls.Add(Btn("تازه‌سازی", ReloadOutbox));
+            flow.Controls.Add(ErpFormChrome.RefreshButton(delegate { ReloadOutbox(); }));
             p.Controls.Add(flow);
             return p;
         }
@@ -199,7 +202,7 @@ namespace CaseManagement.Accounting.Ledger.Adapters
             {
                 ComboBox src = new ComboBox { Left = 20, Top = 40, Width = 360, DropDownStyle = ComboBoxStyle.DropDownList };
                 ComboBox acc = new ComboBox { Left = 20, Top = 100, Width = 360, DropDownStyle = ComboBoxStyle.DropDownList };
-                dlg.Controls.Add(new Label { Text = "منبع Acc", Left = 20, Top = 18, AutoSize = true });
+                dlg.Controls.Add(new Label { Text = ProductMode.IsErp ? "منبع صندوق" : "منبع Acc", Left = 20, Top = 18, AutoSize = true });
                 dlg.Controls.Add(new Label { Text = "حساب برگ", Left = 20, Top = 78, AutoSize = true });
                 IList<KeyValuePair<long, string>> sources = _svc.ListMappableSources(kind, _identity);
                 for (int i = 0; i < sources.Count; i++)

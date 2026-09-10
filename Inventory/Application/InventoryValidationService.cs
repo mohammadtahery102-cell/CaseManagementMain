@@ -4,6 +4,7 @@ using CaseManagement.Accounting.Ledger.Application;
 using CaseManagement.Accounting.Ledger.Domain;
 using CaseManagement.Inventory.Domain;
 using CaseManagement.Inventory.Infrastructure;
+using CaseManagement.Trade;
 
 namespace CaseManagement.Inventory.Application
 {
@@ -49,10 +50,8 @@ namespace CaseManagement.Inventory.Application
                 return InventoryResult.Fail("VALIDATION", "Warehouse company mismatch.");
             if (warehouse.CenterId != doc.CenterId)
                 return InventoryResult.Fail(InventoryCodes.InterBranch, "Document CenterID must match warehouse CenterID.");
-            if (!identity.IsSuperAdmin && identity.CompanyId > 0 && identity.CompanyId != doc.CompanyId)
-                return InventoryResult.Fail("PERMISSION", "Cross-company inventory is not allowed.");
-            if (!identity.IsSuperAdmin && identity.CenterId > 0 && identity.CenterId != doc.CenterId)
-                return InventoryResult.Fail("PERMISSION", "Cross-branch inventory is not allowed.");
+            if (!TradeIsolation.CanSeeCompany(identity, doc.CompanyId) || !TradeIsolation.CanSeeCenter(identity, doc.CenterId))
+                return InventoryResult.Fail("PERMISSION", "Cross-company or cross-branch inventory is not allowed.");
             if (lines == null || lines.Count == 0)
                 return InventoryResult.Fail("VALIDATION", "At least one line is required.");
 

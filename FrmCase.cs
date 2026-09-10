@@ -61,8 +61,10 @@ namespace CaseManagement
             }
         }
 
-        private const long MinFamilyPhotoFileSizeBytes = 50L * 1024;
-        private const long MaxFamilyPhotoFileSizeBytes = 1L * 1024 * 1024;
+        // آموزش — این دو ثابت به Helpers/PhotoRules منتقل شدند تا محدودیتِ
+        // حجمِ عکس فقط یک جا تعریف شود (قبلاً هر فرم عددِ خودش را داشت).
+        private const long MinFamilyPhotoFileSizeBytes = Helpers.PhotoRules.MinGroupBytes;
+        private const long MaxFamilyPhotoFileSizeBytes = Helpers.PhotoRules.MaxGroupBytes;
 
         private int _pendingOpenCaseId = 0;
 
@@ -79,6 +81,7 @@ namespace CaseManagement
         public FrmCase()
         {
             InitializeComponent();
+            ErpAccess.BlockCharityScreenInErp(this);
             IdCardHelper.Attach(cmbHeadIdCardType, txtHeadTazkiraNo);
             ApplyCustomTheme();
             AttachShortcuts();
@@ -140,8 +143,6 @@ namespace CaseManagement
             UiTheme.SetButtonIcon(btnFamily, "♥");
             UiTheme.SetButtonIcon(btnDocs, "▤");
             UiTheme.SetButtonIcon(btnChooseStorageFolder, "⚙");
-            UiTheme.SetButtonIcon(btnExportWord, "➤");
-            UiTheme.SetButtonIcon(btnExportPdf, "➤");
             UiTheme.SetButtonIcon(btnExportExcel, "⇑");
             UiTheme.SetButtonIcon(btnBatchExport, "⇑");
             UiTheme.SetButtonIcon(btnPrint, "🖨");
@@ -158,7 +159,9 @@ namespace CaseManagement
             // حرفه‌ای بودن): دکمه‌های «عملیات» (جدید/ذخیره/ویرایش/حذف/جستجو)
             // پُررنگ می‌مانند، اما دکمه‌های «خروجی‌ها» به سبک ثانویه (روشن با
             // کادر) درمی‌آیند تا در یک نگاه دو گروه مجزا دیده شوند.
-            Button[] exportButtons = { btnPrint, btnExportWord, btnExportPdf, btnExportExcel, btnBatchExport };
+            // خروجی‌های تکیِ «ورد» و «پی دی اف» حذف شدند؛ همان کار را
+            // «خروجی جمعی» با بازهٔ شمارهٔ فرم انجام می‌دهد.
+            Button[] exportButtons = { btnPrint, btnExportExcel, btnBatchExport };
             foreach (Button b in exportButtons)
             {
                 b.BackColor = Color.White;
@@ -211,125 +214,182 @@ namespace CaseManagement
                     frm.ShowDialog(this);
             };
 
-            // آموزش — «نامهٔ انتقالی» دقیقاً هم‌الگوی دو دکمه‌ی بالا اضافه
-            // می‌شود: پویا، کنار دکمه‌های خروجی، بدون دست‌زدن به Designer.
-            // فرمِ آن مسیر خودش را دارد و هیچ‌یک از خروجی‌های Word/PDF/Excel
-            // پرونده را لمس نمی‌کند.
-            Button btnTransferLetter = UiTheme.CreateSecondaryButton("نامهٔ انتقالی", "✉");
-            btnTransferLetter.Size = new Size(140, 32);
-            btnTransferLetter.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
-            btnTransferLetter.Margin = new Padding(3, 3, 3, 3);
-            btnTransferLetter.TabStop = false;
-            btnTransferLetter.Click += delegate
-            {
-                if (currentCaseId == 0)
-                {
-                    Msg.Show("اول پرونده را ذخیره یا جستجو کن");
-                    return;
-                }
-                using (var frm = new FrmTransferLetter(currentCaseId))
-                    frm.ShowDialog(this);
-            };
+            // ─── گام ۱: دو منوی تجمیعی به‌جای دکمه‌های پراکنده ──────────────
+            // «نامهٔ انتقالی» و «وکالت موقت» دکمهٔ مستقل نیستند؛ هر دو داخلِ
+            // منوی فورم‌های رسمی‌اند (از رجیستریِ CaseOfficialForms می‌آیند).
+            _menuOfficialForms = BuildOfficialFormsMenu();
+            Button btnFormsCenter = MenuButton("فرم‌ها و برگه‌های رسمی", "📄", _menuOfficialForms);
+            btnFormsCenter.Size = new Size(200, 32);
 
-            // «ورقهٔ وکالت موقت» — سرپرستِ همین پرونده، وکیلِ موقتش را
-            // معرفی می‌کند. داده‌اش (نام سرپرست، نام پدر، تذکره، کد عمومی،
-            // تعداد ایتام) همه در TblCase/TblFamily است، پس جای درستش همین
-            // فورمِ پرونده است نه فورمِ متقاضیان.
-            Button btnProxy = UiTheme.CreateSecondaryButton("وکالت موقت", "✍");
-            btnProxy.Size = new Size(130, 32);
-            btnProxy.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
-            btnProxy.Margin = new Padding(3, 3, 3, 3);
-            btnProxy.TabStop = false;
-            btnProxy.Click += delegate
-            {
-                if (currentCaseId == 0)
-                {
-                    Msg.Show("اول پرونده را ذخیره یا جستجو کن");
-                    return;
-                }
-                ShowGuardianProxyForm();
-            };
+            _menuExports = BuildExportMenu();
+            Button btnExportsMenu = MenuButton("خروجی‌ها و چاپ", "🖨", _menuExports);
+            btnExportsMenu.Size = new Size(160, 32);
 
             Control parent = btnExportExcel.Parent;
             if (parent != null)
             {
+                // ترتیبِ نهاییِ گروهِ دوم: خروجی‌ها ← فورم‌ها ← کارت‌ها.
+                parent.Controls.Add(btnExportsMenu);
+                parent.Controls.SetChildIndex(btnExportsMenu, parent.Controls.IndexOf(btnHistory) + 1);
+                parent.Controls.Add(btnFormsCenter);
+                parent.Controls.SetChildIndex(btnFormsCenter, parent.Controls.IndexOf(btnExportsMenu) + 1);
                 parent.Controls.Add(btnGuardianCard);
-                // آموزش — لنگر از btnExportExcel به btnBatchExport منتقل شد.
-                // با ترتیبِ تازهٔ نوارِ پایین (پی‌دی‌اف، اکسل، چاپ، خروجی جمعی)
-                // لنگرِ قبلی این چهار دکمه را وسطِ گروهِ خروجی‌ها می‌نشاند و
-                // «چاپ» و «خروجی جمعی» را به خطِ دوم می‌راند.
-                parent.Controls.SetChildIndex(btnGuardianCard, parent.Controls.IndexOf(btnBatchExport) + 1);
+                parent.Controls.SetChildIndex(btnGuardianCard, parent.Controls.IndexOf(btnFormsCenter) + 1);
                 parent.Controls.Add(btnGuardianCardBatch);
                 parent.Controls.SetChildIndex(btnGuardianCardBatch, parent.Controls.IndexOf(btnGuardianCard) + 1);
-                parent.Controls.Add(btnTransferLetter);
-                parent.Controls.SetChildIndex(btnTransferLetter, parent.Controls.IndexOf(btnGuardianCardBatch) + 1);
-                parent.Controls.Add(btnProxy);
-                parent.Controls.SetChildIndex(btnProxy, parent.Controls.IndexOf(btnTransferLetter) + 1);
+
+                // ⚠ رفعِ باگِ «دکمهٔ آخر کار نمی‌کند»: با این چهار دکمه، نوارِ
+                // پایین ۱۹ کنترل دارد و در عرض‌های معمول به سه خط می‌شکند.
+                // AdjustBottomBarHeight فقط در OnResize صدا زده می‌شد، یعنی
+                // ارتفاعِ ردیف با موقعیتِ *قبلیِ* کنترل‌ها حساب می‌گردید و
+                // آخرین دکمه (وکالت موقت) بیرونِ ناحیهٔ دیدهٔ ردیف می‌افتاد —
+                // دیده نمی‌شد و کلیک هم نمی‌گرفت. رویدادِ Layout بعد از
+                // چیدمانِ واقعیِ FlowLayoutPanel اجرا می‌شود، پس اندازه‌گیری
+                // درست است.
+                parent.Layout += delegate { AdjustBottomBarHeight(); };
             }
         }
 
-        // ─── ورقهٔ وکالت موقت سرپرستی ایتام ──────────────────────────────────
-        // خانه‌های سرپرست از همین پروندهٔ باز پر می‌شوند؛ مشخصاتِ وکیل موقت و
-        // بازهٔ اعتبار را کاربر وارد می‌کند. متن ورقه هیچ جدولی در دیتابیس
-        // ندارد و لازم هم ندارد: سندی است که چاپ، امضاء و در اسناد پرونده
-        // بایگانی می‌شود.
-        private void ShowGuardianProxyForm()
+        // ═══════════════════════════════════════════════════════════════════
+        // گام ۱ — تجمیعِ دکمه‌ها در دو منوی واحد.
+        //
+        // آموزش — چرا منو و نه حذف: هیچ قابلیتی حذف نشده. هر آیتمِ منو دقیقاً
+        // همان هندلرِ قبلی را صدا می‌زند (btnPrint_Click، btnExportCaseFile_Click،
+        // …) پس رفتار عوض نمی‌شود و ریسکِ گم‌شدنِ کارکرد صفر است — فقط مسیرِ
+        // دسترسی از «۱۸ دکمهٔ پهلوی‌هم» به «۲ منوی دسته‌بندی‌شده» تغییر کرد.
+        //
+        // چرا ContextMenuStrip: کنترلِ استانداردِ ویندوز است، RTL را بومی
+        // پشتیبانی می‌کند و هیچ کنترلِ سفارشیِ تازه‌ای وارد پروژه نمی‌کند.
+        // ═══════════════════════════════════════════════════════════════════
+        private ContextMenuStrip BuildExportMenu()
         {
-            string code = txtCode.Text.Trim();
-
-            object orphanCount = 0;
-            try
+            var menu = new ContextMenuStrip
             {
-                orphanCount = new DAL.DatabaseHelper().ExecuteScalar(
-                    "SELECT COUNT(*) FROM TblFamily WHERE CasID = @id AND COALESCE(MemberRole,'') = 'یتیم'",
-                    new System.Data.SQLite.SQLiteParameter("@id", currentCaseId));
-            }
-            catch { }
-
-            var fields = new System.Collections.Generic.List<Helpers.FrmDocxForm.FieldDef>
-            {
-                Helpers.FrmDocxForm.FieldDef.Section("سرپرست  (از پروندهٔ باز)"),
-                Helpers.FrmDocxForm.FieldDef.Text("نام سرپرست", "GuardianName", txtHeadFullName.Text.Trim(), true),
-                Helpers.FrmDocxForm.FieldDef.Text("نام پدر", "GuardianFather", txtHeadFatherName.Text.Trim(), true),
-                Helpers.FrmDocxForm.FieldDef.Text("شماره تذکره", "GuardianTazkira", txtHeadTazkiraNo.Text.Trim(), true),
-                Helpers.FrmDocxForm.FieldDef.Text("نوع تذکره", "GuardianTazkiraType", cmbHeadIdCardType.Text.Trim()),
-                Helpers.FrmDocxForm.FieldDef.Text("کد اختصاصی / عمومی", "Code", code, true),
-                Helpers.FrmDocxForm.FieldDef.Text("تعداد ایتام تحت سرپرستی", "OrphanCount", Convert.ToString(orphanCount)),
-
-                Helpers.FrmDocxForm.FieldDef.Section("وکیل موقت"),
-                Helpers.FrmDocxForm.FieldDef.Text("نام وکیل موقت", "ProxyName"),
-                Helpers.FrmDocxForm.FieldDef.Text("نام پدر وکیل", "ProxyFather"),
-                Helpers.FrmDocxForm.FieldDef.Text("شماره تذکره وکیل", "ProxyTazkira"),
-
-                Helpers.FrmDocxForm.FieldDef.Section("مدت و دلیل"),
-                Helpers.FrmDocxForm.FieldDef.Choice("دلیل", "Reason",
-                    new[] { "سفر", "بیماری", "کهولت سن", "سایر" }),
-                Helpers.FrmDocxForm.FieldDef.Text("از تاریخ", "FromDate",
-                    Helpers.PersianDateHelper.ToPersianDateString(DateTime.Now)),
-                Helpers.FrmDocxForm.FieldDef.Text("الی تاریخ  (تاریخ انقضا)", "ToDate"),
-                Helpers.FrmDocxForm.FieldDef.Text("تاریخ تنظیم", "IssueDate",
-                    Helpers.PersianDateHelper.ToPersianDateString(DateTime.Now))
+                RightToLeft = RightToLeft.Yes,
+                ShowImageMargin = false,
+                Font = new Font("Segoe UI", 9F)
             };
 
-            using (var frm = new Helpers.FrmDocxForm("ورقهٔ وکالت موقت سرپرستی ایتام",
-                       Helpers.DocxFormExport.TplGuardianProxy, fields,
-                       "وکالت موقت - " + (code.Length > 0 ? code : txtHeadFullName.Text.Trim())))
+            menu.Items.Add(MenuItem("چاپ خلاصهٔ پرونده", delegate { btnPrint_Click(this, EventArgs.Empty); }));
+            menu.Items.Add(MenuItem("پروندهٔ کامل (اکسل / چاپ)…", delegate { btnExportCaseFile_Click(this, EventArgs.Empty); }));
+            menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add(MenuItem("خروجی جمعی (ورد / پی‌دی‌اف)…", delegate { btnBatchExport_Click(this, EventArgs.Empty); }));
+            menu.Items.Add(MenuItem("گزارش اکسل همهٔ پرونده‌ها…", delegate { btnExportExcel_Click(this, EventArgs.Empty); }));
+            menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add(MenuItem("فهرست اسناد پرونده", delegate { btnDocs_Click(this, EventArgs.Empty); }));
+            menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add(MenuItem("محل ذخیرهٔ فایل‌ها…", delegate { btnChooseStorageFolder_Click(this, EventArgs.Empty); }));
+
+            return menu;
+        }
+
+        // منوی فورم‌های رسمی. فهرست از CaseOfficialForms.Available می‌آید —
+        // یعنی افزودنِ فورمِ تازه در آینده هیچ تغییری در این فرم لازم ندارد.
+        private ContextMenuStrip BuildOfficialFormsMenu()
+        {
+            var menu = new ContextMenuStrip
             {
-                frm.Require("ProxyName", "ToDate");
-                frm.ExtraButtonText = "ثبت سند امضاشده";
+                RightToLeft = RightToLeft.Yes,
+                ShowImageMargin = false,
+                Font = new Font("Segoe UI", 9F)
+            };
 
-                int caseIdForAttach = currentCaseId;
-                string codeForAttach = code;
-                frm.OnExtraButton = delegate (string lastPath)
-                {
-                    Helpers.FrmDocxForm.AttachToCase(frm, new DAL.DatabaseHelper(),
-                        caseIdForAttach, codeForAttach, "وکالت موقت",
-                        "ورقهٔ وکالت موقت سرپرستی ایتام",
-                        string.IsNullOrWhiteSpace(lastPath) ? "" : System.IO.Path.GetDirectoryName(lastPath));
-                };
+            menu.Opening += delegate { RebuildOfficialFormsMenu(menu); };
+            return menu;
+        }
 
-                frm.ShowDialog(this);
+        // هر بار که منو باز می‌شود از نو ساخته می‌شود، چون فورمِ پیشنهادی به
+        // نوعِ پروندهٔ *جاری* بستگی دارد و کاربر ممکن است بینِ دو باز کردن،
+        // پروندهٔ دیگری را انتخاب کرده باشد.
+        private void RebuildOfficialFormsMenu(ContextMenuStrip menu)
+        {
+            menu.Items.Clear();
+
+            var db = new DAL.DatabaseHelper();
+            string requestTypeCode = "";
+            try
+            {
+                if (currentCaseId > 0)
+                    requestTypeCode = Helpers.CaseOfficialForms.RequestTypeCodeOf(db, currentCaseId);
             }
+            catch { /* نوعِ پرونده ناشناخته ⇒ فهرستِ پیش‌فرض */ }
+
+            List<Helpers.CaseFormDef> forms = Helpers.CaseOfficialForms.Available(requestTypeCode);
+
+            bool first = true;
+            foreach (Helpers.CaseFormDef def in forms)
+            {
+                if (def == null) continue;
+
+                Helpers.CaseFormDef captured = def;
+                string title = def.Title ?? "فورم";
+
+                // فورمِ نخستِ فهرست همان پیشنهادِ سیستم بر پایهٔ نوعِ پرونده
+                // است؛ با ★ مشخص می‌شود ولی کاربر آزاد است هرکدام را بزند.
+                if (first) title = "★  " + title;
+
+                var item = MenuItem(title, delegate { OpenOfficialForm(captured.Key); });
+                item.Enabled = captured.IsAvailable;
+                if (!captured.IsAvailable)
+                    item.ToolTipText = "فایل قالب این فورم در پوشهٔ Templates/Forms موجود نیست.";
+
+                menu.Items.Add(item);
+
+                if (first)
+                {
+                    menu.Items.Add(new ToolStripSeparator());
+                    first = false;
+                }
+            }
+
+            menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add(MenuItem("مرکز فورم‌های رسمی…", delegate { OpenOfficialForm(null); }));
+        }
+
+        private void OpenOfficialForm(string preselectKey)
+        {
+            if (currentCaseId == 0)
+            {
+                Msg.Show("اول پرونده را ذخیره یا جستجو کن");
+                return;
+            }
+
+            Helpers.CaseOfficialForms.ShowCenter(this, new DAL.DatabaseHelper(),
+                currentCaseId, txtCode.Text.Trim(), null, preselectKey);
+        }
+
+        private static ToolStripMenuItem MenuItem(string text, EventHandler onClick)
+        {
+            var item = new ToolStripMenuItem(text);
+            item.Click += onClick;
+            return item;
+        }
+
+        // دکمه‌ای که منو را زیرِ خودش باز می‌کند.
+        private static Button MenuButton(string text, string icon, ContextMenuStrip menu)
+        {
+            Button button = UiTheme.CreateSecondaryButton(text, icon);
+            button.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
+            button.Margin = new Padding(3, 3, 3, 3);
+            button.TabStop = false;
+            button.Click += delegate
+            {
+                menu.Show(button, new Point(0, button.Height));
+            };
+            return button;
+        }
+
+        // ─── ورقهٔ وکالت موقت سرپرستی ایتام ──────────────────────────────────
+        // آموزش — این متد قبلاً خودش دیالوگِ FrmDocxForm را می‌ساخت و خانه‌ها
+        // را از کادرهای روی همین فرم می‌خواند. حالا داده‌اش از CaseFormTokens
+        // (یعنی مستقیم از دیتابیس) می‌آید و دیالوگش همان «مرکز فورم‌های رسمی»
+        // است که FrmDocs هم از آن استفاده می‌کند — درخواستِ کاربر: همهٔ
+        // فورم‌ها یک‌جا. رفتارِ دکمه عوض نشده: هنوز وکالت موقتِ همین پرونده را
+        // باز می‌کند، فقط از پیش انتخاب‌شده در فهرستِ فورم‌ها.
+        private void ShowGuardianProxyForm()
+        {
+            Helpers.CaseOfficialForms.ShowCenter(this, new DAL.DatabaseHelper(),
+                currentCaseId, txtCode.Text.Trim(), null, "PROXY");
         }
 
         // ─── ستون‌های واقعیِ جستجو در TblCase — منبعِ واحد، هم برای نوار
@@ -356,9 +416,15 @@ namespace CaseManagement
         // انجام می‌شود؛ فقط باید ردیفِ نگه‌دارنده به‌اندازه‌ی کافی بلند باشد.
         // این کار در هر تغییر اندازه انجام می‌شود، پس روی هر عرض/رزولوشنی
         // (و با هر تعداد دکمه‌ای که در آینده اضافه شود) هیچ دکمه‌ای پنهان نمی‌ماند.
+        private bool _adjustingBottomBar;
+
         private void AdjustBottomBarHeight()
         {
             if (bottomActionsRow == null || rootLayout == null) return;
+
+            // تغییرِ ارتفاعِ ردیف خودش یک Layout تازه می‌سازد؛ بدونِ این نگهبان
+            // رویداد Layout بی‌نهایت بار خودش را صدا می‌زند.
+            if (_adjustingBottomBar) return;
             // آموزش — فاز A2: با افزودنِ ردیفِ جدیدِ «نوار جستجوی سریع» در بالای
             // rootLayout، نوار دکمه‌ها از ردیفِ اندیس ۲ به ۳ منتقل شد. این
             // اندیس اینجا (و شرطِ Count) همراهش به‌روز شد تا این متد روی ردیفِ
@@ -379,8 +445,13 @@ namespace CaseManagement
             RowStyle bottomRow = rootLayout.RowStyles[3];
             if (bottomRow.SizeType != SizeType.Absolute || Math.Abs(bottomRow.Height - needed) > 1f)
             {
-                bottomRow.SizeType = SizeType.Absolute;
-                bottomRow.Height = needed;
+                _adjustingBottomBar = true;
+                try
+                {
+                    bottomRow.SizeType = SizeType.Absolute;
+                    bottomRow.Height = needed;
+                }
+                finally { _adjustingBottomBar = false; }
             }
         }
 
@@ -501,8 +572,6 @@ namespace CaseManagement
             btnSearch.TabStop = false;
             btnDocs.TabStop = false;
             btnFamily.TabStop = false;
-            btnExportWord.TabStop = false;
-            btnExportPdf.TabStop = false;
             btnExportExcel.TabStop = false;
             btnBatchExport.TabStop = false;
             btnPrint.TabStop = false;
@@ -1589,6 +1658,44 @@ namespace CaseManagement
             }
         }
 
+        // ─── عکس‌های بازدید میدانی ───────────────────────────────────────────
+        // آموزش — تا امروز TblFieldVisitPhoto هیچ راهِ ورودی نداشت: سرویس،
+        // پوشه، بکاپ و همگام‌سازی‌اش آماده بود ولی هیچ فرمی صدایش نمی‌زد و
+        // ستونِ «تعداد عکس» همیشه صفر می‌ماند. دیالوگ کارِ افزودن/دیدن/حذف
+        // را می‌کند؛ اینجا فقط باز می‌شود و گرید بعدش تازه می‌گردد.
+        private void btnVisitPhotos_Click(object sender, EventArgs e)
+        {
+            if (currentCaseId <= 0)
+            {
+                Msg.Show("اول پرونده را ذخیره یا انتخاب کنید");
+                return;
+            }
+
+            if (currentVisitId <= 0)
+            {
+                Msg.Show("اول یک بازدید را از فهرست انتخاب کنید؛ عکس به همان بازدید بسته می‌شود.");
+                return;
+            }
+
+            string title = Helpers.PersianDateHelper.ToPersianDateString(dtpVisitDate.Value);
+            string visitor = txtVisitorName.Text.Trim();
+            if (visitor.Length > 0) title += "  ·  " + visitor;
+
+            try
+            {
+                using (var frm = new Helpers.FrmFieldVisitPhotos(
+                           currentVisitId, currentCaseId, txtCode.Text.Trim(), title))
+                    frm.ShowDialog(this);
+            }
+            catch (Exception ex)
+            {
+                Msg.Show("خطا در باز کردن عکس‌های بازدید: " + ex.Message);
+            }
+
+            // «تعداد عکس» در گرید از همین جدول خوانده می‌شود، پس باید تازه شود.
+            RefreshVisitsTab();
+        }
+
         // ═══════════════════════════════════════════════════════════════════
         // Phase 6 — تب خانواده. حداقلی و عمداً بدونِ ماژولِ مدیریتِ جداگانه:
         // نمایشِ شناسهٔ خانوار + فهرستِ پرونده‌های هم‌خانوار + پیوند/جدا کردن.
@@ -2163,45 +2270,19 @@ namespace CaseManagement
                 return;
             }
 
-            var modeItems = new List<KeyValuePair<string, string>>();
-            modeItems.Add(new KeyValuePair<string, string>("EXCEL", "فایل اکسل (همهٔ بخش‌ها)"));
-            modeItems.Add(new KeyValuePair<string, string>("PRINT", "چاپ همهٔ بخش‌ها"));
-
-            Dictionary<string, string> choice = CaseManagement.Enterprise.EntPrompt.Edit(this,
-                "خروجی پروندهٔ کامل",
-                CaseManagement.Enterprise.EntField.Combo("Mode", "نوع خروجی", "EXCEL", modeItems));
-
-            if (choice == null) return;
-
+            // آموزش — قبلاً اینجا یک کرکرهٔ دوگزینه‌ای بود و گزینهٔ «چاپ» برای
+            // هر یک از سیزده بخش یک پیش‌نمایشِ جدا باز می‌کرد. حالا دیالوگِ
+            // اختصاصی، انتخابِ بخش‌ها و چهار نوع خروجی را در یک جا می‌دهد و
+            // سند پیوسته و صفحه‌بندی‌شده ساخته می‌شود.
             try
             {
-                if (choice["Mode"] == "PRINT")
-                {
-                    Helpers.CaseFileExportService.PrintFullCase(this, currentCaseId, txtCode.Text.Trim());
-                    return;
-                }
-
-                string rootFolder = FileHelper.GetOrChooseBaseRootFolder();
-                if (string.IsNullOrWhiteSpace(rootFolder))
-                {
-                    Msg.Show("محل ذخیره فایل‌ها مشخص نیست");
-                    return;
-                }
-
-                string folder = Path.Combine(rootFolder, "CaseFiles");
-                Directory.CreateDirectory(folder);
-
-                string outputPath = Path.Combine(folder,
-                    "CaseFile_" + FileHelper.CleanName(txtCode.Text.Trim()) + "_" +
-                    DateTime.Now.ToString("yyyyMMdd_HHmmss", System.Globalization.CultureInfo.InvariantCulture) + ".xlsx");
-
-                Helpers.CaseFileExportService.ExportCaseToExcel(currentCaseId, outputPath);
-
-                Msg.Show("خروجی پروندهٔ کامل ساخته شد:" + Environment.NewLine + outputPath);
+                using (var frm = new Helpers.FrmCaseFileExport(
+                           new DAL.DatabaseHelper(), currentCaseId, txtCode.Text.Trim()))
+                    frm.ShowDialog(this);
             }
             catch (Exception ex)
             {
-                Msg.Show("خطا در ساخت خروجی پروندهٔ کامل: " + ex.Message);
+                Msg.Show("خطا در باز کردن خروجی پروندهٔ کامل: " + ex.Message);
             }
         }
 
@@ -2434,7 +2515,6 @@ namespace CaseManagement
             btnSearch.TabStop = false;
             btnDocs.TabStop = false;
             btnFamily.TabStop = false;
-            btnExportWord.TabStop = false;
             Helpers.UiTheme.ApplyPersianDateColumns(dgvCases, "CaseDate");
             LoadLookupCombos();
             ApplyIncomingDashboardFilter();
@@ -2791,13 +2871,15 @@ namespace CaseManagement
             return true;
         }
 
+        // عکسِ پرسنلی: سرپرست خانوار، سرپرست کودک و نمایندهٔ قانونی — هر سه
+        // یک جنس‌اند و یک قاعده دارند (تصمیمِ کاربر: ۵۰ تا ۵۰۰ کیلوبایت).
         private bool IsValidImageFile(string filePath)
         {
             return IsValidImageFile(
                 filePath,
-                1,
-                FileHelper.MaxPhotoFileSizeBytes,
-                "حجم عکس باید کمتر از 15 مگابایت باشد");
+                Helpers.PhotoRules.MinPortraitBytes,
+                Helpers.PhotoRules.MaxPortraitBytes,
+                null);
         }
 
         private bool IsValidFamilyPhotoFile(string filePath)
@@ -2806,46 +2888,19 @@ namespace CaseManagement
                 filePath,
                 MinFamilyPhotoFileSizeBytes,
                 MaxFamilyPhotoFileSizeBytes,
-                "حجم عکس جمعی باید از 50 کیلوبایت تا 1 مگابایت باشد");
+                null);
         }
 
+        // وارسیِ واقعی در Helpers/PhotoRules است؛ اینجا فقط پیامش نشان داده
+        // می‌شود. sizeErrorMessage اختیاری مانده تا فراخوانندهٔ قدیمی نشکند.
         private bool IsValidImageFile(string filePath, long minBytes, long maxBytes, string sizeErrorMessage)
         {
-            if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
-            {
-                Msg.Show("فایل عکس پیدا نشد");
-                return false;
-            }
+            string reason;
+            if (Helpers.PhotoRules.IsValidPhoto(filePath, minBytes, maxBytes, out reason))
+                return true;
 
-            string ext = Path.GetExtension(filePath).ToLowerInvariant();
-
-            if (ext != ".jpg" && ext != ".jpeg" && ext != ".png")
-            {
-                Msg.Show("فقط فایل JPG، JPEG یا PNG مجاز است");
-                return false;
-            }
-
-            FileInfo fi = new FileInfo(filePath);
-
-            if (fi.Length < minBytes || fi.Length > maxBytes)
-            {
-                Msg.Show(sizeErrorMessage);
-                return false;
-            }
-
-            try
-            {
-                using (FileStream fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-                using (DrawingImage.FromStream(fs, false, true))
-                {
-                    return true;
-                }
-            }
-            catch
-            {
-                Msg.Show("فایل انتخاب‌شده عکس معتبر نیست");
-                return false;
-            }
+            Msg.Show(string.IsNullOrWhiteSpace(sizeErrorMessage) ? reason : sizeErrorMessage);
+            return false;
         }
 
         private void ClearPictureBox(PictureBox pictureBox)
@@ -3630,6 +3685,41 @@ namespace CaseManagement
                     LoadImageToPictureBox(ofd.FileName, picFamilyPhoto);
                 }
             }
+        }
+
+        // ─── حذفِ عکس ────────────────────────────────────────────────────────
+        // آموزش — تا امروز عکسِ سرپرست و عکسِ جمعی را فقط می‌شد *عوض* کرد، نه
+        // برداشت؛ اگر کاربر اشتباهی عکس می‌گذاشت هیچ راهی برای پاک‌کردنش
+        // نداشت (قیّم و نماینده از قبل دکمهٔ حذف داشتند). با خالی‌شدنِ
+        // savedHeadPhotoPath، متدِ SaveSelectedPhotos ستونِ مسیر را خالی
+        // می‌نویسد. فایلِ روی دیسک عمداً پاک نمی‌شود — همان محافظه‌کاریِ
+        // FrmDocs و عکسِ نماینده.
+        private void btnClearPhoto_Click(object sender, EventArgs e)
+        {
+            if (picPhoto.Image == null && savedHeadPhotoPath == "" && selectedHeadPhotoSource == "")
+                return;
+
+            if (!UiTheme.ShowConfirm(this, "عکس سرپرست از این پرونده برداشته شود؟", "حذف عکس"))
+                return;
+
+            ClearPictureBox(picPhoto);
+            selectedHeadPhotoSource = "";
+            savedHeadPhotoPath = "";
+            txtPhotoPath.Text = "";
+        }
+
+        private void btnClearFamilyPhoto_Click(object sender, EventArgs e)
+        {
+            if (picFamilyPhoto.Image == null && savedFamilyPhotoPath == "" && selectedFamilyPhotoSource == "")
+                return;
+
+            if (!UiTheme.ShowConfirm(this, "عکس جمعی خانواده از این پرونده برداشته شود؟", "حذف عکس"))
+                return;
+
+            ClearPictureBox(picFamilyPhoto);
+            selectedFamilyPhotoSource = "";
+            savedFamilyPhotoPath = "";
+            txtFamilyPhotoPath.Text = "";
         }
 
         private void btnNew_Click(object sender, EventArgs e)
@@ -4833,9 +4923,24 @@ WHERE CasID = @CasID", con))
                         return false;
 
                     LoadCaseFromReader(dr);
+                    GoToSummaryTab();
                     return true;
                 }
             }
+        }
+
+        // ─── با انتخابِ هر پرونده، «خلاصه پرونده» جلو می‌آید ─────────────────
+        // آموزش — پیشنهادِ کاربر: کاربر پس از انتخابِ پرونده اول می‌خواهد
+        // *ببیند* نه اینکه ویرایش کند، پس تبِ خلاصه نقطهٔ فرودِ درستی است.
+        // اگر همان لحظه در حالِ ویرایش باشد (فرم قفل نیست)، تب عوض نمی‌شود —
+        // وگرنه کاربرِ در حالِ تایپ از روی فیلدهایش پرت می‌شد.
+        private void GoToSummaryTab()
+        {
+            if (tabsCase == null || tabsCase.TabPages.Count == 0) return;
+            if (_caseEditMode) return;
+
+            try { tabsCase.SelectedTab = tabsCase.TabPages[0]; }
+            catch { }
         }
 
         private bool LoadCaseById(int caseId)
@@ -5077,6 +5182,8 @@ WHERE CasID = @CasID", con))
             // انتخابِ عکس هم بخشی از ویرایش است.
             btnBrowsePhoto.Enabled = editable;
             btnBrowseFamilyPhoto.Enabled = editable;
+            btnClearPhoto.Enabled = editable;
+            btnClearFamilyPhoto.Enabled = editable;
 
             btnSave.Enabled = editable;
 
@@ -5737,179 +5844,6 @@ WHERE CasID = @CasID", con))
             };
 
             PrintHelper.PrintKeyValueDocument(this, "پرونده — " + txtCode.Text.Trim(), fields);
-        }
-
-        private void btnExportWord_Click(object sender, EventArgs e)
-        {
-            if (!CaseManagement.Enterprise.PermissionService.Require("Case.Export"))
-            {
-                Msg.Show("کاربر اجازه خروجی‌گیری از پرونده را ندارد.");
-                return;
-            }
-
-            if (currentCaseId == 0)
-            {
-                Msg.Show("اول پرونده را ذخیره یا از لیست انتخاب کن");
-                return;
-            }
-
-            if (string.IsNullOrWhiteSpace(txtCode.Text))
-            {
-                Msg.Show("کد اختصاصی پرونده مشخص نیست");
-                txtCode.Focus();
-                return;
-            }
-
-            string tempDocx = "";
-
-            try
-            {
-                // اینجا (خروجیِ یک پرونده) الگوی قدیمیِ RDLC هم قابل انتخاب است.
-                string templatePath = ChooseWordTemplatePath(true);
-                if (string.IsNullOrEmpty(templatePath)) return;     // انصراف کاربر
-
-                if (templatePath == Helpers.ReportTemplateHelper.RdlcKey)
-                {
-                    // مسیرِ کاملاً جدا: گزارشِ قدیمی در پنجره‌ی پیش‌نمایشِ خودش
-                    // باز می‌شود و کاربر از همان‌جا چاپ یا ذخیره می‌کند.
-                    using (var rpt = new FrmCaseReport(currentCaseId))
-                        rpt.ShowDialog(this);
-                    return;
-                }
-
-                tempDocx = Path.Combine(
-                    Path.GetTempPath(),
-                    CleanFileName(txtCode.Text.Trim()) + "_" + Guid.NewGuid().ToString("N") + ".docx");
-
-                OpenXmlCaseExporter exporter = new OpenXmlCaseExporter();
-                exporter.ExportFullCaseToWord(currentCaseId, templatePath, tempDocx);
-
-                string savedPath = SaveGeneratedFileToCaseCodeFolder(tempDocx);
-
-                Msg.Show(
-                    "فایل Word پرونده با موفقیت ذخیره شد:" +
-                    Environment.NewLine +
-                    savedPath);
-            }
-            catch (Exception ex)
-            {
-                Msg.Show("خطا در ساخت Word: " + ex.Message);
-            }
-            finally
-            {
-                try
-                {
-                    if (!string.IsNullOrWhiteSpace(tempDocx) && File.Exists(tempDocx))
-                        File.Delete(tempDocx);
-                }
-                catch
-                {
-                }
-            }
-        }
-
-        private void btnExportPdf_Click(object sender, EventArgs e)
-        {
-            if (!CaseManagement.Enterprise.PermissionService.Require("Case.Export"))
-            {
-                Msg.Show("کاربر اجازه خروجی‌گیری از پرونده را ندارد.");
-                return;
-            }
-
-            if (currentCaseId == 0)
-            {
-                Msg.Show("اول پرونده را ذخیره یا از لیست انتخاب کن");
-                return;
-            }
-
-            if (string.IsNullOrWhiteSpace(txtCode.Text))
-            {
-                Msg.Show("کد اختصاصی پرونده مشخص نیست");
-                txtCode.Focus();
-                return;
-            }
-
-            string tempDocx = "";
-            string tempPdf = "";
-
-            try
-            {
-                // آموزش — به درخواست کاربر: الگوی قدیمی (RDLC) هم برای PDF قابل
-                // انتخاب است، نه فقط برای Word. خروجی‌اش مستقیم و بی‌واسطه
-                // است (RdlcExportHelper)، بدون نیاز به Word/LibreOffice.
-                string templatePath = ChooseWordTemplatePath(true);
-                if (string.IsNullOrEmpty(templatePath)) return;     // انصراف کاربر
-
-                string safeCode = CleanFileName(txtCode.Text.Trim());
-
-                if (templatePath == Helpers.ReportTemplateHelper.RdlcKey)
-                {
-                    tempPdf = Path.Combine(Path.GetTempPath(), safeCode + "_" + Guid.NewGuid().ToString("N") + ".pdf");
-                    Helpers.RdlcExportHelper.ExportCaseToPdf(currentCaseId, tempPdf);
-
-                    string savedRdlcPdfPath = SaveGeneratedFileToCaseCodeFolder(tempPdf);
-                    Msg.Show("فایل PDF (الگوی قدیمی) با موفقیت ساخته شد:" + Environment.NewLine + savedRdlcPdfPath);
-                    return;
-                }
-
-                tempDocx = Path.Combine(
-                    Path.GetTempPath(),
-                    safeCode + "_" + Guid.NewGuid().ToString("N") + ".docx");
-
-                OpenXmlCaseExporter exporter = new OpenXmlCaseExporter();
-                exporter.ExportFullCaseToWord(currentCaseId, templatePath, tempDocx);
-
-                try
-                {
-                    // آموزش — رفع باگ «دکمه‌ی PDF فایل Word می‌داد»: این‌جا فقط
-                    // LibreOffice امتحان می‌شد و روی سیستمی که فقط Word دارد
-                    // همیشه خطا می‌خورد و به ذخیره‌ی docx برمی‌گشت.
-                    // PdfConversionHelper مسیر استانداردِ خودِ پروژه است:
-                    // اول Microsoft Word، بعد LibreOffice.
-                    tempPdf = PdfConversionHelper.ConvertDocxToPdf(tempDocx);
-                }
-                catch (Exception pdfEx)
-                {
-                    string savedWordPath = SaveGeneratedFileToCaseCodeFolder(tempDocx);
-
-                    Msg.Show(
-                        "PDF ساخته نشد." +
-                        Environment.NewLine +
-                        pdfEx.Message +
-                        Environment.NewLine +
-                        Environment.NewLine +
-                        "اما فایل Word پرونده ذخیره شد:" +
-                        Environment.NewLine +
-                        savedWordPath);
-
-                    return;
-                }
-
-                string savedPdfPath = SaveGeneratedFileToCaseCodeFolder(tempPdf);
-
-                Msg.Show(
-                    "فایل PDF با موفقیت ساخته شد:" +
-                    Environment.NewLine +
-                    savedPdfPath);
-            }
-            catch (Exception ex)
-            {
-                Msg.Show("خطا در ساخت خروجی: " + ex.Message);
-            }
-            finally
-            {
-                try
-                {
-                    if (!string.IsNullOrWhiteSpace(tempDocx) && File.Exists(tempDocx))
-                        File.Delete(tempDocx);
-
-                    if (!string.IsNullOrWhiteSpace(tempPdf) && File.Exists(tempPdf))
-                        File.Delete(tempPdf);
-                }
-                catch
-                {
-                }
-            }
         }
 
         private async void btnExportExcel_Click(object sender, EventArgs e)

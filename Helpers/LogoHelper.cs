@@ -24,6 +24,30 @@ namespace CaseManagement.Helpers
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool DestroyIcon(IntPtr handle);
 
+        public static bool HasUploadedLogo()
+        {
+            string logoPath = SettingsHelper.Get(SettingsHelper.LogoPath);
+            return !string.IsNullOrWhiteSpace(logoPath) && File.Exists(logoPath);
+        }
+
+        // فقط فایل آپلودشده در تنظیمات — بدون نماد ساخته‌شده.
+        public static Image TryGetUploadedLogo()
+        {
+            string logoPath = SettingsHelper.Get(SettingsHelper.LogoPath);
+            if (string.IsNullOrWhiteSpace(logoPath) || !File.Exists(logoPath))
+                return null;
+            try
+            {
+                using (var fs = new FileStream(logoPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                using (var img = Image.FromStream(fs))
+                    return new Bitmap(img);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
         // ─── تصویر لوگو برای نمایش در بنر فرم‌ها (Login/Dashboard/About) ────
         public static Image GetLogoImage()
         {

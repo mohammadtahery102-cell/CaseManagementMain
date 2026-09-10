@@ -15,9 +15,34 @@ namespace CaseManagement.Accounting
     public class FrmAccounting : Form
     {
         private readonly AccountingRepo _repo = new AccountingRepo();
+        private TabControl _tabs;
+        private readonly string _navTitle;
+        private readonly string _startTabTitle;
+        private readonly string _startTxnDirection;
+
+        public const string TabTxn = "دریافت / پرداخت";
+        public const string TabReports = "گزارش‌ها";
+        public const string TabPeriod = "دوره مالی";
+        public const string TabFunds = "صندوق";
+        public const string TabParties = "طرف حساب";
+        public const string TabIncome = "دسته‌بندی درآمد";
+        public const string TabExpense = "دسته‌بندی هزینه";
+        public const string TabIntegrity = "بررسی صحت";
+        public const string TabSalary = "حقوق کارکنان";
+        public const string TabExpenseItems = "هزینه‌های جاری";
+        public const string DirectionReceive = "دریافت";
+        public const string DirectionPay = "پرداخت";
 
         public FrmAccounting()
+            : this(null, null, null)
         {
+        }
+
+        public FrmAccounting(string title, string tabTitle, string txnDirection)
+        {
+            _navTitle = title;
+            _startTabTitle = tabTitle;
+            _startTxnDirection = txnDirection;
             BuildUi();
 
             // مثل فرم تنظیمات، این فرم هم چند تب با دکمه‌های هم‌نام دارد؛ پس
@@ -26,11 +51,17 @@ namespace CaseManagement.Accounting
                 .SaveVisible()
                 .BindVisible(Keys.Control | Keys.P, "چاپ (تبِ جاری)", "چاپ")
                 .BindVisible(Keys.F5, "اجرا / تازه‌سازی (تبِ جاری)", "اجرا");
+            ErpAccess.RequirePermission(this, "Accounting.View");
         }
 
         private void BuildUi()
         {
-            Text = "حسابداری داخلی ایتام  —  " + SecurityContext.CenterDisplay;
+            string heading = !string.IsNullOrWhiteSpace(_navTitle) && ProductMode.IsErp
+                ? _navTitle
+                : ProductBranding.CashBookBanner;
+            Text = !string.IsNullOrWhiteSpace(_navTitle) && ProductMode.IsErp
+                ? _navTitle + "  ·  " + ProductBranding.CommercialName + "  —  " + SecurityContext.CenterDisplay
+                : ProductBranding.CashBookWindowTitle(SecurityContext.CenterDisplay);
             RightToLeft = RightToLeft.Yes;
             RightToLeftLayout = true;
             BackColor = UiTheme.Background;
@@ -41,34 +72,35 @@ namespace CaseManagement.Accounting
             Panel banner = new Panel { Dock = DockStyle.Top, Height = 54, BackColor = UiTheme.PrimaryDark };
             Label lblTitle = new Label
             {
-                Text = "💰  حسابداری داخلی ایتام",
+                Text = heading,
                 Dock = DockStyle.Fill, ForeColor = Color.White, Font = UiTheme.FontBold(15F),
                 TextAlign = ContentAlignment.MiddleRight, Padding = new Padding(0, 0, 20, 0)
             };
             banner.Controls.Add(lblTitle);
 
-            TabControl tabs = new TabControl();
-            tabs.Dock = DockStyle.Fill;
-            tabs.Font = UiTheme.FontBold(10F);
-            tabs.RightToLeft = RightToLeft.Yes;
-            tabs.RightToLeftLayout = true;
+            _tabs = new TabControl();
+            _tabs.Dock = DockStyle.Fill;
+            _tabs.Font = UiTheme.FontBold(10F);
+            _tabs.RightToLeft = RightToLeft.Yes;
+            _tabs.RightToLeftLayout = true;
 
-            tabs.TabPages.Add(BuildTransactionsTab());   // دریافت/پرداخت + دفتر صندوق
+            _tabs.TabPages.Add(BuildTransactionsTab());   // دریافت/پرداخت + دفتر صندوق
             if (ProductMode.IsCharity)
-                tabs.TabPages.Add(BuildStipendTab());        // شهریه ایتام — فقط حالت خیریه
-            tabs.TabPages.Add(BuildSalaryTab());         // حقوق کارکنان
-            tabs.TabPages.Add(BuildExpenseItemsTab());   // هزینه‌های جاری
-            tabs.TabPages.Add(BuildReportsTab());        // گزارش‌ها
-            tabs.TabPages.Add(BuildPeriodsTab());        // دوره مالی
-            tabs.TabPages.Add(BuildFundsTab());          // صندوق
-            tabs.TabPages.Add(BuildPartiesTab());        // طرف حساب
-            tabs.TabPages.Add(BuildCategoriesTab(true)); // دسته‌بندی درآمد
-            tabs.TabPages.Add(BuildCategoriesTab(false));// دسته‌بندی هزینه
-            tabs.TabPages.Add(BuildIntegrityTab());       // بررسی صحت حسابداری
-            tabs.TabPages.Add(BuildSettingsTab());       // تنظیمات گزارش
-            tabs.TabPages.Add(BuildAccBackupTab());      // بکاپ/بازیابی مستقل حسابداری
+                _tabs.TabPages.Add(BuildStipendTab());        // شهریه ایتام — فقط حالت خیریه
+            _tabs.TabPages.Add(BuildSalaryTab());         // حقوق کارکنان
+            _tabs.TabPages.Add(BuildExpenseItemsTab());   // هزینه‌های جاری
+            _tabs.TabPages.Add(BuildReportsTab());        // گزارش‌ها
+            _tabs.TabPages.Add(BuildPeriodsTab());        // دوره مالی
+            _tabs.TabPages.Add(BuildFundsTab());          // صندوق
+            _tabs.TabPages.Add(BuildPartiesTab());        // طرف حساب
+            _tabs.TabPages.Add(BuildCategoriesTab(true)); // دسته‌بندی درآمد
+            _tabs.TabPages.Add(BuildCategoriesTab(false));// دسته‌بندی هزینه
+            _tabs.TabPages.Add(BuildIntegrityTab());       // بررسی صحت حسابداری
+            _tabs.TabPages.Add(BuildSettingsTab());       // تنظیمات گزارش
+            _tabs.TabPages.Add(BuildAccBackupTab());      // بکاپ/بازیابی مستقل حسابداری
 
-            Controls.Add(tabs);
+            ApplyNavStart();
+            Controls.Add(_tabs);
             Controls.Add(banner);
 
             // آموزش — رفع باگ «عنوان‌ها و فیلدهای همه‌ی تب‌های حسابداری چپ‌چین
@@ -95,6 +127,27 @@ namespace CaseManagement.Accounting
 
             foreach (Control child in root.Controls)
                 ForceRtl(child);
+        }
+
+        private void ApplyNavStart()
+        {
+            if (_tabs != null && !string.IsNullOrWhiteSpace(_startTabTitle))
+            {
+                foreach (TabPage page in _tabs.TabPages)
+                {
+                    if (page.Text == _startTabTitle)
+                    {
+                        _tabs.SelectedTab = page;
+                        break;
+                    }
+                }
+            }
+            if (_txnDirection != null && !string.IsNullOrWhiteSpace(_startTxnDirection))
+            {
+                int idx = _txnDirection.Items.IndexOf(_startTxnDirection);
+                if (idx >= 0)
+                    _txnDirection.SelectedIndex = idx;
+            }
         }
 
         // ═══════════════════════════════════════════════════════════════════
@@ -432,6 +485,7 @@ namespace CaseManagement.Accounting
                 r[valueCol] = DBNull.Value; r[displayCol] = "";
                 dt.Rows.InsertAt(r, 0);
             }
+            ProductBranding.OverlayCategoryNames(dt, displayCol);
             cmb.DataSource = dt;
             cmb.ValueMember = valueCol;
             cmb.DisplayMember = displayCol;
@@ -1410,7 +1464,9 @@ namespace CaseManagement.Accounting
 
             Action reload = delegate
             {
-                grid.DataSource = _repo.GetCategories(income);
+                DataTable categories = _repo.GetCategories(income);
+                ProductBranding.OverlayCategoryNames(categories, "عنوان");
+                grid.DataSource = categories;
                 if (grid.Columns.Contains("CatID")) grid.Columns["CatID"].Visible = false;
             };
 
@@ -2087,12 +2143,12 @@ VALUES
 
             var flow = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = true, Padding = new Padding(16), AutoScroll = true };
 
-            AddReportButton(flow, "۱) صورت حساب کلی", delegate { RunReport(1); });
+            AddReportButton(flow, ProductMode.IsErp ? "۱) خلاصه دریافت و پرداخت" : "۱) صورت حساب کلی", delegate { RunReport(1); });
             if (ProductMode.IsCharity)
                 AddReportButton(flow, "۲) صورت حساب جزیی شهریه", delegate { RunReport(2); });
-            AddReportButton(flow, "۳) صورت حساب هزینه‌ها", delegate { RunReport(3); });
-            AddReportButton(flow, "۴) صورت حساب حقوق", delegate { RunReport(4); });
-            AddReportButton(flow, "۵) صورت حساب دریافت بودجه", delegate { RunReport(5); });
+            AddReportButton(flow, ProductMode.IsErp ? "۳) گزارش هزینه‌ها" : "۳) صورت حساب هزینه‌ها", delegate { RunReport(3); });
+            AddReportButton(flow, ProductMode.IsErp ? "۴) گزارش حقوق صندوق" : "۴) صورت حساب حقوق", delegate { RunReport(4); });
+            AddReportButton(flow, ProductMode.IsErp ? "۵) گزارش دریافت‌ها" : "۵) صورت حساب دریافت بودجه", delegate { RunReport(5); });
             AddReportButton(flow, "۶) دفتر صندوق", delegate { RunReport(6); });
             AddReportButton(flow, "۷) دفتر طرف حساب", delegate { RunReport(7); });
             AddReportButton(flow, "۸) ریز تراکنش‌های دوره", delegate { RunReport(8); });

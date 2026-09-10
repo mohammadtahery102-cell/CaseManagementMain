@@ -457,6 +457,8 @@ namespace CaseManagement.Crm.Application
 
         public static int Company(int companyId, ILedgerIdentity identity)
         {
+            if (identity != null && !identity.IsSuperAdmin && identity.CompanyId > 0)
+                return identity.CompanyId;
             if (companyId > 0) return companyId;
             if (identity != null && identity.CompanyId > 0) return identity.CompanyId;
             return LedgerCodes.DefaultCompanyId;
@@ -471,13 +473,15 @@ namespace CaseManagement.Crm.Application
 
         public static int ReportCenter(ILedgerIdentity identity)
         {
+            // هویت نامعتبر نباید با مقدار ۰ به گزارش همه شعب دسترسی پیدا کند.
+            if (identity == null) return -1;
             if (identity.IsSuperAdmin && identity.CenterId == 0) return 0;
             return identity.CenterId;
         }
 
         public static TradeResult Branch(ILedgerIdentity identity, int centerId)
         {
-            if (identity != null && !identity.IsSuperAdmin && identity.CenterId > 0 && centerId > 0 && identity.CenterId != centerId)
+            if (!TradeIsolation.CanSeeCenter(identity, centerId))
                 return TradeResult.Fail("PERMISSION", "Cross-branch CRM is not allowed.");
             return TradeResult.Success(0, 0);
         }

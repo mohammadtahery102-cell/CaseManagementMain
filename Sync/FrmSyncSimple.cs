@@ -46,6 +46,7 @@ namespace CaseManagement.Sync
         public FrmSyncSimple()
         {
             BuildUi();
+            ErpAccess.RequirePermission(this, "Sync.Execute");
         }
 
         private void BuildUi()
