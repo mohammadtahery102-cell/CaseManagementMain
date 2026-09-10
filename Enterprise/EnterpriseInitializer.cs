@@ -769,6 +769,17 @@ CREATE TABLE IF NOT EXISTS EntUserPermission (
             AddPermission(con, "Ledger.ManageProject", "مدیریت پروژه‌های حسابداری", "دفتر کل", 563, true, false, false);
             AddPermission(con, "Ledger.Outbox.Process", "پردازش صف ارسال دفتر کل", "دفتر کل", 564, true, false, false);
 
+            AddPermission(con, "Inventory.View", "مشاهده موجودی", "موجودی", 570, true, true, true);
+            AddPermission(con, "Inventory.Create", "ثبت پیش‌نویس موجودی", "موجودی", 571, true, true, false);
+            AddPermission(con, "Inventory.Post", "ثبت قطعی موجودی", "موجودی", 572, true, false, false);
+            AddPermission(con, "Inventory.Approve", "تأیید سند موجودی", "موجودی", 573, true, false, false);
+            AddPermission(con, "Inventory.Reverse", "برگشت سند موجودی", "موجودی", 574, true, false, false);
+            AddPermission(con, "Inventory.Adjust", "تعدیل موجودی", "موجودی", 575, true, false, false);
+            AddPermission(con, "Inventory.Revalue", "تجدید ارزیابی موجودی", "موجودی", 576, true, false, false);
+            AddPermission(con, "Inventory.ManageItem", "مدیریت کالا", "موجودی", 577, true, false, false);
+            AddPermission(con, "Inventory.ManageWarehouse", "مدیریت انبار", "موجودی", 578, true, false, false);
+            AddPermission(con, "Inventory.MapAccounts", "نگاشت حساب موجودی", "موجودی", 579, true, false, false);
+
             // ─── نسخهٔ ۱٫۰ / فاز ۴ (موج ۵) — کاربران/تنظیمات/پشتیبان‌گیری/
             // همگام‌سازی/مراکز/ماژول‌ها. «User.Manage» و «Module.Manage» از
             // قبل (پایهٔ اولیهٔ PermissionService) تعریف شده بودند ولی به هیچ

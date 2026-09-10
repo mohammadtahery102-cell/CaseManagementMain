@@ -38,7 +38,9 @@ namespace CaseManagement.Helpers
             "GlCompany", "GlCurrency", "GlAccountType", "GlExchangeRate",
             "GlFiscalYear", "GlFiscalPeriod", "GlAccount", "GlLedgerSetting",
             "GlJournal", "GlJournalLine",
-            "GlCashBookMap", "GlCostCenter", "GlProject"
+            "GlCashBookMap", "GlCostCenter", "GlProject",
+            "InvItemCategory", "InvUnitOfMeasure", "InvItem", "InvWarehouse", "InvLocation",
+            "InvItemMap", "InvSetting", "InvDocument", "InvDocumentLine", "InvItemLedger", "InvItemBalance"
         };
 
         // ─── گرفتن بکاپ: همه‌ی جداول Acc* (همه‌ی مراکز، نه فقط مرکز جاری —
@@ -86,6 +88,14 @@ namespace CaseManagement.Helpers
 
             DataSet dataSet = new DataSet();
             dataSet.ReadXml(dataPath, XmlReadMode.ReadSchema);
+
+            if (!dataSet.Tables.Contains("InvItemLedger"))
+            {
+                object live = new DatabaseHelper().ExecuteScalar("SELECT COUNT(1) FROM InvItemLedger;");
+                long liveCount = live == null || live == DBNull.Value ? 0 : Convert.ToInt64(live);
+                if (liveCount > 0)
+                    throw new Exception("بازیابی بدون جداول موجودی مجاز نیست؛ دفتر موجودی زنده خالی نیست.");
+            }
 
             // ۱) بکاپ ایمنیِ خودکار از وضعیت فعلی، قبل از هر تغییری — اگر این
             // مرحله شکست بخورد، بازیابی به‌هیچ‌وجه ادامه پیدا نمی‌کند (ایمنی

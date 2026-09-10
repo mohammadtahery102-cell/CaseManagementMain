@@ -27,6 +27,7 @@ namespace CaseManagement.Accounting.Ledger.Infrastructure
                 ApplyV3CostCenter(con);
                 ApplyV4Project(con);
                 ApplyV6YearEndAccounts(con);
+                ApplyV7InventoryAccounts(con);
             }
 
             SchemaVersion.SetIfNewer(
@@ -39,6 +40,8 @@ namespace CaseManagement.Accounting.Ledger.Infrastructure
                 SchemaVersion.ComponentAccounting, 4, "Phase 5: GlProject");
             SchemaVersion.SetIfNewer(
                 SchemaVersion.ComponentAccounting, 6, "Accounting V1: year-end FX accounts");
+            SchemaVersion.SetIfNewer(
+                SchemaVersion.ComponentAccounting, 7, "Inventory V1 CoA seeds (2400/4410/4420/5400/5410)");
         }
 
         private static void CreateTables(SQLiteConnection con)
@@ -317,6 +320,21 @@ WHERE IsDeleted = 0;");
             EnsureLeafAccount(con, LedgerCodes.DefaultCompanyId, LedgerCodes.AccountFxGain, "سود تسعیر ارز",
                 LedgerCodes.TypeRevenue, "4000", now);
             EnsureLeafAccount(con, LedgerCodes.DefaultCompanyId, LedgerCodes.AccountFxLoss, "زیان تسعیر ارز",
+                LedgerCodes.TypeExpense, "5000", now);
+        }
+
+        private static void ApplyV7InventoryAccounts(SQLiteConnection con)
+        {
+            string now = LedgerTime.UtcNow(DateTime.UtcNow);
+            EnsureLeafAccount(con, LedgerCodes.DefaultCompanyId, "2400", "کالای دریافت‌شده تسویه‌نشده",
+                LedgerCodes.TypeLiability, "2000", now);
+            EnsureLeafAccount(con, LedgerCodes.DefaultCompanyId, "4410", "سود تعدیل موجودی",
+                LedgerCodes.TypeRevenue, "4000", now);
+            EnsureLeafAccount(con, LedgerCodes.DefaultCompanyId, "4420", "تجدید ارزیابی موجودی",
+                LedgerCodes.TypeRevenue, "4000", now);
+            EnsureLeafAccount(con, LedgerCodes.DefaultCompanyId, "5400", "بهای تمام‌شده کالا",
+                LedgerCodes.TypeExpense, "5000", now);
+            EnsureLeafAccount(con, LedgerCodes.DefaultCompanyId, "5410", "زیان تعدیل موجودی",
                 LedgerCodes.TypeExpense, "5000", now);
         }
 

@@ -21,6 +21,7 @@ namespace CaseManagement.Helpers
         public const string ComponentSync       = "Sync";
         public const string ComponentAdmin      = "Admin";
         public const string ComponentAi         = "Ai";
+        public const string ComponentInventory  = "Inventory";
 
         public static void Ensure()
         {

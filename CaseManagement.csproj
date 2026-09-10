@@ -326,6 +326,16 @@
     <Compile Include="Accounting\Ledger\Adapters\FrmDimensionMaster.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="Inventory\Domain\InventoryEntities.cs" />
+    <Compile Include="Inventory\Infrastructure\InventoryInitializer.cs" />
+    <Compile Include="Inventory\Infrastructure\InventoryStore.cs" />
+    <Compile Include="Inventory\Application\InventoryValidationService.cs" />
+    <Compile Include="Inventory\Application\InventoryPostingService.cs" />
+    <Compile Include="Inventory\Application\InventoryQueryService.cs" />
+    <Compile Include="Inventory\Application\InventoryOutboxAdapter.cs" />
+    <Compile Include="Inventory\Adapters\FrmInventory.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="GuardianCardIntegration\CardDesigner\DemoCardData.cs" />
     <Compile Include="GuardianCardIntegration\CardDesigner\CardFieldCatalog.cs" />
     <Compile Include="GuardianCardIntegration\CardDesigner\TemplateHealthCheck.cs" />
