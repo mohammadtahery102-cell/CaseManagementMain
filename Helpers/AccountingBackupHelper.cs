@@ -46,7 +46,8 @@ namespace CaseManagement.Helpers
             "PurGoodsReceipt", "PurGoodsReceiptLine", "PurInvoice", "PurInvoiceLine",
             "SalCustomerCategory", "SalCustomer", "SalCustomerContact", "SalSetting",
             "SalQuotation", "SalQuotationLine", "SalOrder", "SalOrderLine",
-            "SalDelivery", "SalDeliveryLine", "SalInvoice", "SalInvoiceLine"
+            "SalDelivery", "SalDeliveryLine", "SalInvoice", "SalInvoiceLine",
+            "CrmSetting", "CrmLead", "CrmOpportunity", "CrmContact", "CrmActivity", "CrmTask", "CrmCommunication"
         };
 
         // ─── گرفتن بکاپ: همه‌ی جداول Acc* (همه‌ی مراکز، نه فقط مرکز جاری —

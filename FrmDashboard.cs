@@ -157,6 +157,8 @@ namespace CaseManagement
                 delegate { using (var frm = new CaseManagement.Purchase.Adapters.FrmPurchase()) frm.ShowDialog(this); });
             _sidebar.AddItem(IconFont.Money, "فروش",
                 delegate { using (var frm = new CaseManagement.Sales.Adapters.FrmSales()) frm.ShowDialog(this); });
+            _sidebar.AddItem(IconFont.People, "CRM",
+                delegate { using (var frm = new CaseManagement.Crm.Adapters.FrmCrm()) frm.ShowDialog(this); });
 
             // ماژول اداری و کارمندان — رخصتی، ماموریت، درخواست استخدام.
             // آموزش — چرا AddItem و نه AddModuleNav: AddModuleNav به یک

@@ -158,6 +158,10 @@ CREATE TABLE IF NOT EXISTS EntWorkflowHistory (
                 "Sales.Create", "Sales.Approve", "Sales.Post");
             CaseManagement.Trade.TradeWorkflowSeed.Ensure(con, "SAL_INV", "فاکتور فروش", "SalInvoice",
                 "Sales.Create", "Sales.Approve", "Sales.Post");
+            CaseManagement.Trade.TradeWorkflowSeed.Ensure(con, "CRM_LEAD", "سرنخ CRM", "CrmLead",
+                "CRM.Create", "CRM.Approve", "CRM.Approve");
+            CaseManagement.Trade.TradeWorkflowSeed.Ensure(con, "CRM_OPP", "فرصت CRM", "CrmOpportunity",
+                "CRM.Create", "CRM.Approve", "CRM.Approve");
         }
 
         // گردش‌کار پیش‌فرض پرونده — مطابق همان وضعیت‌های سرویسی که هم‌اکنون در
@@ -800,6 +804,11 @@ CREATE TABLE IF NOT EXISTS EntUserPermission (
             AddPermission(con, "Sales.Create", "ثبت فروش", "فروش", 585, true, true, false);
             AddPermission(con, "Sales.Approve", "تأیید فروش", "فروش", 586, true, false, false);
             AddPermission(con, "Sales.Post", "ثبت قطعی فروش", "فروش", 587, true, false, false);
+            AddPermission(con, "CRM.View", "مشاهده CRM", "CRM", 588, true, true, true);
+            AddPermission(con, "CRM.Create", "ثبت CRM", "CRM", 589, true, true, false);
+            AddPermission(con, "CRM.Edit", "ویرایش CRM", "CRM", 590, true, true, false);
+            AddPermission(con, "CRM.Approve", "تأیید CRM", "CRM", 591, true, false, false);
+            AddPermission(con, "CRM.Delete", "حذف CRM", "CRM", 592, true, false, false);
 
             // ─── نسخهٔ ۱٫۰ / فاز ۴ (موج ۵) — کاربران/تنظیمات/پشتیبان‌گیری/
             // همگام‌سازی/مراکز/ماژول‌ها. «User.Manage» و «Module.Manage» از

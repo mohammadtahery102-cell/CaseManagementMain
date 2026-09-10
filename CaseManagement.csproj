@@ -355,6 +355,13 @@
     <Compile Include="Sales\Adapters\FrmSales.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="Crm\Domain\CrmEntities.cs" />
+    <Compile Include="Crm\Infrastructure\CrmInitializer.cs" />
+    <Compile Include="Crm\Infrastructure\CrmStore.cs" />
+    <Compile Include="Crm\Application\CrmServices.cs" />
+    <Compile Include="Crm\Adapters\FrmCrm.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="GuardianCardIntegration\CardDesigner\DemoCardData.cs" />
     <Compile Include="GuardianCardIntegration\CardDesigner\CardFieldCatalog.cs" />
     <Compile Include="GuardianCardIntegration\CardDesigner\TemplateHealthCheck.cs" />
