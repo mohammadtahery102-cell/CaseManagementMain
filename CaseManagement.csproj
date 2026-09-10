@@ -362,6 +362,31 @@
     <Compile Include="Crm\Adapters\FrmCrm.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="Trade\TradeCoaSeed.cs" />
+    <Compile Include="Assets\Domain\AssetEntities.cs" />
+    <Compile Include="Assets\Infrastructure\AssetInitializer.cs" />
+    <Compile Include="Assets\Infrastructure\AssetStore.cs" />
+    <Compile Include="Assets\Application\AssetServices.cs" />
+    <Compile Include="Assets\Application\AssetOutboxAdapter.cs" />
+    <Compile Include="Assets\Adapters\FrmAssets.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Payroll\Domain\PayrollEntities.cs" />
+    <Compile Include="Payroll\Infrastructure\PayrollInitializer.cs" />
+    <Compile Include="Payroll\Infrastructure\PayrollStore.cs" />
+    <Compile Include="Payroll\Application\PayrollServices.cs" />
+    <Compile Include="Payroll\Application\PayrollOutboxAdapter.cs" />
+    <Compile Include="Payroll\Adapters\FrmPayroll.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Pos\Domain\PosEntities.cs" />
+    <Compile Include="Pos\Infrastructure\PosInitializer.cs" />
+    <Compile Include="Pos\Infrastructure\PosStore.cs" />
+    <Compile Include="Pos\Application\PosServices.cs" />
+    <Compile Include="Pos\Application\PosOutboxAdapter.cs" />
+    <Compile Include="Pos\Adapters\FrmPos.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="GuardianCardIntegration\CardDesigner\DemoCardData.cs" />
     <Compile Include="GuardianCardIntegration\CardDesigner\CardFieldCatalog.cs" />
     <Compile Include="GuardianCardIntegration\CardDesigner\TemplateHealthCheck.cs" />

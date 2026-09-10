@@ -25,6 +25,9 @@ namespace CaseManagement.Helpers
         public const string ComponentPurchase   = "Purchase";
         public const string ComponentSales      = "Sales";
         public const string ComponentCrm        = "Crm";
+        public const string ComponentFixedAssets = "FixedAssets";
+        public const string ComponentPayroll    = "Payroll";
+        public const string ComponentPos        = "Pos";
 
         public static void Ensure()
         {

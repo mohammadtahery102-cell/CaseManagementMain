@@ -162,6 +162,18 @@ CREATE TABLE IF NOT EXISTS EntWorkflowHistory (
                 "CRM.Create", "CRM.Approve", "CRM.Approve");
             CaseManagement.Trade.TradeWorkflowSeed.Ensure(con, "CRM_OPP", "فرصت CRM", "CrmOpportunity",
                 "CRM.Create", "CRM.Approve", "CRM.Approve");
+            CaseManagement.Trade.TradeWorkflowSeed.Ensure(con, "FA_ACQ", "تحصیل دارایی", "FaAcquisition",
+                "Assets.Create", "Assets.Approve", "Assets.Post");
+            CaseManagement.Trade.TradeWorkflowSeed.Ensure(con, "FA_DISP", "واگذاری دارایی", "FaDisposal",
+                "Assets.Create", "Assets.Approve", "Assets.Post");
+            CaseManagement.Trade.TradeWorkflowSeed.Ensure(con, "FA_DEP", "استهلاک دارایی", "FaDepreciation",
+                "Assets.Create", "Assets.Approve", "Assets.Post");
+            CaseManagement.Trade.TradeWorkflowSeed.Ensure(con, "PR_RUN", "اجرای حقوق", "PrPayrollRun",
+                "Payroll.Create", "Payroll.Approve", "Payroll.Post");
+            CaseManagement.Trade.TradeWorkflowSeed.Ensure(con, "POS_SALE", "فروش صندوق", "PosSale",
+                "POS.Create", "POS.Approve", "POS.Post");
+            CaseManagement.Trade.TradeWorkflowSeed.Ensure(con, "POS_RET", "برگشت صندوق", "PosReturn",
+                "POS.Create", "POS.Approve", "POS.Post");
         }
 
         // گردش‌کار پیش‌فرض پرونده — مطابق همان وضعیت‌های سرویسی که هم‌اکنون در
@@ -809,6 +821,18 @@ CREATE TABLE IF NOT EXISTS EntUserPermission (
             AddPermission(con, "CRM.Edit", "ویرایش CRM", "CRM", 590, true, true, false);
             AddPermission(con, "CRM.Approve", "تأیید CRM", "CRM", 591, true, false, false);
             AddPermission(con, "CRM.Delete", "حذف CRM", "CRM", 592, true, false, false);
+            AddPermission(con, "Assets.View", "مشاهده دارایی", "دارایی ثابت", 593, true, true, true);
+            AddPermission(con, "Assets.Create", "ثبت دارایی", "دارایی ثابت", 594, true, true, false);
+            AddPermission(con, "Assets.Approve", "تأیید دارایی", "دارایی ثابت", 595, true, false, false);
+            AddPermission(con, "Assets.Post", "ثبت قطعی دارایی", "دارایی ثابت", 596, true, false, false);
+            AddPermission(con, "Payroll.View", "مشاهده حقوق", "حقوق", 597, true, true, true);
+            AddPermission(con, "Payroll.Create", "ثبت حقوق", "حقوق", 598, true, true, false);
+            AddPermission(con, "Payroll.Approve", "تأیید حقوق", "حقوق", 599, true, false, false);
+            AddPermission(con, "Payroll.Post", "ثبت قطعی حقوق", "حقوق", 600, true, false, false);
+            AddPermission(con, "POS.View", "مشاهده صندوق", "صندوق", 601, true, true, true);
+            AddPermission(con, "POS.Create", "ثبت فروش صندوق", "صندوق", 602, true, true, false);
+            AddPermission(con, "POS.Approve", "تأیید صندوق", "صندوق", 603, true, false, false);
+            AddPermission(con, "POS.Post", "ثبت قطعی صندوق", "صندوق", 604, true, false, false);
 
             // ─── نسخهٔ ۱٫۰ / فاز ۴ (موج ۵) — کاربران/تنظیمات/پشتیبان‌گیری/
             // همگام‌سازی/مراکز/ماژول‌ها. «User.Manage» و «Module.Manage» از

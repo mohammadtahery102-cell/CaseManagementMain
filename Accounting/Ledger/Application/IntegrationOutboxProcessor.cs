@@ -56,7 +56,10 @@ namespace CaseManagement.Accounting.Ledger.Application
                 new CashBookOutboxHandler(),
                 new CaseManagement.Inventory.Application.InventoryOutboxAdapter(),
                 new CaseManagement.Purchase.Application.PurchaseOutboxAdapter(),
-                new CaseManagement.Sales.Application.SalesOutboxAdapter()
+                new CaseManagement.Sales.Application.SalesOutboxAdapter(),
+                new CaseManagement.Assets.Application.AssetOutboxAdapter(),
+                new CaseManagement.Payroll.Application.PayrollOutboxAdapter(),
+                new CaseManagement.Pos.Application.PosOutboxAdapter()
             })
         {
         }

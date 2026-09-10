@@ -39,6 +39,7 @@ namespace CaseManagement.Accounting.Ledger.Domain
         public const string SourceSales = "Sales";
         public const string SourcePayroll = "Payroll";
         public const string SourceFixedAsset = "FixedAsset";
+        public const string SourcePos = "POS";
 
         public const string TypeAsset = "ASSET";
         public const string TypeLiability = "LIABILITY";

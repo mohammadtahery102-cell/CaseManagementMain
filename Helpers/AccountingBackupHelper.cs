@@ -47,7 +47,11 @@ namespace CaseManagement.Helpers
             "SalCustomerCategory", "SalCustomer", "SalCustomerContact", "SalSetting",
             "SalQuotation", "SalQuotationLine", "SalOrder", "SalOrderLine",
             "SalDelivery", "SalDeliveryLine", "SalInvoice", "SalInvoiceLine",
-            "CrmSetting", "CrmLead", "CrmOpportunity", "CrmContact", "CrmActivity", "CrmTask", "CrmCommunication"
+            "CrmSetting", "CrmLead", "CrmOpportunity", "CrmContact", "CrmActivity", "CrmTask", "CrmCommunication",
+            "FaSetting", "FaCategory", "FaLocation", "FaCustodian", "FaAsset",
+            "FaAcquisition", "FaTransfer", "FaDisposal", "FaDepreciation", "FaDepreciationLine",
+            "PrSetting", "PrDepartment", "PrPosition", "PrEmployee", "PrPeriod", "PrRun", "PrRunLine",
+            "PosSetting", "PosTerminal", "PosDrawer", "PosSale", "PosSaleLine", "PosReturn", "PosReturnLine"
         };
 
         // ─── گرفتن بکاپ: همه‌ی جداول Acc* (همه‌ی مراکز، نه فقط مرکز جاری —
