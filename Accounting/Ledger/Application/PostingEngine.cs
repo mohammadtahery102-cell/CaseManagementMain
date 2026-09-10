@@ -37,6 +37,17 @@ namespace CaseManagement.Accounting.Ledger.Application
             return r;
         }
 
+        public IList<GlJournal> ListJournals(string fromDate, string toDate, ILedgerIdentity identity)
+        {
+            if (!Require(identity, LedgerPermissions.View))
+                return new List<GlJournal>();
+            int companyId = identity.CompanyId > 0 ? identity.CompanyId : LedgerCodes.DefaultCompanyId;
+            int center = identity.IsSuperAdmin && identity.CenterId == 0 ? 0 : identity.CenterId;
+            string from = LedgerTime.DateOnly(fromDate) ?? "";
+            string to = LedgerTime.DateOnly(toDate) ?? "";
+            return _repo.ListJournalHeaders(companyId, center, from, to);
+        }
+
         public LedgerResult SaveDraft(SaveDraftJournalCommand command, ILedgerIdentity identity)
         {
             if (!Require(identity, LedgerPermissions.Create))
@@ -499,7 +510,7 @@ namespace CaseManagement.Accounting.Ledger.Application
             if (draft == null)
                 return LedgerResult.Fail(LedgerErrorCodes.InvalidLine, "Line is required.");
 
-            GlCompany company = _repo.GetCompany(companyId);
+            GlCompany company = _repo.GetCompany(con, tr, companyId);
             string baseCcy = company != null ? company.BaseCurrencyCode : LedgerCodes.BaseCurrency;
             string ccy = string.IsNullOrWhiteSpace(draft.CurrencyCode) ? baseCcy : draft.CurrencyCode.Trim().ToUpperInvariant();
 

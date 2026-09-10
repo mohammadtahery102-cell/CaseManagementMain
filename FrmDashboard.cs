@@ -148,6 +148,9 @@ namespace CaseManagement
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleAccounting, IconFont.Calculator,
                 ProductMode.IsErp ? "حسابداری" : "حسابداری ایتام",
                 delegate { using (var frm = new CaseManagement.Accounting.FrmAccounting()) frm.ShowDialog(this); });
+            AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleAccounting, IconFont.Calculator,
+                "دفتر کل",
+                delegate { using (var frm = new CaseManagement.Accounting.Ledger.Adapters.FrmLedger()) frm.ShowDialog(this); });
 
             // ماژول اداری و کارمندان — رخصتی، ماموریت، درخواست استخدام.
             // آموزش — چرا AddItem و نه AddModuleNav: AddModuleNav به یک

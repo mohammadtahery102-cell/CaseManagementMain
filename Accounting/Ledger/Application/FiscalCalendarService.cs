@@ -60,6 +60,7 @@ namespace CaseManagement.Accounting.Ledger.Application
                 return LedgerResult.Fail(LedgerErrorCodes.Validation, "Year code is required.");
 
             long id = _repo.InsertYear(y);
+            _repo.InsertMasterAudit("CreateYear", "GlFiscalYear", id, null, y.Code, identity);
             return LedgerResult.Entity(id, 1);
         }
 
@@ -95,6 +96,7 @@ namespace CaseManagement.Accounting.Ledger.Application
                 UpdatedBy = identity.UserName
             };
             long id = _repo.InsertPeriod(p);
+            _repo.InsertMasterAudit("AddPeriod", "GlFiscalPeriod", id, null, p.Name, identity);
             return LedgerResult.Entity(id, 1);
         }
 
@@ -182,6 +184,38 @@ namespace CaseManagement.Accounting.Ledger.Application
             if (!_repo.UpdateYearConcurrency(y, command.ExpectedRowVersion))
                 return LedgerResult.Fail(LedgerErrorCodes.ConcurrencyConflict, "RowVersion mismatch.");
             return LedgerResult.Entity(y.FiscalYearId, y.RowVersion + 1);
+        }
+
+        public LedgerResult UnlockYear(CalendarStatusCommand command, ILedgerIdentity identity)
+        {
+            if (!identity.HasPermission(LedgerPermissions.UnlockYear))
+                return LedgerResult.Fail(LedgerErrorCodes.PermissionDenied, LedgerPermissions.UnlockYear);
+
+            GlFiscalYear y = _repo.GetYear(command.EntityId);
+            if (y == null || y.IsDeleted)
+                return LedgerResult.Fail(LedgerErrorCodes.Validation, "Fiscal year not found.");
+            if (y.Status != LedgerCodes.StatusLocked)
+                return LedgerResult.Fail(LedgerErrorCodes.InvalidStatus, "Only a Locked year can be unlocked.");
+
+            y.Status = LedgerCodes.StatusClosed;
+            y.LockedAt = null;
+            y.LockedBy = null;
+            y.UpdatedAt = LedgerTime.UtcNow(identity.UtcNow);
+            y.UpdatedBy = identity.UserName;
+            if (!_repo.UpdateYearConcurrency(y, command.ExpectedRowVersion))
+                return LedgerResult.Fail(LedgerErrorCodes.ConcurrencyConflict, "RowVersion mismatch.");
+            _repo.InsertMasterAudit("UnlockYear", "GlFiscalYear", y.FiscalYearId, LedgerCodes.StatusLocked, LedgerCodes.StatusClosed, identity);
+            return LedgerResult.Entity(y.FiscalYearId, y.RowVersion + 1);
+        }
+
+        public IList<GlFiscalYear> ListYears(int companyId)
+        {
+            return _repo.ListYears(companyId);
+        }
+
+        public IList<GlFiscalPeriod> ListPeriods(long fiscalYearId)
+        {
+            return _repo.ListPeriods(fiscalYearId, false);
         }
 
         private LedgerResult SetPeriodStatus(CalendarStatusCommand command, ILedgerIdentity identity, string status)

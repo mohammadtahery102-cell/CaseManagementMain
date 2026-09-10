@@ -201,6 +201,7 @@ namespace CaseManagement.Accounting.Ledger.Application
         LedgerResult Reverse(ReverseJournalCommand command, ILedgerIdentity identity);
         LedgerResult SoftDeleteDraft(JournalStatusCommand command, ILedgerIdentity identity);
         LedgerResult GetJournal(long journalId, ILedgerIdentity identity);
+        IList<GlJournal> ListJournals(string fromDate, string toDate, ILedgerIdentity identity);
     }
 
     public interface IChartOfAccountsService
@@ -208,8 +209,11 @@ namespace CaseManagement.Accounting.Ledger.Application
         LedgerResult Create(CreateAccountCommand command, ILedgerIdentity identity);
         LedgerResult SoftDelete(SoftDeleteCommand command, ILedgerIdentity identity);
         LedgerResult Deactivate(SoftDeleteCommand command, ILedgerIdentity identity);
+        LedgerResult Activate(SoftDeleteCommand command, ILedgerIdentity identity);
         IList<GlAccount> List(int companyId, bool includeDeleted);
+        IList<GlAccountType> ListTypes(int companyId);
         GlAccount Get(long accountId);
+        GlCompany GetCompany(int companyId);
     }
 
     public interface IFiscalCalendarService
@@ -220,7 +224,80 @@ namespace CaseManagement.Accounting.Ledger.Application
         LedgerResult LockPeriod(CalendarStatusCommand command, ILedgerIdentity identity);
         LedgerResult CloseYear(CalendarStatusCommand command, ILedgerIdentity identity);
         LedgerResult LockYear(CalendarStatusCommand command, ILedgerIdentity identity);
+        LedgerResult UnlockYear(CalendarStatusCommand command, ILedgerIdentity identity);
         LedgerResult ReopenYear(CalendarStatusCommand command, ILedgerIdentity identity);
         GlFiscalPeriod Resolve(int companyId, string postingDate);
+        IList<GlFiscalYear> ListYears(int companyId);
+        IList<GlFiscalPeriod> ListPeriods(long fiscalYearId);
+    }
+
+    public class LedgerReportQuery
+    {
+        public int CompanyId { get; set; }
+        public string FromDate { get; set; }
+        public string ToDate { get; set; }
+        public long AccountId { get; set; }
+    }
+
+    public class TrialBalanceRow
+    {
+        public long AccountId { get; set; }
+        public string AccountCode { get; set; }
+        public string AccountName { get; set; }
+        public string AccountTypeCode { get; set; }
+        public bool IsContra { get; set; }
+        public long OpeningDebit { get; set; }
+        public long OpeningCredit { get; set; }
+        public long PeriodDebit { get; set; }
+        public long PeriodCredit { get; set; }
+        public long ClosingDebit { get; set; }
+        public long ClosingCredit { get; set; }
+    }
+
+    public class GeneralLedgerLineRow
+    {
+        public string PostingDate { get; set; }
+        public string JournalNumber { get; set; }
+        public string Description { get; set; }
+        public long DebitBaseMinor { get; set; }
+        public long CreditBaseMinor { get; set; }
+        public long RunningNet { get; set; }
+    }
+
+    public class StatementLine
+    {
+        public string AccountCode { get; set; }
+        public string AccountName { get; set; }
+        public string AccountTypeCode { get; set; }
+        public long AmountMinor { get; set; }
+    }
+
+    public class BalanceSheetResult
+    {
+        public IList<StatementLine> Assets { get; set; }
+        public IList<StatementLine> Liabilities { get; set; }
+        public IList<StatementLine> Equity { get; set; }
+        public long AssetTotal { get; set; }
+        public long LiabilityTotal { get; set; }
+        public long EquityTotal { get; set; }
+        public long CurrentPeriodNetIncome { get; set; }
+        public bool EquationHolds { get; set; }
+    }
+
+    public class ProfitAndLossResult
+    {
+        public IList<StatementLine> Revenue { get; set; }
+        public IList<StatementLine> Expenses { get; set; }
+        public long RevenueTotal { get; set; }
+        public long ExpenseTotal { get; set; }
+        public long NetIncome { get; set; }
+    }
+
+    public interface ILedgerReporting
+    {
+        IList<TrialBalanceRow> GetTrialBalance(LedgerReportQuery query, ILedgerIdentity identity);
+        IList<GeneralLedgerLineRow> GetGeneralLedger(LedgerReportQuery query, ILedgerIdentity identity);
+        BalanceSheetResult GetBalanceSheet(LedgerReportQuery query, ILedgerIdentity identity);
+        ProfitAndLossResult GetProfitAndLoss(LedgerReportQuery query, ILedgerIdentity identity);
     }
 }

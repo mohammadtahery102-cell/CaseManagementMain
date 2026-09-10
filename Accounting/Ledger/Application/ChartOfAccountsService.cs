@@ -27,6 +27,11 @@ namespace CaseManagement.Accounting.Ledger.Application
             return _repo.GetAccount(accountId);
         }
 
+        public GlCompany GetCompany(int companyId)
+        {
+            return _repo.GetCompany(companyId);
+        }
+
         public LedgerResult Create(CreateAccountCommand command, ILedgerIdentity identity)
         {
             if (identity == null) return LedgerResult.Fail(LedgerErrorCodes.PermissionDenied, "Identity required.");
@@ -81,6 +86,7 @@ namespace CaseManagement.Accounting.Ledger.Application
             };
 
             long id = _repo.InsertAccount(a);
+            _repo.InsertMasterAudit("Create", "GlAccount", id, null, a.AccountCode, identity);
             return LedgerResult.Entity(id, 1);
         }
 
@@ -107,6 +113,30 @@ namespace CaseManagement.Accounting.Ledger.Application
             return LedgerResult.Entity(a.AccountId, a.RowVersion + 1);
         }
 
+        public IList<GlAccountType> ListTypes(int companyId)
+        {
+            return _repo.ListAccountTypes(companyId);
+        }
+
+        public LedgerResult Activate(SoftDeleteCommand command, ILedgerIdentity identity)
+        {
+            if (!identity.HasPermission(LedgerPermissions.ManageCoA))
+                return LedgerResult.Fail(LedgerErrorCodes.PermissionDenied, LedgerPermissions.ManageCoA);
+
+            GlAccount a = _repo.GetAccount(command.EntityId);
+            if (a == null || a.IsDeleted)
+                return LedgerResult.Fail(LedgerErrorCodes.AccountMissing, "Account not found.");
+
+            a.IsActive = true;
+            if (a.IsLeaf) a.AllowPosting = true;
+            a.UpdatedAt = LedgerTime.UtcNow(identity.UtcNow);
+            a.UpdatedBy = identity.UserName;
+            if (!_repo.UpdateAccountConcurrency(a, command.ExpectedRowVersion))
+                return LedgerResult.Fail(LedgerErrorCodes.ConcurrencyConflict, "RowVersion mismatch.");
+            _repo.InsertMasterAudit("Activate", "GlAccount", a.AccountId, "0", "1", identity);
+            return LedgerResult.Entity(a.AccountId, a.RowVersion + 1);
+        }
+
         public LedgerResult Deactivate(SoftDeleteCommand command, ILedgerIdentity identity)
         {
             if (!identity.HasPermission(LedgerPermissions.ManageCoA))
@@ -122,6 +152,7 @@ namespace CaseManagement.Accounting.Ledger.Application
             a.UpdatedBy = identity.UserName;
             if (!_repo.UpdateAccountConcurrency(a, command.ExpectedRowVersion))
                 return LedgerResult.Fail(LedgerErrorCodes.ConcurrencyConflict, "RowVersion mismatch.");
+            _repo.InsertMasterAudit("Deactivate", "GlAccount", a.AccountId, "1", "0", identity);
             return LedgerResult.Entity(a.AccountId, a.RowVersion + 1);
         }
     }

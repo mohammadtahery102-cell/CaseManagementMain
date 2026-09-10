@@ -301,9 +301,14 @@
     <Compile Include="Accounting\Ledger\Application\ChartOfAccountsService.cs" />
     <Compile Include="Accounting\Ledger\Application\FiscalCalendarService.cs" />
     <Compile Include="Accounting\Ledger\Application\PostingEngine.cs" />
+    <Compile Include="Accounting\Ledger\Application\LedgerReportingService.cs" />
     <Compile Include="Accounting\Ledger\Infrastructure\LedgerInitializer.cs" />
     <Compile Include="Accounting\Ledger\Infrastructure\LedgerRepository.cs" />
     <Compile Include="Accounting\Ledger\Adapters\DesktopLedgerIdentity.cs" />
+    <Compile Include="Accounting\Ledger\Adapters\LedgerUiText.cs" />
+    <Compile Include="Accounting\Ledger\Adapters\FrmLedger.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="GuardianCardIntegration\CardDesigner\DemoCardData.cs" />
     <Compile Include="GuardianCardIntegration\CardDesigner\CardFieldCatalog.cs" />
     <Compile Include="GuardianCardIntegration\CardDesigner\TemplateHealthCheck.cs" />

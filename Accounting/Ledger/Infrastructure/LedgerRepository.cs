@@ -37,6 +37,148 @@ namespace CaseManagement.Accounting.Ledger.Infrastructure
                 P("@id", companyId)));
         }
 
+        public GlCompany GetCompany(SQLiteConnection con, SQLiteTransaction tr, int companyId)
+        {
+            return MapCompany(QueryRow(con, tr,
+                "SELECT * FROM GlCompany WHERE CompanyID = @id AND IsDeleted = 0;",
+                P("@id", companyId)));
+        }
+
+        public IList<GlAccountType> ListAccountTypes(int companyId)
+        {
+            DataTable table = Query(
+                "SELECT * FROM GlAccountType WHERE CompanyID = @c AND IsDeleted = 0 ORDER BY AccountTypeCode;",
+                P("@c", companyId));
+            List<GlAccountType> list = new List<GlAccountType>();
+            foreach (DataRow r in table.Rows)
+            {
+                list.Add(new GlAccountType
+                {
+                    AccountTypeId = Long(r["AccountTypeID"]),
+                    CompanyId = Int(r["CompanyID"]),
+                    AccountTypeCode = Str(r["AccountTypeCode"]),
+                    Name = Str(r["Name"]),
+                    NormalBalance = Str(r["NormalBalance"]),
+                    Statement = Str(r["Statement"])
+                });
+            }
+            return list;
+        }
+
+        public IList<GlFiscalYear> ListYears(int companyId)
+        {
+            DataTable table = Query(
+                "SELECT * FROM GlFiscalYear WHERE CompanyID = @c AND IsDeleted = 0 ORDER BY StartDate DESC;",
+                P("@c", companyId));
+            List<GlFiscalYear> list = new List<GlFiscalYear>();
+            foreach (DataRow r in table.Rows)
+                list.Add(MapYear(r));
+            return list;
+        }
+
+        public IList<GlJournal> ListJournalHeaders(int companyId, int centerFilter, string fromDate, string toDate)
+        {
+            DataTable table = Query(@"
+SELECT * FROM GlJournal
+WHERE CompanyID = @c AND IsDeleted = 0
+  AND (@from = '' OR PostingDate >= @from)
+  AND (@to = '' OR PostingDate <= @to)
+  AND (@ctr = 0 OR CenterID = @ctr)
+ORDER BY PostingDate DESC, JournalID DESC
+LIMIT 500;",
+                P("@c", companyId),
+                P("@from", fromDate ?? ""),
+                P("@to", toDate ?? ""),
+                P("@ctr", centerFilter));
+            List<GlJournal> list = new List<GlJournal>();
+            foreach (DataRow r in table.Rows)
+                list.Add(MapJournal(r));
+            return list;
+        }
+
+        public DataTable QueryPostedLineSums(int companyId, int centerFilter, string fromDate, string toDate)
+        {
+            return Query(@"
+SELECT a.AccountID, a.AccountCode, a.AccountName, a.AccountTypeCode, a.IsContra,
+  COALESCE(SUM(CASE WHEN j.PostingDate < @from THEN l.DebitBaseMinor ELSE 0 END), 0) AS OpenDr,
+  COALESCE(SUM(CASE WHEN j.PostingDate < @from THEN l.CreditBaseMinor ELSE 0 END), 0) AS OpenCr,
+  COALESCE(SUM(CASE WHEN j.PostingDate >= @from AND j.PostingDate <= @to THEN l.DebitBaseMinor ELSE 0 END), 0) AS PeriodDr,
+  COALESCE(SUM(CASE WHEN j.PostingDate >= @from AND j.PostingDate <= @to THEN l.CreditBaseMinor ELSE 0 END), 0) AS PeriodCr
+FROM GlAccount a
+LEFT JOIN GlJournalLine l ON l.AccountID = a.AccountID
+LEFT JOIN GlJournal j ON j.JournalID = l.JournalID
+  AND j.IsDeleted = 0 AND j.Status IN ('Posted', 'Reversed')
+  AND (@ctr = 0 OR j.CenterID = @ctr)
+WHERE a.CompanyID = @c AND a.IsDeleted = 0 AND a.IsLeaf = 1
+GROUP BY a.AccountID, a.AccountCode, a.AccountName, a.AccountTypeCode, a.IsContra
+ORDER BY a.AccountCode;",
+                P("@c", companyId),
+                P("@from", fromDate ?? ""),
+                P("@to", toDate ?? "9999-12-31"),
+                P("@ctr", centerFilter));
+        }
+
+        public DataTable QueryGeneralLedgerLines(int companyId, int centerFilter, long accountId, string fromDate, string toDate)
+        {
+            return Query(@"
+SELECT j.PostingDate, j.JournalNumber, COALESCE(l.Description, j.Description) AS Description,
+  l.DebitBaseMinor, l.CreditBaseMinor, l.LineNo, j.JournalID
+FROM GlJournalLine l
+JOIN GlJournal j ON j.JournalID = l.JournalID
+WHERE l.AccountID = @acc AND l.CompanyID = @c
+  AND j.IsDeleted = 0 AND j.Status IN ('Posted', 'Reversed')
+  AND (@ctr = 0 OR j.CenterID = @ctr)
+  AND (@from = '' OR j.PostingDate >= @from)
+  AND (@to = '' OR j.PostingDate <= @to)
+  AND (l.DebitMinor > 0 OR l.CreditMinor > 0)
+ORDER BY j.PostingDate, j.JournalID, l.LineNo;",
+                P("@c", companyId),
+                P("@acc", accountId),
+                P("@from", fromDate ?? ""),
+                P("@to", toDate ?? ""),
+                P("@ctr", centerFilter));
+        }
+
+        public long QueryOpeningNet(int companyId, int centerFilter, long accountId, string fromDate)
+        {
+            object v = _db.ExecuteScalar(@"
+SELECT COALESCE(SUM(l.DebitBaseMinor - l.CreditBaseMinor), 0)
+FROM GlJournalLine l
+JOIN GlJournal j ON j.JournalID = l.JournalID
+WHERE l.AccountID = @acc AND l.CompanyID = @c
+  AND j.IsDeleted = 0 AND j.Status IN ('Posted', 'Reversed')
+  AND (@ctr = 0 OR j.CenterID = @ctr)
+  AND (@from = '' OR j.PostingDate < @from);",
+                P("@c", companyId), P("@acc", accountId), P("@from", fromDate ?? ""), P("@ctr", centerFilter));
+            if (v == null || v == DBNull.Value) return 0;
+            return Convert.ToInt64(v);
+        }
+
+        public void InsertMasterAudit(string operation, string entity, long entityId,
+            string oldValue, string newValue, CaseManagement.Accounting.Ledger.Application.ILedgerIdentity identity)
+        {
+            if (identity == null) return;
+            try
+            {
+                int id32 = entityId > int.MaxValue ? 0 : (int)entityId;
+                _db.ExecuteNonQuery(@"
+INSERT INTO TblAuditLog (UserID, Username, Operation, EntityName, EntityID, OldValue, NewValue, CenterID)
+VALUES (@uid, @un, @op, @en, @id, @ov, @nv, @cid);",
+                    P("@uid", identity.UserId > 0 ? (object)identity.UserId : DBNull.Value),
+                    P("@un", identity.UserName ?? ""),
+                    P("@op", operation ?? ""),
+                    P("@en", entity ?? ""),
+                    P("@id", id32),
+                    P("@ov", (object)oldValue ?? DBNull.Value),
+                    P("@nv", (object)newValue ?? DBNull.Value),
+                    P("@cid", identity.CenterId > 0 ? (object)identity.CenterId : DBNull.Value));
+            }
+            catch
+            {
+                // Master audit must not block GL writes if TblAuditLog is absent (isolated ledger tests).
+            }
+        }
+
         public GlLedgerSetting GetSetting(int companyId)
         {
             return MapSetting(QueryRow(
