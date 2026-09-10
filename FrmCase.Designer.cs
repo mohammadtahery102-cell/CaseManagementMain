@@ -37,7 +37,9 @@
             this.txtPhotoPath = new System.Windows.Forms.TextBox();
             this.dtpCaseDate = new CaseManagement.Helpers.PersianDatePicker();
             this.btnBrowsePhoto = new System.Windows.Forms.Button();
+            this.btnClearPhoto = new System.Windows.Forms.Button();
             this.btnBrowseFamilyPhoto = new System.Windows.Forms.Button();
+            this.btnClearFamilyPhoto = new System.Windows.Forms.Button();
             this.txtFamilyPhotoPath = new System.Windows.Forms.TextBox();
             this.picPhoto = new System.Windows.Forms.PictureBox();
             this.picFamilyPhoto = new System.Windows.Forms.PictureBox();
@@ -145,8 +147,6 @@
             this.btnFamily = new System.Windows.Forms.Button();
             this.btnDocs = new System.Windows.Forms.Button();
             this.btnChooseStorageFolder = new System.Windows.Forms.Button();
-            this.btnExportPdf = new System.Windows.Forms.Button();
-            this.btnExportWord = new System.Windows.Forms.Button();
             this.btnExportCaseFile = new System.Windows.Forms.Button();
             this.btnExportExcel = new System.Windows.Forms.Button();
             this.btnBatchExport = new System.Windows.Forms.Button();
@@ -335,9 +335,85 @@
             AddCaseField(gridHead, this.label17, "شغل",                 this.txtJob);
             AddCaseField(gridHead, this.label18, "مهارت",               this.txtSkill);
 
+            // ─── ستونِ عکسِ سرپرست، کنارِ فیلدهای همان کارت ───────────────────
+            // هم‌الگوی ستونِ عکسِ «نمایندهٔ قانونی» (ConfigurePhotoCard): قابِ
+            // یک‌پیکسلی، عکسِ Zoom، و دو دکمهٔ «انتخاب/حذف» زیرِ آن.
+            this.picPhoto.BorderStyle = System.Windows.Forms.BorderStyle.None;
+            this.picPhoto.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.picPhoto.SizeMode = System.Windows.Forms.PictureBoxSizeMode.Zoom;
+            this.picPhoto.BackColor = CaseManagement.Helpers.UiTheme.Background;
+            this.picPhoto.TabStop = false;
+
+            var headPhotoFrame = new System.Windows.Forms.Panel();
+            headPhotoFrame.Dock = System.Windows.Forms.DockStyle.Fill;
+            headPhotoFrame.Padding = new System.Windows.Forms.Padding(1);
+            headPhotoFrame.BackColor = CaseManagement.Helpers.UiTheme.Border;
+            headPhotoFrame.Controls.Add(this.picPhoto);
+
+            this.btnBrowsePhoto.Text = "انتخاب عکس";
+            this.btnBrowsePhoto.Size = new System.Drawing.Size(100, 30);
+            this.btnBrowsePhoto.Margin = new System.Windows.Forms.Padding(0, 0, 4, 0);
+            this.btnBrowsePhoto.Click += new System.EventHandler(this.btnBrowsePhoto_Click);
+
+            this.btnClearPhoto.Name = "btnClearPhoto";
+            this.btnClearPhoto.Text = "حذف عکس";
+            this.btnClearPhoto.Size = new System.Drawing.Size(86, 30);
+            this.btnClearPhoto.Margin = new System.Windows.Forms.Padding(0);
+            this.btnClearPhoto.Click += new System.EventHandler(this.btnClearPhoto_Click);
+
+            var headPhotoButtons = new System.Windows.Forms.FlowLayoutPanel();
+            headPhotoButtons.Dock = System.Windows.Forms.DockStyle.Bottom;
+            headPhotoButtons.Height = 38;
+            headPhotoButtons.FlowDirection = System.Windows.Forms.FlowDirection.LeftToRight;
+            headPhotoButtons.WrapContents = false;
+            headPhotoButtons.Padding = new System.Windows.Forms.Padding(0, 4, 0, 0);
+            headPhotoButtons.BackColor = System.Drawing.Color.Transparent;
+            headPhotoButtons.Controls.Add(this.btnBrowsePhoto);
+            headPhotoButtons.Controls.Add(this.btnClearPhoto);
+
+            var headPhotoCaption = new System.Windows.Forms.Label();
+            headPhotoCaption.Dock = System.Windows.Forms.DockStyle.Top;
+            headPhotoCaption.Height = 20;
+            headPhotoCaption.Text = "عکس سرپرست";
+            headPhotoCaption.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            headPhotoCaption.Font = CaseManagement.Helpers.UiTheme.FontBold(
+                CaseManagement.Helpers.UiTheme.SizeSmall - 0.5F);
+            headPhotoCaption.ForeColor = CaseManagement.Helpers.UiTheme.TextDark;
+            headPhotoCaption.BackColor = System.Drawing.Color.Transparent;
+
+            var headPhotoColumn = new System.Windows.Forms.Panel();
+            headPhotoColumn.Dock = System.Windows.Forms.DockStyle.Fill;
+            headPhotoColumn.Padding = new System.Windows.Forms.Padding(14, 8, 6, 10);
+            headPhotoColumn.MinimumSize = new System.Drawing.Size(226, 236);
+            headPhotoColumn.BackColor = System.Drawing.Color.Transparent;
+            // Fill اول اضافه می‌شود و لبه‌ها بعد از آن: Dock از بالاترین اندیس
+            // به پایین‌ترین اعمال می‌شود.
+            headPhotoColumn.Controls.Add(headPhotoFrame);
+            headPhotoColumn.Controls.Add(headPhotoButtons);
+            headPhotoColumn.Controls.Add(headPhotoCaption);
+
+            var headBody = new System.Windows.Forms.TableLayoutPanel();
+            headBody.Dock = System.Windows.Forms.DockStyle.Top;
+            headBody.AutoSize = true;
+            headBody.AutoSizeMode = System.Windows.Forms.AutoSizeMode.GrowAndShrink;
+            headBody.ColumnCount = 2;
+            headBody.RowCount = 1;
+            headBody.BackColor = System.Drawing.Color.Transparent;
+            // با RightToLeftLayout ستونِ ۰ سمتِ راست کشیده می‌شود — یعنی عکس
+            // در آغازِ خط، همان جایی که در فورم‌های رسمی هست.
+            headBody.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(
+                System.Windows.Forms.SizeType.Absolute, 232F));
+            headBody.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(
+                System.Windows.Forms.SizeType.Percent, 100F));
+            headBody.RowStyles.Add(new System.Windows.Forms.RowStyle(
+                System.Windows.Forms.SizeType.AutoSize));
+            gridHead.Dock = System.Windows.Forms.DockStyle.Fill;
+            headBody.Controls.Add(headPhotoColumn, 0, 0);
+            headBody.Controls.Add(gridHead, 1, 0);
+
             this.grpHead.Text = "";
             this.grpHead.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            var cardHead = MkCaseCard("مشخصات کلی سرپرست", gridHead, this.grpHead);
+            var cardHead = MkCaseCard("مشخصات کلی سرپرست", headBody, this.grpHead);
 
             // ═══════════════════════════════════════════════════════════════════
             // گروه ۲: مشخصات جسمی — چک‌باکس سالم/معلول + نوع/درجه معلولیت
@@ -1091,9 +1167,19 @@
             visitButtons.WrapContents = false;
             visitButtons.Padding = new System.Windows.Forms.Padding(16, 2, 16, 6);
             visitButtons.BackColor = System.Drawing.Color.Transparent;
+            // آموزش — جدول TblFieldVisitPhoto و متدهای FieldVisitService از فاز ۵
+            // آماده بودند ولی هیچ دکمه‌ای صدایشان نمی‌زد؛ ستونِ «تعداد عکس»
+            // همیشه صفر می‌ماند. این دکمه همان شکاف را می‌بندد.
+            this.btnVisitPhotos = new System.Windows.Forms.Button();
+            this.btnVisitPhotos.Name = "btnVisitPhotos";
+            this.btnVisitPhotos.Text = "عکس‌های بازدید";
+            this.btnVisitPhotos.Size = new System.Drawing.Size(140, 38);
+            this.btnVisitPhotos.Click += new System.EventHandler(this.btnVisitPhotos_Click);
+
             visitButtons.Controls.Add(this.btnVisitNew);
             visitButtons.Controls.Add(this.btnVisitSave);
             visitButtons.Controls.Add(this.btnVisitDelete);
+            visitButtons.Controls.Add(this.btnVisitPhotos);
 
             var visitFormContent = new System.Windows.Forms.Panel();
             visitFormContent.Name = "visitFormContent";
@@ -1357,12 +1443,10 @@
             // و با cmbServiceStatusFilter (فیلترِ ورودی از داشبورد) کار می‌کند.
             // پس داخل یک میزبانِ نامرئی نگه داشته می‌شوند تا رفتارِ برنامه
             // ذره‌ای عوض نشود و فقط از دیدِ کاربر خارج شوند.
-            this.picPhoto.SizeMode = System.Windows.Forms.PictureBoxSizeMode.StretchImage;
-            this.picPhoto.TabStop = false;
-            this.picPhoto.Size = new System.Drawing.Size(2, 2);
-            this.btnBrowsePhoto.Text = "عکس پرسنلی";
-            this.btnBrowsePhoto.Size = new System.Drawing.Size(2, 2);
-            this.btnBrowsePhoto.Click += new System.EventHandler(this.btnBrowsePhoto_Click);
+            // آموزش — عکسِ سرپرست از میزبانِ نامرئی بیرون آمد (درخواستِ کاربر:
+            // «دکمه‌ها را بگذار»). ولی به ستونِ چپ برنمی‌گردد — همان‌جایی که
+            // قبلاً به‌صراحت خواسته بودند خالی بماند؛ جای درستش کنارِ خودِ
+            // فیلدهای سرپرست است، مثل هر فورمِ رسمیِ کاغذی.
             this.lblServiceStatusFilter.Text = "فیلتر وضعیت خدمات";
             this.lblServiceStatusFilter.Size = new System.Drawing.Size(2, 2);
             this.cmbServiceStatusFilter.Size = new System.Drawing.Size(2, 2);
@@ -1373,8 +1457,6 @@
             hiddenCaseControls.Location = new System.Drawing.Point(-4000, -4000);
             hiddenCaseControls.Visible = false;
             hiddenCaseControls.TabStop = false;
-            hiddenCaseControls.Controls.Add(this.picPhoto);
-            hiddenCaseControls.Controls.Add(this.btnBrowsePhoto);
             hiddenCaseControls.Controls.Add(this.lblServiceStatusFilter);
             hiddenCaseControls.Controls.Add(this.cmbServiceStatusFilter);
 
@@ -1384,9 +1466,12 @@
             this.picFamilyPhoto.SizeMode = System.Windows.Forms.PictureBoxSizeMode.Zoom;
             this.picFamilyPhoto.BackColor = CaseManagement.Helpers.UiTheme.Background;
             this.picFamilyPhoto.TabStop = false;
-            this.btnBrowseFamilyPhoto.Text = "عکس جمعی";
-            this.btnBrowseFamilyPhoto.Dock = System.Windows.Forms.DockStyle.Bottom;
-            this.btnBrowseFamilyPhoto.Height = LeftCardButtonHeight;
+            // آموزش — دو دکمهٔ تمام‌عرضِ روی‌هم (نوارِ آبی + نوارِ قرمز) زیرِ
+            // عکس، کارت را شلوغ و نامنظم نشان می‌داد (گزارشِ کاربر). حالا یک
+            // ردیفِ جمع‌وجورِ راست‌چین با دو دکمهٔ کوچک است.
+            this.btnBrowseFamilyPhoto.Text = "انتخاب عکس";
+            this.btnBrowseFamilyPhoto.Size = new System.Drawing.Size(112, 28);
+            this.btnBrowseFamilyPhoto.Margin = new System.Windows.Forms.Padding(6, 0, 0, 0);
             this.btnBrowseFamilyPhoto.Font = CaseManagement.Helpers.UiTheme.FontBold(CaseManagement.Helpers.UiTheme.SizeSmall);
             this.btnBrowseFamilyPhoto.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
             this.btnBrowseFamilyPhoto.FlatAppearance.BorderSize = 0;
@@ -1394,10 +1479,47 @@
             this.btnBrowseFamilyPhoto.ForeColor = System.Drawing.Color.White;
             this.btnBrowseFamilyPhoto.Click += new System.EventHandler(this.btnBrowseFamilyPhoto_Click);
 
+            this.btnClearFamilyPhoto.Name = "btnClearFamilyPhoto";
+            this.btnClearFamilyPhoto.Text = "حذف";
+            this.btnClearFamilyPhoto.Size = new System.Drawing.Size(66, 28);
+            this.btnClearFamilyPhoto.Margin = new System.Windows.Forms.Padding(0);
+            this.btnClearFamilyPhoto.Font = CaseManagement.Helpers.UiTheme.Font(
+                CaseManagement.Helpers.UiTheme.SizeSmall);
+            this.btnClearFamilyPhoto.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.btnClearFamilyPhoto.FlatAppearance.BorderSize = 1;
+            this.btnClearFamilyPhoto.FlatAppearance.BorderColor = CaseManagement.Helpers.UiTheme.Border;
+            this.btnClearFamilyPhoto.BackColor = System.Drawing.Color.White;
+            this.btnClearFamilyPhoto.ForeColor = CaseManagement.Helpers.UiTheme.Danger;
+            this.btnClearFamilyPhoto.Click += new System.EventHandler(this.btnClearFamilyPhoto_Click);
+
+            var familyPhotoButtons = new System.Windows.Forms.FlowLayoutPanel();
+            familyPhotoButtons.Dock = System.Windows.Forms.DockStyle.Bottom;
+            familyPhotoButtons.Height = 34;
+            familyPhotoButtons.FlowDirection = System.Windows.Forms.FlowDirection.LeftToRight;
+            familyPhotoButtons.WrapContents = false;
+            familyPhotoButtons.Padding = new System.Windows.Forms.Padding(0, 4, 0, 0);
+            familyPhotoButtons.BackColor = System.Drawing.Color.Transparent;
+            familyPhotoButtons.Controls.Add(this.btnBrowseFamilyPhoto);
+            familyPhotoButtons.Controls.Add(this.btnClearFamilyPhoto);
+
+            // کادرِ ۹:۱۶ — بزرگ‌ترین مستطیلِ عمودی که در کارت جا می‌شود.
+            var familyPhotoAspect = new CaseManagement.Helpers.AspectBox();
+            familyPhotoAspect.Dock = System.Windows.Forms.DockStyle.Fill;
+            // ۱۶:۹ افقی — عکسِ جمعیِ خانواده معمولاً نشسته و در عرض گرفته
+            // می‌شود (تصحیحِ کاربر؛ برداشتِ اولِ من عمودی بود).
+            familyPhotoAspect.AspectWidth = 16f;
+            familyPhotoAspect.AspectHeight = 9f;
+            familyPhotoAspect.FrameColor = CaseManagement.Helpers.UiTheme.Border;
+            familyPhotoAspect.FrameThickness = 1;
+            this.picFamilyPhoto.Dock = System.Windows.Forms.DockStyle.None;
+            familyPhotoAspect.Controls.Add(this.picFamilyPhoto);
+
             System.Windows.Forms.Panel familyPhotoBody = new System.Windows.Forms.Panel();
             familyPhotoBody.BackColor = System.Drawing.Color.Transparent;
-            familyPhotoBody.Controls.Add(this.picFamilyPhoto);
-            familyPhotoBody.Controls.Add(this.btnBrowseFamilyPhoto);
+
+            // Fill اول، بعد نوارِ دکمه‌ها.
+            familyPhotoBody.Controls.Add(familyPhotoAspect);
+            familyPhotoBody.Controls.Add(familyPhotoButtons);
 
             // ── کارت ۲: وضعیت خدمات ──────────────────────────────────────────
             // آموزش — هیچ دادهٔ تازه‌ای اینجا ساخته نمی‌شود: هر سه مقدار از
@@ -1595,10 +1717,11 @@
             // آموزش — تا امروز تاریخچهٔ تغییراتِ یک پروندهٔ مشخص از هیچ‌جای برنامه
             // قابل دیدن نبود؛ تنها دسترسی، گریدِ کلیِ ممیزی در داشبورد بود.
             StyleBtn(this.btnHistory, "تاریخچه", 82, 32); this.btnHistory.Click += new System.EventHandler(this.btnHistory_Click);
+            // گام ۱ — این دکمه‌ها دیگر روی نوار نمی‌نشینند؛ منوی
+            // «خروجی‌ها و چاپ» مستقیماً هندلرهایشان را صدا می‌زند.
+            // ساخته‌شدنشان حفظ شد تا هیچ هندلر/رفتاری تغییر نکند.
             this.lblExportSection.Text = "خروجی‌ها:"; this.lblExportSection.AutoSize = false; this.lblExportSection.Size = new System.Drawing.Size(60, 32); this.lblExportSection.TextAlign = System.Drawing.ContentAlignment.MiddleRight; this.lblExportSection.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
             StyleBtn(this.btnPrint, "چاپ", 74, 32); this.btnPrint.Click += new System.EventHandler(this.btnPrint_Click);
-            StyleBtn(this.btnExportWord, "ورد", 62, 32); this.btnExportWord.Click += new System.EventHandler(this.btnExportWord_Click);
-            StyleBtn(this.btnExportPdf, "پی دی اف", 100, 32); this.btnExportPdf.Click += new System.EventHandler(this.btnExportPdf_Click);
             StyleBtn(this.btnExportExcel, "اکسل", 62, 32); this.btnExportExcel.Click += new System.EventHandler(this.btnExportExcel_Click);
             StyleBtn(this.btnBatchExport, "خروجی جمعی", 104, 32); this.btnBatchExport.Click += new System.EventHandler(this.btnBatchExport_Click);
             // Phase 5.5-C — «پروندهٔ کامل»: همهٔ بخش‌ها (تایم‌لاین/بازدید/تأمین
@@ -1623,18 +1746,10 @@
             bottomActionsRow.Controls.Add(this.btnDelete);
             bottomActionsRow.Controls.Add(this.btnSearch);
             bottomActionsRow.Controls.Add(this.btnHistory);
-            bottomActionsRow.Controls.Add(this.lblExportSection);
             // آموزش — ترتیب طبق تصویرِ مرجع (از راست به چپ): پی‌دی‌اف، اکسل،
             // چاپ، خروجی جمعی. «ورد» و «محل ذخیره» در تصویر نیستند ولی حذف
             // نشدند (کارِ موجودِ کاربر را نمی‌شکنیم) و به انتهای همان ردیف
             // منتقل شدند تا ترتیبِ خواسته‌شده به‌هم نخورد.
-            bottomActionsRow.Controls.Add(this.btnExportPdf);
-            bottomActionsRow.Controls.Add(this.btnExportExcel);
-            bottomActionsRow.Controls.Add(this.btnPrint);
-            bottomActionsRow.Controls.Add(this.btnBatchExport);
-            bottomActionsRow.Controls.Add(this.btnExportCaseFile);
-            bottomActionsRow.Controls.Add(this.btnExportWord);
-            bottomActionsRow.Controls.Add(this.btnChooseStorageFolder);
 
             System.Windows.Forms.TableLayoutPanel bottomBar = new System.Windows.Forms.TableLayoutPanel();
             bottomBar.Dock = System.Windows.Forms.DockStyle.Fill;
@@ -2030,6 +2145,16 @@
             }
         }
 
+        // ─── چرا تب‌ها رنگ‌بندیِ گروهی ندارند ────────────────────────────────
+        // آموزش (تصمیمِ ۱۴۰۵/۰۶/۱۶) — یک‌بار با TabDrawMode.OwnerDrawFixed
+        // امتحان شد تا هر گروهِ کاری رنگِ خودش را بگیرد. نتیجه خراب بود:
+        // این کنترل WS_EX_LAYOUTRTL دارد، پس ویندوز مختصاتِ ترسیم را آینه
+        // می‌کند و نوارهای رنگی سرِ جای تبِ همسایه می‌افتادند (گزارشِ کاربر:
+        // «رنگ‌ها قاطی آمده»). درستش نگه‌داشتنِ تبِ بومیِ ساده است.
+        // اگر روزی رنگ‌بندی لازم شد، راهِ درست جایگزینیِ کلِ نوار با
+        // Helpers/PillTabStrip است (کنترلِ خودمان، بدونِ آینهٔ سیستمی) — نه
+        // نقاشیِ سفارشیِ روی TabControl.
+
         // یک تب با پانلِ اسکرولِ اختصاصی که کارتِ داده‌شده را در خود دارد.
         // چند کارت در یک تب: کارت‌ها Dock=Top و AutoSize هستند و از قبل
         // Margin پایین دارند، پس روی‌هم‌چیدنشان همان الگوی جاافتادهٔ این فایل
@@ -2142,7 +2267,10 @@
         // آموزش — بعد از بازرسیِ تصویری از ۱۹۶ به ۱۶۸ کم شد: روی نمایشگرِ
         // ۷۶۸ پیکسلی، ۱۹۶ پیکسل آن‌قدر از ارتفاعِ ستون را می‌گرفت که از ۱۰
         // ردیفِ گرید فقط شش‌تا دیده می‌شد.
-        private const int LeftCardsRowHeight   = 168;  // ارتفاعِ ردیفِ دو کارتِ بالا
+        // آموزش — از ۱۶۸ به ۲۴۰ رفت: کادرِ عکسِ خانواده نسبتِ ۱۶:۹ (افقی)
+        // دارد و در ارتفاعِ قبلی به نوارِ باریکِ ~۵۶ پیکسلی تبدیل می‌شد —
+        // همان چیزی که کاربر «خیلی کوچک» خواندش.
+        private const int LeftCardsRowHeight   = 240;  // ارتفاعِ ردیفِ دو کارتِ بالا
         private const int LeftCardButtonHeight = 30;   // ارتفاعِ دکمهٔ داخلِ کارت
         private const int PagerBarHeight       = 44;   // ارتفاعِ نوارِ صفحه‌بندی
         private const float PagerButtonWidth   = 58F;  // عرضِ هر دکمهٔ صفحه‌بندی
@@ -2305,7 +2433,9 @@
         private System.Windows.Forms.TextBox txtPhotoPath;
         private CaseManagement.Helpers.PersianDatePicker dtpCaseDate;
         private System.Windows.Forms.Button btnBrowsePhoto;
+        private System.Windows.Forms.Button btnClearPhoto;
         private System.Windows.Forms.Button btnBrowseFamilyPhoto;
+        private System.Windows.Forms.Button btnClearFamilyPhoto;
         private System.Windows.Forms.TextBox txtFamilyPhotoPath;
         private System.Windows.Forms.PictureBox picPhoto;
         private System.Windows.Forms.PictureBox picFamilyPhoto;
@@ -2343,8 +2473,6 @@
         private System.Windows.Forms.Button btnFamily;
         private System.Windows.Forms.Button btnDocs;
         private System.Windows.Forms.Button btnChooseStorageFolder;
-        private System.Windows.Forms.Button btnExportPdf;
-        private System.Windows.Forms.Button btnExportWord;
         private System.Windows.Forms.Button btnExportExcel;
         private System.Windows.Forms.Button btnBatchExport;
         // آموزش — به فیلد ارتقا یافت تا کد فرم بتواند هنگام تغییر اندازه،
@@ -2511,6 +2639,10 @@
         private System.Windows.Forms.Button btnVisitNew;
         private System.Windows.Forms.Button btnVisitSave;
         private System.Windows.Forms.Button btnVisitDelete;
+        private System.Windows.Forms.Button btnVisitPhotos;
+        // گام ۱ — منوهای تجمیعی (خروجی‌ها / فورم‌های رسمی).
+        private System.Windows.Forms.ContextMenuStrip _menuExports;
+        private System.Windows.Forms.ContextMenuStrip _menuOfficialForms;
         // Phase 5.5-C — کارت‌های وضعیتِ محاسبه‌شده + تب تأمین مالی + خروجی کامل.
         private System.Windows.Forms.Label lblStatCompletionPct;
         private System.Windows.Forms.Label lblStatCompletionStatus;

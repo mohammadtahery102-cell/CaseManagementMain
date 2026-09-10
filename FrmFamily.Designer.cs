@@ -1,4 +1,4 @@
-using System.Windows.Forms;
+﻿using System.Windows.Forms;
 namespace CaseManagement
 {
     partial class FrmFamily
@@ -68,6 +68,7 @@ namespace CaseManagement
             this.cmbEducationCoverage   = new System.Windows.Forms.ComboBox();
             this.picMemberPhoto         = new System.Windows.Forms.PictureBox();
             this.btnBrowseMemberPhoto   = new System.Windows.Forms.Button();
+            this.btnClearMemberPhoto    = new System.Windows.Forms.Button();
             this.dtpBirthDate           = new CaseManagement.Helpers.PersianDatePicker();
             this.tabsMain               = new RtlTabControl();
             this.lblHeadInfo            = new System.Windows.Forms.Label();
@@ -380,8 +381,24 @@ namespace CaseManagement
             photoPanel.Height  = 150;
             photoPanel.BackColor = CaseManagement.Helpers.UiTheme.CardBack;
             photoPanel.Padding = new System.Windows.Forms.Padding(10, 6, 10, 6);
+            // آموزش — تا امروز عکسِ عضو را فقط می‌شد عوض کرد، نه برداشت؛
+            // عکسِ نماینده و قیّم از قبل دکمهٔ حذف داشتند و این یکی نداشت.
+            this.btnClearMemberPhoto.Name   = "btnClearMemberPhoto";
+            this.btnClearMemberPhoto.Text   = "حذف عکس";
+            this.btnClearMemberPhoto.Dock   = System.Windows.Forms.DockStyle.Bottom;
+            this.btnClearMemberPhoto.Height = 30;
+            this.btnClearMemberPhoto.Margin = new System.Windows.Forms.Padding(0);
+            this.btnClearMemberPhoto.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.btnClearMemberPhoto.FlatAppearance.BorderSize = 1;
+            this.btnClearMemberPhoto.FlatAppearance.BorderColor = CaseManagement.Helpers.UiTheme.Border;
+            this.btnClearMemberPhoto.BackColor = System.Drawing.Color.White;
+            this.btnClearMemberPhoto.ForeColor = CaseManagement.Helpers.UiTheme.Danger;
+            this.btnClearMemberPhoto.Click += new System.EventHandler(this.btnClearMemberPhoto_Click);
+
+            // Fill اول، بعد نوارهای پایین؛ آخرین افزوده پایین‌ترین می‌شود.
             photoPanel.Controls.Add(this.picMemberPhoto);
             photoPanel.Controls.Add(this.btnBrowseMemberPhoto);
+            photoPanel.Controls.Add(this.btnClearMemberPhoto);
 
             this.dgvFamily.Name                        = "dgvFamily";
             this.dgvFamily.Dock                        = System.Windows.Forms.DockStyle.Fill;
@@ -832,6 +849,7 @@ namespace CaseManagement
         private System.Windows.Forms.Label label27;
         private System.Windows.Forms.PictureBox picMemberPhoto;
         private System.Windows.Forms.Button btnBrowseMemberPhoto;
+        private System.Windows.Forms.Button btnClearMemberPhoto;
         private CaseManagement.Helpers.PersianDatePicker dtpBirthDate;
         private System.Windows.Forms.ComboBox cmbReligion;
         private System.Windows.Forms.Label lblReligion;

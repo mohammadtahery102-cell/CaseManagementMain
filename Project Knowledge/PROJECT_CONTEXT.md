@@ -3,7 +3,7 @@
 > Permanent project memory + operational guide for AI coding agents.
 > Authoritative: this file outranks assumptions and prior sessions.
 > Keep updated. Keep short. Replace every `<...>` placeholder.
-> Last updated: `2026-09-06` | Maintainer: `<name>`
+> Last updated: `2026-09-07` | Maintainer: `<name>`
 
 ## Authority
 - This file has higher priority than assumptions.
@@ -34,7 +34,7 @@
 - **Database:** SQLite (`System.Data.SQLite.Core` 1.0.115.5), single file, `PRAGMA foreign_keys = ON`.
 - **ORM / Data Access:** None — raw `SQLiteCommand`/parameterized SQL via `DAL/DatabaseHelper.cs`. No repository layer.
 - **UI Framework:** WinForms, custom theme (`Helpers/UiTheme.cs`), custom `FieldBox`/`SectionCard` layout controls, RTL throughout.
-- **Reporting Tools:** RDLC (`Microsoft.ReportingServices.ReportViewerControl.Winforms`) + typed dataset `DsFullCaseReport.xsd`; a separate metadata-driven report builder (`Helpers/ReportDefinitions.cs` + `FrmReportBuilder`).
+- **Reporting Tools:** RDLC (`Microsoft.ReportingServices.ReportViewerControl.Winforms`) + typed dataset `DsFullCaseReport.xsd`; a metadata-driven report builder (`Helpers/ReportDefinitions.cs` + `FrmReportBuilder`); and `Helpers/ReportDoc.cs` — the GDI+ print engine for composed multi-section RTL documents (see Printed Documents below). `Helpers/PrintHelper.cs` remains for the older single-table print paths.
 - **Testing:** MSTest-style, `CaseManagement.Tests` (separate SDK-style project), 346+ tests against a real temp SQLite DB.
 - **External Libraries:** ClosedXML 0.105 (Excel), DocumentFormat.OpenXml 3.1.1 (Word), QRCoder 1.8, Microsoft.Web.WebView2, RBush (spatial), SixLabors.Fonts.
 - **Build Configuration:**
@@ -430,7 +430,7 @@ new public surface is added to `FrmCase`, and the user lands on filters they can
 
 ### Export preparation layer (Phase 5.5-C)
 - **`Helpers/CaseExportDataProvider.cs`** — 8 `DataTable` providers (timeline, field visits, funding, assistance history, vulnerability breakdown, document status, missing documents, case summary). `DataTable` is deliberate: it is what `ExcelReportExporter`, `PrintHelper.PrintDataTable` **and** `ReportDataSource` all consume, so the future RDLC phase is a one-line `DataSources.Add(...)` per section.
-- **`Helpers/CaseFileExportService.cs`** — per-case Excel workbook + sequential print, both driven by that provider. Timeline is deliberately the **last** section, per the requirement that history appears at the end of outputs.
+- **`Helpers/CaseFileExportService.cs`** — per-case Excel workbook + sequential print, both driven by that provider. Timeline is deliberately the **last** section, per the requirement that history appears at the end of outputs. **Superseded for the UI by `CaseFileReport`/`FrmCaseFileExport` (2026-09-06) but left untouched** — it is still the programmatic per-case export API.
 - The existing multi-case `ExcelReportExporter` is untouched — per-case and multi-case are different data shapes.
 - ⚠ **ClosedXML cannot be covered by the automated suite** — the test project ships `System.Memory` 4.0.1.1 while the app ships 4.0.1.2 (the version its binding redirect names). The *app's* Excel path is verified working against the live DB; only the automated coverage is missing. Fix by aligning the test project's package version.
 
@@ -467,7 +467,8 @@ with "— بدون خیّر —" as the first sponsor option since funding witho
 funding source exists, the user is pointed at the admin screen rather than shown an empty dropdown.
 
 **`btnExportCaseFile`** ("پرونده کامل") — distinct from the existing `btnExportExcel`, which is the *multi-case*
-filtered report. This exports **one** case with every section via `CaseFileExportService`, offering Excel or Print.
+filtered report. This exports **one** case. Since 2026-09-06 it opens `Helpers/FrmCaseFileExport` (section picker with
+row counts + Preview/PDF/Excel/Direct-print), building one continuous `ReportDoc` via `Helpers/CaseFileReport`.
 
 **Refresh wiring:** `RefreshFundingTab()` + `RefreshCaseStatusStats()` are called from both the case-load and
 clear-form paths, alongside the existing tab refreshes.
@@ -502,19 +503,105 @@ clear-form paths, alongside the existing tab refreshes.
 - **Output:** `OpenXmlCaseExporter` supplies `{{Rep1*}}`/`{{Rep2*}}` placeholders (Name, Relationship, IdCardType, NationalID, Phone, SecondaryPhone, Address, Notes) — always defined, so a template lacking them is unaffected; `RptFullCase.rdlc` shows a "نمایندهٔ قانونی" section whose rows are hidden by expression when empty, so non-disability reports print exactly as before. **Excel (added 2026-09-05):** 10 columns (5 per slot) on the "پرونده ها" sheet, built as **scalar sub-queries, never a `JOIN`** — a join would double the row of any case with two representatives and corrupt the summary sheet's case count. Same `IsActive = 1` + `RepresentativeOrder` rule as `RdlcExportHelper.RepresentativeSummarySql`, so Excel and the printed report always agree.
 - **Not done, deliberately:** representative data is **not** on the ID card (see Decision #40), and the completion/vulnerability engines were not extended.
 
+## Case Photos (`Helpers/PhotoRules.cs` — consolidated 2026-09-07)
+
+- **`PhotoRules` is the single definition of "which photo is acceptable".** Before it, every form carried its own
+  numbers (head 15 MB with no minimum, group 50 KB–1 MB, member 5 MB) — three rules for one kind of data.
+  Portrait photos (head of household, child's guardian, legal representative, family member) are **50 KB–500 KB**
+  (business rule set by the user); the *group* family photo and *field-visit* photos are scene photos and stay at
+  50 KB–1 MB. `FileHelper.MaxPhotoFileSizeBytes` (15 MB) is the outer storage cap and was not touched.
+  `IsValidPhoto` **returns** the reason instead of showing it, so batch callers can list all rejects in one dialog.
+- **Every photo slot now has both "انتخاب عکس" and "حذف عکس".** Head, group and member photos previously had no way
+  to *remove* a photo, only replace it. Clearing writes an empty path column; **the file on disk is deliberately
+  left in place** — same conservatism as `FrmDocs` and the representative photo.
+- **`FrmFamily` needed an explicit `clearMemberPhotoRequested` flag**: its update path reads the previous photo path
+  from the database (`GetStoredMemberPhotoPath`), not from the form field, so blanking the field alone re-saved the
+  old path.
+- **The head photo card is back on screen, inside the «مشخصات کلی سرپرست» tab** (`grpHead` content is now a 2-column
+  `TableLayoutPanel`: photo column + field grid). It is *not* returned to the left column, which an earlier explicit
+  user request had cleared. `picPhoto`/`btnBrowsePhoto` left the `hiddenCaseControls` host;
+  `lblServiceStatusFilter`/`cmbServiceStatusFilter` stay hidden there.
+- **Visit photos reach the outputs too (2026-09-07).** `CaseExportDataProvider.GetFieldVisitPhotos(caseId)` feeds a
+  «عکس‌های بازدید» section in `CaseFileReport`: the printed/PDF document renders it through the new
+  `ReportImageGrid` block (4 per row landscape / 3 portrait, caption = date · visitor · description, missing files
+  draw a "فایل عکس پیدا نشد" placeholder), while the Excel sheet keeps the plain table **including the file-path
+  column** so the user can find the original. `CaseFileSection.RenderAsPhotos` is the switch.
+- **The family photo box is a 16:9 landscape frame (`Helpers/AspectBox`).** Docked `Fill` inside a short wide card
+  it had collapsed to a ~56 px strip. A family group photo is a seated, wide shot, so the frame keeps 16:9 and takes
+  the largest size that fits (`LeftCardsRowHeight` 168 → 240). The two buttons moved from stacked full-width bars
+  into one compact right-aligned row.
+- **Field-visit photos finally have a UI: `Helpers/FrmFieldVisitPhotos`** (`FrmCase` → tab بازدید میدانی →
+  «عکس‌های بازدید»). `TblFieldVisitPhoto`, `FieldVisitService.AddPhoto/GetPhotos/DeletePhoto`,
+  `FileHelper.SectionVisitPhotos`, backup and sync had all existed since Phase 5 with **no caller** — the grid's
+  «تعداد عکس» column could only ever read zero. The dialog adds multi-select import, thumbnails (read through a
+  `FileShare.ReadWrite` stream so files are never locked), open, and delete; one optional description is applied to
+  a whole batch because the service has no update-description method. `ImageList` thumbnails are disposed by hand —
+  the form's own `Dispose` does not reach into an `ImageList`.
+
+### Case tabs stay natively drawn — do not owner-draw them
+Colour-grouping the eleven tabs was tried (2026-09-07) with `TabDrawMode.OwnerDrawFixed` and reverted the same day.
+`tabsCase` is an `RtlTabControl`, so the window carries `WS_EX_LAYOUTRTL` and Windows mirrors the drawing coordinates:
+the group colour bars landed over the neighbouring tab ("رنگ‌ها قاطی آمده"). Two further traps found on the way:
+**GDI+ `Graphics.DrawString` also mirrors the glyphs** in such a window (captions printed reversed) while GDI
+`TextRenderer.DrawText` does not — and **`Control.DrawToBitmap` carries none of this mirroring**, so screenshots taken
+through it *lie* about these bugs; only `Graphics.CopyFromScreen` proves them.
+If tab grouping is ever wanted again, replace the whole strip with `Helpers/PillTabStrip` (our own control, no system
+mirror) rather than painting over a native `TabControl`.
+
+### Landing tab
+`LoadCaseByQuery` calls `GoToSummaryTab()` on every successful load, so selecting a case always lands on
+«خلاصه پرونده» — unless `_caseEditMode` is on, which would yank a typing user off their fields.
+All tabs stay visible in every mode: view-only users must still be able to open documents, members and visits, and
+`SetCaseEditMode` already locks the *fields* rather than hiding the tabs.
+
+### WinForms layout rules learned the hard way (verified by rendering, not by memory)
+- **Docking is applied from the highest child index down to index 0.** So the `Fill` control must be added
+  **first** and the edge-docked ones after it. `Controls.SetChildIndex(topControl, 0)` puts a `Top` control *last*
+  in the docking order and it ends up hidden behind the `Fill`.
+- **`RightToLeft = Yes` mirrors `ContentAlignment` on `Label`, `CheckBox` and `RadioButton`.** To place text or a
+  check box on the physical right, use the `…Left` value (or leave the default) — `MiddleRight` renders on the left.
+- **Never position a child with `SetBounds` + `Anchor = Right` inside a panel whose width is set later by `Dock`.**
+  The panel's construction-time width is the default, so the anchored child is thrown outside once `Dock` resizes it
+  (this made two buttons and a dialog title vanish). Use `Dock`, or a `FlowLayoutPanel` docked to the edge.
+
+## Printed Documents (`Helpers/ReportDoc.cs` — added 2026-09-06)
+
+- **The composed-document print engine.** A `ReportDoc` is a letterhead + a list of blocks (`ReportHeading`,
+  `ReportParagraph`, `ReportCallout`, `ReportKeyValues`, `ReportTable`, `ReportSpacer`, `ReportPageBreak`,
+  `ReportSignatures`) plus an optional cover page. Outputs: `Preview(owner)`, `PrintDirect()`,
+  `SaveAsPdf(path)`, and `CreateDocument()` for any other print destination.
+- **Three-step render:** *Flatten* (blocks → "atoms", the smallest unit that must not split across a page — measured
+  with a real `Graphics`), *Paginate* (greedy fill; an atom carrying `RepeatHeader` re-draws the table header when it
+  lands at the top of a page), *Draw*. Pagination happens in `BeginPrint`, so «صفحهٔ X از Y» is correct on page 1.
+- **The letterhead height must stay identical on every page** — it is subtracted once during pagination. That is why
+  the header-fields box is *reserved* on continuation pages and filled with a one-line «… · ادامه» strip instead of
+  being omitted. With a cover page, the full header box belongs to page index 1, not 0.
+- **RTL:** every string is drawn with `StringFormatFlags.DirectionRightToLeft` (so `Near` means *right*); columns run
+  right-to-left from `MarginBounds.Right`. Font prefers an installed Persian family, falls back to **Tahoma**.
+- **PDF without Word or LibreOffice:** `SaveAsPdf` prints to the built-in **"Microsoft Print to PDF"** queue; re-apply
+  `Landscape`/`Margins` *after* setting `PrinterName` (switching printers rebuilds `DefaultPageSettings`).
+  `IsPdfPrinterAvailable()` gates the UI. `DocxFormExport.WritePdf` stays the path for the `.docx` official forms.
+- **Never allocate `Font`/`StringFormat` inside a draw callback** — hundreds of cells per page, one GDI+ handle each.
+- **Consumers:** `Helpers/CaseDocumentListReport.cs` (`FrmDocs` → «چاپ فهرست اسناد» — case identity, statistics,
+  the document table, and the missing-mandatory-documents check, honouring the grid's current search filter) and
+  `Helpers/CaseFileReport.cs` (the «پرونده کامل» document; single-row wide sections are rendered as key/value blocks
+  rather than 11 narrow columns, and column weights are derived from actual content length).
+
 ## Official Case Forms — print → sign → scan → attach (`Helpers/CaseOfficialForms.cs` + `CaseFormTokens.cs`)
 - **Five institution forms live as Word templates in `Templates\Forms\`** — «فورم ۱ درخواست ایتام», «۲ درخواست نیازمندان», «۳ درخواست درمان», «۴ تحقیق و بررسی», «۷ پرونده بخش درمان» — rebuilt from the institution's own PDFs, A4, RTL, B Nazanin / B Titr, navy section bars. All are one page except **form 2**, which is deliberately two: its 8-row family table plus the disability *and* migrant blocks cannot fit one sheet, so `build_f2.py` places an explicit `page_break` before «شرح درخواست» — page 2 is then a complete «شرح + امضاء + مدارک» sheet instead of a stray signature block. They must stay in the `Forms` subfolder (`ReportTemplateHelper.DiscoverCaseTemplates` reads only the `Templates` root).
 - **Three-layer split, none of the layers knows the others:** `CaseFormTokens` reads the database and returns the `{{Token}}` map; `CaseOfficialForms` knows only *which form, which document category, which fields are hand-filled*; `FrmDocxForm`/`DocxFormExport` own the dialog and the Word/PDF output.
 - **Checkboxes are tokens too.** Every ☐ in a template is a token whose value is `☒`/`☐` (`CaseFormTokens.Chk`), so ticking «مرد/زن», «اهل تشیع/تسنن», priority, disability type etc. needs no engine change. **Every token in every template must have a key** — `DocxFormExport.AssertNoTokensLeft` rejects the output otherwise; `CaseFormTokens.BlankGroups` exists purely to give a key to the boxes/texts that have no database backing (they are filled by pen during the field visit).
 - **No `TblDocs` row is written when the form is *generated*.** Phase 5.5 counts a document row without a file as "incomplete" and with a file as "complete"; registering the freshly printed, unsigned file would satisfy the mandatory-document matrix and neuter the activation gate. The row is created only when the **scanned signed copy** is attached, so the existing missing-document indicator correctly warns until then — no extra code.
 - **`FrmDocxForm.AttachToCase` now writes the document category** (`DocCategory` + `DocumentCategoryID`), a `GlobalID`, and fires `SyncOutboxService` / `VersionService` / `TimelineService.LogDocumentAdded` — the same four hooks `FrmDocs` uses. Before this it wrote only `DocType`, so an attached signed form counted for nothing in the matrix, the completion percentage or the activation gate. It returns `bool` so the caller can refresh; `FrmDocs` passes `LoadDocs`.
-- **Entry point: `FrmDocs` → «چاپ فورم رسمی»** (a `ContextMenuStrip` of the forms applicable to the case's request type). `ORPHAN` gets form 1, every other type gets form 2; forms 3 and 7 are offered to all cases because **`TblRequestType` has no "درمان" type** — the treatment module does not exist, so their medical fields are typed in the dialog or left blank for handwriting, and only the identity block auto-fills.
+- **Entry point (rewritten 2026-09-06): `Helpers/FrmOfficialForms` — one "forms centre" for the whole app.** `FrmDocs` → «فورم‌های رسمی» and `FrmCase` → «وکالت موقت» both open it (the latter with `preselectKey = "PROXY"`); `CaseOfficialForms.ShowMenu` kept its signature and now forwards to `ShowCenter`. It replaced a `ContextMenuStrip` that showed only titles. The dialog shows, per form: description, «ضمیمه شده / نشده / قالب پیدا نشد» status (cached once per open — the status query must never run inside `DrawItem`), the auto-filled identity block, and the hand-filled fields with required markers. Output is written straight into `<CaseFolder>/Docs/OfficialForms/` and opened, with «ذخیره در مسیر دلخواه…» as the fallback.
+- **The registry now has 7 entries, not 5.** «وکالت موقت» (`Key = "PROXY"`) joined it — its data moved out of `FrmCase`'s textboxes into `CaseFormTokens`, so it can be produced from anywhere. «نامهٔ انتقالی» (`Key = "TRANSFER"`) appears as a `CustomOpen` entry that launches the existing `FrmTransferLetter`; it owns its own token map, so **`CustomOpen` entries must be skipped by anything that renders with the shared map** (the test does this). `ORPHAN` gets form 1, every other type gets form 2; forms 3 and 7 are offered to all cases because **`TblRequestType` has no "درمان" type** — the treatment module does not exist, so their medical fields are typed in the dialog or left blank for handwriting, and only the identity block auto-fills.
+- **`CaseFormTokens.GuardianProxy` fills with `Fill()` (write-only-if-empty), never assignment.** `GuardianName`/`OrphanCount` are *already* set by the orphan block from `TblOrphan`; overwriting them with the head's own name would silently corrupt form 1. The proxy's own hand-filled keys (`ProxyName`, `ToDate`, `Reason`, …) are present-but-empty so `AssertNoTokensLeft` stays satisfied.
 - **`INVESTIGATION_FORMS` is now a mandatory document for all six request types** (`MinCount = 1`). Business rule: the **first** field visit must have a review form; later visits may or may not. The per-visit expectation is *reported*, not enforced — `Cases` report source gained «تعداد بازدید میدانی» and «فورم بررسی آپلودشده» so the gap is visible without blocking anyone.
 - **`FrmCase` warns on save** (`WarnMissingRequiredDocuments`) listing missing categories and categories whose row has no attached file. It warns, never blocks: the real block is the activation gate, and "print → sign → scan" is inherently multi-session, so blocking the save would make partial data unsavable.
 - **Report coverage:** `Cases` gained «اسناد الزامی (تعداد)/موجود/کم», «اسناد کامل است؟», «تعداد کل اسناد آپلودشده»; `MissingDocuments` gained «وضعیت سند» (کامل/ناقص — so it can be filtered) and «بدون فایل پیوست». The two `REQUIRED_DOC_COUNT`/`SATISFIED_DOC_COUNT` sub-queries are `const` so the count columns and the yes/no column can never disagree.
 - **Templates are generated, not hand-drawn.** The python generator lives in `Templates\Forms\_generator\` (see its README). Regenerate rather than editing the `.docx` in Word — Word can split a `{{Token}}` across runs and `AssertNoTokensLeft` will then reject every export of that form. `coverage.py` there is the guard: it fails if any template token lacks a key in `CaseFormTokens`.
 - **Numeric values are wrapped in U+200E (`CaseFormTokens.Ltr`).** In an RTL paragraph Word treats Persian-shaped digits as *Arabic* numbers, so the neutral `-` / `/` between them stops joining the segments and `1401-2233-44551` prints as `44551-2233-1401`; dates and phone numbers break the same way. An LRM on each side fixes it and renders nothing. Do **not** use U+2066/U+2069 instead — B Nazanin draws them as empty boxes (both were measured). The wrap is applied only when the value has a digit and no Arabic-script letter, so Persian sentences are left alone.
-- **Runtime guard: `CaseManagement.Tests/OfficialCaseFormTests.cs`.** `coverage.py` only compares text; this test actually seeds a case, runs `CaseFormTokens.Build` and renders all five templates through `DocxFormExport`, so a token broken across runs inside a `.docx` is caught too. It also pins the LRM rule and the checkbox mapping.
+- **Runtime guard: `CaseManagement.Tests/OfficialCaseFormTests.cs`.** `coverage.py` only compares text; this test actually seeds a case, runs `CaseFormTokens.Build` and renders every non-`CustomOpen` template through `DocxFormExport`, so a token broken across runs inside a `.docx` is caught too. It pins the registry size (7), the LRM rule, the checkbox mapping, and the guardian-proxy keys.
 
 ## Reference-Data Administration (Feature 1 — `Helpers/ReferenceDataAdminService.cs` + `FrmReferenceDataSettings`)
 - **Sole writer of `TblRequestType`/`TblServiceStatus` from the UI.** The form holds no SQL.
@@ -616,9 +703,9 @@ clear-form paths, alongside the existing tab refreshes.
 - Test project: `C:\Projects\CaseManagement.Tests`.
 - Build: MSBuild on `CaseManagement.Tests.csproj` (SDK-style, auto-includes new `.cs` files — unlike the main app).
 - Run: `vstest.console.exe <dll> /Parallel` — **~3 hours 12 minutes** for the full suite (664 tests, measured end-to-end 2026-09-06). The long-standing "~6 minutes" figure was wrong by ~30× and is what made a healthy run look hung. Kill any running Test Explorer host first (`taskkill /IM vstest.console.exe /F`) or the DLL is locked.
-- 2 tests are always Skipped (pre-existing, unrelated — ClosedXML/System.Memory binding issue). 1 test (`Diag_BatchDesignOverride_AppliesToAllCards`) always fails under `vstest.console` due to `Application.StartupPath` differing from the app's real folder — pre-existing, not a regression signal.
+- 2 tests are always Skipped (pre-existing, unrelated — ClosedXML/System.Memory binding issue). `Diag_BatchDesignOverride_AppliesToAllCards` used to fail under `vstest.console` because `Application.StartupPath` is the vstest install folder, not the test output folder; **fixed 2026-09-07** — `GuardianCardRenderer` now probes `AppDomain.CurrentDomain.BaseDirectory` before `Application.StartupPath` (same `CandidateFolders()` pattern as `DocxFormExport`).
 - ⚠ **The suite is not hung — it is just very long (corrected 2026-09-06).** An earlier run was killed at ~50 min and recorded here as a deadlock because `vstest.console`'s own CPU sat frozen at 146.5 s; that is the *orchestrator* process, which idles while the test host works, so its flat CPU proves nothing. A completed run took **3 h 12 min** and finished 660/664. Never diagnose a hang from elapsed time or from `vstest.console` CPU. Practical rule: pipe stdout line-by-line (`| ForEach-Object { $_ | Out-File -Append }`) so progress is visible — a plain redirect buffers and the run looks silent — and confirm progress by counting `Passed`/`Failed` lines rather than waiting on a total.
-- Full-run baseline (2026-09-06): **664 total · 660 passed · 1 failed · 3 skipped.** The one failure is the documented environmental `Diag_BatchDesignOverride_AppliesToAllCards`; the three skips are 2 WebView2-dependent + 1 ClosedXML binding in the test host. Treat any other failure as a real regression.
+- Full-run baseline (2026-09-06): **664 total · 660 passed · 1 failed · 3 skipped.** The three skips are 2 WebView2-dependent + 1 ClosedXML binding in the test host. The single failure (`Diag_BatchDesignOverride_AppliesToAllCards`) was fixed 2026-09-07, so the expected baseline is now **661 passed · 0 failed**; treat any failure as a real regression.
 - **Run time scales with test *count*, not with a few slow tests, and `/Parallel` barely matters (four measurements, 2026-09-06).**
 
   | run | tests | switch | wall clock |
@@ -727,7 +814,7 @@ A5-landscape footprint (210 × 148.5 mm trim + 3 mm bleed — **not** a credit-c
 | 52 | **H4 — `FrmFinance` نوعِ درخواست را فقط در صورتِ تغییرِ آگاهانه می‌نویسد، و آن‌وقت هر دو ستون را.** سه شرط: (۱) مقدارِ ذخیره‌شده واقعاً در کمبو نشسته باشد (`selectedCaseRequestTypeSelectable`)، (۲) مقدار عوض شده باشد، (۳) نام به ردیفِ مرجع نگاشت شود — وگرنه هیچ نوشتنی انجام نمی‌شود و کمک ثبت می‌گردد | `cmbRequestType` از نوعِ `DropDownList` است: انتساب `.Text` با مقداری خارج از فهرست بی‌صدا نادیده گرفته می‌شود و کمبو نوعِ *پروندهٔ قبلی* را نگه می‌دارد؛ UPDATE بی‌قید همان را روی این پرونده مهر می‌کرد (بازطبقه‌بندیِ خاموش). ضمناً `RequestTypeID` هرگز نوشته نمی‌شد، پس ستونِ متنی و کلیدِ خارجی برای همیشه واگرا می‌شدند — گزارش‌ها یک نوع و دروازهٔ فعال‌سازی/اسنادِ الزامی نوعِ دیگری. حالا `REQUEST_TYPE_CHANGED` در تایم‌لاین و یک ردیفِ حسابرسی هم ثبت می‌شود. | 2026-09-05 | active |
 
 **Disability release audit (2026-09-04): complete.** Full inventory, 15 findings, 8 fixed (2 Critical, 4 High, 4 Medium), 10 regression tests, suite 549/553. See `DISABILITY_RELEASE_REPORT.md`, `H4_IMPACT_ASSESSMENT.md`, `DISABILITY_MODIFIED_FILES.md`.
-- **Known-failing test: one.** `Diag_BatchDesignOverride_AppliesToAllCards` (environmental — `Application.StartupPath` under `vstest.console`). The second one previously listed here was the stale `Members_ElectronicTazkiraWithoutDashes_IsFormatted`, retired by Decision #43.
+- **Known-failing test: none.** `Diag_BatchDesignOverride_AppliesToAllCards` (environmental — `Application.StartupPath` under `vstest.console`) was fixed 2026-09-07 by folder probing in `GuardianCardRenderer`. The other one previously listed here was the stale `Members_ElectronicTazkiraWithoutDashes_IsFormatted`, retired by Decision #43.
 - **H4 open (High):** `FrmFinance` writes `TblCase.RequestType` on every assistance save, updates only the TEXT column (never `RequestTypeID`), and silently keeps the previous value when a case's type is absent from `TblLookup` — silent reclassification plus permanent TEXT/FK divergence. Investigated, deliberately not fixed. Full analysis in `H4_IMPACT_ASSESSMENT.md`.
 - **Open data risk:** disability/orphan rows written before Decision #44 still hold fabricated dates. Detection query in `DISABILITY_RELEASE_REPORT.md` §5; cleanup needs explicit approval.
 

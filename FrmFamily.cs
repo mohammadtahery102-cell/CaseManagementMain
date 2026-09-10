@@ -68,6 +68,13 @@ namespace CaseManagement
         private string storedMemberPhotoPath = "";
         private string pendingSourcePhotoPath = "";
 
+        // آموزش — چرا یک پرچمِ جدا لازم بود: مسیرِ عکسِ قبلی هنگام ذخیره
+        // مستقیم از دیتابیس خوانده می‌شود (GetStoredMemberPhotoPath)، نه از
+        // storedMemberPhotoPath. پس خالی‌کردنِ آن متغیر عکس را حذف نمی‌کرد و
+        // ذخیره دوباره همان مسیرِ قدیمی را می‌نوشت. این پرچم «کاربر عکس را
+        // برداشت» را به مسیرِ ذخیره می‌رساند.
+        private bool clearMemberPhotoRequested;
+
         // ─── ویژگی ۵ (فعال‌سازی) — قفل رکورد ────────────────────────────────
         // آموزش: برخلافِ FrmCase که یک حالتِ صریحِ «ویرایش» دارد، اینجا فیلدها
         // همیشه قابلِ تایپ‌اند و بارگذاریِ یک عضو (LoadMemberToForm) همان لحظه‌ای
@@ -500,6 +507,7 @@ namespace CaseManagement
             currentFamilyId = 0;
             storedMemberPhotoPath = "";
             pendingSourcePhotoPath = "";
+            clearMemberPhotoRequested = false;
 
             txtMemberName.Text = "";
             txtMemberFatherName.Text = "";
@@ -697,11 +705,15 @@ namespace CaseManagement
                     return false;
                 }
 
+                // آموزش — عکسِ عضو هم عکسِ پرسنلی است، پس همان قاعدهٔ
+                // Helpers.PhotoRules را می‌گیرد که عکسِ سرپرست و نماینده
+                // دارند؛ قبلاً این فرم سقفِ جداگانهٔ ۵ مگابایت داشت.
                 FileInfo fi = new FileInfo(filePath);
-                if (fi.Length <= 0 || fi.Length > MaxMemberPhotoBytes)
+                if (fi.Length < Helpers.PhotoRules.MinPortraitBytes ||
+                    fi.Length > Helpers.PhotoRules.MaxPortraitBytes)
                 {
                     if (showMessage)
-                        Msg.Show("حجم عکس باید کمتر از 5 مگابایت باشد");
+                        Msg.Show(Helpers.PhotoRules.PortraitSizeMessage);
 
                     return false;
                 }
@@ -1027,7 +1039,28 @@ namespace CaseManagement
                 txtMemberPhotoPath.Text = pendingSourcePhotoPath;
 
                 LoadImageToPictureBox(pendingSourcePhotoPath, picMemberPhoto, true);
+                clearMemberPhotoRequested = false;
             }
+        }
+
+        // ─── برداشتنِ عکسِ عضو ────────────────────────────────────────────────
+        // فایلِ روی دیسک عمداً پاک نمی‌شود — همان محافظه‌کاریِ FrmDocs و عکسِ
+        // نماینده؛ فقط ستونِ MemberPhotoPath خالی می‌شود.
+        private void btnClearMemberPhoto_Click(object sender, EventArgs e)
+        {
+            if (picMemberPhoto.Image == null &&
+                string.IsNullOrWhiteSpace(storedMemberPhotoPath) &&
+                string.IsNullOrWhiteSpace(pendingSourcePhotoPath))
+                return;
+
+            if (!UiTheme.ShowConfirm(this, "عکس این عضو برداشته شود؟", "حذف عکس"))
+                return;
+
+            ClearPicture(picMemberPhoto);
+            pendingSourcePhotoPath = "";
+            storedMemberPhotoPath = "";
+            txtMemberPhotoPath.Text = "";
+            clearMemberPhotoRequested = true;
         }
 
         private void btnNew_Click(object sender, EventArgs e)
@@ -1203,6 +1236,10 @@ namespace CaseManagement
                 }
 
                 finalPhotoPath = oldPhotoPath;
+
+                // کاربر عکس را برداشته و عکسِ تازه‌ای هم نگذاشته ⇒ ستون خالی شود.
+                if (clearMemberPhotoRequested && string.IsNullOrWhiteSpace(pendingSourcePhotoPath))
+                    finalPhotoPath = "";
 
                 if (!string.IsNullOrWhiteSpace(pendingSourcePhotoPath))
                 {
@@ -1583,6 +1620,7 @@ namespace CaseManagement
                         currentFamilyId = Convert.ToInt32(dr["FamID"]);
                         storedMemberPhotoPath = DbString(dr["MemberPhotoPath"]);
                         pendingSourcePhotoPath = "";
+                        clearMemberPhotoRequested = false;
 
                         txtMemberName.Text = DbString(dr["MemberName"]);
                         txtMemberFatherName.Text = DbString(dr["MemberFatherName"]);
