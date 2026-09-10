@@ -31,6 +31,10 @@ namespace CaseManagement.Accounting.Ledger.Adapters
         private TextBox _txtFrom;
         private TextBox _txtTo;
         private ComboBox _cmbGlAccount;
+        private ComboBox _cmbYear;
+        private ComboBox _cmbCostCenter;
+        private ComboBox _cmbProject;
+        private TextBox _txtCenter;
         private Label _lblReportNote;
 
         public FrmLedger()
@@ -47,6 +51,7 @@ namespace CaseManagement.Accounting.Ledger.Adapters
             ReloadCoa();
             ReloadCalendar();
             ReloadJournals();
+            ReloadReportFilters();
         }
 
         private void BuildUi()
@@ -93,6 +98,8 @@ namespace CaseManagement.Accounting.Ledger.Adapters
                 Btn("حساب فرزند", AddChildAccount),
                 Btn("غیرفعال", DeactivateAccount),
                 Btn("فعال", ActivateAccount),
+                Btn("مراکز هزینه", delegate { using (FrmDimensionMaster f = FrmDimensionMaster.CostCenters()) f.ShowDialog(this); }),
+                Btn("پروژه‌ها", delegate { using (FrmDimensionMaster f = FrmDimensionMaster.Projects()) f.ShowDialog(this); }),
                 Btn("تازه‌سازی", delegate { ReloadCoa(); }));
             page.Controls.Add(_tree);
             page.Controls.Add(tools);
@@ -134,6 +141,7 @@ namespace CaseManagement.Accounting.Ledger.Adapters
                 Btn("رد تأیید", RejectJournal),
                 Btn("ثبت قطعی", PostJournal),
                 Btn("برگشت", ReverseJournal),
+                Btn("صندوق → دفتر کل", delegate { using (FrmCashBookGl f = new FrmCashBookGl()) f.ShowDialog(this); ReloadJournals(); }),
                 Btn("تازه‌سازی", delegate { ReloadJournals(); })));
             return page;
         }
@@ -143,27 +151,39 @@ namespace CaseManagement.Accounting.Ledger.Adapters
             TabPage page = new TabPage("گزارش‌ها");
             _gridReport = Grid();
             _lblReportNote = new Label { Dock = DockStyle.Bottom, Height = 28, TextAlign = ContentAlignment.MiddleRight, Padding = new Padding(8, 0, 8, 0) };
-            Panel filters = new Panel { Dock = DockStyle.Top, Height = 48 };
+            Panel filters = new Panel { Dock = DockStyle.Top, Height = 88 };
             FlowLayoutPanel flow = new FlowLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 FlowDirection = FlowDirection.LeftToRight,
                 RightToLeft = RightToLeft.Yes,
-                WrapContents = false,
+                WrapContents = true,
                 Padding = new Padding(6)
             };
-            _cmbReport = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 180 };
+            _cmbReport = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 160 };
             _cmbReport.Items.AddRange(new object[] { "دفتر کل", "تراز آزمایشی", "ترازنامه", "سود و زیان" });
             _cmbReport.SelectedIndex = 1;
-            _txtFrom = new TextBox { Width = 100, Text = DateTime.UtcNow.Year + "-01-01" };
-            _txtTo = new TextBox { Width = 100, Text = DateTime.UtcNow.ToString("yyyy-MM-dd") };
-            _cmbGlAccount = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 220 };
+            _txtFrom = new TextBox { Width = 90, Text = DateTime.UtcNow.Year + "-01-01" };
+            _txtTo = new TextBox { Width = 90, Text = DateTime.UtcNow.ToString("yyyy-MM-dd") };
+            _cmbGlAccount = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200 };
+            _txtCenter = new TextBox { Width = 50, Text = _identity.CenterId > 0 ? _identity.CenterId.ToString() : "" };
+            _cmbYear = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 140 };
+            _cmbCostCenter = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 160 };
+            _cmbProject = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 160 };
             flow.Controls.Add(Lbl("گزارش"));
             flow.Controls.Add(_cmbReport);
+            flow.Controls.Add(Lbl("سال مالی"));
+            flow.Controls.Add(_cmbYear);
             flow.Controls.Add(Lbl("از"));
             flow.Controls.Add(_txtFrom);
             flow.Controls.Add(Lbl("تا"));
             flow.Controls.Add(_txtTo);
+            flow.Controls.Add(Lbl("شعبه"));
+            flow.Controls.Add(_txtCenter);
+            flow.Controls.Add(Lbl("مرکز هزینه"));
+            flow.Controls.Add(_cmbCostCenter);
+            flow.Controls.Add(Lbl("پروژه"));
+            flow.Controls.Add(_cmbProject);
             flow.Controls.Add(Lbl("حساب"));
             flow.Controls.Add(_cmbGlAccount);
             flow.Controls.Add(Btn("اجرا", RunReport));
@@ -547,7 +567,11 @@ namespace CaseManagement.Accounting.Ledger.Adapters
                 CompanyId = CompanyId(),
                 FromDate = _txtFrom.Text.Trim(),
                 ToDate = _txtTo.Text.Trim(),
-                AccountId = SelectedReportAccountId()
+                AccountId = SelectedReportAccountId(),
+                CenterId = ParseLong(_txtCenter.Text),
+                FiscalYearId = SelectedFilterId(_cmbYear),
+                CostCenterId = SelectedFilterId(_cmbCostCenter),
+                ProjectId = SelectedFilterId(_cmbProject)
             };
             string kind = _cmbReport.SelectedItem != null ? _cmbReport.SelectedItem.ToString() : "";
             DataTable table = new System.Data.DataTable();
@@ -722,6 +746,46 @@ namespace CaseManagement.Accounting.Ledger.Adapters
             return _identity.CompanyId > 0 ? _identity.CompanyId : LedgerCodes.DefaultCompanyId;
         }
 
+        private void ReloadReportFilters()
+        {
+            if (_cmbYear == null) return;
+            _cmbYear.Items.Clear();
+            _cmbYear.Items.Add(new FilterItem(0, "(همه سال‌ها)"));
+            IList<GlFiscalYear> years = _calendar.ListYears(CompanyId());
+            for (int i = 0; i < years.Count; i++)
+                _cmbYear.Items.Add(new FilterItem(years[i].FiscalYearId, years[i].Code + " " + years[i].Status));
+            _cmbYear.SelectedIndex = 0;
+
+            _cmbCostCenter.Items.Clear();
+            _cmbCostCenter.Items.Add(new FilterItem(0, "(همه)"));
+            IList<GlCostCenter> ccs = new CostCenterService().List(CompanyId(), false);
+            for (int i = 0; i < ccs.Count; i++)
+                if (ccs[i].IsLeaf)
+                    _cmbCostCenter.Items.Add(new FilterItem(ccs[i].CostCenterId, ccs[i].Code + " " + ccs[i].Name));
+            _cmbCostCenter.SelectedIndex = 0;
+
+            _cmbProject.Items.Clear();
+            _cmbProject.Items.Add(new FilterItem(0, "(همه)"));
+            IList<GlProject> prs = new ProjectService().List(CompanyId(), false);
+            for (int i = 0; i < prs.Count; i++)
+                if (prs[i].IsLeaf)
+                    _cmbProject.Items.Add(new FilterItem(prs[i].ProjectId, prs[i].Code + " " + prs[i].Name));
+            _cmbProject.SelectedIndex = 0;
+        }
+
+        private static int ParseLong(string text)
+        {
+            int n;
+            int.TryParse((text ?? "").Trim(), out n);
+            return n;
+        }
+
+        private static long SelectedFilterId(ComboBox cmb)
+        {
+            FilterItem item = cmb != null ? cmb.SelectedItem as FilterItem : null;
+            return item == null ? 0 : item.Id;
+        }
+
         private static GlAccount FindAccount(IList<GlAccount> accounts, long id)
         {
             for (int i = 0; i < accounts.Count; i++)
@@ -843,6 +907,14 @@ namespace CaseManagement.Accounting.Ledger.Adapters
         private static Label Lbl(string t)
         {
             return new Label { Text = t, AutoSize = true, Padding = new Padding(8, 8, 4, 0) };
+        }
+
+        private sealed class FilterItem
+        {
+            public long Id;
+            public string Text;
+            public FilterItem(long id, string text) { Id = id; Text = text; }
+            public override string ToString() { return Text; }
         }
 
         private sealed class AccountItem

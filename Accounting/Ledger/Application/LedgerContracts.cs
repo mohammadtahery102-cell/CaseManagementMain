@@ -231,9 +231,59 @@ namespace CaseManagement.Accounting.Ledger.Application
         IList<GlFiscalPeriod> ListPeriods(long fiscalYearId);
     }
 
+    public class UpsertCashBookMapCommand
+    {
+        public int CompanyId { get; set; }
+        public string MapKind { get; set; }
+        public long SourceId { get; set; }
+        public long AccountId { get; set; }
+        public long ExpectedRowVersion { get; set; }
+    }
+
+    public class CreateDimensionCommand
+    {
+        public int CompanyId { get; set; }
+        public string Code { get; set; }
+        public string Name { get; set; }
+        public long? ParentId { get; set; }
+        public bool IsLeaf { get; set; }
+    }
+
+    public interface ICashBookGlService
+    {
+        IList<CashBookTxn> ListTransactions(ILedgerIdentity identity);
+        IList<GlCashBookMap> ListMaps(int companyId, string mapKind);
+        IList<KeyValuePair<long, string>> ListMappableSources(string mapKind, ILedgerIdentity identity);
+        LedgerResult UpsertMap(UpsertCashBookMapCommand command, ILedgerIdentity identity);
+        LedgerResult PostTransaction(long txnId, ILedgerIdentity identity);
+        LedgerResult ReverseIfVoided(long txnId, ILedgerIdentity identity);
+    }
+
+    public interface ICostCenterService
+    {
+        LedgerResult Create(CreateDimensionCommand command, ILedgerIdentity identity);
+        LedgerResult Activate(SoftDeleteCommand command, ILedgerIdentity identity);
+        LedgerResult Deactivate(SoftDeleteCommand command, ILedgerIdentity identity);
+        IList<GlCostCenter> List(int companyId, bool includeInactive);
+        GlCostCenter Get(long costCenterId);
+    }
+
+    public interface IProjectService
+    {
+        LedgerResult Create(CreateDimensionCommand command, ILedgerIdentity identity);
+        LedgerResult Activate(SoftDeleteCommand command, ILedgerIdentity identity);
+        LedgerResult Deactivate(SoftDeleteCommand command, ILedgerIdentity identity);
+        IList<GlProject> List(int companyId, bool includeInactive);
+        GlProject Get(long projectId);
+    }
+
     public class LedgerReportQuery
     {
         public int CompanyId { get; set; }
+        public int CenterId { get; set; }
+        public long CostCenterId { get; set; }
+        public long ProjectId { get; set; }
+        public long FiscalYearId { get; set; }
         public string FromDate { get; set; }
         public string ToDate { get; set; }
         public long AccountId { get; set; }

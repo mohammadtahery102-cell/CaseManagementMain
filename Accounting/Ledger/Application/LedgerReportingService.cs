@@ -23,12 +23,15 @@ namespace CaseManagement.Accounting.Ledger.Application
                 return empty;
 
             int companyId = Company(query, identity);
-            int center = Center(identity);
+            int center = Center(query, identity);
             string from = LedgerTime.DateOnly(query != null ? query.FromDate : null) ?? "";
             string to = LedgerTime.DateOnly(query != null ? query.ToDate : null) ?? "9999-12-31";
             if (from.Length == 0) from = "0001-01-01";
+            ApplyFiscalYear(query, companyId, ref from, ref to);
+            long cc = query != null ? query.CostCenterId : 0;
+            long pr = query != null ? query.ProjectId : 0;
 
-            DataTable table = _repo.QueryPostedLineSums(companyId, center, from, to);
+            DataTable table = _repo.QueryPostedLineSums(companyId, center, from, to, cc, pr);
             List<TrialBalanceRow> rows = new List<TrialBalanceRow>();
             foreach (DataRow r in table.Rows)
             {
@@ -67,11 +70,12 @@ namespace CaseManagement.Accounting.Ledger.Application
                 return list;
 
             int companyId = Company(query, identity);
-            int center = Center(identity);
+            int center = Center(query, identity);
             string from = LedgerTime.DateOnly(query.FromDate) ?? "";
             string to = LedgerTime.DateOnly(query.ToDate) ?? "";
-            long running = _repo.QueryOpeningNet(companyId, center, query.AccountId, from);
-            DataTable table = _repo.QueryGeneralLedgerLines(companyId, center, query.AccountId, from, to);
+            ApplyFiscalYear(query, companyId, ref from, ref to);
+            long running = _repo.QueryOpeningNet(companyId, center, query.AccountId, from, query.CostCenterId, query.ProjectId);
+            DataTable table = _repo.QueryGeneralLedgerLines(companyId, center, query.AccountId, from, to, query.CostCenterId, query.ProjectId);
             foreach (DataRow r in table.Rows)
             {
                 long dr = ToLong(r["DebitBaseMinor"]);
@@ -171,16 +175,27 @@ namespace CaseManagement.Accounting.Ledger.Application
             else { debit = 0; credit = -net; }
         }
 
+        private void ApplyFiscalYear(LedgerReportQuery query, int companyId, ref string from, ref string to)
+        {
+            if (query == null || query.FiscalYearId <= 0) return;
+            GlFiscalYear y = _repo.GetYear(query.FiscalYearId);
+            if (y == null || y.IsDeleted || y.CompanyId != companyId) return;
+            from = y.StartDate;
+            to = y.EndDate;
+        }
+
         private static int Company(LedgerReportQuery query, ILedgerIdentity identity)
         {
             if (query != null && query.CompanyId > 0) return query.CompanyId;
             return identity.CompanyId > 0 ? identity.CompanyId : LedgerCodes.DefaultCompanyId;
         }
 
-        private static int Center(ILedgerIdentity identity)
+        private static int Center(LedgerReportQuery query, ILedgerIdentity identity)
         {
-            if (identity.IsSuperAdmin && identity.CenterId == 0) return 0;
-            return identity.CenterId;
+            if (!(identity.IsSuperAdmin && identity.CenterId == 0))
+                return identity.CenterId;
+            if (query != null && query.CenterId > 0) return query.CenterId;
+            return 0;
         }
 
         private static long ToLong(object v)

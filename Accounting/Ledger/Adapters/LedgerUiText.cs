@@ -36,6 +36,10 @@ namespace CaseManagement.Accounting.Ledger.Adapters
                 case LedgerErrorCodes.HasChildren: return "حساب زیرمجموعه دارد.";
                 case LedgerErrorCodes.HasPostings: return "حساب گردش دفتر کل دارد.";
                 case LedgerErrorCodes.PostedImmutable: return "سند ثبت‌شده قابل ویرایش یا حذف نیست.";
+                case LedgerErrorCodes.MappingMissing: return "نگاشت صندوق/دسته به حساب دفتر کل تعریف نشده است.";
+                case LedgerErrorCodes.DimensionMissing: return "مرکز هزینه یا پروژه پیدا نشد.";
+                case LedgerErrorCodes.DimensionInactive: return "مرکز هزینه یا پروژه غیرفعال است.";
+                case LedgerErrorCodes.DimensionNotLeaf: return "ثبت فقط روی برگ مرکز هزینه/پروژه مجاز است.";
                 default: return string.IsNullOrEmpty(fallback) ? code : fallback;
             }
         }

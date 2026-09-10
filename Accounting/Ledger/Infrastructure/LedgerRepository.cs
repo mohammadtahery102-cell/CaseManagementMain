@@ -10,7 +10,7 @@ namespace CaseManagement.Accounting.Ledger.Infrastructure
     /// <summary>
     /// Persistence for Gl* only. Never emits DELETE FROM. Optimistic concurrency via RowVersion.
     /// </summary>
-    public class LedgerRepository
+    public partial class LedgerRepository
     {
         private readonly DatabaseHelper _db;
 
@@ -96,7 +96,8 @@ LIMIT 500;",
             return list;
         }
 
-        public DataTable QueryPostedLineSums(int companyId, int centerFilter, string fromDate, string toDate)
+        public DataTable QueryPostedLineSums(int companyId, int centerFilter, string fromDate, string toDate,
+            long costCenterId, long projectId)
         {
             return Query(@"
 SELECT a.AccountID, a.AccountCode, a.AccountName, a.AccountTypeCode, a.IsContra,
@@ -106,6 +107,8 @@ SELECT a.AccountID, a.AccountCode, a.AccountName, a.AccountTypeCode, a.IsContra,
   COALESCE(SUM(CASE WHEN j.PostingDate >= @from AND j.PostingDate <= @to THEN l.CreditBaseMinor ELSE 0 END), 0) AS PeriodCr
 FROM GlAccount a
 LEFT JOIN GlJournalLine l ON l.AccountID = a.AccountID
+  AND (@cc = 0 OR l.CostCenterID = @cc)
+  AND (@pr = 0 OR l.ProjectID = @pr)
 LEFT JOIN GlJournal j ON j.JournalID = l.JournalID
   AND j.IsDeleted = 0 AND j.Status IN ('Posted', 'Reversed')
   AND (@ctr = 0 OR j.CenterID = @ctr)
@@ -115,10 +118,13 @@ ORDER BY a.AccountCode;",
                 P("@c", companyId),
                 P("@from", fromDate ?? ""),
                 P("@to", toDate ?? "9999-12-31"),
-                P("@ctr", centerFilter));
+                P("@ctr", centerFilter),
+                P("@cc", costCenterId),
+                P("@pr", projectId));
         }
 
-        public DataTable QueryGeneralLedgerLines(int companyId, int centerFilter, long accountId, string fromDate, string toDate)
+        public DataTable QueryGeneralLedgerLines(int companyId, int centerFilter, long accountId, string fromDate, string toDate,
+            long costCenterId, long projectId)
         {
             return Query(@"
 SELECT j.PostingDate, j.JournalNumber, COALESCE(l.Description, j.Description) AS Description,
@@ -128,6 +134,8 @@ JOIN GlJournal j ON j.JournalID = l.JournalID
 WHERE l.AccountID = @acc AND l.CompanyID = @c
   AND j.IsDeleted = 0 AND j.Status IN ('Posted', 'Reversed')
   AND (@ctr = 0 OR j.CenterID = @ctr)
+  AND (@cc = 0 OR l.CostCenterID = @cc)
+  AND (@pr = 0 OR l.ProjectID = @pr)
   AND (@from = '' OR j.PostingDate >= @from)
   AND (@to = '' OR j.PostingDate <= @to)
   AND (l.DebitMinor > 0 OR l.CreditMinor > 0)
@@ -136,10 +144,13 @@ ORDER BY j.PostingDate, j.JournalID, l.LineNo;",
                 P("@acc", accountId),
                 P("@from", fromDate ?? ""),
                 P("@to", toDate ?? ""),
-                P("@ctr", centerFilter));
+                P("@ctr", centerFilter),
+                P("@cc", costCenterId),
+                P("@pr", projectId));
         }
 
-        public long QueryOpeningNet(int companyId, int centerFilter, long accountId, string fromDate)
+        public long QueryOpeningNet(int companyId, int centerFilter, long accountId, string fromDate,
+            long costCenterId, long projectId)
         {
             object v = _db.ExecuteScalar(@"
 SELECT COALESCE(SUM(l.DebitBaseMinor - l.CreditBaseMinor), 0)
@@ -148,8 +159,11 @@ JOIN GlJournal j ON j.JournalID = l.JournalID
 WHERE l.AccountID = @acc AND l.CompanyID = @c
   AND j.IsDeleted = 0 AND j.Status IN ('Posted', 'Reversed')
   AND (@ctr = 0 OR j.CenterID = @ctr)
+  AND (@cc = 0 OR l.CostCenterID = @cc)
+  AND (@pr = 0 OR l.ProjectID = @pr)
   AND (@from = '' OR j.PostingDate < @from);",
-                P("@c", companyId), P("@acc", accountId), P("@from", fromDate ?? ""), P("@ctr", centerFilter));
+                P("@c", companyId), P("@acc", accountId), P("@from", fromDate ?? ""), P("@ctr", centerFilter),
+                P("@cc", costCenterId), P("@pr", projectId));
             if (v == null || v == DBNull.Value) return 0;
             return Convert.ToInt64(v);
         }
@@ -494,7 +508,8 @@ WHERE FiscalPeriodID = @id AND RowVersion = @rv;",
 SELECT * FROM GlJournal
 WHERE CompanyID = @c AND SourceModule = @m AND SourceDocumentType = @t AND SourceDocumentID = @id
   AND IsDeleted = 0
-ORDER BY JournalID LIMIT 1;",
+ORDER BY CASE Status WHEN 'Posted' THEN 0 WHEN 'Approved' THEN 1 WHEN 'Draft' THEN 2 ELSE 3 END, JournalID
+LIMIT 1;",
                 P("@c", companyId), P("@m", module), P("@t", docType), P("@id", sourceId)));
             if (j != null)
                 j.Lines = ListLines(j.JournalId);

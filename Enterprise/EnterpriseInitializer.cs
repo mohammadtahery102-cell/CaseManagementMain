@@ -764,6 +764,9 @@ CREATE TABLE IF NOT EXISTS EntUserPermission (
             AddPermission(con, "Ledger.CloseYear",  "بستن سال مالی دفتر کل",    "دفتر کل", 558, true,  false, false);
             AddPermission(con, "Ledger.ReopenYear", "بازگشایی سال مالی دفتر کل", "دفتر کل", 559, true,  false, false);
             AddPermission(con, "Ledger.UnlockYear", "قفل‌شکنی سال مالی دفتر کل", "دفتر کل", 560, false, false, false);
+            AddPermission(con, "Ledger.MapCashBook", "نگاشت صندوق به دفتر کل", "دفتر کل", 561, true, false, false);
+            AddPermission(con, "Ledger.ManageCostCenter", "مدیریت مراکز هزینه", "دفتر کل", 562, true, false, false);
+            AddPermission(con, "Ledger.ManageProject", "مدیریت پروژه‌های حسابداری", "دفتر کل", 563, true, false, false);
 
             // ─── نسخهٔ ۱٫۰ / فاز ۴ (موج ۵) — کاربران/تنظیمات/پشتیبان‌گیری/
             // همگام‌سازی/مراکز/ماژول‌ها. «User.Manage» و «Module.Manage» از

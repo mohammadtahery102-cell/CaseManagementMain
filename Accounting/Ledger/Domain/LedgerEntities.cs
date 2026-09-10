@@ -225,4 +225,72 @@ namespace CaseManagement.Accounting.Ledger.Domain
         public string CreatedBy { get; set; }
         public string UpdatedBy { get; set; }
     }
+
+    public class GlCostCenter
+    {
+        public long CostCenterId { get; set; }
+        public int CompanyId { get; set; }
+        public int CenterId { get; set; }
+        public string Code { get; set; }
+        public string Name { get; set; }
+        public long? ParentCostCenterId { get; set; }
+        public int Level { get; set; }
+        public bool IsLeaf { get; set; }
+        public bool IsActive { get; set; }
+        public bool IsDeleted { get; set; }
+        public long RowVersion { get; set; }
+        public string CreatedAt { get; set; }
+        public string UpdatedAt { get; set; }
+        public string CreatedBy { get; set; }
+        public string UpdatedBy { get; set; }
+    }
+
+    public class GlProject
+    {
+        public long ProjectId { get; set; }
+        public int CompanyId { get; set; }
+        public int CenterId { get; set; }
+        public string Code { get; set; }
+        public string Name { get; set; }
+        public long? ParentProjectId { get; set; }
+        public int Level { get; set; }
+        public bool IsLeaf { get; set; }
+        public bool IsActive { get; set; }
+        public bool IsDeleted { get; set; }
+        public long RowVersion { get; set; }
+        public string CreatedAt { get; set; }
+        public string UpdatedAt { get; set; }
+        public string CreatedBy { get; set; }
+        public string UpdatedBy { get; set; }
+    }
+
+    public class GlCashBookMap
+    {
+        public long MapId { get; set; }
+        public int CompanyId { get; set; }
+        public string MapKind { get; set; }
+        public long SourceId { get; set; }
+        public string SourceName { get; set; }
+        public long AccountId { get; set; }
+        public long RowVersion { get; set; }
+    }
+
+    public class CashBookTxn
+    {
+        public long TxnId { get; set; }
+        public string DocNo { get; set; }
+        public string TxnDateRaw { get; set; }
+        public string PostingDateIso { get; set; }
+        public string Direction { get; set; }
+        public int CenterId { get; set; }
+        public int? FundId { get; set; }
+        public string CategoryType { get; set; }
+        public int? CategoryId { get; set; }
+        public decimal AmountMajor { get; set; }
+        public string Description { get; set; }
+        public bool IsReversed { get; set; }
+        public int? PartyId { get; set; }
+        public bool GlPosted { get; set; }
+        public long? GlJournalId { get; set; }
+    }
 }

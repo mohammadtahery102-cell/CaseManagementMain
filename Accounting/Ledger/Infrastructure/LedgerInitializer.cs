@@ -23,12 +23,19 @@ namespace CaseManagement.Accounting.Ledger.Infrastructure
                 CreateTables(con);
                 CreateIndexes(con);
                 Seed(con);
+                ApplyV2CashBookMap(con);
+                ApplyV3CostCenter(con);
+                ApplyV4Project(con);
             }
 
             SchemaVersion.SetIfNewer(
-                SchemaVersion.ComponentAccounting,
-                AccountingSchemaVersion,
-                "Phase 2: General Ledger foundation (Gl*)");
+                SchemaVersion.ComponentAccounting, 1, "Phase 2: General Ledger foundation (Gl*)");
+            SchemaVersion.SetIfNewer(
+                SchemaVersion.ComponentAccounting, 2, "Phase 3: GlCashBookMap");
+            SchemaVersion.SetIfNewer(
+                SchemaVersion.ComponentAccounting, 3, "Phase 4: GlCostCenter");
+            SchemaVersion.SetIfNewer(
+                SchemaVersion.ComponentAccounting, 4, "Phase 5: GlProject");
         }
 
         private static void CreateTables(SQLiteConnection con)
@@ -262,8 +269,72 @@ CREATE TABLE IF NOT EXISTS GlLedgerSetting (
   UpdatedAt TEXT NOT NULL,
   CreatedBy TEXT NOT NULL,
   UpdatedBy TEXT NOT NULL,
-  UNIQUE (CompanyID)
+            UNIQUE (CompanyID)
 );");
+        }
+
+        private static void ApplyV2CashBookMap(SQLiteConnection con)
+        {
+            Exec(con, @"
+CREATE TABLE IF NOT EXISTS GlCashBookMap (
+  MapID INTEGER PRIMARY KEY,
+  CompanyID INTEGER NOT NULL,
+  CenterID INTEGER NOT NULL,
+  MapKind TEXT NOT NULL,
+  SourceID INTEGER NOT NULL,
+  AccountID INTEGER NOT NULL,
+  IsDeleted INTEGER NOT NULL DEFAULT 0,
+  DeletedAt TEXT NULL,
+  DeletedBy TEXT NULL,
+  RowVersion INTEGER NOT NULL DEFAULT 1,
+  CreatedAt TEXT NOT NULL,
+  UpdatedAt TEXT NOT NULL,
+  CreatedBy TEXT NOT NULL,
+  UpdatedBy TEXT NOT NULL
+);");
+            Exec(con, @"
+CREATE UNIQUE INDEX IF NOT EXISTS UX_GlCashBookMap_KindSource
+ON GlCashBookMap(CompanyID, MapKind, SourceID)
+WHERE IsDeleted = 0;");
+        }
+
+        private static void ApplyV3CostCenter(SQLiteConnection con)
+        {
+            CreateDimensionTable(con, "GlCostCenter", "CostCenterID", "ParentCostCenterID");
+        }
+
+        private static void ApplyV4Project(SQLiteConnection con)
+        {
+            CreateDimensionTable(con, "GlProject", "ProjectID", "ParentProjectID");
+        }
+
+        private static void CreateDimensionTable(SQLiteConnection con, string table, string idCol, string parentCol)
+        {
+            Exec(con, @"
+CREATE TABLE IF NOT EXISTS " + table + @" (
+  " + idCol + @" INTEGER PRIMARY KEY,
+  CompanyID INTEGER NOT NULL,
+  CenterID INTEGER NOT NULL,
+  Code TEXT NOT NULL,
+  Name TEXT NOT NULL,
+  " + parentCol + @" INTEGER NULL,
+  Level INTEGER NOT NULL,
+  IsLeaf INTEGER NOT NULL,
+  IsActive INTEGER NOT NULL DEFAULT 1,
+  IsDeleted INTEGER NOT NULL DEFAULT 0,
+  DeletedAt TEXT NULL,
+  DeletedBy TEXT NULL,
+  RowVersion INTEGER NOT NULL DEFAULT 1,
+  CreatedAt TEXT NOT NULL,
+  UpdatedAt TEXT NOT NULL,
+  CreatedBy TEXT NOT NULL,
+  UpdatedBy TEXT NOT NULL
+);");
+            Exec(con, "CREATE INDEX IF NOT EXISTS IX_" + table + "_Parent ON " + table + "(CompanyID, " + parentCol + ");");
+            Exec(con, @"
+CREATE UNIQUE INDEX IF NOT EXISTS UX_" + table + @"_Code
+ON " + table + @"(CompanyID, Code)
+WHERE IsDeleted = 0;");
         }
 
         private static void CreateIndexes(SQLiteConnection con)

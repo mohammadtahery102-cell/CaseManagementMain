@@ -47,6 +47,13 @@ namespace CaseManagement.Accounting.Ledger.Domain
 
         public const string CalendarSolarHijri = "SOLAR_HIJRI";
         public const string SystemUser = "SYSTEM";
+
+        public const string MapFund = "FUND";
+        public const string MapIncome = "INCOME_CAT";
+        public const string MapExpense = "EXPENSE_CAT";
+        public const string DocAccTransaction = "AccTransaction";
+        public const string AccReceipt = "دریافت";
+        public const string AccPayment = "پرداخت";
     }
 
     public static class LedgerPermissions
@@ -61,6 +68,9 @@ namespace CaseManagement.Accounting.Ledger.Domain
         public const string CloseYear = "Ledger.CloseYear";
         public const string ReopenYear = "Ledger.ReopenYear";
         public const string UnlockYear = "Ledger.UnlockYear";
+        public const string ManageCostCenter = "Ledger.ManageCostCenter";
+        public const string ManageProject = "Ledger.ManageProject";
+        public const string MapCashBook = "Ledger.MapCashBook";
     }
 
     public static class LedgerErrorCodes
@@ -95,6 +105,10 @@ namespace CaseManagement.Accounting.Ledger.Domain
         public const string TypeMismatch = "ACCOUNT_TYPE_MISMATCH";
         public const string Validation = "VALIDATION";
         public const string PostedImmutable = "POSTED_IMMUTABLE";
+        public const string MappingMissing = "MAPPING_MISSING";
+        public const string DimensionMissing = "DIMENSION_MISSING";
+        public const string DimensionInactive = "DIMENSION_INACTIVE";
+        public const string DimensionNotLeaf = "DIMENSION_NOT_LEAF";
     }
 
     public static class LedgerTime
@@ -116,6 +130,14 @@ namespace CaseManagement.Accounting.Ledger.Domain
             }
             if (value.Length >= 10) return value.Substring(0, 10);
             return value;
+        }
+
+        public static long ToMinorUnits(decimal major, int minorUnits)
+        {
+            if (minorUnits < 0) minorUnits = 2;
+            decimal scale = 1m;
+            for (int i = 0; i < minorUnits; i++) scale *= 10m;
+            return (long)Math.Round(major * scale, MidpointRounding.AwayFromZero);
         }
     }
 }

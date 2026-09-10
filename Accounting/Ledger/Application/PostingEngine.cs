@@ -299,9 +299,9 @@ namespace CaseManagement.Accounting.Ledger.Application
                 FiscalPeriodId = period.FiscalPeriodId,
                 JournalNumber = number,
                 JournalSource = LedgerCodes.SourceReversal,
-                SourceModule = original.SourceModule,
-                SourceDocumentType = original.SourceDocumentType,
-                SourceDocumentId = original.SourceDocumentId,
+                SourceModule = LedgerCodes.SourceReversal,
+                SourceDocumentType = "GlJournal",
+                SourceDocumentId = original.JournalId,
                 PostingDate = postingDate,
                 DocumentDate = original.DocumentDate,
                 ReferenceNumber = original.ReferenceNumber,
@@ -593,6 +593,27 @@ namespace CaseManagement.Accounting.Ledger.Application
                     return LedgerResult.Fail(LedgerErrorCodes.AccountNotLeaf, "Posting is only allowed on leaf accounts.");
                 if (account.CompanyId != companyId)
                     return LedgerResult.Fail(LedgerErrorCodes.AccountMissing, "Account belongs to another company.");
+
+                if (line.CostCenterId.HasValue)
+                {
+                    GlCostCenter cc = _repo.GetCostCenter(con, tr, line.CostCenterId.Value);
+                    if (cc == null || cc.IsDeleted || cc.CompanyId != companyId)
+                        return LedgerResult.Fail(LedgerErrorCodes.DimensionMissing, "Cost center not found.");
+                    if (!cc.IsActive)
+                        return LedgerResult.Fail(LedgerErrorCodes.DimensionInactive, "Cost center is inactive.");
+                    if (!cc.IsLeaf)
+                        return LedgerResult.Fail(LedgerErrorCodes.DimensionNotLeaf, "Posting requires a leaf cost center.");
+                }
+                if (line.ProjectId.HasValue)
+                {
+                    GlProject pr = _repo.GetProject(con, tr, line.ProjectId.Value);
+                    if (pr == null || pr.IsDeleted || pr.CompanyId != companyId)
+                        return LedgerResult.Fail(LedgerErrorCodes.DimensionMissing, "Project not found.");
+                    if (!pr.IsActive)
+                        return LedgerResult.Fail(LedgerErrorCodes.DimensionInactive, "Project is inactive.");
+                    if (!pr.IsLeaf)
+                        return LedgerResult.Fail(LedgerErrorCodes.DimensionNotLeaf, "Posting requires a leaf project.");
+                }
 
                 debit += line.DebitBaseMinor;
                 credit += line.CreditBaseMinor;

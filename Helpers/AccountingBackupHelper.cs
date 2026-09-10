@@ -37,7 +37,8 @@ namespace CaseManagement.Helpers
             "AccSettings", "AccAudit",
             "GlCompany", "GlCurrency", "GlAccountType", "GlExchangeRate",
             "GlFiscalYear", "GlFiscalPeriod", "GlAccount", "GlLedgerSetting",
-            "GlJournal", "GlJournalLine"
+            "GlJournal", "GlJournalLine",
+            "GlCashBookMap", "GlCostCenter", "GlProject"
         };
 
         // ─── گرفتن بکاپ: همه‌ی جداول Acc* (همه‌ی مراکز، نه فقط مرکز جاری —
