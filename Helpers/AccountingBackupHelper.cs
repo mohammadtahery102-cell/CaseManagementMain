@@ -34,7 +34,10 @@ namespace CaseManagement.Helpers
         {
             "AccPeriod", "AccFund", "AccParty", "AccIncomeCategory", "AccExpenseCategory",
             "AccTransaction", "AccStipend", "AccSalary", "AccExpenseItem",
-            "AccSettings", "AccAudit"
+            "AccSettings", "AccAudit",
+            "GlCompany", "GlCurrency", "GlAccountType", "GlExchangeRate",
+            "GlFiscalYear", "GlFiscalPeriod", "GlAccount", "GlLedgerSetting",
+            "GlJournal", "GlJournalLine"
         };
 
         // ─── گرفتن بکاپ: همه‌ی جداول Acc* (همه‌ی مراکز، نه فقط مرکز جاری —

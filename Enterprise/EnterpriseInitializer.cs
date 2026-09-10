@@ -754,6 +754,17 @@ CREATE TABLE IF NOT EXISTS EntUserPermission (
             AddPermission(con, "Accounting.Repair",      "اصلاح داده‌های تاریخی حسابداری", "حسابداری", 480, false, false, false);
             AddPermission(con, "Accounting.Backup",      "پشتیبان‌گیری/بازیابی حسابداری",  "حسابداری", 490, false, false, false);
 
+            AddPermission(con, "Ledger.View",       "مشاهده دفتر کل",           "دفتر کل", 551, true,  true,  true);
+            AddPermission(con, "Ledger.Create",     "ثبت پیش‌نویس سند دفتر کل", "دفتر کل", 552, true,  true,  false);
+            AddPermission(con, "Ledger.Approve",    "تأیید سند دفتر کل",        "دفتر کل", 553, true,  false, false);
+            AddPermission(con, "Ledger.Post",       "ثبت قطعی سند دفتر کل",     "دفتر کل", 554, true,  false, false);
+            AddPermission(con, "Ledger.Reverse",    "برگشت سند دفتر کل",        "دفتر کل", 555, true,  false, false);
+            AddPermission(con, "Ledger.ManageCoA",  "مدیریت سرفصل حساب‌ها",     "دفتر کل", 556, true,  false, false);
+            AddPermission(con, "Ledger.ClosePeriod","بستن دوره دفتر کل",        "دفتر کل", 557, true,  false, false);
+            AddPermission(con, "Ledger.CloseYear",  "بستن سال مالی دفتر کل",    "دفتر کل", 558, true,  false, false);
+            AddPermission(con, "Ledger.ReopenYear", "بازگشایی سال مالی دفتر کل", "دفتر کل", 559, true,  false, false);
+            AddPermission(con, "Ledger.UnlockYear", "قفل‌شکنی سال مالی دفتر کل", "دفتر کل", 560, false, false, false);
+
             // ─── نسخهٔ ۱٫۰ / فاز ۴ (موج ۵) — کاربران/تنظیمات/پشتیبان‌گیری/
             // همگام‌سازی/مراکز/ماژول‌ها. «User.Manage» و «Module.Manage» از
             // قبل (پایهٔ اولیهٔ PermissionService) تعریف شده بودند ولی به هیچ
