@@ -295,6 +295,15 @@
     <Compile Include="Accounting\Money.cs" />
     <Compile Include="Accounting\AccReports.cs" />
     <Compile Include="Accounting\AccTemplateExport.cs" />
+    <Compile Include="Accounting\Ledger\Domain\LedgerCodes.cs" />
+    <Compile Include="Accounting\Ledger\Domain\LedgerEntities.cs" />
+    <Compile Include="Accounting\Ledger\Application\LedgerContracts.cs" />
+    <Compile Include="Accounting\Ledger\Application\ChartOfAccountsService.cs" />
+    <Compile Include="Accounting\Ledger\Application\FiscalCalendarService.cs" />
+    <Compile Include="Accounting\Ledger\Application\PostingEngine.cs" />
+    <Compile Include="Accounting\Ledger\Infrastructure\LedgerInitializer.cs" />
+    <Compile Include="Accounting\Ledger\Infrastructure\LedgerRepository.cs" />
+    <Compile Include="Accounting\Ledger\Adapters\DesktopLedgerIdentity.cs" />
     <Compile Include="GuardianCardIntegration\CardDesigner\DemoCardData.cs" />
     <Compile Include="GuardianCardIntegration\CardDesigner\CardFieldCatalog.cs" />
     <Compile Include="GuardianCardIntegration\CardDesigner\TemplateHealthCheck.cs" />

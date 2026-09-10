@@ -242,6 +242,8 @@ CREATE TABLE IF NOT EXISTS AccAudit (
 
                 SeedDefaults(con);
             }
+
+            CaseManagement.Accounting.Ledger.Infrastructure.LedgerInitializer.Ensure();
         }
 
         private static void SeedDefaults(SQLiteConnection con)
