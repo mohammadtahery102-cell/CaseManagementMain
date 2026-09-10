@@ -88,6 +88,9 @@ namespace CaseManagement.Helpers
         public const string ForcePasswordChangeDays = "ForcePasswordChangeDays";
         public const string AuditEnabled           = "AuditEnabled";
 
+        // فاز ۱ ERP — Charity | Erp (مالک منطق: Helpers/ProductMode.cs).
+        public const string ProductMode            = "ProductMode";
+
         // ─── خروجی‌ها ──────────────────────────────────────────────────────────
         // آموزش — تا امروز تاریخچهٔ تغییرات و کمک‌های مالیِ پرونده در هیچ خروجی‌ای
         // نمی‌آمد. این دو کلید (پیش‌فرض روشن) اجازه می‌دهند هرکدام از این دو بخش

@@ -102,9 +102,10 @@ namespace CaseManagement
             var col1 = new Panel { Dock = DockStyle.Fill };
             col1.Controls.Add(new Label { Text = "منبع گزارش:", Dock = DockStyle.Top, Height = 20, Font = UiTheme.Font(UiTheme.SizeSmall) });
             _cmbSource = new ComboBox { Dock = DockStyle.Top, DropDownStyle = ComboBoxStyle.DropDownList };
-            foreach (ReportSource s in ReportCatalog.Sources)
+            foreach (ReportSource s in ReportCatalog.VisibleSources())
                 _cmbSource.Items.Add(s.DisplayName);
-            _cmbSource.SelectedIndex = 0;
+            if (_cmbSource.Items.Count > 0)
+                _cmbSource.SelectedIndex = 0;
             _cmbSource.SelectedIndexChanged += delegate { OnSourceChanged(); };
             col1.Controls.Add(_cmbSource);
             col1.Controls.Add(new Label { Text = "ستون‌ها:", Dock = DockStyle.Top, Height = 20, Font = UiTheme.Font(UiTheme.SizeSmall), Margin = new Padding(0, 6, 0, 0) });
@@ -206,13 +207,24 @@ namespace CaseManagement
         // ─── تعامل بین کنترل‌ها ─────────────────────────────────────────────
         private ReportSource CurrentSource()
         {
-            if (_cmbSource.SelectedIndex < 0) return ReportCatalog.Sources[0];
-            return ReportCatalog.Sources[_cmbSource.SelectedIndex];
+            List<ReportSource> visible = ReportCatalog.VisibleSources();
+            if (visible.Count == 0) return null;
+            if (_cmbSource.SelectedIndex < 0) return visible[0];
+            if (_cmbSource.SelectedIndex >= visible.Count) return visible[0];
+            return visible[_cmbSource.SelectedIndex];
         }
 
         private void OnSourceChanged()
         {
             ReportSource source = CurrentSource();
+            if (source == null)
+            {
+                _clbColumns.Items.Clear();
+                _cmbFilterColumn.Items.Clear();
+                _cmbGroupBy.Items.Clear();
+                _cmbSortColumn.Items.Clear();
+                return;
+            }
 
             _clbColumns.Items.Clear();
             _cmbFilterColumn.Items.Clear();
@@ -238,13 +250,18 @@ namespace CaseManagement
 
         private void btnAddFilter_Click(object sender, EventArgs e)
         {
+            ReportSource source = CurrentSource();
+            if (source == null)
+            {
+                Msg.Show("ستون و مقدار فیلتر را مشخص کنید");
+                return;
+            }
             if (_cmbFilterColumn.SelectedIndex < 0 || string.IsNullOrWhiteSpace(_txtFilterValue.Text))
             {
                 Msg.Show("ستون و مقدار فیلتر را مشخص کنید");
                 return;
             }
 
-            ReportSource source = CurrentSource();
             ReportColumn col = source.Columns[_cmbFilterColumn.SelectedIndex];
             ReportFilterOperator op = (ReportFilterOperator)_cmbFilterOperator.SelectedIndex;
 
@@ -265,6 +282,11 @@ namespace CaseManagement
         private ReportDefinition BuildDefinitionFromUi()
         {
             ReportSource source = CurrentSource();
+            if (source == null)
+            {
+                Msg.Show("در حالت ERP هنوز منبع گزارشی تعریف نشده است.");
+                return null;
+            }
 
             var def = new ReportDefinition { SourceKey = source.Key };
             for (int i = 0; i < _clbColumns.Items.Count; i++)
@@ -294,6 +316,7 @@ namespace CaseManagement
             try
             {
                 ReportDefinition def = BuildDefinitionFromUi();
+                if (def == null) return;
 
                 if (def.ColumnKeys.Count == 0 && string.IsNullOrEmpty(def.GroupByKey))
                 {
@@ -348,6 +371,7 @@ namespace CaseManagement
                 return;
 
             ReportDefinition def = BuildDefinitionFromUi();
+            if (def == null) return;
 
             try
             {

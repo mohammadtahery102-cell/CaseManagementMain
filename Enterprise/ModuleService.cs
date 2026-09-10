@@ -64,6 +64,12 @@ namespace CaseManagement.Enterprise
         {
             if (string.IsNullOrWhiteSpace(moduleKey)) return true;
 
+            // فاز ۱ ERP — قرنطینهٔ ناوبری خیریه. حتی مدیر کل در حالت ERP این
+            // بخش‌ها را در منو نمی‌بیند؛ برای بازگشت، ProductMode را عوض کند.
+            // EntModule دست‌نخورده می‌ماند (حذف/خاموشی سراسری نیست).
+            if (ProductMode.IsErp && ProductMode.IsCharityModule(moduleKey))
+                return false;
+
             try
             {
                 Dictionary<string, bool> cache = GetCache();

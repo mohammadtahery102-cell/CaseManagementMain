@@ -54,7 +54,8 @@ namespace CaseManagement.Accounting
             tabs.RightToLeftLayout = true;
 
             tabs.TabPages.Add(BuildTransactionsTab());   // دریافت/پرداخت + دفتر صندوق
-            tabs.TabPages.Add(BuildStipendTab());        // شهریه ایتام
+            if (ProductMode.IsCharity)
+                tabs.TabPages.Add(BuildStipendTab());        // شهریه ایتام — فقط حالت خیریه
             tabs.TabPages.Add(BuildSalaryTab());         // حقوق کارکنان
             tabs.TabPages.Add(BuildExpenseItemsTab());   // هزینه‌های جاری
             tabs.TabPages.Add(BuildReportsTab());        // گزارش‌ها
@@ -2084,7 +2085,8 @@ VALUES
             var flow = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = true, Padding = new Padding(16), AutoScroll = true };
 
             AddReportButton(flow, "۱) صورت حساب کلی", delegate { RunReport(1); });
-            AddReportButton(flow, "۲) صورت حساب جزیی شهریه", delegate { RunReport(2); });
+            if (ProductMode.IsCharity)
+                AddReportButton(flow, "۲) صورت حساب جزیی شهریه", delegate { RunReport(2); });
             AddReportButton(flow, "۳) صورت حساب هزینه‌ها", delegate { RunReport(3); });
             AddReportButton(flow, "۴) صورت حساب حقوق", delegate { RunReport(4); });
             AddReportButton(flow, "۵) صورت حساب دریافت بودجه", delegate { RunReport(5); });

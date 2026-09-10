@@ -87,9 +87,26 @@ namespace CaseManagement.Helpers
 
         public static readonly List<ReportSource> Sources = BuildSources();
 
+        public static List<ReportSource> VisibleSources()
+        {
+            if (!ProductMode.IsErp) return Sources;
+
+            var visible = new List<ReportSource>();
+            foreach (ReportSource source in Sources)
+            {
+                if (!ProductMode.IsCharityReportSource(source.Key))
+                    visible.Add(source);
+            }
+            return visible;
+        }
+
         public static ReportSource FindSource(string key)
         {
-            return Sources.FirstOrDefault(s => string.Equals(s.Key, key, StringComparison.OrdinalIgnoreCase));
+            ReportSource source = Sources.FirstOrDefault(s => string.Equals(s.Key, key, StringComparison.OrdinalIgnoreCase));
+            if (source == null) return null;
+            if (ProductMode.IsErp && ProductMode.IsCharityReportSource(source.Key))
+                return null;
+            return source;
         }
 
         private static List<ReportSource> BuildSources()
@@ -523,7 +540,11 @@ namespace CaseManagement.Helpers
         {
             ReportSource source = ReportCatalog.FindSource(def.SourceKey);
             if (source == null)
+            {
+                if (ProductMode.IsErp && ProductMode.IsCharityReportSource(def.SourceKey))
+                    throw new InvalidOperationException("این گزارش در حالت ERP در دسترس نیست.");
                 throw new InvalidOperationException("منبع گزارش نامعتبر است.");
+            }
 
             List<ReportColumn> selectedColumns = def.ColumnKeys
                 .Select(source.FindColumn)

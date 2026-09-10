@@ -131,16 +131,23 @@ namespace CaseManagement
 
             // درخواست جدید کاربر: همه‌ی گروه‌های نوار کناری هنگام باز شدن داشبورد جمع (Collapsed) باشند.
             _sidebar.AddGroup("اصلی", startExpanded: false);
-            int navDashboard = _sidebar.AddItem(IconFont.Home, "داشبورد", delegate { SelectTabByTitle("داشبورد کل پرونده‌ها"); });
+            int navDashboard = _sidebar.AddItem(IconFont.Home, "داشبورد", delegate
+            {
+                SelectTabByTitle(ProductMode.IsErp ? "خانه" : "داشبورد کل پرونده‌ها");
+            });
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleCases, IconFont.Folder, "پرونده‌ها", delegate { using (var frm = new FrmCase(_filterProvince, _filterDistrict, _filterServiceStatus)) frm.ShowDialog(this); RefreshAll(); });
-            _sidebar.AddItem(IconFont.People, "اعضای خانواده", delegate { SelectTabByTitle("اعضای خانواده"); });
+            if (ProductMode.IsCharity)
+                _sidebar.AddItem(IconFont.People, "اعضای خانواده", delegate { SelectTabByTitle("اعضای خانواده"); });
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleApplicants, IconFont.Contact, "متقاضیان", delegate { using (var frm = new FrmApplicant()) frm.ShowDialog(this); RefreshAll(); });
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleSearch, IconFont.Search, "جستجوی پیشرفته", delegate { using (var frm = new FrmAdvancedSearch()) frm.ShowDialog(this); });
-            _sidebar.AddItem(IconFont.Search, "دستیار هوشمند", delegate { using (var frm = new FrmAiAssistant()) frm.ShowDialog(this); RefreshAll(); });
+            if (ProductMode.IsCharity)
+                _sidebar.AddItem(IconFont.Search, "دستیار هوشمند", delegate { using (var frm = new FrmAiAssistant()) frm.ShowDialog(this); RefreshAll(); });
 
             _sidebar.AddGroup("مالی و حسابداری", startExpanded: false);
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleFinance, IconFont.Money, "مالی", delegate { OpenFinance(); });
-            AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleAccounting, IconFont.Calculator, "حسابداری ایتام", delegate { using (var frm = new CaseManagement.Accounting.FrmAccounting()) frm.ShowDialog(this); });
+            AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleAccounting, IconFont.Calculator,
+                ProductMode.IsErp ? "حسابداری" : "حسابداری ایتام",
+                delegate { using (var frm = new CaseManagement.Accounting.FrmAccounting()) frm.ShowDialog(this); });
 
             // ماژول اداری و کارمندان — رخصتی، ماموریت، درخواست استخدام.
             // آموزش — چرا AddItem و نه AddModuleNav: AddModuleNav به یک
@@ -186,10 +193,14 @@ namespace CaseManagement
 
             _sidebar.AddGroup("سیستم", startExpanded: false);
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleUsers, IconFont.Shield, "کاربران و دسترسی", OpenUsers);
-            _sidebar.AddItem(IconFont.Edit, "تعیین نقش اعضای خانواده", OpenAssignMemberRole);
-            _sidebar.AddItem(IconFont.Card, "قالب‌های کارت شناسایی", OpenCardTemplateManager);
+            if (ProductMode.IsCharity)
+            {
+                _sidebar.AddItem(IconFont.Edit, "تعیین نقش اعضای خانواده", OpenAssignMemberRole);
+                _sidebar.AddItem(IconFont.Card, "قالب‌های کارت شناسایی", OpenCardTemplateManager);
+            }
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleSettings, IconFont.Settings, "تنظیمات", OpenSettings);
-            _sidebar.AddItem(IconFont.Book, "جزوه آموزشی", OpenTrainingManual);
+            if (ProductMode.IsCharity)
+                _sidebar.AddItem(IconFont.Book, "جزوه آموزشی", OpenTrainingManual);
             _sidebar.AddItem(IconFont.Phone, "ارتباط با ما", OpenContactUs);
             _sidebar.AddItem(IconFont.Exit, "خروج از حساب", delegate { LogoutCurrentUser(); });
 
@@ -314,19 +325,31 @@ namespace CaseManagement
             // فقط جهتِ متن/برخی اسکرول‌بارها را آینه می‌کند. تنها راهِ واقعاً
             // کارسازِ رساندنِ تبِ اول به سمتِ راست، معکوس‌کردنِ خودِ ترتیبِ
             // افزودن است.
-            List<TabPage> orderedTabPages = new List<TabPage>
+            List<TabPage> orderedTabPages;
+            if (ProductMode.IsErp)
             {
-                BuildSummaryTab(),            // داشبورد کل پرونده‌ها (باید راست‌ترین/پیش‌فرض باشد)
-                BuildFamilyMembersStatsTab(), // اعضای خانواده
-                BuildNotificationsTab(),      // اعلان‌ها
-                BuildTrendTab(),              // روند زمانی
-                BuildCriticalTab(),           // وضعیت‌های بحرانی
-                BuildGeographyTab(),          // جغرافیا
-                BuildReminderTab(),           // یادآوری سروی
-                BuildQualityTab(),            // کیفیت داده
-                BuildManagementTab(),         // Phase 5.5-C — سنجه‌های مدیریتی
-                BuildAuditTab()               // گزارش رویدادها
-            };
+                orderedTabPages = new List<TabPage>
+                {
+                    BuildErpHomeTab(),
+                    BuildAuditTab()
+                };
+            }
+            else
+            {
+                orderedTabPages = new List<TabPage>
+                {
+                    BuildSummaryTab(),            // داشبورد کل پرونده‌ها (باید راست‌ترین/پیش‌فرض باشد)
+                    BuildFamilyMembersStatsTab(), // اعضای خانواده
+                    BuildNotificationsTab(),      // اعلان‌ها
+                    BuildTrendTab(),              // روند زمانی
+                    BuildCriticalTab(),           // وضعیت‌های بحرانی
+                    BuildGeographyTab(),          // جغرافیا
+                    BuildReminderTab(),           // یادآوری سروی
+                    BuildQualityTab(),            // کیفیت داده
+                    BuildManagementTab(),         // Phase 5.5-C — سنجه‌های مدیریتی
+                    BuildAuditTab()               // گزارش رویدادها
+                };
+            }
             for (int i = orderedTabPages.Count - 1; i >= 0; i--)
                 _tabs.TabPages.Add(orderedTabPages[i]);
 
@@ -337,8 +360,15 @@ namespace CaseManagement
             // محتوای Fill بقیه‌ی فضا را پر می‌کند.
             Panel contentHost = new Panel { Dock = DockStyle.Fill, BackColor = UiTheme.Background };
             contentHost.Controls.Add(_tabs);
-            contentHost.Controls.Add(BuildFilterBar());
-            contentHost.Controls.Add(hadithBar);
+            Panel filterBar = BuildFilterBar();
+            if (ProductMode.IsErp)
+            {
+                filterBar.Visible = false;
+                filterBar.Height = 0;
+            }
+            contentHost.Controls.Add(filterBar);
+            if (ProductMode.IsCharity)
+                contentHost.Controls.Add(hadithBar);
             contentHost.Controls.Add(header);
 
             Controls.Add(contentHost);
@@ -390,7 +420,8 @@ namespace CaseManagement
                 WrapContents = false, Padding = new Padding(0, 21, 0, 0), BackColor = Color.Transparent
             };
             tools.Controls.Add(MakeHeaderIconButton(IconFont.Sync, "تازه‌سازی", delegate { RefreshAll(); }));
-            tools.Controls.Add(MakeHeaderIconButton(IconFont.Bell, "اعلان‌ها", delegate { SelectTabByTitle("اعلان‌ها"); }));
+            tools.Controls.Add(MakeHeaderIconButton(IconFont.Bell, "اعلان‌ها",
+                delegate { SelectTabByTitle(ProductMode.IsErp ? "خانه" : "اعلان‌ها"); }));
             tools.Controls.Add(MakeHeaderIconButton(IconFont.Settings, "تنظیمات", delegate { OpenSettings(this, EventArgs.Empty); }));
 
             left.Controls.Add(tools);
@@ -628,6 +659,9 @@ namespace CaseManagement
         // و گزینه مثل قبل ساخته می‌شود (سازگاری عقب‌رو).
         private void AddModuleNav(string moduleKey, string icon, string title, EventHandler onClick)
         {
+            if (ProductMode.HidesNavTitle(title))
+                return;
+
             if (!CaseManagement.Enterprise.ModuleService.IsEnabled(moduleKey))
                 return;
 
@@ -675,6 +709,63 @@ namespace CaseManagement
             // @Svc فقط در CaseFilterSql (نه CaseFilterSqlNoStatus) استفاده می‌شود؛
             // پارامترِ اضافه در کوئری‌های بدون آن بی‌اثر است.
             cmd.Parameters.AddWithValue("@Svc", _filterServiceStatus ?? "");
+        }
+
+        private TabPage BuildErpHomeTab()
+        {
+            TabPage page = new TabPage("خانه") { BackColor = UiTheme.Background };
+            Panel host = new Panel { Dock = DockStyle.Fill, Padding = new Padding(28, 24, 28, 24) };
+
+            Label title = new Label
+            {
+                Text = "حالت ERP",
+                Dock = DockStyle.Top,
+                Height = 36,
+                Font = UiTheme.FontBold(16F),
+                ForeColor = UiTheme.PrimaryDark,
+                TextAlign = ContentAlignment.MiddleRight
+            };
+            Label hint = new Label
+            {
+                Text = "ماژول‌های خیریه (پرونده، مساعدت، ایتام، سرپرست، آسیب‌پذیری و گزارش‌های مربوط) در این حالت پنهان‌اند. " +
+                       "کد و جداول آن‌ها حذف نشده‌اند. برای بازگشت، از تنظیمات «حالت محصول» را روی Charity بگذارید و برنامه را دوباره باز کنید.",
+                Dock = DockStyle.Top,
+                Height = 72,
+                Font = UiTheme.Font(UiTheme.SizeBody),
+                ForeColor = UiTheme.TextMuted,
+                TextAlign = ContentAlignment.TopRight
+            };
+
+            FlowLayoutPanel actions = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                Height = 52,
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = false,
+                Padding = new Padding(0, 8, 0, 0)
+            };
+            Button btnAcc = UiTheme.CreateButton("حسابداری", IconFont.Calculator, UiTheme.Primary);
+            btnAcc.Size = new Size(150, 38);
+            btnAcc.Click += delegate
+            {
+                using (var frm = new CaseManagement.Accounting.FrmAccounting())
+                    frm.ShowDialog(this);
+            };
+            Button btnUsers = UiTheme.CreateButton("کاربران", IconFont.Shield, UiTheme.Primary);
+            btnUsers.Size = new Size(140, 38);
+            btnUsers.Click += OpenUsers;
+            Button btnSettings = UiTheme.CreateButton("تنظیمات", IconFont.Settings, UiTheme.Primary);
+            btnSettings.Size = new Size(140, 38);
+            btnSettings.Click += OpenSettings;
+            actions.Controls.Add(btnAcc);
+            actions.Controls.Add(btnUsers);
+            actions.Controls.Add(btnSettings);
+
+            host.Controls.Add(actions);
+            host.Controls.Add(hint);
+            host.Controls.Add(title);
+            page.Controls.Add(host);
+            return page;
         }
 
         private TabPage BuildSummaryTab()
@@ -2533,6 +2624,12 @@ ORDER BY RemindAt", con))
 
         private void RefreshAll()
         {
+            if (ProductMode.IsErp)
+            {
+                LoadAudit();
+                return;
+            }
+
             LoadSummary();
             LoadTrend();
             LoadCritical();

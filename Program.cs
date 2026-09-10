@@ -69,6 +69,11 @@ namespace CaseManagement
                 // TblAuditLog برای آشتیِ یادآوری‌ها نیاز دارد.
                 CaseManagement.Helpers.AiInitializer.EnsureAiObjects();
 
+                // فاز ۱ ERP — جدول نسخهٔ اسکیما + تشخیص Charity/Erp.
+                // بعد از همه‌ی Ensure* تا TblCase و TblAppSettings حتماً موجود باشند.
+                CaseManagement.Helpers.SchemaVersion.Ensure();
+                CaseManagement.Helpers.ProductMode.EnsureDefault();
+
                 // ویژگی ۸ — ثبت متمرکز خطاها: از این لحظه به بعد هر استثنای
                 // گرفته‌نشده ثبت می‌شود و برنامه به‌جای بسته شدن ناگهانی، پیام
                 // فارسی مناسب نشان می‌دهد. عمداً بعد از ساخت جداول نصب می‌شود

@@ -243,6 +243,13 @@ namespace CaseManagement
             // همان الگوی عکسِ نمونه که برچسب‌های تک‌کلمه‌ای دارد.
             addPage("مؤسسه", tabGeneral);
 
+            if (SecurityContext.IsSuperAdmin())
+            {
+                Panel tabProductMode = new Panel { BackColor = UiTheme.Background };
+                BuildProductModeTab(tabProductMode);
+                addPage("حالت محصول", tabProductMode);
+            }
+
             // آموزش — رفع باگ امنیتی چندمرکزی: «مدیریت مراکز» و «Backup/Restore»
             // کل سیستم را تحت تأثیر قرار می‌دهند (همه مراکز)، پس فقط SuperAdmin
             // این دو تب را می‌بیند؛ Admin مرکز (نه SuperAdmin) اصلاً این
@@ -250,7 +257,8 @@ namespace CaseManagement
             if (CaseManagement.Enterprise.PermissionService.HasPermission("Center.Manage"))
                 addPage("مراکز", tabCenters);
 
-            addPage("شماره‌گذاری", tabNumbering);
+            if (ProductMode.IsCharity)
+                addPage("شماره‌گذاری", tabNumbering);
             addPage("فایل‌ها", tabPaths);
             addPage("امنیت", tabSecurity);
 
@@ -258,13 +266,17 @@ namespace CaseManagement
                 addPage("پشتیبان‌گیری", tabBackup);
 
             addPage("اعلان‌ها", tabNotify);
-            addPage("کارت شناسایی", tabGuardianCard);
-            addPage("بسته‌های مساعدت", tabAssistancePackages);
+            if (ProductMode.IsCharity)
+            {
+                addPage("کارت شناسایی", tabGuardianCard);
+                addPage("بسته‌های مساعدت", tabAssistancePackages);
+            }
             addPage("زبان", tabLanguage);
-            addPage("اطلاعات پایه", tabLookup);
+            if (ProductMode.IsCharity)
+                addPage("اطلاعات پایه", tabLookup);
             addPage("نگهداری", tabMaintenance);
             // حذف پرونده‌ها فقط برای کاربر دارای مجوز حذف (مدیر) نمایش داده می‌شود.
-            if (SecurityContext.CanDelete())
+            if (ProductMode.IsCharity && SecurityContext.CanDelete())
                 addPage("حذف پرونده", tabDeleteCases);
             addPage("درباره", tabAbout);
 
@@ -776,6 +788,75 @@ LIMIT " + MaxDeleteGridRows, con))
                 frm.ShowDialog(this);
                 return confirmed;
             }
+        }
+
+        // ══════════════════════════════════════════════════════════════════
+        // فاز ۱ ERP — تب حالت محصول (فقط SuperAdmin)
+        // ══════════════════════════════════════════════════════════════════
+        private void BuildProductModeTab(Panel tab)
+        {
+            FlowLayoutPanel flow = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown,
+                WrapContents = false, AutoScroll = true, Padding = new Padding(14, 12, 14, 12)
+            };
+
+            Label lblTitle = new Label
+            {
+                Text = "حالت محصول", AutoSize = false, Width = 700, Height = 34,
+                Font = UiTheme.FontBold(UiTheme.SizeMedium), ForeColor = UiTheme.TextDark,
+                TextAlign = ContentAlignment.MiddleRight
+            };
+            flow.Controls.Add(lblTitle);
+
+            Label lblHint = new Label
+            {
+                Text = "Charity: همهٔ ماژول‌های پرونده، مساعدت، ایتام، سرپرست و آسیب‌پذیری دیده می‌شوند.\r\n" +
+                       "ERP: آن بخش‌ها از منو و گزارش‌ساز پنهان می‌شوند؛ هیچ فایلی حذف نمی‌شود.",
+                AutoSize = false, Width = 700, Height = 56,
+                Font = UiTheme.Font(UiTheme.SizeSmall), ForeColor = UiTheme.TextMuted,
+                TextAlign = ContentAlignment.TopRight
+            };
+            flow.Controls.Add(lblHint);
+
+            RadioButton radCharity = new RadioButton
+            {
+                Text = "Charity — مدیریت پرونده و خیریه",
+                AutoSize = true,
+                Checked = ProductMode.IsCharity,
+                Font = UiTheme.Font(UiTheme.SizeBody),
+                Margin = new Padding(0, 10, 0, 4)
+            };
+            RadioButton radErp = new RadioButton
+            {
+                Text = "ERP — هسته سازمانی و حسابداری",
+                AutoSize = true,
+                Checked = ProductMode.IsErp,
+                Font = UiTheme.Font(UiTheme.SizeBody),
+                Margin = new Padding(0, 4, 0, 8)
+            };
+            flow.Controls.Add(radCharity);
+            flow.Controls.Add(radErp);
+
+            Button btnSave = UiTheme.CreateButton("ذخیره حالت", "✔", UiTheme.Success);
+            btnSave.Size = new Size(180, 38);
+            btnSave.Margin = new Padding(0, 12, 0, 0);
+            btnSave.Click += delegate
+            {
+                string mode = radErp.Checked ? ProductMode.Erp : ProductMode.Charity;
+                string previous = ProductMode.Current;
+                ProductMode.Set(mode);
+                AuditLogger.Log("تغییر حالت محصول", "TblAppSettings", 0, previous, mode);
+                if (UiTheme.ShowConfirm(this,
+                    "حالت محصول ذخیره شد. برای اعمال کامل روی منو و داشبورد، برنامه باید دوباره باز شود. الان خارج شویم؟",
+                    "حالت محصول"))
+                {
+                    Application.Restart();
+                }
+            };
+            flow.Controls.Add(btnSave);
+
+            tab.Controls.Add(flow);
         }
 
         // ══════════════════════════════════════════════════════════════════
