@@ -20,6 +20,12 @@ namespace CaseManagement.Enterprise
 
         public FrmPermissionMatrix()
         {
+            if (!PermissionService.Require("Permission.Manage"))
+            {
+                Load += delegate { Close(); };
+                return;
+            }
+
             BuildUi();
             LoadMatrix();
         }

@@ -652,7 +652,7 @@ WHERE  TransitionID = @Id;",
 
         private bool RequireAdmin()
         {
-            if (SecurityContext.IsAdmin()) return true;
+            if (PermissionService.HasPermission("Workflow.Manage")) return true;
 
             UiTheme.ShowWarning(this, "تعریف گردش‌کار فقط برای مدیر سیستم مجاز است.");
             return false;

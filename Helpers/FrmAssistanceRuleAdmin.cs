@@ -298,7 +298,7 @@ namespace CaseManagement.Helpers
 
         private bool RequireAdmin()
         {
-            if (SecurityContext.IsAdmin() || SecurityContext.IsSuperAdmin()) return true;
+            if (PermissionService.HasPermission("Rule.Manage")) return true;
             Msg.Show("این بخش فقط برای مدیر سیستم در دسترس است.");
             return false;
         }

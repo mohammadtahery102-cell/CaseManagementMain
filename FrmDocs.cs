@@ -396,9 +396,25 @@ namespace CaseManagement
             return true;
         }
 
+        private bool EnsureCurrentCaseCenter()
+        {
+            string message;
+            if (CenterGuard.TryEnsureCaseAccess(db, CurrentCaseId, out message))
+                return true;
+            Msg.Show(message);
+            return false;
+        }
+
         private void LoadDocs()
         {
             if (CurrentCaseId <= 0)
+            {
+                dgvDocs.DataSource = null;
+                RefreshMissingDocumentsIndicator();
+                return;
+            }
+
+            if (!EnsureCurrentCaseCenter())
             {
                 dgvDocs.DataSource = null;
                 RefreshMissingDocumentsIndicator();
@@ -673,6 +689,9 @@ namespace CaseManagement
                 return;
             }
 
+            if (!EnsureCurrentCaseCenter())
+                return;
+
             // آموزش — رفع باگ حادّ (از بین رفتن فایل سند): وقتی سندی از گرید
             // انتخاب شده بود (currentDocId > 0) و کاربر به‌جای «ویرایش» دکمه
             // «ذخیره» را می‌زد، فایلِ همان سندِ انتخاب‌شده به‌عنوان «فایل قبلی»
@@ -784,6 +803,9 @@ namespace CaseManagement
                 Msg.Show("کاربر فقط مشاهده اجازه ویرایش سند ندارد.");
                 return;
             }
+
+            if (!EnsureCurrentCaseCenter())
+                return;
 
             if (currentDocId <= 0)
             {
@@ -931,6 +953,9 @@ namespace CaseManagement
                 return;
             }
 
+            if (!EnsureCurrentCaseCenter())
+                return;
+
             if (currentDocId <= 0)
             {
                 Msg.Show("اول یک سند را انتخاب کن");
@@ -1011,6 +1036,9 @@ namespace CaseManagement
                 Msg.Show("کاربر اجازه چاپ فهرست اسناد را ندارد.");
                 return;
             }
+
+            if (!EnsureCurrentCaseCenter())
+                return;
 
             if (CurrentCaseId <= 0)
             {

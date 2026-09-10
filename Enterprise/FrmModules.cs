@@ -23,6 +23,12 @@ namespace CaseManagement.Enterprise
 
         public FrmModules()
         {
+            if (!PermissionService.Require("Module.Manage"))
+            {
+                Load += delegate { Close(); };
+                return;
+            }
+
             BuildUi();
             LoadGlobal();
         }

@@ -373,7 +373,7 @@ WHERE  RuleID = @Id;",
 
         private bool RequireAdmin()
         {
-            if (SecurityContext.IsAdmin()) return true;
+            if (PermissionService.HasPermission("Rule.Manage")) return true;
 
             UiTheme.ShowWarning(this, "تعریف قواعد فقط برای مدیر سیستم مجاز است.");
             return false;

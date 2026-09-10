@@ -13,9 +13,7 @@ namespace CaseManagement.Enterprise
     //      تنظیم اشتباهی نتواند کل سیستم را برای همیشه قفل کند.
     //   ۲. استثنای کاربر (EntUserPermission) → اجازه یا منع صریح.
     //   ۳. مجوز نقش (EntRolePermission).
-    //   ۴. اگر مجوز اصلاً در سیستم تعریف نشده باشد → رفتار قدیمی
-    //      SecurityContext (سازگاری کامل عقب‌رو؛ کلید ناشناخته باعث قفل شدن
-    //      قابلیت‌های موجود نمی‌شود).
+    //   ۴. کلید ناشناخته یا بدون ردیف نقش → رد (ماتریس منبع حقیقت است).
     //
     // نتیجه‌ها برای هر کاربر یک‌بار خوانده و در حافظه نگه داشته می‌شوند، چون
     // در فرم‌ها ممکن است ده‌ها بار پشت سر هم پرسیده شوند.
@@ -32,6 +30,11 @@ namespace CaseManagement.Enterprise
         public static void Install()
         {
             WorkflowService.PermissionGate = HasPermission;
+            SecurityContext.AfterIdentityChanged = delegate
+            {
+                InvalidateCache();
+                ModuleService.InvalidateCache();
+            };
         }
 
         // ─── پرسش اصلی ────────────────────────────────────────────────────
@@ -50,13 +53,13 @@ namespace CaseManagement.Enterprise
                 if (cache.TryGetValue(permissionKey, out granted))
                     return granted;
 
-                // ۴) مجوز ناشناخته → رفتار قدیمی بر پایه نقش.
-                return LegacyFallback(permissionKey);
+                // کلید ناشناخته یا بدون ردیف نقش → رد. ماتریس منبع حقیقت است.
+                return false;
             }
-            catch
+            catch (Exception ex)
             {
-                // در صورت هر خطا، رفتار قدیمی ملاک است تا کاربر بی‌دلیل مسدود نشود.
-                return LegacyFallback(permissionKey);
+                ErrorLogger.Log(ex, "PermissionService.HasPermission:" + permissionKey);
+                return false;
             }
         }
 
@@ -119,28 +122,6 @@ namespace CaseManagement.Enterprise
                 _cacheUserId = -1;
                 _cacheRole   = null;
             }
-        }
-
-        // رفتار پیش از این ویژگی — بر پایه نقش‌های موجود SecurityContext.
-        private static bool LegacyFallback(string permissionKey)
-        {
-            string key = permissionKey ?? "";
-
-            if (key.EndsWith(".Delete", StringComparison.OrdinalIgnoreCase))
-                return SecurityContext.CanDelete();
-
-            if (key.EndsWith(".Manage", StringComparison.OrdinalIgnoreCase) ||
-                key.EndsWith(".Override", StringComparison.OrdinalIgnoreCase) ||
-                key.EndsWith(".Approve", StringComparison.OrdinalIgnoreCase))
-                return SecurityContext.IsAdmin();
-
-            if (key.EndsWith(".Create", StringComparison.OrdinalIgnoreCase) ||
-                key.EndsWith(".Edit", StringComparison.OrdinalIgnoreCase) ||
-                key.EndsWith(".Review", StringComparison.OrdinalIgnoreCase))
-                return SecurityContext.CanEdit();
-
-            // مشاهده و موارد ناشناخته: هر کاربر واردشده مجاز است (رفتار قبلی).
-            return SecurityContext.IsLoggedIn;
         }
 
         // ─── خواندن برای فرم مدیریت ───────────────────────────────────────
@@ -210,7 +191,7 @@ ORDER  BY SortOrder, PermissionID;");
         // ─── تغییر ماتریس ─────────────────────────────────────────────────
         public static WorkflowActionResult SetRolePermission(string role, string permissionKey, bool granted)
         {
-            if (!SecurityContext.IsAdmin())
+            if (!HasPermission("Permission.Manage"))
                 return WorkflowActionResult.Fail("تغییر مجوزها فقط برای مدیر سیستم مجاز است.");
 
             // مجوزهای مدیر کل قابل تغییر نیستند تا امکان قفل شدن کامل سیستم
@@ -235,7 +216,7 @@ ON CONFLICT(RoleName, PermKey) DO UPDATE SET IsGranted = @Granted;",
 
         public static WorkflowActionResult SetUserPermission(int userId, string permissionKey, bool? granted)
         {
-            if (!SecurityContext.IsAdmin())
+            if (!HasPermission("Permission.Manage"))
                 return WorkflowActionResult.Fail("تغییر مجوزها فقط برای مدیر سیستم مجاز است.");
 
             if (userId <= 0)

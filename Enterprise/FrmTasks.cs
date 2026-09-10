@@ -37,7 +37,7 @@ namespace CaseManagement.Enterprise
             TabControl tabs = new TabControl { Dock = DockStyle.Fill, RightToLeft = RightToLeft.Yes };
             tabs.TabPages.Add(BuildMineTab());
 
-            if (SecurityContext.IsAdmin())
+            if (PermissionService.HasPermission("Task.Manage"))
                 tabs.TabPages.Add(BuildAllTab());
 
             Controls.Add(tabs);

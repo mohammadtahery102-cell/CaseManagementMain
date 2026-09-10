@@ -197,7 +197,7 @@ LIMIT  2000;",
 
         public static WorkflowActionResult MarkResolved(int errorId, string note)
         {
-            if (!SecurityContext.IsAdmin())
+            if (!PermissionService.HasPermission("Error.View"))
                 return WorkflowActionResult.Fail("علامت‌گذاری خطا فقط برای مدیر سیستم مجاز است.");
 
             EntDb.Exec(@"
@@ -220,7 +220,7 @@ WHERE  ErrorID = @Id;",
         {
             if (days <= 0) return 0;
 
-            if (!SecurityContext.IsAdmin()) return 0;
+            if (!PermissionService.HasPermission("Error.View")) return 0;
 
             return EntDb.Exec(@"
 DELETE FROM EntErrorLog

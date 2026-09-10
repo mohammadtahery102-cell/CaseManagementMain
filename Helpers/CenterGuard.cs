@@ -60,5 +60,21 @@ namespace CaseManagement.Helpers
                 return centerId;
             }
         }
+
+        public static bool TryEnsureCaseAccess(DatabaseHelper db, int caseId, out string message)
+        {
+            message = null;
+            if (caseId <= 0) return true;
+            try
+            {
+                EnsureCaseAccess(db, caseId);
+                return true;
+            }
+            catch (CenterAccessDeniedException ex)
+            {
+                message = ex.Message;
+                return false;
+            }
+        }
     }
 }

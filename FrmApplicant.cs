@@ -358,7 +358,7 @@ SELECT ApplicantID,
        Status      AS [وضعیت],
        CreatedAt   AS [تاریخ ثبت]
 FROM TblApplicant
-WHERE (@CID = 0 OR CenterID = @CID OR CenterID IS NULL)
+WHERE (@CID = 0 OR CenterID = @CID)
 ORDER BY ApplicantID DESC", con))
             using (var da = new SQLiteDataAdapter(cmd))
             {

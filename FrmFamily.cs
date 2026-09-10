@@ -780,9 +780,24 @@ namespace CaseManagement
                 oldImage.Dispose();
         }
 
+        private bool EnsureCurrentCaseCenter()
+        {
+            string message;
+            if (CenterGuard.TryEnsureCaseAccess(db, CurrentCaseId, out message))
+                return true;
+            Msg.Show(message);
+            return false;
+        }
+
         private void LoadFamilyMembers()
         {
             if (CurrentCaseId <= 0)
+            {
+                dgvFamily.DataSource = null;
+                return;
+            }
+
+            if (!EnsureCurrentCaseCenter())
             {
                 dgvFamily.DataSource = null;
                 return;
@@ -1076,6 +1091,9 @@ namespace CaseManagement
                 return;
             }
 
+            if (!EnsureCurrentCaseCenter())
+                return;
+
             if (currentFamilyId > 0)
             {
                 Msg.Show("برای ثبت عضو جدید ابتدا دکمه جدید را بزنید؛ برای رکورد انتخاب‌شده از دکمه ویرایش استفاده کنید");
@@ -1187,6 +1205,9 @@ namespace CaseManagement
                 Msg.Show("کاربر فقط مشاهده اجازه ویرایش عضو خانواده ندارد.");
                 return;
             }
+
+            if (!EnsureCurrentCaseCenter())
+                return;
 
             if (currentFamilyId <= 0)
             {
@@ -1372,6 +1393,9 @@ namespace CaseManagement
                 return;
             }
 
+            if (!EnsureCurrentCaseCenter())
+                return;
+
             if (currentFamilyId <= 0)
             {
                 Msg.Show("اول یک عضو را انتخاب کن");
@@ -1500,6 +1524,9 @@ namespace CaseManagement
                 Msg.Show("کاربر اجازه چاپ فهرست اعضای خانواده را ندارد.");
                 return;
             }
+
+            if (!EnsureCurrentCaseCenter())
+                return;
 
             DataTable table = dgvFamily.DataSource as DataTable;
             if (table == null || table.Rows.Count == 0)

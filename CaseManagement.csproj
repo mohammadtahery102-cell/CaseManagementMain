@@ -540,6 +540,8 @@
     <Compile Include="Helpers\SidebarNav.cs">
       <SubType>Component</SubType>
     </Compile>
+    <Compile Include="Helpers\DashboardLayoutMath.cs" />
+    <Compile Include="Helpers\DashboardSafeChart.cs" />
     <Compile Include="Helpers\DashboardCard.cs">
       <SubType>Component</SubType>
     </Compile>

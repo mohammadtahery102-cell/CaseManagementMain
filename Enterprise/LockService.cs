@@ -186,7 +186,7 @@ WHERE  EntityName = @Entity AND EntityID = @Id AND IFNULL(UserID, 0) = @UserId;"
         // آزادسازی اجباری توسط مدیر سیستم — برای قفل جامانده.
         public static WorkflowActionResult ForceRelease(int lockId)
         {
-            if (!SecurityContext.IsAdmin())
+            if (!PermissionService.HasPermission("Lock.Override"))
                 return WorkflowActionResult.Fail("آزادسازی اجباری قفل فقط برای مدیر سیستم مجاز است.");
 
             DataTable table = EntDb.Query(

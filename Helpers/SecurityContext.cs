@@ -38,11 +38,15 @@ namespace CaseManagement.Helpers
         public static bool IsLoggedIn { get { return UserId > 0; } }
         public static bool HasCenter  { get { return CurrentCenterId > 0 || IsAllCenters; } }
 
+        // PermissionService/ModuleService کش را با این رویداد خالی می‌کنند.
+        public static Action AfterIdentityChanged;
+
         public static void SignIn(int userId, string username, string role)
         {
             UserId   = userId;
             Username = username ?? "";
             Role     = role     ?? "";
+            RaiseIdentityChanged();
         }
 
         public static void SelectCenter(int centerId, string centerCode, string centerName, bool allCenters = false)
@@ -66,6 +70,13 @@ namespace CaseManagement.Helpers
             CurrentCenterCode = "";
             CurrentCenterName = "";
             IsAllCenters      = false;
+            RaiseIdentityChanged();
+        }
+
+        private static void RaiseIdentityChanged()
+        {
+            if (AfterIdentityChanged != null)
+                AfterIdentityChanged();
         }
 
         public static bool IsAdmin()

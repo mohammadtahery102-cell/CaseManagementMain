@@ -327,7 +327,7 @@ namespace CaseManagement.Helpers
         // ─── کمکی‌ها (هم‌الگوی Enterprise/FrmRules) ─────────────────────────
         private bool RequireAdmin()
         {
-            if (SecurityContext.IsAdmin() || SecurityContext.IsSuperAdmin()) return true;
+            if (PermissionService.HasPermission("Settings.Manage")) return true;
             Msg.Show("این بخش فقط برای مدیر سیستم در دسترس است.");
             return false;
         }

@@ -53,6 +53,26 @@ namespace CaseManagement.Enterprise
         public const string ModuleModules     = "Modules";
         public const string ModuleSettings    = "Settings";
 
+        // مجوز لازم برای دیدن آیتم منو. null یعنی فقط وضعیت ماژول کافی است.
+        public static string RequiredPermission(string moduleKey)
+        {
+            if (string.Equals(moduleKey, ModuleCases, StringComparison.OrdinalIgnoreCase))
+                return "Case.View";
+            if (string.Equals(moduleKey, ModuleUsers, StringComparison.OrdinalIgnoreCase))
+                return "User.Manage";
+            if (string.Equals(moduleKey, ModulePermissions, StringComparison.OrdinalIgnoreCase))
+                return "Permission.Manage";
+            if (string.Equals(moduleKey, ModuleModules, StringComparison.OrdinalIgnoreCase))
+                return "Module.Manage";
+            if (string.Equals(moduleKey, ModuleSettings, StringComparison.OrdinalIgnoreCase))
+                return "Settings.Manage";
+            if (string.Equals(moduleKey, ModuleFinance, StringComparison.OrdinalIgnoreCase))
+                return "Finance.View";
+            if (string.Equals(moduleKey, ModuleAccounting, StringComparison.OrdinalIgnoreCase))
+                return "Accounting.View";
+            return null;
+        }
+
         private static readonly object Sync = new object();
 
         private static Dictionary<string, bool> _cache;
@@ -75,9 +95,9 @@ namespace CaseManagement.Enterprise
                 // ۱) ماژول ثبت‌نشده همیشه در دسترس است.
                 return true;
             }
-            catch
+            catch (Exception ex)
             {
-                // خطا نباید باعث ناپدید شدن بخشی از برنامه شود.
+                ErrorLogger.Log(ex, "ModuleService.IsEnabled:" + moduleKey);
                 return true;
             }
         }

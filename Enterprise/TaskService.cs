@@ -152,7 +152,7 @@ WHERE  TaskID = @Id;",
 
         public static WorkflowActionResult Assign(int taskId, int userId, string role)
         {
-            if (!SecurityContext.IsAdmin())
+            if (!PermissionService.HasPermission("Task.Manage"))
                 return WorkflowActionResult.Fail("تخصیص وظیفه فقط برای مدیر سیستم مجاز است.");
 
             EntDb.Exec(@"
@@ -166,7 +166,7 @@ UPDATE EntTask SET AssignedToUserID = @UserId, AssignedToRole = @Role WHERE Task
 
         public static WorkflowActionResult Delete(int taskId)
         {
-            if (!SecurityContext.IsAdmin())
+            if (!PermissionService.HasPermission("Task.Manage"))
                 return WorkflowActionResult.Fail("حذف وظیفه فقط برای مدیر سیستم مجاز است.");
 
             EntDb.Exec("DELETE FROM EntTask WHERE TaskID = @Id;", "@Id", taskId);

@@ -89,6 +89,7 @@ namespace CaseManagement
         private StatCard _cardIdElectronic, _cardIdPaper, _cardIdNone;
         private Panel _activityHost;
         private Label _lblDonutCenter;
+        private int _summaryRows = DashboardLayoutMath.MinSummaryRows;
 
         public FrmDashboard()
         {
@@ -140,7 +141,7 @@ namespace CaseManagement
 
             _sidebar.AddGroup("مالی و حسابداری", startExpanded: false);
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleFinance, IconFont.Money, "مالی", delegate { OpenFinance(); });
-            AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleAccounting, IconFont.Calculator, "حسابداری ایتام", delegate { using (var frm = new CaseManagement.Accounting.FrmAccounting()) frm.ShowDialog(this); });
+            AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleAccounting, IconFont.Calculator, "حسابداری ایتام", delegate { OpenAccounting(); });
 
             // ماژول اداری و کارمندان — رخصتی، ماموریت، درخواست استخدام.
             // آموزش — چرا AddItem و نه AddModuleNav: AddModuleNav به یک
@@ -179,15 +180,19 @@ namespace CaseManagement
             // کنترلِ دسترسیِ ماژولی عیناً مثلِ بقیه اعمال می‌شود.
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleFinance, IconFont.Settings,
                 "منابع مالی و خیّرین",
-                delegate { using (var frm = new CaseManagement.Helpers.FrmFundingAdmin()) frm.ShowDialog(this); });
+                delegate { using (var frm = new CaseManagement.Helpers.FrmFundingAdmin()) frm.ShowDialog(this); },
+                "Settings.Manage");
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleRules, IconFont.Settings,
                 "قواعد مساعدت",
-                delegate { using (var frm = new CaseManagement.Helpers.FrmAssistanceRuleAdmin()) frm.ShowDialog(this); });
+                delegate { using (var frm = new CaseManagement.Helpers.FrmAssistanceRuleAdmin()) frm.ShowDialog(this); },
+                "Rule.Manage");
 
             _sidebar.AddGroup("سیستم", startExpanded: false);
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleUsers, IconFont.Shield, "کاربران و دسترسی", OpenUsers);
-            _sidebar.AddItem(IconFont.Edit, "تعیین نقش اعضای خانواده", OpenAssignMemberRole);
-            _sidebar.AddItem(IconFont.Card, "قالب‌های کارت شناسایی", OpenCardTemplateManager);
+            if (CaseManagement.Enterprise.PermissionService.HasPermission("Settings.Manage"))
+                _sidebar.AddItem(IconFont.Edit, "تعیین نقش اعضای خانواده", OpenAssignMemberRole);
+            if (CaseManagement.Enterprise.PermissionService.HasPermission("GuardianCard.ManageTemplates"))
+                _sidebar.AddItem(IconFont.Card, "قالب‌های کارت شناسایی", OpenCardTemplateManager);
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleSettings, IconFont.Settings, "تنظیمات", OpenSettings);
             _sidebar.AddItem(IconFont.Book, "جزوه آموزشی", OpenTrainingManual);
             _sidebar.AddItem(IconFont.Phone, "ارتباط با ما", OpenContactUs);
@@ -391,7 +396,8 @@ namespace CaseManagement
             };
             tools.Controls.Add(MakeHeaderIconButton(IconFont.Sync, "تازه‌سازی", delegate { RefreshAll(); }));
             tools.Controls.Add(MakeHeaderIconButton(IconFont.Bell, "اعلان‌ها", delegate { SelectTabByTitle("اعلان‌ها"); }));
-            tools.Controls.Add(MakeHeaderIconButton(IconFont.Settings, "تنظیمات", delegate { OpenSettings(this, EventArgs.Empty); }));
+            if (CaseManagement.Enterprise.PermissionService.HasPermission("Settings.Manage"))
+                tools.Controls.Add(MakeHeaderIconButton(IconFont.Settings, "تنظیمات", delegate { OpenSettings(this, EventArgs.Empty); }));
 
             left.Controls.Add(tools);
             left.Controls.Add(userBox);
@@ -626,9 +632,18 @@ namespace CaseManagement
         // افزودن گزینه‌ی منو فقط در صورت فعال بودن ماژول برای کاربر جاری.
         // اگر ماژول در جدول ثبت نشده باشد، ModuleService مقدار true برمی‌گرداند
         // و گزینه مثل قبل ساخته می‌شود (سازگاری عقب‌رو).
-        private void AddModuleNav(string moduleKey, string icon, string title, EventHandler onClick)
+        private void AddModuleNav(string moduleKey, string icon, string title, EventHandler onClick, string extraPermission = null)
         {
             if (!CaseManagement.Enterprise.ModuleService.IsEnabled(moduleKey))
+                return;
+
+            string required = CaseManagement.Enterprise.ModuleService.RequiredPermission(moduleKey);
+            if (!string.IsNullOrEmpty(required) &&
+                !CaseManagement.Enterprise.PermissionService.HasPermission(required))
+                return;
+
+            if (!string.IsNullOrEmpty(extraPermission) &&
+                !CaseManagement.Enterprise.PermissionService.HasPermission(extraPermission))
                 return;
 
             _sidebar.AddItem(icon, title, onClick);
@@ -699,16 +714,17 @@ namespace CaseManagement
             // آموزش — تعداد ردیفِ این شبکه از تنظیمات سیستم (مؤسسه ▸ ظاهر و
             // نمایش) قابل تغییر است. پیش‌فرض همان ۲ ردیفِ قبلی (بدون تغییر
             // برای نصب‌های موجود)؛ کارت‌ها هم کمی کوچک‌تر از قبل شدند.
-            int SummaryRows = SettingsHelper.GetInt(SettingsHelper.DashboardSummaryRows, 2);
-            if (SummaryRows < 2) SummaryRows = 2;
-            if (SummaryRows > 4) SummaryRows = 4;
+            int SummaryRows = DashboardLayoutMath.ClampSummaryRows(
+                SettingsHelper.GetInt(SettingsHelper.DashboardSummaryRows, DashboardLayoutMath.MinSummaryRows));
+            _summaryRows = SummaryRows;
             // باید با تعدادِ عناصرِ آرایه‌ی summaryCards پایین‌تر یکی بماند،
             // وگرنه یا کارتِ آخر جا نمی‌شود یا خانه‌ی خالی می‌ماند.
             int SummaryCols = (int)Math.Ceiling(SummaryCardCount / (double)SummaryRows);
 
             summaryPanel = new TableLayoutPanel();
             summaryPanel.Dock = DockStyle.Top;
-            summaryPanel.Height = SummaryRows * 122 + 10;
+            int initialAvailable = Math.Max(1, page.ClientSize.Height - page.Padding.Top - page.Padding.Bottom);
+            summaryPanel.Height = DashboardLayoutMath.SummaryPanelHeight(SummaryRows, initialAvailable);
             summaryPanel.BackColor = UiTheme.Background;
             summaryPanel.Padding = new Padding(0, 0, 0, 10);
             summaryPanel.AutoScroll = false;
@@ -842,7 +858,19 @@ namespace CaseManagement
 
             page.Controls.Add(row2);
             page.Controls.Add(summaryPanel);
+            page.Layout += delegate { ApplySummaryRowHeight(page); };
             return page;
+        }
+
+        // ارتفاع ردیف کارت‌ها را از فضای واقعی TabPage حساب می‌کند تا ردیف
+        // نمودار (statusChart) هرگز صفر نشود — علت ریشه‌ای Height<=0px.
+        private void ApplySummaryRowHeight(TabPage page)
+        {
+            if (summaryPanel == null || page == null) return;
+            int available = page.ClientSize.Height - page.Padding.Top - page.Padding.Bottom;
+            int height = DashboardLayoutMath.SummaryPanelHeight(_summaryRows, available);
+            if (summaryPanel.Height != height)
+                summaryPanel.Height = height;
         }
 
         private StatCard MakeStatCard(string title, string unit, string glyph, string accentHex, string tintHex)
@@ -2380,7 +2408,7 @@ SELECT ReminderID,
        RemindAt AS [موعد],
        CASE IsDone WHEN 1 THEN 'انجام‌شده' ELSE 'در انتظار' END AS [وضعیت]
 FROM TblReminder
-WHERE (@CID = 0 OR CenterID = @CID OR CenterID IS NULL)
+WHERE (@CID = 0 OR CenterID = @CID)
 ORDER BY IsDone, RemindAt", cid);
             dgvCustomReminders.DataSource = table;
             if (dgvCustomReminders.Columns.Contains("ReminderID"))
@@ -2410,7 +2438,7 @@ SELECT ReminderID, Title, Note, RemindAt
 FROM TblReminder
 WHERE IsDone = 0 AND IsNotified = 0
   AND RemindAt <= strftime('%Y-%m-%d %H:%M', 'now', 'localtime')
-  AND (@CID = 0 OR CenterID = @CID OR CenterID IS NULL)
+  AND (@CID = 0 OR CenterID = @CID)
 ORDER BY RemindAt", con))
                 {
                     cmd.Parameters.AddWithValue("@CID", cid);
@@ -2625,7 +2653,7 @@ SELECT
     (SELECT COUNT(1) FROM TblDocs d
       JOIN TblCase c ON c.CasID = d.CasID
       WHERE (@CID=0 OR c.CenterID=@CID)" + CaseFilterSqlNoStatus("c") + @")                          AS DocCount,
-    (SELECT COUNT(1) FROM TblCenter WHERE IsActive = 1)                                              AS CenterCount,
+    (SELECT COUNT(1) FROM TblCenter WHERE IsActive = 1 AND (@CID = 0 OR CenterID = @CID)) AS CenterCount,
     (SELECT COALESCE(SUM(a.Amount), 0) FROM TblAssistance a
       JOIN TblCase c ON c.CasID = a.CasID
       WHERE (@CID=0 OR c.CenterID=@CID)" + CaseFilterSqlNoStatus("c") + @")                          AS FinanceTotal,
@@ -3076,7 +3104,7 @@ ORDER BY LogID DESC", cid);
 
         private void OpenUsers(object sender, EventArgs e)
         {
-            if (!SecurityContext.IsAdmin())
+            if (!CaseManagement.Enterprise.PermissionService.Require("User.Manage"))
             {
                 UiTheme.ShowWarning(this, "مدیریت کاربران فقط برای مدیر مجاز است.");
                 return;
@@ -3091,7 +3119,7 @@ ORDER BY LogID DESC", cid);
         // (روی چاپ کارت شناسایی و گزارش‌ها اثر می‌گذارد).
         private void OpenAssignMemberRole(object sender, EventArgs e)
         {
-            if (!SecurityContext.IsAdmin())
+            if (!CaseManagement.Enterprise.PermissionService.Require("Settings.Manage"))
             {
                 UiTheme.ShowWarning(this, "تعیین نقش اعضای خانواده فقط برای مدیر مجاز است.");
                 return;
@@ -3105,7 +3133,7 @@ ORDER BY LogID DESC", cid);
         // مدیر، چون روی چیزی که نهایتاً چاپ می‌شود اثر می‌گذارد.
         private void OpenCardTemplateManager(object sender, EventArgs e)
         {
-            if (!SecurityContext.IsAdmin())
+            if (!CaseManagement.Enterprise.PermissionService.Require("GuardianCard.ManageTemplates"))
             {
                 UiTheme.ShowWarning(this, "مدیریت قالب‌های کارت فقط برای مدیر مجاز است.");
                 return;
@@ -3117,7 +3145,7 @@ ORDER BY LogID DESC", cid);
 
         private void CleanupFiles(object sender, EventArgs e)
         {
-            if (!SecurityContext.CanDelete())
+            if (!CaseManagement.Enterprise.PermissionService.Require("Case.Delete"))
             {
                 UiTheme.ShowWarning(this, "پاکسازی فایل‌ها فقط برای مدیر مجاز است.");
                 return;
@@ -3216,7 +3244,7 @@ ORDER BY LogID DESC", cid);
         // ─── تنظیمات نرم‌افزار ──────────────────────────────────────────────────
         private void OpenSettings(object sender, EventArgs e)
         {
-            if (!SecurityContext.IsAdmin())
+            if (!CaseManagement.Enterprise.PermissionService.Require("Settings.Manage"))
             {
                 UiTheme.ShowWarning(this, "تنظیمات فقط برای مدیر مجاز است.");
                 return;
@@ -3330,6 +3358,17 @@ WHERE IsActive = 1 ORDER BY CenterCode", con))
             RefreshAll();
         }
 
+        private void OpenAccounting()
+        {
+            if (!CaseManagement.Enterprise.PermissionService.Require("Accounting.View"))
+            {
+                UiTheme.ShowWarning(this, "شما به بخش حسابداری دسترسی ندارید.");
+                return;
+            }
+
+            using (var frm = new CaseManagement.Accounting.FrmAccounting()) frm.ShowDialog(this);
+        }
+
         private Button CreateToolButton(string text, string icon, EventHandler handler)
         {
             Button button = UiTheme.CreateButton(text, icon, UiTheme.PrimaryDark);
@@ -3368,7 +3407,7 @@ WHERE IsActive = 1 ORDER BY CenterCode", con))
 
         private Chart CreateChart(string title, SeriesChartType chartType)
         {
-            Chart chart = new Chart();
+            Chart chart = new DashboardSafeChart();
             chart.Dock = DockStyle.Fill;
             chart.BackColor = UiTheme.CardBack;
             chart.Palette = ChartColorPalette.None;

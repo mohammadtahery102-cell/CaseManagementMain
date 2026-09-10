@@ -592,7 +592,7 @@ WHERE  LevelID = @Id;",
 
         private bool RequireAdmin()
         {
-            if (SecurityContext.IsAdmin()) return true;
+            if (PermissionService.HasPermission("Approval.Manage")) return true;
 
             UiTheme.ShowWarning(this, "تعریف زنجیره تأیید فقط برای مدیر سیستم مجاز است.");
             return false;

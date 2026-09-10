@@ -153,6 +153,12 @@ namespace CaseManagement
 
         public FrmSettings()
         {
+            if (!CaseManagement.Enterprise.PermissionService.Require("Settings.Manage"))
+            {
+                Load += delegate { Close(); };
+                return;
+            }
+
             BuildUi();
 
             // ⚠ این فرم ۱۱ تب دارد و هر تب دکمه‌ی «ذخیره»ی خودش را. پس Ctrl+S
@@ -218,7 +224,7 @@ namespace CaseManagement
             BuildNotificationsTab(tabNotify);
             BuildLookupTab(tabLookup);
             BuildMaintenanceTab(tabMaintenance);
-            if (SecurityContext.CanDelete())
+            if (CaseManagement.Enterprise.PermissionService.HasPermission("Case.Delete"))
                 BuildDeleteCasesTab(tabDeleteCases);
             BuildAboutTab(tabAbout);
             BuildLanguageTab(tabLanguage);
@@ -264,7 +270,7 @@ namespace CaseManagement
             addPage("اطلاعات پایه", tabLookup);
             addPage("نگهداری", tabMaintenance);
             // حذف پرونده‌ها فقط برای کاربر دارای مجوز حذف (مدیر) نمایش داده می‌شود.
-            if (SecurityContext.CanDelete())
+            if (CaseManagement.Enterprise.PermissionService.HasPermission("Case.Delete"))
                 addPage("حذف پرونده", tabDeleteCases);
             addPage("درباره", tabAbout);
 
@@ -593,7 +599,7 @@ LIMIT " + MaxDeleteGridRows, con))
 
         private void BtnDeleteCases_Click(object sender, EventArgs e)
         {
-            if (!SecurityContext.CanDelete())
+            if (!CaseManagement.Enterprise.PermissionService.Require("Case.Delete"))
             {
                 UiTheme.ShowWarning(this, "حذف پرونده فقط برای مدیر مجاز است.");
                 return;

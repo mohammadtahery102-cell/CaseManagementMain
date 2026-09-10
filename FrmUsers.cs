@@ -22,6 +22,12 @@ namespace CaseManagement
 
         public FrmUsers()
         {
+            if (!CaseManagement.Enterprise.PermissionService.Require("User.Manage"))
+            {
+                Load += delegate { Close(); };
+                return;
+            }
+
             BuildUi();
         }
 
