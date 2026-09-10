@@ -33,7 +33,7 @@ namespace CaseManagement.Helpers
         private static readonly string[] Tables =
         {
             "AccPeriod", "AccFund", "AccParty", "AccIncomeCategory", "AccExpenseCategory",
-            "AccTransaction", "AccStipend", "AccSalary", "AccExpenseItem",
+            "AccTransaction", "AccOutbox", "AccStipend", "AccSalary", "AccExpenseItem",
             "AccSettings", "AccAudit",
             "GlCompany", "GlCurrency", "GlAccountType", "GlExchangeRate",
             "GlFiscalYear", "GlFiscalPeriod", "GlAccount", "GlLedgerSetting",

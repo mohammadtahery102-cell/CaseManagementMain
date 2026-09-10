@@ -26,6 +26,7 @@ namespace CaseManagement.Accounting.Ledger.Infrastructure
                 ApplyV2CashBookMap(con);
                 ApplyV3CostCenter(con);
                 ApplyV4Project(con);
+                ApplyV6YearEndAccounts(con);
             }
 
             SchemaVersion.SetIfNewer(
@@ -36,6 +37,8 @@ namespace CaseManagement.Accounting.Ledger.Infrastructure
                 SchemaVersion.ComponentAccounting, 3, "Phase 4: GlCostCenter");
             SchemaVersion.SetIfNewer(
                 SchemaVersion.ComponentAccounting, 4, "Phase 5: GlProject");
+            SchemaVersion.SetIfNewer(
+                SchemaVersion.ComponentAccounting, 6, "Accounting V1: year-end FX accounts");
         }
 
         private static void CreateTables(SQLiteConnection con)
@@ -306,6 +309,33 @@ WHERE IsDeleted = 0;");
         private static void ApplyV4Project(SQLiteConnection con)
         {
             CreateDimensionTable(con, "GlProject", "ProjectID", "ParentProjectID");
+        }
+
+        private static void ApplyV6YearEndAccounts(SQLiteConnection con)
+        {
+            string now = LedgerTime.UtcNow(DateTime.UtcNow);
+            EnsureLeafAccount(con, LedgerCodes.DefaultCompanyId, LedgerCodes.AccountFxGain, "سود تسعیر ارز",
+                LedgerCodes.TypeRevenue, "4000", now);
+            EnsureLeafAccount(con, LedgerCodes.DefaultCompanyId, LedgerCodes.AccountFxLoss, "زیان تسعیر ارز",
+                LedgerCodes.TypeExpense, "5000", now);
+        }
+
+        private static void EnsureLeafAccount(SQLiteConnection con, int companyId, string code, string name,
+            string type, string parentCode, string now)
+        {
+            if (ScalarInt(con, "SELECT COUNT(1) FROM GlAccount WHERE CompanyID = " + companyId
+                + " AND AccountCode = '" + code.Replace("'", "''") + "' AND IsDeleted = 0") > 0)
+                return;
+            long parentId = 0;
+            using (SQLiteCommand cmd = new SQLiteCommand(
+                "SELECT AccountID FROM GlAccount WHERE CompanyID = @c AND AccountCode = @p AND IsDeleted = 0 LIMIT 1;", con))
+            {
+                cmd.Parameters.AddWithValue("@c", companyId);
+                cmd.Parameters.AddWithValue("@p", parentCode);
+                object v = cmd.ExecuteScalar();
+                if (v != null && v != DBNull.Value) parentId = Convert.ToInt64(v);
+            }
+            InsertAccount(con, companyId, code, name, type, parentId > 0 ? (long?)parentId : null, 2, true, now, LedgerCodes.SystemUser);
         }
 
         private static void CreateDimensionTable(SQLiteConnection con, string table, string idCol, string parentCol)

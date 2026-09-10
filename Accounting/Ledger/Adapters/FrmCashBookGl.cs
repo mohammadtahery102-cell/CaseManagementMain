@@ -14,15 +14,22 @@ namespace CaseManagement.Accounting.Ledger.Adapters
         private readonly ILedgerIdentity _identity;
         private readonly ICashBookGlService _svc;
         private readonly IChartOfAccountsService _coa;
+        private readonly IOutboxProcessor _outbox;
+        private readonly IOutboxMonitor _monitor;
         private DataGridView _gridTxn;
         private DataGridView _gridMap;
+        private DataGridView _gridOutbox;
         private ComboBox _cmbKind;
+        private Label _lblOutbox;
 
         public FrmCashBookGl()
         {
             _identity = DesktopLedgerIdentity.FromSession();
             _svc = new CashBookGlService();
             _coa = new ChartOfAccountsService();
+            IntegrationOutboxProcessor box = new IntegrationOutboxProcessor();
+            _outbox = box;
+            _monitor = box;
             Text = "صندوق → دفتر کل";
             RightToLeft = RightToLeft.Yes;
             RightToLeftLayout = true;
@@ -33,9 +40,11 @@ namespace CaseManagement.Accounting.Ledger.Adapters
             TabControl tabs = new TabControl { Dock = DockStyle.Fill, RightToLeft = RightToLeft.Yes, RightToLeftLayout = true };
             tabs.TabPages.Add(BuildTxnTab());
             tabs.TabPages.Add(BuildMapTab());
+            tabs.TabPages.Add(BuildOutboxTab());
             Controls.Add(tabs);
             ReloadTxn();
             ReloadMap();
+            ReloadOutbox();
         }
 
         private TabPage BuildTxnTab()
@@ -66,6 +75,21 @@ namespace CaseManagement.Accounting.Ledger.Adapters
             flow.Controls.Add(new Label { Text = "نوع", AutoSize = true, Padding = new Padding(8, 8, 4, 0) });
             flow.Controls.Add(_cmbKind);
             flow.Controls.Add(Btn("نگاشت جدید", AddMap));
+            p.Controls.Add(flow);
+            return p;
+        }
+
+        private TabPage BuildOutboxTab()
+        {
+            TabPage p = new TabPage("صف ارسال");
+            _gridOutbox = Grid();
+            _lblOutbox = new Label { Dock = DockStyle.Bottom, Height = 28, TextAlign = ContentAlignment.MiddleRight };
+            p.Controls.Add(_gridOutbox);
+            p.Controls.Add(_lblOutbox);
+            FlowLayoutPanel flow = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 44, RightToLeft = RightToLeft.Yes };
+            flow.Controls.Add(Btn("پردازش صف", DrainOutbox));
+            flow.Controls.Add(Btn("تلاش مجدد", RequeueSelected));
+            flow.Controls.Add(Btn("تازه‌سازی", ReloadOutbox));
             p.Controls.Add(flow);
             return p;
         }
@@ -106,6 +130,45 @@ namespace CaseManagement.Accounting.Ledger.Adapters
             _gridMap.DataSource = t;
             if (_gridMap.Columns.Contains("Id")) _gridMap.Columns["Id"].Visible = false;
             if (_gridMap.Columns.Contains("RV")) _gridMap.Columns["RV"].Visible = false;
+        }
+
+        private void ReloadOutbox()
+        {
+            OutboxSnapshot snap = _monitor.GetSnapshot(_identity);
+            _lblOutbox.Text = "در انتظار " + snap.Pending + "  ·  ناموفق " + snap.Failed +
+                "  ·  بن‌بست " + snap.DeadLetter + "  ·  انجام‌شده " + snap.Completed;
+            DataTable t = new DataTable();
+            t.Columns.Add("Id", typeof(long));
+            t.Columns.Add("ماژول");
+            t.Columns.Add("سند", typeof(long));
+            t.Columns.Add("عمل");
+            t.Columns.Add("وضعیت");
+            t.Columns.Add("تلاش", typeof(int));
+            t.Columns.Add("خطا");
+            IList<AccOutboxRow> rows = snap.Recent ?? new List<AccOutboxRow>();
+            for (int i = 0; i < rows.Count; i++)
+            {
+                AccOutboxRow r = rows[i];
+                t.Rows.Add(r.OutboxId, r.SourceModule, r.DocumentId, r.Operation, r.Status, r.AttemptCount, r.LastError ?? "");
+            }
+            _gridOutbox.DataSource = t;
+            if (_gridOutbox.Columns.Contains("Id")) _gridOutbox.Columns["Id"].Visible = false;
+        }
+
+        private void DrainOutbox()
+        {
+            int n = _outbox.ProcessDue(_identity);
+            UiTheme.ShowSuccess(this, "پردازش شد: " + n);
+            ReloadOutbox();
+            ReloadTxn();
+        }
+
+        private void RequeueSelected()
+        {
+            long id = SelectedId(_gridOutbox);
+            if (id <= 0) return;
+            Show(_outbox.Requeue(id, _identity));
+            ReloadOutbox();
         }
 
         private void PostSelected()

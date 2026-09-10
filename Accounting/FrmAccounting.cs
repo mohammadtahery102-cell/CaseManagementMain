@@ -926,6 +926,7 @@ namespace CaseManagement.Accounting
                     UiTheme.ShowSuccess(this,
                         "سند قبلی باطل شد و سند اصلاحی با شماره " + revised.DocNo + " صادر گردید.\n" +
                         "هر دو سند در دفتر و ردّ حسابرسی باقی می‌مانند.");
+                    AccGlOutboxDrain.AfterAccCommit();
                     SoftResetTxnForm();
                     LoadTransactions();
                     UpdateFundBalanceLabel();
@@ -952,6 +953,7 @@ namespace CaseManagement.Accounting
 
                 UiTheme.ShowSuccess(this, "تراکنش با شماره سند " + saved.DocNo + " ثبت شد." +
                     (saved.DocNoReassigned ? "\n(شماره سند به‌دلیل استفاده‌ی هم‌زمان تغییر کرد.)" : ""));
+                AccGlOutboxDrain.AfterAccCommit();
                 SoftResetTxnForm();
                 LoadTransactions();
                 UpdateFundBalanceLabel();
@@ -999,6 +1001,7 @@ namespace CaseManagement.Accounting
             try
             {
                 _repo.VoidTransaction(Convert.ToInt32(idv), reason);
+                AccGlOutboxDrain.AfterAccCommit();
                 UiTheme.ShowSuccess(this, "تراکنش باطل شد و از مانده‌ها کنار گذاشته شد.");
                 LoadTransactions();
                 UpdateFundBalanceLabel();

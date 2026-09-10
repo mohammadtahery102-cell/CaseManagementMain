@@ -208,6 +208,13 @@ namespace CaseManagement.Accounting.Ledger.Application
             return LedgerResult.Entity(y.FiscalYearId, y.RowVersion + 1);
         }
 
+        public LedgerResult ReopenPeriod(CalendarStatusCommand command, ILedgerIdentity identity)
+        {
+            if (identity == null || !identity.HasPermission(LedgerPermissions.ClosePeriod))
+                return LedgerResult.Fail(LedgerErrorCodes.PermissionDenied, LedgerPermissions.ClosePeriod);
+            return SetPeriodStatus(command, identity, LedgerCodes.StatusOpen);
+        }
+
         public IList<GlFiscalYear> ListYears(int companyId)
         {
             return _repo.ListYears(companyId);

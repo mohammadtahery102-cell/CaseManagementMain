@@ -26,7 +26,13 @@ namespace CaseManagement.Accounting.Ledger.Domain
         public const string SourceManual = "Manual";
         public const string SourceOpening = "Opening";
         public const string SourceClose = "Close";
+        public const string SourceRevaluation = "Revaluation";
         public const string SourceReversal = "Reversal";
+        public const string DocFiscalYear = "GlFiscalYear";
+        public const string DocFxRevaluation = "FxRevaluation";
+        public const string AccountRetainedEarnings = "3200";
+        public const string AccountFxGain = "4300";
+        public const string AccountFxLoss = "5300";
         public const string SourceCashBook = "CashBook";
         public const string SourceInventory = "Inventory";
         public const string SourcePurchase = "Purchase";
@@ -54,6 +60,14 @@ namespace CaseManagement.Accounting.Ledger.Domain
         public const string DocAccTransaction = "AccTransaction";
         public const string AccReceipt = "دریافت";
         public const string AccPayment = "پرداخت";
+
+        public const string OutboxPending = "Pending";
+        public const string OutboxProcessing = "Processing";
+        public const string OutboxCompleted = "Completed";
+        public const string OutboxFailed = "Failed";
+        public const string OutboxDeadLetter = "DeadLetter";
+        public const string OutboxPost = "Post";
+        public const string OutboxReverse = "Reverse";
     }
 
     public static class LedgerPermissions
@@ -71,6 +85,7 @@ namespace CaseManagement.Accounting.Ledger.Domain
         public const string ManageCostCenter = "Ledger.ManageCostCenter";
         public const string ManageProject = "Ledger.ManageProject";
         public const string MapCashBook = "Ledger.MapCashBook";
+        public const string OutboxProcess = "Ledger.Outbox.Process";
     }
 
     public static class LedgerErrorCodes

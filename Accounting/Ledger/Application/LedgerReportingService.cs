@@ -156,6 +156,41 @@ namespace CaseManagement.Accounting.Ledger.Application
             return result;
         }
 
+        public IList<CurrencyPositionRow> GetCurrencyPositions(LedgerReportQuery query, ILedgerIdentity identity)
+        {
+            List<CurrencyPositionRow> list = new List<CurrencyPositionRow>();
+            if (identity == null || !identity.HasPermission(LedgerPermissions.View))
+                return list;
+
+            int companyId = Company(query, identity);
+            int center = Center(query, identity);
+            string to = LedgerTime.DateOnly(query != null ? query.ToDate : null) ?? "";
+            string fromUnused = LedgerTime.DateOnly(query != null ? query.FromDate : null) ?? "";
+            ApplyFiscalYear(query, companyId, ref fromUnused, ref to);
+            GlCompany co = _repo.GetCompany(companyId);
+            string baseCcy = co != null ? co.BaseCurrencyCode : LedgerCodes.BaseCurrency;
+            System.Data.DataTable table = _repo.QueryCurrencyNets(companyId, center, to, baseCcy);
+            foreach (System.Data.DataRow r in table.Rows)
+            {
+                CurrencyPositionRow row = new CurrencyPositionRow();
+                row.AccountId = ToLong(r["AccountID"]);
+                row.AccountCode = r["AccountCode"].ToString();
+                row.AccountName = r["AccountName"].ToString();
+                row.AccountTypeCode = r["AccountTypeCode"].ToString();
+                row.CurrencyCode = r["CurrencyCode"].ToString();
+                row.TransactionNetMinor = ToLong(r["TxnNet"]);
+                row.BookedBaseMinor = ToLong(r["BaseNet"]);
+                long? rate = _repo.GetRateToBaseMicros(companyId, row.CurrencyCode, to);
+                row.RateToBaseMicros = rate.HasValue ? rate.Value : 0;
+                row.RevaluedBaseMinor = rate.HasValue
+                    ? row.TransactionNetMinor * rate.Value / LedgerCodes.RateOne
+                    : 0;
+                row.UnrealizedBaseMinor = row.RevaluedBaseMinor - row.BookedBaseMinor;
+                list.Add(row);
+            }
+            return list;
+        }
+
         private static long Add(IList<StatementLine> list, TrialBalanceRow t, long amount, long total)
         {
             if (amount == 0) return total;

@@ -240,10 +240,40 @@ CREATE TABLE IF NOT EXISTS AccAudit (
                 Exec(con, "CREATE INDEX IF NOT EXISTS IX_AccSalary_Fund ON AccSalary(FundID);");
                 Exec(con, "CREATE INDEX IF NOT EXISTS IX_AccExpItem_Fund ON AccExpenseItem(FundID);");
 
+                Exec(con, @"
+CREATE TABLE IF NOT EXISTS AccOutbox (
+  OutboxID INTEGER PRIMARY KEY,
+  CompanyID INTEGER NOT NULL,
+  CenterID INTEGER NOT NULL DEFAULT 0,
+  SourceModule TEXT NOT NULL,
+  DocumentType TEXT NOT NULL,
+  DocumentID INTEGER NOT NULL,
+  Operation TEXT NOT NULL,
+  Payload TEXT NULL,
+  Status TEXT NOT NULL,
+  AttemptCount INTEGER NOT NULL DEFAULT 0,
+  MaxAttempts INTEGER NOT NULL DEFAULT 8,
+  NextAttemptAt TEXT NULL,
+  LastError TEXT NULL,
+  LastErrorCode TEXT NULL,
+  LockedAt TEXT NULL,
+  LockedBy TEXT NULL,
+  ProcessedAt TEXT NULL,
+  CreatedAt TEXT NOT NULL,
+  CreatedBy TEXT NULL,
+  RowVersion INTEGER NOT NULL DEFAULT 1
+);");
+                Exec(con, @"
+CREATE UNIQUE INDEX IF NOT EXISTS UX_AccOutbox_SourceOp
+ON AccOutbox(SourceModule, DocumentType, DocumentID, Operation);");
+                Exec(con, "CREATE INDEX IF NOT EXISTS IX_AccOutbox_Due ON AccOutbox(Status, NextAttemptAt, OutboxID);");
+
                 SeedDefaults(con);
             }
 
             CaseManagement.Accounting.Ledger.Infrastructure.LedgerInitializer.Ensure();
+            SchemaVersion.SetIfNewer(
+                SchemaVersion.ComponentAccounting, 6, "Accounting V1: year-end close and FX");
         }
 
         private static void SeedDefaults(SQLiteConnection con)

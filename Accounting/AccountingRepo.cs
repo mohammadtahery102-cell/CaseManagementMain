@@ -3,6 +3,7 @@ using System.Data;
 using System.Data.SQLite;
 using CaseManagement.DAL;
 using CaseManagement.Helpers;
+using CaseManagement.Accounting.Ledger.Domain;
 
 namespace CaseManagement.Accounting
 {
@@ -510,6 +511,10 @@ VALUES
 
                 using (var idCmd = new SQLiteCommand("SELECT last_insert_rowid();", con, tr))
                     result.TxnId = Convert.ToInt32(idCmd.ExecuteScalar());
+
+                AccOutboxWriter.Enqueue(con, tr, LedgerCodes.SourceCashBook, LedgerCodes.DocAccTransaction,
+                    result.TxnId, LedgerCodes.OutboxPost, LedgerCodes.DefaultCompanyId,
+                    SecurityContext.CurrentCenterId, SecurityContext.Username);
             });
 
             result.DocNo = finalDoc;
@@ -659,6 +664,13 @@ VALUES
 
                 using (var idCmd = new SQLiteCommand("SELECT last_insert_rowid();", con, tr))
                     result.TxnId = Convert.ToInt32(idCmd.ExecuteScalar());
+
+                AccOutboxWriter.Enqueue(con, tr, LedgerCodes.SourceCashBook, LedgerCodes.DocAccTransaction,
+                    originalId, LedgerCodes.OutboxReverse, LedgerCodes.DefaultCompanyId,
+                    SecurityContext.CurrentCenterId, SecurityContext.Username);
+                AccOutboxWriter.Enqueue(con, tr, LedgerCodes.SourceCashBook, LedgerCodes.DocAccTransaction,
+                    result.TxnId, LedgerCodes.OutboxPost, LedgerCodes.DefaultCompanyId,
+                    SecurityContext.CurrentCenterId, SecurityContext.Username);
             });
 
             result.DocNo = finalDoc;
@@ -696,11 +708,27 @@ VALUES
                 "سند " + before["DocNo"] + " / " + before["Direction"] + " / " +
                 Convert.ToDouble(before["Amount"]).ToString("N0") + " افغانی";
 
-            _db.ExecuteNonQuery(@"
+            _db.ExecuteInTransaction(delegate (SQLiteConnection con, SQLiteTransaction tr)
+            {
+                int affected;
+                using (SQLiteCommand cmd = new SQLiteCommand(@"
 UPDATE AccTransaction
 SET IsReversed = 1, VoidReason = @r, VoidedBy = @by, VoidedAt = datetime('now')
-WHERE TxnID = @id AND (@cid = 0 OR CenterID = @cid) AND COALESCE(IsReversed,0) = 0",
-                P("@id", id), P("@r", reason), P("@by", SecurityContext.Username), P("@cid", Cid));
+WHERE TxnID = @id AND (@cid = 0 OR CenterID = @cid) AND COALESCE(IsReversed,0) = 0", con, tr))
+                {
+                    cmd.Parameters.AddRange(new[]
+                    {
+                        P("@id", id), P("@r", reason), P("@by", SecurityContext.Username), P("@cid", Cid)
+                    });
+                    affected = cmd.ExecuteNonQuery();
+                }
+                if (affected == 1)
+                {
+                    AccOutboxWriter.Enqueue(con, tr, LedgerCodes.SourceCashBook, LedgerCodes.DocAccTransaction,
+                        id, LedgerCodes.OutboxReverse, LedgerCodes.DefaultCompanyId,
+                        SecurityContext.CurrentCenterId, SecurityContext.Username);
+                }
+            });
 
             AccAudit.LogChange("ابطال تراکنش", "AccTransaction", id, snapshot, "باطل شد", reason);
         }

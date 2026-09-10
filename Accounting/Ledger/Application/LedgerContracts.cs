@@ -226,6 +226,7 @@ namespace CaseManagement.Accounting.Ledger.Application
         LedgerResult LockYear(CalendarStatusCommand command, ILedgerIdentity identity);
         LedgerResult UnlockYear(CalendarStatusCommand command, ILedgerIdentity identity);
         LedgerResult ReopenYear(CalendarStatusCommand command, ILedgerIdentity identity);
+        LedgerResult ReopenPeriod(CalendarStatusCommand command, ILedgerIdentity identity);
         GlFiscalPeriod Resolve(int companyId, string postingDate);
         IList<GlFiscalYear> ListYears(int companyId);
         IList<GlFiscalPeriod> ListPeriods(long fiscalYearId);
@@ -349,5 +350,78 @@ namespace CaseManagement.Accounting.Ledger.Application
         IList<GeneralLedgerLineRow> GetGeneralLedger(LedgerReportQuery query, ILedgerIdentity identity);
         BalanceSheetResult GetBalanceSheet(LedgerReportQuery query, ILedgerIdentity identity);
         ProfitAndLossResult GetProfitAndLoss(LedgerReportQuery query, ILedgerIdentity identity);
+        IList<CurrencyPositionRow> GetCurrencyPositions(LedgerReportQuery query, ILedgerIdentity identity);
+    }
+
+    public class CurrencyPositionRow
+    {
+        public long AccountId { get; set; }
+        public string AccountCode { get; set; }
+        public string AccountName { get; set; }
+        public string AccountTypeCode { get; set; }
+        public string CurrencyCode { get; set; }
+        public long TransactionNetMinor { get; set; }
+        public long BookedBaseMinor { get; set; }
+        public long RateToBaseMicros { get; set; }
+        public long RevaluedBaseMinor { get; set; }
+        public long UnrealizedBaseMinor { get; set; }
+    }
+
+    public class YearEndCloseCommand
+    {
+        public long FiscalYearId { get; set; }
+        public long ExpectedRowVersion { get; set; }
+        public int CenterId { get; set; }
+    }
+
+    public class OpeningBalanceCommand
+    {
+        public long FiscalYearId { get; set; }
+        public int CenterId { get; set; }
+        public string PostingDate { get; set; }
+        public string Description { get; set; }
+        public List<JournalLineDraft> Lines { get; set; }
+    }
+
+    public class InitializeNextYearCommand
+    {
+        public long PriorFiscalYearId { get; set; }
+        public string Code { get; set; }
+        public string Name { get; set; }
+        public bool PostOpeningFromPrior { get; set; }
+        public int CenterId { get; set; }
+    }
+
+    public class UpsertExchangeRateCommand
+    {
+        public int CompanyId { get; set; }
+        public string CurrencyCode { get; set; }
+        public string RateDate { get; set; }
+        public long RateToBaseMicros { get; set; }
+    }
+
+    public class RevalueCommand
+    {
+        public int CompanyId { get; set; }
+        public int CenterId { get; set; }
+        public string AsOfDate { get; set; }
+    }
+
+    public interface IYearEndService
+    {
+        LedgerResult Close(YearEndCloseCommand command, ILedgerIdentity identity);
+        LedgerResult Reopen(YearEndCloseCommand command, ILedgerIdentity identity);
+        LedgerResult PostOpening(OpeningBalanceCommand command, ILedgerIdentity identity);
+        LedgerResult PostOpeningFromPriorYear(long priorYearId, long nextYearId, ILedgerIdentity identity);
+        LedgerResult InitializeNextYear(InitializeNextYearCommand command, ILedgerIdentity identity);
+    }
+
+    public interface ICurrencyAccountingService
+    {
+        IList<GlCurrency> ListCurrencies(int companyId);
+        IList<GlExchangeRate> ListRates(int companyId, string currencyCode);
+        LedgerResult UpsertRate(UpsertExchangeRateCommand command, ILedgerIdentity identity);
+        LedgerResult Revalue(RevalueCommand command, ILedgerIdentity identity);
+        string FunctionalCurrency(int companyId);
     }
 }

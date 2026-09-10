@@ -767,6 +767,7 @@ CREATE TABLE IF NOT EXISTS EntUserPermission (
             AddPermission(con, "Ledger.MapCashBook", "نگاشت صندوق به دفتر کل", "دفتر کل", 561, true, false, false);
             AddPermission(con, "Ledger.ManageCostCenter", "مدیریت مراکز هزینه", "دفتر کل", 562, true, false, false);
             AddPermission(con, "Ledger.ManageProject", "مدیریت پروژه‌های حسابداری", "دفتر کل", 563, true, false, false);
+            AddPermission(con, "Ledger.Outbox.Process", "پردازش صف ارسال دفتر کل", "دفتر کل", 564, true, false, false);
 
             // ─── نسخهٔ ۱٫۰ / فاز ۴ (موج ۵) — کاربران/تنظیمات/پشتیبان‌گیری/
             // همگام‌سازی/مراکز/ماژول‌ها. «User.Manage» و «Module.Manage» از

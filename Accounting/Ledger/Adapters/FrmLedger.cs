@@ -19,6 +19,8 @@ namespace CaseManagement.Accounting.Ledger.Adapters
         private readonly IGeneralLedger _gl;
         private readonly IChartOfAccountsService _coa;
         private readonly IFiscalCalendarService _calendar;
+        private readonly IYearEndService _yearEnd;
+        private readonly ICurrencyAccountingService _fx;
         private readonly ILedgerReporting _reports;
         private readonly int _minorUnits;
 
@@ -43,6 +45,8 @@ namespace CaseManagement.Accounting.Ledger.Adapters
             _gl = new PostingEngine();
             _coa = new ChartOfAccountsService();
             _calendar = new FiscalCalendarService();
+            _yearEnd = new YearEndCloseService();
+            _fx = new CurrencyAccountingService();
             _reports = new LedgerReportingService();
             GlCompany company = _coa.GetCompany(_identity.CompanyId > 0 ? _identity.CompanyId : LedgerCodes.DefaultCompanyId);
             _minorUnits = company != null ? company.MinorUnits : 2;
@@ -119,12 +123,16 @@ namespace CaseManagement.Accounting.Ledger.Adapters
                 Btn("بستن سال", delegate { YearAction("close"); }),
                 Btn("قفل سال", delegate { YearAction("lock"); }),
                 Btn("بازگشایی سال", delegate { YearAction("reopen"); }),
-                Btn("رفع قفل سال", delegate { YearAction("unlock"); })));
+                Btn("رفع قفل سال", delegate { YearAction("unlock"); }),
+                Btn("سال بعد + افتتاحیه", InitNextYear),
+                Btn("نرخ ارز", UpsertRate),
+                Btn("تسعیر ارز", RevalueFx)));
             split.Panel2.Controls.Add(_gridPeriods);
             split.Panel2.Controls.Add(Toolbar(
                 Btn("دوره جدید", AddPeriod),
                 Btn("بستن دوره", delegate { PeriodAction(true); }),
-                Btn("قفل دوره", delegate { PeriodAction(false); })));
+                Btn("قفل دوره", delegate { PeriodAction(false); }),
+                Btn("بازگشایی دوره", ReopenSelectedPeriod)));
             page.Controls.Add(split);
             return page;
         }
@@ -161,7 +169,7 @@ namespace CaseManagement.Accounting.Ledger.Adapters
                 Padding = new Padding(6)
             };
             _cmbReport = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 160 };
-            _cmbReport.Items.AddRange(new object[] { "دفتر کل", "تراز آزمایشی", "ترازنامه", "سود و زیان" });
+            _cmbReport.Items.AddRange(new object[] { "دفتر کل", "تراز آزمایشی", "ترازنامه", "سود و زیان", "موقعیت ارزی" });
             _cmbReport.SelectedIndex = 1;
             _txtFrom = new TextBox { Width = 90, Text = DateTime.UtcNow.Year + "-01-01" };
             _txtTo = new TextBox { Width = 90, Text = DateTime.UtcNow.ToString("yyyy-MM-dd") };
@@ -406,9 +414,10 @@ namespace CaseManagement.Accounting.Ledger.Adapters
             if (id <= 0) return;
             CalendarStatusCommand cmd = new CalendarStatusCommand { EntityId = id, ExpectedRowVersion = rv };
             LedgerResult r;
-            if (action == "close") r = _calendar.CloseYear(cmd, _identity);
+            YearEndCloseCommand ye = new YearEndCloseCommand { FiscalYearId = id, ExpectedRowVersion = rv, CenterId = _identity.CenterId };
+            if (action == "close") r = _yearEnd.Close(ye, _identity);
             else if (action == "lock") r = _calendar.LockYear(cmd, _identity);
-            else if (action == "reopen") r = _calendar.ReopenYear(cmd, _identity);
+            else if (action == "reopen") r = _yearEnd.Reopen(ye, _identity);
             else r = _calendar.UnlockYear(cmd, _identity);
             ShowResult(r);
             ReloadCalendar();
@@ -422,6 +431,83 @@ namespace CaseManagement.Accounting.Ledger.Adapters
             CalendarStatusCommand cmd = new CalendarStatusCommand { EntityId = id, ExpectedRowVersion = rv };
             ShowResult(close ? _calendar.ClosePeriod(cmd, _identity) : _calendar.LockPeriod(cmd, _identity));
             ReloadCalendar();
+        }
+
+        private void ReopenSelectedPeriod()
+        {
+            long id = SelectedId(_gridPeriods);
+            long rv = SelectedRv(_gridPeriods);
+            if (id <= 0) return;
+            ShowResult(_calendar.ReopenPeriod(new CalendarStatusCommand { EntityId = id, ExpectedRowVersion = rv }, _identity));
+            ReloadCalendar();
+        }
+
+        private void InitNextYear()
+        {
+            long id = SelectedId(_gridYears);
+            if (id <= 0) return;
+            using (Form dlg = SmallDialog("سال بعد", 400, 200))
+            {
+                TextBox code = Field(dlg, "کد سال بعد", 16, 40, 220);
+                CheckBox open = new CheckBox { Text = "افتتاحیه از سال انتخاب‌شده", Left = 16, Top = 90, Width = 260, Checked = true, Parent = dlg };
+                Button ok = Btn("اجرا", delegate
+                {
+                    LedgerResult r = _yearEnd.InitializeNextYear(new InitializeNextYearCommand
+                    {
+                        PriorFiscalYearId = id,
+                        Code = code.Text,
+                        PostOpeningFromPrior = open.Checked,
+                        CenterId = _identity.CenterId
+                    }, _identity);
+                    ShowResult(r);
+                    if (r.Ok) { dlg.DialogResult = DialogResult.OK; dlg.Close(); }
+                });
+                ok.Left = 250; ok.Top = 130; dlg.Controls.Add(ok);
+                dlg.ShowDialog(this);
+            }
+            ReloadCalendar();
+            ReloadJournals();
+        }
+
+        private void UpsertRate()
+        {
+            using (Form dlg = SmallDialog("نرخ ارز", 400, 240))
+            {
+                TextBox ccy = Field(dlg, "ارز", 16, 40, 220);
+                ccy.Text = "USD";
+                TextBox date = Field(dlg, "تاریخ", 16, 90, 220);
+                date.Text = DateTime.UtcNow.ToString("yyyy-MM-dd");
+                TextBox rate = Field(dlg, "نرخ به ارز عملیاتی (مثلاً 70)", 16, 140, 220);
+                Button ok = Btn("ثبت", delegate
+                {
+                    decimal major;
+                    decimal.TryParse(rate.Text, out major);
+                    long micros = (long)Math.Round(major * LedgerCodes.RateOne, MidpointRounding.AwayFromZero);
+                    ShowResult(_fx.UpsertRate(new UpsertExchangeRateCommand
+                    {
+                        CompanyId = CompanyId(),
+                        CurrencyCode = ccy.Text,
+                        RateDate = date.Text,
+                        RateToBaseMicros = micros
+                    }, _identity));
+                    dlg.DialogResult = DialogResult.OK;
+                    dlg.Close();
+                });
+                ok.Left = 250; ok.Top = 180; dlg.Controls.Add(ok);
+                dlg.ShowDialog(this);
+            }
+        }
+
+        private void RevalueFx()
+        {
+            string asOf = _txtTo != null ? _txtTo.Text.Trim() : DateTime.UtcNow.ToString("yyyy-MM-dd");
+            ShowResult(_fx.Revalue(new RevalueCommand
+            {
+                CompanyId = CompanyId(),
+                CenterId = _identity.CenterId,
+                AsOfDate = asOf
+            }, _identity));
+            ReloadJournals();
         }
 
         private void ReloadJournals()
@@ -618,6 +704,20 @@ namespace CaseManagement.Accounting.Ledger.Adapters
                 FillStatement(table, "حقوق مالکانه", bs.Equity);
                 _lblReportNote.Text = (bs.EquationHolds ? "دارایی = بدهی + حقوق مالکانه. " : "هشدار: معادله ترازنامه برقرار نیست. ")
                     + "جمع دارایی " + Money(bs.AssetTotal);
+            }
+            else if (kind == "موقعیت ارزی")
+            {
+                table.Columns.Add("کد"); table.Columns.Add("حساب"); table.Columns.Add("ارز");
+                table.Columns.Add("مانده ارز"); table.Columns.Add("مبنای دفتری"); table.Columns.Add("ارزش‌گذاری"); table.Columns.Add("تسعیر نشده");
+                IList<CurrencyPositionRow> fx = _reports.GetCurrencyPositions(q, _identity);
+                for (int i = 0; i < fx.Count; i++)
+                {
+                    CurrencyPositionRow r = fx[i];
+                    table.Rows.Add(r.AccountCode, r.AccountName, r.CurrencyCode,
+                        LedgerUiText.Money(r.TransactionNetMinor, _minorUnits),
+                        Money(r.BookedBaseMinor), Money(r.RevaluedBaseMinor), Money(r.UnrealizedBaseMinor));
+                }
+                _lblReportNote.Text = "ارز عملیاتی: " + _fx.FunctionalCurrency(CompanyId());
             }
             else
             {

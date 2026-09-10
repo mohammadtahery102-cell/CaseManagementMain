@@ -287,6 +287,8 @@
     <Compile Include="FrmApplicant.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="Accounting\AccOutboxWriter.cs" />
+    <Compile Include="Accounting\AccGlOutboxDrain.cs" />
     <Compile Include="Accounting\AccAudit.cs" />
     <Compile Include="Accounting\AccountingRepo.cs" />
     <Compile Include="Accounting\AccountingRuleException.cs" />
@@ -297,16 +299,21 @@
     <Compile Include="Accounting\AccTemplateExport.cs" />
     <Compile Include="Accounting\Ledger\Domain\LedgerCodes.cs" />
     <Compile Include="Accounting\Ledger\Domain\LedgerEntities.cs" />
+    <Compile Include="Accounting\Ledger\Domain\OutboxEntities.cs" />
     <Compile Include="Accounting\Ledger\Application\LedgerContracts.cs" />
     <Compile Include="Accounting\Ledger\Application\ChartOfAccountsService.cs" />
     <Compile Include="Accounting\Ledger\Application\FiscalCalendarService.cs" />
     <Compile Include="Accounting\Ledger\Application\PostingEngine.cs" />
     <Compile Include="Accounting\Ledger\Application\LedgerReportingService.cs" />
+    <Compile Include="Accounting\Ledger\Application\IntegrationOutboxProcessor.cs" />
     <Compile Include="Accounting\Ledger\Application\CashBookGlService.cs" />
     <Compile Include="Accounting\Ledger\Application\DimensionServices.cs" />
+    <Compile Include="Accounting\Ledger\Application\YearEndCloseService.cs" />
+    <Compile Include="Accounting\Ledger\Application\CurrencyAccountingService.cs" />
     <Compile Include="Accounting\Ledger\Infrastructure\LedgerInitializer.cs" />
     <Compile Include="Accounting\Ledger\Infrastructure\LedgerRepository.cs" />
     <Compile Include="Accounting\Ledger\Infrastructure\LedgerRepository.Dimensions.cs" />
+    <Compile Include="Accounting\Ledger\Infrastructure\AccOutboxStore.cs" />
     <Compile Include="Accounting\Ledger\Infrastructure\CashBookReadRepository.cs" />
     <Compile Include="Accounting\Ledger\Adapters\DesktopLedgerIdentity.cs" />
     <Compile Include="Accounting\Ledger\Adapters\LedgerUiText.cs" />

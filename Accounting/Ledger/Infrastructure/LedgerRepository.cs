@@ -212,9 +212,9 @@ VALUES (@uid, @un, @op, @en, @id, @ov, @nv, @cid);",
         {
             using (SQLiteCommand cmd = new SQLiteCommand(@"
 SELECT RateToBaseMicros FROM GlExchangeRate
-WHERE CompanyID = @cid AND CurrencyCode = @c AND RateDate = @d AND IsDeleted = 0
-  AND (CenterID = 0)
-ORDER BY ExchangeRateID DESC LIMIT 1;", con, tr))
+WHERE CompanyID = @cid AND CurrencyCode = @c AND IsDeleted = 0
+  AND (CenterID = 0) AND RateDate <= @d
+ORDER BY RateDate DESC, ExchangeRateID DESC LIMIT 1;", con, tr))
             {
                 cmd.Parameters.AddWithValue("@cid", companyId);
                 cmd.Parameters.AddWithValue("@c", currencyCode);
@@ -223,6 +223,104 @@ ORDER BY ExchangeRateID DESC LIMIT 1;", con, tr))
                 if (v == null || v == DBNull.Value) return null;
                 return Convert.ToInt64(v);
             }
+        }
+
+        public long? GetRateToBaseMicros(int companyId, string currencyCode, string rateDate)
+        {
+            object v = _db.ExecuteScalar(@"
+SELECT RateToBaseMicros FROM GlExchangeRate
+WHERE CompanyID = @cid AND CurrencyCode = @c AND IsDeleted = 0
+  AND (CenterID = 0) AND RateDate <= @d
+ORDER BY RateDate DESC, ExchangeRateID DESC LIMIT 1;",
+                P("@cid", companyId), P("@c", currencyCode), P("@d", rateDate ?? ""));
+            if (v == null || v == DBNull.Value) return null;
+            return Convert.ToInt64(v);
+        }
+
+        public IList<GlCurrency> ListCurrencies(int companyId)
+        {
+            DataTable table = Query(
+                "SELECT * FROM GlCurrency WHERE CompanyID = @c AND IsDeleted = 0 ORDER BY CurrencyCode;",
+                P("@c", companyId));
+            List<GlCurrency> list = new List<GlCurrency>();
+            foreach (DataRow r in table.Rows)
+                list.Add(MapCurrency(r));
+            return list;
+        }
+
+        public IList<GlExchangeRate> ListRates(int companyId, string currencyCode)
+        {
+            DataTable table = Query(@"
+SELECT * FROM GlExchangeRate
+WHERE CompanyID = @c AND IsDeleted = 0 AND (@ccy = '' OR CurrencyCode = @ccy)
+ORDER BY RateDate DESC, ExchangeRateID DESC;",
+                P("@c", companyId), P("@ccy", currencyCode ?? ""));
+            List<GlExchangeRate> list = new List<GlExchangeRate>();
+            foreach (DataRow r in table.Rows)
+                list.Add(MapRate(r));
+            return list;
+        }
+
+        public long UpsertExchangeRate(GlExchangeRate rate)
+        {
+            object existing = _db.ExecuteScalar(@"
+SELECT ExchangeRateID FROM GlExchangeRate
+WHERE CompanyID = @c AND CenterID = @ctr AND CurrencyCode = @ccy AND RateDate = @d AND IsDeleted = 0;",
+                P("@c", rate.CompanyId), P("@ctr", rate.CenterId), P("@ccy", rate.CurrencyCode), P("@d", rate.RateDate));
+            if (existing != null && existing != DBNull.Value)
+            {
+                long id = Convert.ToInt64(existing);
+                _db.ExecuteNonQuery(@"
+UPDATE GlExchangeRate SET RateToBaseMicros = @r, UpdatedAt = @now, UpdatedBy = @by, RowVersion = RowVersion + 1
+WHERE ExchangeRateID = @id;",
+                    P("@r", rate.RateToBaseMicros), P("@now", rate.UpdatedAt), P("@by", rate.UpdatedBy), P("@id", id));
+                return id;
+            }
+            _db.ExecuteNonQuery(@"
+INSERT INTO GlExchangeRate (CompanyID, CenterID, CurrencyCode, RateDate, RateToBaseMicros,
+  IsDeleted, RowVersion, CreatedAt, UpdatedAt, CreatedBy, UpdatedBy)
+VALUES (@c, @ctr, @ccy, @d, @r, 0, 1, @now, @now, @by, @by);",
+                P("@c", rate.CompanyId), P("@ctr", rate.CenterId), P("@ccy", rate.CurrencyCode),
+                P("@d", rate.RateDate), P("@r", rate.RateToBaseMicros), P("@now", rate.CreatedAt), P("@by", rate.CreatedBy));
+            object created = _db.ExecuteScalar(@"
+SELECT ExchangeRateID FROM GlExchangeRate
+WHERE CompanyID = @c AND CenterID = @ctr AND CurrencyCode = @ccy AND RateDate = @d AND IsDeleted = 0;",
+                P("@c", rate.CompanyId), P("@ctr", rate.CenterId), P("@ccy", rate.CurrencyCode), P("@d", rate.RateDate));
+            return created == null || created == DBNull.Value ? 0 : Convert.ToInt64(created);
+        }
+
+        public DataTable QueryCurrencyNets(int companyId, int centerFilter, string asOfDate, string baseCurrency)
+        {
+            return Query(@"
+SELECT a.AccountID, a.AccountCode, a.AccountName, a.AccountTypeCode, l.CurrencyCode,
+  COALESCE(SUM(l.DebitMinor - l.CreditMinor), 0) AS TxnNet,
+  COALESCE(SUM(l.DebitBaseMinor - l.CreditBaseMinor), 0) AS BaseNet
+FROM GlJournalLine l
+JOIN GlJournal j ON j.JournalID = l.JournalID
+JOIN GlAccount a ON a.AccountID = l.AccountID
+WHERE l.CompanyID = @c AND j.IsDeleted = 0 AND j.Status IN ('Posted', 'Reversed')
+  AND a.IsDeleted = 0 AND a.IsLeaf = 1
+  AND (@ctr = 0 OR j.CenterID = @ctr)
+  AND (@to = '' OR j.PostingDate <= @to)
+  AND l.CurrencyCode <> @base
+  AND (l.DebitMinor > 0 OR l.CreditMinor > 0)
+GROUP BY a.AccountID, a.AccountCode, a.AccountName, a.AccountTypeCode, l.CurrencyCode
+HAVING COALESCE(SUM(l.DebitMinor - l.CreditMinor), 0) <> 0
+    OR COALESCE(SUM(l.DebitBaseMinor - l.CreditBaseMinor), 0) <> 0
+ORDER BY a.AccountCode, l.CurrencyCode;",
+                P("@c", companyId),
+                P("@ctr", centerFilter),
+                P("@to", asOfDate ?? ""),
+                P("@base", baseCurrency ?? LedgerCodes.BaseCurrency));
+        }
+
+        public void ReleaseSourceKey(long journalId)
+        {
+            _db.ExecuteNonQuery(@"
+UPDATE GlJournal SET SourceModule = NULL, SourceDocumentType = NULL, SourceDocumentID = NULL,
+  RowVersion = RowVersion + 1
+WHERE JournalID = @id AND Status = @st;",
+                P("@id", journalId), P("@st", LedgerCodes.JournalReversed));
         }
 
         public long AllocateJournalNumber(SQLiteConnection con, SQLiteTransaction tr,
@@ -826,6 +924,22 @@ VALUES (@op, @en, @id, @d, @ov, @nv, @rs, @u, @m, @ip, @cid);", con, tr))
                 Name = Str(r["Name"]),
                 MinorUnits = Int(r["MinorUnits"]),
                 IsActive = Flag(r["IsActive"]),
+                IsDeleted = Flag(r["IsDeleted"]),
+                RowVersion = Long(r["RowVersion"])
+            };
+        }
+
+        private static GlExchangeRate MapRate(DataRow r)
+        {
+            if (r == null) return null;
+            return new GlExchangeRate
+            {
+                ExchangeRateId = Long(r["ExchangeRateID"]),
+                CompanyId = Int(r["CompanyID"]),
+                CenterId = Int(r["CenterID"]),
+                CurrencyCode = Str(r["CurrencyCode"]),
+                RateDate = Str(r["RateDate"]),
+                RateToBaseMicros = Long(r["RateToBaseMicros"]),
                 IsDeleted = Flag(r["IsDeleted"]),
                 RowVersion = Long(r["RowVersion"])
             };
