@@ -707,6 +707,9 @@ ORDER BY DocumentID DESC LIMIT 200;",
             d.WarehouseId = Convert.ToInt64(r["WarehouseID"]);
             d.ToLocationId = r["ToLocationID"] == DBNull.Value ? (long?)null : Convert.ToInt64(r["ToLocationID"]);
             d.Description = r["Description"] == DBNull.Value ? null : r["Description"].ToString();
+            d.SourceModule = r["SourceModule"] == DBNull.Value ? null : r["SourceModule"].ToString();
+            d.SourceDocumentType = r["SourceDocumentType"] == DBNull.Value ? null : r["SourceDocumentType"].ToString();
+            d.SourceDocumentId = r["SourceDocumentID"] == DBNull.Value ? (long?)null : Convert.ToInt64(r["SourceDocumentID"]);
             d.RowVersion = Convert.ToInt64(r["RowVersion"]);
             return d;
         }

@@ -90,11 +90,19 @@ namespace CaseManagement.Inventory.Application
             if (_store.ResolveAccount(doc.CompanyId, item.ItemId, item.CategoryId, InventoryCodes.RoleInventory) <= 0)
                 return InventoryResult.Fail("MAPPING_MISSING", "Inventory account map is required.");
 
-            string offsetRole = OffsetRole(doc.DocumentType, inbound);
+            string offsetRole = OffsetRole(doc, inbound);
             if (string.IsNullOrEmpty(offsetRole)) return InventoryResult.Success(0, 0);
             if (_store.ResolveAccount(doc.CompanyId, item.ItemId, item.CategoryId, offsetRole) <= 0)
                 return InventoryResult.Fail("MAPPING_MISSING", offsetRole + " account map is required.");
             return InventoryResult.Success(0, 0);
+        }
+
+        public static string OffsetRole(InvDocument doc, bool inbound)
+        {
+            if (doc != null && (doc.DocumentType == InventoryCodes.TypeReceipt || doc.DocumentType == InventoryCodes.TypeOpening)
+                && doc.SourceModule == CaseManagement.Accounting.Ledger.Domain.LedgerCodes.SourcePurchase)
+                return InventoryCodes.RoleGrir;
+            return OffsetRole(doc == null ? null : doc.DocumentType, inbound);
         }
 
         public static string OffsetRole(string documentType, bool inbound)

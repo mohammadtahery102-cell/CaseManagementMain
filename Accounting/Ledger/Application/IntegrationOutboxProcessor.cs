@@ -51,10 +51,12 @@ namespace CaseManagement.Accounting.Ledger.Application
         private readonly IList<IOutboxHandler> _handlers;
 
         public IntegrationOutboxProcessor()
-            : this(new AccOutboxStore(), new LedgerRepository(), new IOutboxHandler[]
+            : this(new AccOutboxStore(), new LedgerRepository(),                 new IOutboxHandler[]
             {
                 new CashBookOutboxHandler(),
-                new CaseManagement.Inventory.Application.InventoryOutboxAdapter()
+                new CaseManagement.Inventory.Application.InventoryOutboxAdapter(),
+                new CaseManagement.Purchase.Application.PurchaseOutboxAdapter(),
+                new CaseManagement.Sales.Application.SalesOutboxAdapter()
             })
         {
         }

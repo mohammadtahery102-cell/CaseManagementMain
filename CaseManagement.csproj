@@ -336,6 +336,25 @@
     <Compile Include="Inventory\Adapters\FrmInventory.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="Trade\TradeContracts.cs" />
+    <Compile Include="Trade\TradeWorkflowSeed.cs" />
+    <Compile Include="Trade\GlOutboxPostHelper.cs" />
+    <Compile Include="Purchase\Domain\PurchaseEntities.cs" />
+    <Compile Include="Purchase\Infrastructure\PurchaseInitializer.cs" />
+    <Compile Include="Purchase\Infrastructure\PurchaseStore.cs" />
+    <Compile Include="Purchase\Application\PurchaseServices.cs" />
+    <Compile Include="Purchase\Application\PurchaseOutboxAdapter.cs" />
+    <Compile Include="Purchase\Adapters\FrmPurchase.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Sales\Domain\SalesEntities.cs" />
+    <Compile Include="Sales\Infrastructure\SalesInitializer.cs" />
+    <Compile Include="Sales\Infrastructure\SalesStore.cs" />
+    <Compile Include="Sales\Application\SalesServices.cs" />
+    <Compile Include="Sales\Application\SalesOutboxAdapter.cs" />
+    <Compile Include="Sales\Adapters\FrmSales.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="GuardianCardIntegration\CardDesigner\DemoCardData.cs" />
     <Compile Include="GuardianCardIntegration\CardDesigner\CardFieldCatalog.cs" />
     <Compile Include="GuardianCardIntegration\CardDesigner\TemplateHealthCheck.cs" />

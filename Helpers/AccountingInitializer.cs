@@ -273,6 +273,8 @@ ON AccOutbox(SourceModule, DocumentType, DocumentID, Operation);");
 
             CaseManagement.Accounting.Ledger.Infrastructure.LedgerInitializer.Ensure();
             CaseManagement.Inventory.Infrastructure.InventoryInitializer.Ensure();
+            CaseManagement.Purchase.Infrastructure.PurchaseInitializer.Ensure();
+            CaseManagement.Sales.Infrastructure.SalesInitializer.Ensure();
             SchemaVersion.SetIfNewer(
                 SchemaVersion.ComponentAccounting, 6, "Accounting V1: year-end close and FX");
         }

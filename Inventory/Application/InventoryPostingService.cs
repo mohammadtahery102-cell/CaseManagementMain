@@ -84,6 +84,10 @@ namespace CaseManagement.Inventory.Application
                 doc.PostingDate = identity.UtcNow.ToString("yyyy-MM-dd");
             doc.WarehouseId = warehouse.WarehouseId;
             doc.Description = command.Description;
+            doc.SourceModule = command.SourceModule;
+            doc.SourceDocumentType = command.SourceDocumentType;
+            doc.SourceDocumentId = command.SourceDocumentId;
+            doc.PartyId = command.PartyId;
             doc.CreatedAt = LedgerTime.UtcNow(identity.UtcNow);
             doc.CreatedBy = identity.UserName;
             doc.UpdatedAt = doc.CreatedAt;

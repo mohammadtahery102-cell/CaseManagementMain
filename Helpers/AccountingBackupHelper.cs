@@ -40,7 +40,13 @@ namespace CaseManagement.Helpers
             "GlJournal", "GlJournalLine",
             "GlCashBookMap", "GlCostCenter", "GlProject",
             "InvItemCategory", "InvUnitOfMeasure", "InvItem", "InvWarehouse", "InvLocation",
-            "InvItemMap", "InvSetting", "InvDocument", "InvDocumentLine", "InvItemLedger", "InvItemBalance"
+            "InvItemMap", "InvSetting", "InvDocument", "InvDocumentLine", "InvItemLedger", "InvItemBalance",
+            "PurVendorCategory", "PurVendor", "PurVendorContact", "PurSetting",
+            "PurRequest", "PurRequestLine", "PurOrder", "PurOrderLine",
+            "PurGoodsReceipt", "PurGoodsReceiptLine", "PurInvoice", "PurInvoiceLine",
+            "SalCustomerCategory", "SalCustomer", "SalCustomerContact", "SalSetting",
+            "SalQuotation", "SalQuotationLine", "SalOrder", "SalOrderLine",
+            "SalDelivery", "SalDeliveryLine", "SalInvoice", "SalInvoiceLine"
         };
 
         // ─── گرفتن بکاپ: همه‌ی جداول Acc* (همه‌ی مراکز، نه فقط مرکز جاری —

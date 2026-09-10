@@ -146,6 +146,18 @@ CREATE TABLE IF NOT EXISTS EntWorkflowHistory (
             Exec(con, "CREATE INDEX IF NOT EXISTS IX_EntWorkflowHistory_Instance ON EntWorkflowHistory(InstanceID, ActionAt);");
 
             EnsureDefaultCaseWorkflow(con);
+            CaseManagement.Trade.TradeWorkflowSeed.Ensure(con, "PUR_PO", "سفارش خرید", "PurPurchaseOrder",
+                "Purchase.Create", "Purchase.Approve", "Purchase.Post");
+            CaseManagement.Trade.TradeWorkflowSeed.Ensure(con, "PUR_GR", "رسید کالا", "PurGoodsReceipt",
+                "Purchase.Create", "Purchase.Approve", "Purchase.Post");
+            CaseManagement.Trade.TradeWorkflowSeed.Ensure(con, "PUR_INV", "فاکتور خرید", "PurInvoice",
+                "Purchase.Create", "Purchase.Approve", "Purchase.Post");
+            CaseManagement.Trade.TradeWorkflowSeed.Ensure(con, "SAL_SO", "سفارش فروش", "SalSalesOrder",
+                "Sales.Create", "Sales.Approve", "Sales.Post");
+            CaseManagement.Trade.TradeWorkflowSeed.Ensure(con, "SAL_DN", "حواله فروش", "SalDeliveryNote",
+                "Sales.Create", "Sales.Approve", "Sales.Post");
+            CaseManagement.Trade.TradeWorkflowSeed.Ensure(con, "SAL_INV", "فاکتور فروش", "SalInvoice",
+                "Sales.Create", "Sales.Approve", "Sales.Post");
         }
 
         // گردش‌کار پیش‌فرض پرونده — مطابق همان وضعیت‌های سرویسی که هم‌اکنون در
@@ -779,6 +791,15 @@ CREATE TABLE IF NOT EXISTS EntUserPermission (
             AddPermission(con, "Inventory.ManageItem", "مدیریت کالا", "موجودی", 577, true, false, false);
             AddPermission(con, "Inventory.ManageWarehouse", "مدیریت انبار", "موجودی", 578, true, false, false);
             AddPermission(con, "Inventory.MapAccounts", "نگاشت حساب موجودی", "موجودی", 579, true, false, false);
+
+            AddPermission(con, "Purchase.View", "مشاهده خرید", "خرید", 580, true, true, true);
+            AddPermission(con, "Purchase.Create", "ثبت خرید", "خرید", 581, true, true, false);
+            AddPermission(con, "Purchase.Approve", "تأیید خرید", "خرید", 582, true, false, false);
+            AddPermission(con, "Purchase.Post", "ثبت قطعی خرید", "خرید", 583, true, false, false);
+            AddPermission(con, "Sales.View", "مشاهده فروش", "فروش", 584, true, true, true);
+            AddPermission(con, "Sales.Create", "ثبت فروش", "فروش", 585, true, true, false);
+            AddPermission(con, "Sales.Approve", "تأیید فروش", "فروش", 586, true, false, false);
+            AddPermission(con, "Sales.Post", "ثبت قطعی فروش", "فروش", 587, true, false, false);
 
             // ─── نسخهٔ ۱٫۰ / فاز ۴ (موج ۵) — کاربران/تنظیمات/پشتیبان‌گیری/
             // همگام‌سازی/مراکز/ماژول‌ها. «User.Manage» و «Module.Manage» از

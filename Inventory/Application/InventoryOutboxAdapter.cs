@@ -93,14 +93,15 @@ namespace CaseManagement.Inventory.Application
                 if (v > 0) debitInv += v;
                 else creditInv += abs;
 
-                string role = InventoryValidationService.OffsetRole(doc.DocumentType, v > 0);
+                string role = InventoryValidationService.OffsetRole(doc, v > 0);
                 long offsetId = _store.ResolveAccount(companyId, item.ItemId, item.CategoryId, role);
                 if (offsetId <= 0)
                     return LedgerResult.Fail(LedgerErrorCodes.MappingMissing, role + " map missing.");
                 if (role == InventoryCodes.RoleCogs) { cogs += abs; cogsAcc = offsetId; }
                 else if (role == InventoryCodes.RoleAdjGain) { gain += abs; gainAcc = offsetId; }
                 else if (role == InventoryCodes.RoleAdjLoss) { loss += abs; lossAcc = offsetId; }
-                else if (role == InventoryCodes.RoleOpeningOffset) { opening += abs; openAcc = offsetId; }
+                else if (role == InventoryCodes.RoleOpeningOffset || role == InventoryCodes.RoleGrir)
+                { opening += abs; openAcc = offsetId; }
             }
 
             List<JournalLineDraft> lines = new List<JournalLineDraft>();

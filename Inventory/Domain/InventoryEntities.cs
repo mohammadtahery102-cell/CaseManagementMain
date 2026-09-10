@@ -255,6 +255,10 @@ namespace CaseManagement.Inventory.Domain
         public long WarehouseId { get; set; }
         public string Description { get; set; }
         public string Reason { get; set; }
+        public string SourceModule { get; set; }
+        public string SourceDocumentType { get; set; }
+        public long? SourceDocumentId { get; set; }
+        public int? PartyId { get; set; }
         public System.Collections.Generic.IList<InvDocumentLine> Lines { get; set; }
     }
 }
