@@ -109,19 +109,19 @@ namespace CaseManagement.Helpers
             // 2. گزارشات مالی
             Add(list, Finance, "گزارشات مالی", "صورت‌های مالی", "ترازنامه", true, "ledger-balance", "ترازنامه");
             Add(list, Finance, "گزارشات مالی", "صورت‌های مالی", "سود و زیان", true, "ledger-pnl", "سود و زیان");
-            Add(list, Finance, "گزارشات مالی", "صورت‌های مالی", "جریان نقدی", true, "cash-reports", "گزارشات صندوق و بانک");
+            Add(list, Finance, "گزارشات مالی", "صورت‌های مالی", "جریان نقدی", true, "ledger-cashflow", "جریان نقدی");
             Add(list, Finance, "گزارشات مالی", "صورت‌های مالی", "تراز آزمایشی", true, "trial", "تراز آزمایشی");
-            Add(list, Finance, "گزارشات مالی", "دفترها", "دفتر روزنامه", true, "ledger-journal", "اسناد حسابداری");
+            Add(list, Finance, "گزارشات مالی", "دفترها", "دفتر روزنامه", true, "daybook", "دفتر روزنامه");
             Add(list, Finance, "گزارشات مالی", "دفترها", "دفتر کل", true, "ledger-gl", "دفتر کل");
-            Add(list, Finance, "گزارشات مالی", "دفترها", "دفتر معین", true, "ledger-gl", "دفتر کل");
-            Add(list, Finance, "گزارشات مالی", "دفترها", "دفتر تفصیلی", true, "cash-reports", "دفتر طرف حساب");
+            Add(list, Finance, "گزارشات مالی", "دفترها", "دفتر معین", true, "subsidiary", "دفتر معین");
+            Add(list, Finance, "گزارشات مالی", "دفترها", "دفتر تفصیلی", true, "ledger-detail", "دفتر تفصیلی حسابداری");
             Add(list, Finance, "گزارشات مالی", "سایر", "گردش حساب‌ها", true, "ledger-gl", "گردش حساب / دفتر کل");
             Add(list, Finance, "گزارشات مالی", "سایر", "درآمدها", true, "cash-reports", "خلاصه دریافت و پرداخت");
             Add(list, Finance, "گزارشات مالی", "سایر", "هزینه‌ها", true, "cash-reports", "گزارش هزینه‌ها");
             Add(list, Finance, "گزارشات مالی", "سایر", "صندوق و بانک", true, "cash-reports", "دفتر صندوق");
-            Add(list, Finance, "گزارشات مالی", "سایر", "بدهکاران", true, "cash-parties", "طرف حساب");
-            Add(list, Finance, "گزارشات مالی", "سایر", "بستانکاران", true, "cash-parties", "طرف حساب");
-            Add(list, Finance, "گزارشات مالی", "سایر", "بودجه", false, null, null);
+            Add(list, Finance, "گزارشات مالی", "سایر", "بدهکاران", true, "cash-debtors", "بدهکاران");
+            Add(list, Finance, "گزارشات مالی", "سایر", "بستانکاران", true, "cash-creditors", "بستانکاران");
+            Add(list, Finance, "گزارشات مالی", "سایر", "بودجه", true, "budget", "بودجه");
 
             // 3. گزارشات عملیات
             Add(list, Operations, "گزارشات عملیات", null, "فروش", true, "sale", "فروش");

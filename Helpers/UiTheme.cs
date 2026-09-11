@@ -189,6 +189,11 @@ namespace CaseManagement.Helpers
             return new Font(ResolvedFamily, size * SizeScale, FontStyle.Bold);
         }
 
+        public static string FontFamilyName
+        {
+            get { return ResolvedFamily != null ? ResolvedFamily.Name : "Tahoma"; }
+        }
+
         // ─── انتخاب فونت از تنظیمات (تب ظاهر نرم‌افزار) ────────────────────────
         // اگر فونت اختصاصی در پوشه Fonts\ بسته شده باشد، همیشه اولویت دارد
         // (کیفیت/سازگاری تضمین‌شده)؛ در غیر این صورت اگر مدیر سیستم یکی از
@@ -266,6 +271,26 @@ namespace CaseManagement.Helpers
             { "بعدی",             "رفتن به مرحله‌ی بعد." },
             { "کارت شناسایی",     "ساخت و نمایش کارت شناسایی این سرپرست." },
             { "مشاهده پرونده",    "باز کردن پرونده‌ی مربوط به ردیف انتخاب‌شده." },
+            { "باطل",             "ابطال چک با حفظ رد حسابرسی." },
+            { "ثبت برگشت",        "صدور سند برگشت فروش یا خرید." },
+            { "ابطال برگشت",      "ابطال سند برگشت با حفظ رد حسابرسی." },
+            { "ذخیره دوره",       "ثبت یا به‌روزرسانی دوره مالی انتخاب‌شده." },
+            { "انتقال مانده از دوره قبل", "کپی مانده پایان دوره قبل به افتتاحیه این دوره." },
+            { "بستن دوره انتخاب‌شده", "بستن دوره؛ پس از آن ثبت سند در این دوره ممکن نیست." },
+            { "بررسی و یافتن اشکالات", "پویش داده‌های تاریخی معیوب بدون اعمال خودکار اصلاح." },
+            { "تأیید و اعمال این اصلاح", "اعمال اصلاح انتخاب‌شده پس از ثبت دلیل و تأیید." },
+            { "ارسال به دفتر کل", "ارسال سند صندوق انتخاب‌شده به دفتر کل." },
+            { "ثبت تراکنش",       "صدور سند دریافت، پرداخت یا انتقال در دفتر صندوق." },
+            { "ثبت سند",          "ایجاد سند حسابداری جدید." },
+            { "تأیید",            "تأیید سند انتخاب‌شده برای ثبت قطعی." },
+            { "ثبت قطعی",         "ثبت سند در دفتر کل. پس از این، ویرایش مستقیم ممکن نیست." },
+            { "برگشت",            "صدور سند برگشت برای سند ثبت‌شده." },
+            { "ابطال",            "ابطال سند با حفظ رد حسابرسی." },
+            { "حذف پیش‌نویس",     "حذف نرم پیش‌نویس. اسناد ثبت‌شده حذف نمی‌شوند." },
+            { "بستن دوره",        "بستن دوره مالی؛ پس از آن ثبت سند در این دوره ممکن نیست." },
+            { "بازگشایی دوره",    "باز کردن دوباره دوره بسته‌شده — فقط مدیر." },
+            { "اجرا",             "اجرای گزارش با فیلترهای انتخاب‌شده." },
+            { "وصول",             "وصول چک و صدور سند صندوق." },
         };
 
         private static string TipForButton(string text)
@@ -312,6 +337,21 @@ namespace CaseManagement.Helpers
             b.Cursor = Cursors.Hand;
             b.TextAlign = ContentAlignment.MiddleCenter;
             b.UseVisualStyleBackColor = false;
+            b.EnabledChanged += delegate
+            {
+                if (!b.Enabled)
+                {
+                    b.BackColor = ColorTranslator.FromHtml("#EEF1F5");
+                    b.ForeColor = TextMuted;
+                    b.Cursor = Cursors.No;
+                }
+                else
+                {
+                    b.BackColor = backColor;
+                    b.ForeColor = Color.White;
+                    b.Cursor = Cursors.Hand;
+                }
+            };
             return b;
         }
 
@@ -357,11 +397,21 @@ namespace CaseManagement.Helpers
             grid.DefaultCellStyle.Padding = new Padding(3, 0, 3, 0);
             grid.DefaultCellStyle.SelectionBackColor = PrimaryLight;
             grid.DefaultCellStyle.SelectionForeColor = Color.White;
-            grid.AlternatingRowsDefaultCellStyle.BackColor = ColorTranslator.FromHtml("#F7F9FB");
-            grid.RowTemplate.Height = 30;
+            grid.AlternatingRowsDefaultCellStyle.BackColor = ColorTranslator.FromHtml("#F4F7FA");
+            grid.RowTemplate.Height = 32;
             grid.RowHeadersVisible = false;
             grid.AllowUserToResizeRows = false;
+            grid.AllowUserToOrderColumns = true;
+            grid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
+            grid.ColumnHeadersHeight = 36;
             grid.GridColor = Border;
+            try
+            {
+                typeof(DataGridView).GetProperty("DoubleBuffered",
+                    System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                    .SetValue(grid, true, null);
+            }
+            catch { }
 
             // هدر فارسی خودکار: بعد از هر بار bind، ستون‌هایی که هنوز نام
             // انگلیسی دیتابیس را نشان می‌دهند به فارسی ترجمه می‌شوند. ستون‌هایی
@@ -442,7 +492,13 @@ namespace CaseManagement.Helpers
             { "EducationLevel", "تحصیلات" }, { "Surveyors", "سروی‌کننده‌ها" }, { "LocationAddress", "آدرس لوکیشن" },
             // بخش ۳ و ۵ — نوع تذکره و یادداشت وضعیت جسمی
             { "HeadIdCardType", "نوع تذکره سرپرست" }, { "MemberIdCardType", "نوع تذکره" },
-            { "PhysicalStatusNotes", "یادداشت وضعیت جسمی" }
+            { "PhysicalStatusNotes", "یادداشت وضعیت جسمی" },
+            { "JournalNumber", "شماره سند" }, { "PostingDate", "تاریخ ثبت" },
+            { "AccountCode", "کد حساب" }, { "AccountName", "نام حساب" },
+            { "Debit", "بدهکار" }, { "Credit", "بستانکار" },
+            { "Status", "وضعیت" }, { "RowVersion", "نسخه" },
+            { "ChequeNo", "شماره چک" }, { "DueDate", "سررسید" },
+            { "BudgetID", "شناسه بودجه" }, { "ChequeID", "شناسه چک" }
         };
 
         // ─── نمایش شمسی ستون‌های تاریخ در گرید (بدون تغییر مقدار واقعی) ──────
@@ -810,6 +866,11 @@ namespace CaseManagement.Helpers
         public static void ShowWarning(IWin32Window owner, string message)
         {
             ShowMessage(owner, message, "هشدار", Warning, WarningLight, "!");
+        }
+
+        public static void ShowInfo(IWin32Window owner, string message)
+        {
+            ShowMessage(owner, message, "اطلاع", Primary, HoverTint, "i");
         }
 
         public static bool ShowConfirm(IWin32Window owner, string message, string title)

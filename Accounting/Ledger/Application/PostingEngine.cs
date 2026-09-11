@@ -39,13 +39,18 @@ namespace CaseManagement.Accounting.Ledger.Application
 
         public IList<GlJournal> ListJournals(string fromDate, string toDate, ILedgerIdentity identity)
         {
+            return ListJournals(fromDate, toDate, null, identity);
+        }
+
+        public IList<GlJournal> ListJournals(string fromDate, string toDate, string statusFilter, ILedgerIdentity identity)
+        {
             if (!Require(identity, LedgerPermissions.View))
                 return new List<GlJournal>();
             int companyId = identity.CompanyId > 0 ? identity.CompanyId : LedgerCodes.DefaultCompanyId;
             int center = identity.IsSuperAdmin && identity.CenterId == 0 ? 0 : identity.CenterId;
             string from = LedgerTime.DateOnly(fromDate) ?? "";
             string to = LedgerTime.DateOnly(toDate) ?? "";
-            return _repo.ListJournalHeaders(companyId, center, from, to);
+            return _repo.ListJournalHeaders(companyId, center, from, to, statusFilter);
         }
 
         public LedgerResult SaveDraft(SaveDraftJournalCommand command, ILedgerIdentity identity)

@@ -27,14 +27,19 @@ namespace CaseManagement.Accounting.Ledger.Application
                 return LedgerResult.Fail(LedgerErrorCodes.Validation, "Code and name are required.");
 
             int companyId = command.CompanyId > 0 ? command.CompanyId : identity.CompanyId;
+            if (_repo.GetCostCenterByCode(companyId, command.Code.Trim()) != null)
+                return LedgerResult.Fail(LedgerErrorCodes.Validation, "Cost center code already exists.");
             int level = 1;
+            GlCostCenter parent = null;
             if (command.ParentId.HasValue)
             {
-                GlCostCenter parent = _repo.GetCostCenter(command.ParentId.Value);
+                parent = _repo.GetCostCenter(command.ParentId.Value);
                 if (parent == null || parent.IsDeleted || parent.CompanyId != companyId)
                     return LedgerResult.Fail(LedgerErrorCodes.DimensionMissing, "Parent cost center not found.");
                 if (parent.Level >= LedgerCodes.MaxAccountDepth)
                     return LedgerResult.Fail(LedgerErrorCodes.Validation, "Maximum depth exceeded.");
+                if (parent.IsLeaf && _repo.DimensionLineCount(true, parent.CostCenterId) > 0)
+                    return LedgerResult.Fail(LedgerErrorCodes.HasPostings, "Cannot add a child under a posted cost center.");
                 level = parent.Level + 1;
             }
 
@@ -55,6 +60,13 @@ namespace CaseManagement.Accounting.Ledger.Application
                 UpdatedBy = identity.UserName
             };
             long id = _repo.InsertCostCenter(n);
+            if (parent != null && parent.IsLeaf)
+            {
+                parent.IsLeaf = false;
+                parent.UpdatedAt = now;
+                parent.UpdatedBy = identity.UserName;
+                _repo.UpdateCostCenterConcurrency(parent, parent.RowVersion);
+            }
             _repo.InsertMasterAudit("Create", "GlCostCenter", id, null, n.Code, identity);
             return LedgerResult.Entity(id, 1);
         }
@@ -109,14 +121,19 @@ namespace CaseManagement.Accounting.Ledger.Application
                 return LedgerResult.Fail(LedgerErrorCodes.Validation, "Code and name are required.");
 
             int companyId = command.CompanyId > 0 ? command.CompanyId : identity.CompanyId;
+            if (_repo.GetProjectByCode(companyId, command.Code.Trim()) != null)
+                return LedgerResult.Fail(LedgerErrorCodes.Validation, "Project code already exists.");
             int level = 1;
+            GlProject parent = null;
             if (command.ParentId.HasValue)
             {
-                GlProject parent = _repo.GetProject(command.ParentId.Value);
+                parent = _repo.GetProject(command.ParentId.Value);
                 if (parent == null || parent.IsDeleted || parent.CompanyId != companyId)
                     return LedgerResult.Fail(LedgerErrorCodes.DimensionMissing, "Parent project not found.");
                 if (parent.Level >= LedgerCodes.MaxAccountDepth)
                     return LedgerResult.Fail(LedgerErrorCodes.Validation, "Maximum depth exceeded.");
+                if (parent.IsLeaf && _repo.DimensionLineCount(false, parent.ProjectId) > 0)
+                    return LedgerResult.Fail(LedgerErrorCodes.HasPostings, "Cannot add a child under a posted project.");
                 level = parent.Level + 1;
             }
 
@@ -137,6 +154,13 @@ namespace CaseManagement.Accounting.Ledger.Application
                 UpdatedBy = identity.UserName
             };
             long id = _repo.InsertProject(n);
+            if (parent != null && parent.IsLeaf)
+            {
+                parent.IsLeaf = false;
+                parent.UpdatedAt = now;
+                parent.UpdatedBy = identity.UserName;
+                _repo.UpdateProjectConcurrency(parent, parent.RowVersion);
+            }
             _repo.InsertMasterAudit("Create", "GlProject", id, null, n.Code, identity);
             return LedgerResult.Entity(id, 1);
         }

@@ -22,20 +22,63 @@ namespace CaseManagement.Inventory.Application
 
         public IList<InvItem> ListItems(ILedgerIdentity identity)
         {
+            return ListItems(identity, null, true);
+        }
+
+        public IList<InvItem> ListItems(ILedgerIdentity identity, string search, bool includeInactive)
+        {
             if (!CanView(identity)) return new List<InvItem>();
-            return _store.ListItems(Company(identity));
+            return _store.ListItems(Company(identity), search, includeInactive);
+        }
+
+        public IList<InvItem> ListItems(ILedgerIdentity identity, InvItemFilter filter)
+        {
+            if (!CanView(identity)) return new List<InvItem>();
+            if (filter == null) return _store.ListItems(Company(identity));
+            return _store.ListItems(Company(identity), filter.Query, filter.CategoryId, filter.ActiveMode);
+        }
+
+        public IList<InvItem> ListActiveItems(ILedgerIdentity identity)
+        {
+            if (!CanView(identity)) return new List<InvItem>();
+            return _store.ListItems(Company(identity), null, 0, 1);
+        }
+
+        public InvItem GetItem(long itemId, ILedgerIdentity identity)
+        {
+            if (!CanView(identity)) return null;
+            InvItem item = _store.GetItem(itemId);
+            if (item == null || !TradeIsolation.CanSeeCompany(identity, item.CompanyId)) return null;
+            return item;
+        }
+
+        public IList<InvItemCategory> ListCategories(ILedgerIdentity identity)
+        {
+            if (!CanView(identity)) return new List<InvItemCategory>();
+            return _store.ListCategories(Company(identity));
+        }
+
+        public IList<InvUnitOfMeasure> ListUoms(ILedgerIdentity identity)
+        {
+            if (!CanView(identity)) return new List<InvUnitOfMeasure>();
+            return _store.ListUoms(Company(identity));
+        }
+
+        public IList<InvDocument> ListDocuments(ILedgerIdentity identity)
+        {
+            return ListDocuments(identity, null, null);
+        }
+
+        public IList<InvDocument> ListDocuments(ILedgerIdentity identity, string typeFilter, string search)
+        {
+            if (!CanView(identity)) return new List<InvDocument>();
+            return _store.ListDocuments(Company(identity), CenterFilter(identity), typeFilter, search, 400);
         }
 
         public IList<InvWarehouse> ListWarehouses(ILedgerIdentity identity)
         {
             if (!CanView(identity)) return new List<InvWarehouse>();
             return _store.ListWarehouses(Company(identity), CenterFilter(identity));
-        }
-
-        public IList<InvDocument> ListDocuments(ILedgerIdentity identity)
-        {
-            if (!CanView(identity)) return new List<InvDocument>();
-            return _store.ListDocuments(Company(identity), CenterFilter(identity));
         }
 
         public InvDocument GetDocument(long id, ILedgerIdentity identity)
@@ -108,6 +151,49 @@ namespace CaseManagement.Inventory.Application
         public long DefaultLocationId(long warehouseId)
         {
             return _store.DefaultLocationId(warehouseId);
+        }
+
+        public long OnHand(int companyId, long itemId)
+        {
+            return _store.ItemOnHand(companyId, itemId);
+        }
+
+        public long OnHandAt(int companyId, long itemId, long warehouseId, long locationId)
+        {
+            InvItemBalance b = _store.GetBalance(companyId, itemId, warehouseId, locationId);
+            return b == null ? 0 : b.QuantityOnHand;
+        }
+
+        public IList<InvLocation> ListLocations(long warehouseId, ILedgerIdentity identity)
+        {
+            if (!CanView(identity)) return new List<InvLocation>();
+            return _store.ListLocations(warehouseId);
+        }
+
+        public IList<InventoryIntegrityRow> Integrity(ILedgerIdentity identity)
+        {
+            if (!CanView(identity)) return new List<InventoryIntegrityRow>();
+            return _store.ListIntegrity(Company(identity), CenterFilter(identity));
+        }
+
+        public InventoryIntegritySummary IntegritySummary(ILedgerIdentity identity)
+        {
+            InventoryIntegritySummary summary = new InventoryIntegritySummary();
+            summary.Rows = Integrity(identity);
+            summary.TotalItems = summary.Rows.Count;
+            int balanced = 0;
+            for (int i = 0; i < summary.Rows.Count; i++)
+                if (summary.Rows[i].Balanced) balanced++;
+            summary.BalancedItems = balanced;
+            summary.BrokenItems = summary.TotalItems - balanced;
+            summary.IntegrityPercent = summary.TotalItems == 0 ? 100d : (balanced * 100d / summary.TotalItems);
+            return summary;
+        }
+
+        public IList<InventoryVelocityRow> Velocity(ILedgerIdentity identity, bool fast)
+        {
+            if (!CanView(identity)) return new List<InventoryVelocityRow>();
+            return _store.ListVelocity(Company(identity), CenterFilter(identity), fast);
         }
 
         private static bool CanView(ILedgerIdentity identity)

@@ -78,18 +78,25 @@ namespace CaseManagement.Accounting.Ledger.Infrastructure
 
         public IList<GlJournal> ListJournalHeaders(int companyId, int centerFilter, string fromDate, string toDate)
         {
+            return ListJournalHeaders(companyId, centerFilter, fromDate, toDate, null);
+        }
+
+        public IList<GlJournal> ListJournalHeaders(int companyId, int centerFilter, string fromDate, string toDate, string statusFilter)
+        {
             DataTable table = Query(@"
 SELECT * FROM GlJournal
 WHERE CompanyID = @c AND IsDeleted = 0
   AND (@from = '' OR PostingDate >= @from)
   AND (@to = '' OR PostingDate <= @to)
   AND (@ctr = 0 OR CenterID = @ctr)
+  AND (@st = '' OR Status = @st)
 ORDER BY PostingDate DESC, JournalID DESC
 LIMIT 500;",
                 P("@c", companyId),
                 P("@from", fromDate ?? ""),
                 P("@to", toDate ?? ""),
-                P("@ctr", centerFilter));
+                P("@ctr", centerFilter),
+                P("@st", statusFilter ?? ""));
             List<GlJournal> list = new List<GlJournal>();
             foreach (DataRow r in table.Rows)
                 list.Add(MapJournal(r));
@@ -128,7 +135,8 @@ ORDER BY a.AccountCode;",
         {
             return Query(@"
 SELECT j.PostingDate, j.JournalNumber, COALESCE(l.Description, j.Description) AS Description,
-  l.DebitBaseMinor, l.CreditBaseMinor, l.LineNo, j.JournalID
+  l.DebitBaseMinor, l.CreditBaseMinor, l.LineNo, j.JournalID, j.Status,
+  j.SourceModule, j.SourceDocumentType, j.SourceDocumentID, j.JournalSource, l.AccountID
 FROM GlJournalLine l
 JOIN GlJournal j ON j.JournalID = l.JournalID
 WHERE l.AccountID = @acc AND l.CompanyID = @c
@@ -149,6 +157,55 @@ ORDER BY j.PostingDate, j.JournalID, l.LineNo;",
                 P("@pr", projectId));
         }
 
+        public DataTable QueryDaybookLines(int companyId, int centerFilter, long accountId, string fromDate, string toDate,
+            long costCenterId, long projectId)
+        {
+            return QueryDaybookLines(companyId, centerFilter, accountId, fromDate, toDate, costCenterId, projectId, 0, 0);
+        }
+
+        public DataTable QueryDaybookLines(int companyId, int centerFilter, long accountId, string fromDate, string toDate,
+            long costCenterId, long projectId, long partyId, long fundId)
+        {
+            return Query(@"
+SELECT j.PostingDate, j.JournalNumber, j.Status, a.AccountCode, a.AccountName, a.AccountTypeCode,
+  COALESCE(l.Description, j.Description) AS Description,
+  l.DebitBaseMinor, l.CreditBaseMinor, j.JournalID, l.LineNo, l.AccountID,
+  j.SourceModule, j.SourceDocumentType, j.SourceDocumentID, j.JournalSource,
+  COALESCE(l.PartyID, 0) AS PartyID, COALESCE(l.FundID, 0) AS FundID,
+  COALESCE(l.CostCenterID, 0) AS CostCenterID, COALESCE(l.ProjectID, 0) AS ProjectID,
+  COALESCE(pty.Name, '') AS PartyName, COALESCE(fnd.Name, '') AS FundName,
+  COALESCE(gcc.Code || ' ' || gcc.Name, '') AS CostCenterName,
+  COALESCE(gpr.Code || ' ' || gpr.Name, '') AS ProjectName
+FROM GlJournalLine l
+JOIN GlJournal j ON j.JournalID = l.JournalID
+JOIN GlAccount a ON a.AccountID = l.AccountID
+LEFT JOIN AccParty pty ON pty.PartyID = l.PartyID
+LEFT JOIN AccFund fnd ON fnd.FundID = l.FundID
+LEFT JOIN GlCostCenter gcc ON gcc.CostCenterID = l.CostCenterID AND gcc.IsDeleted = 0
+LEFT JOIN GlProject gpr ON gpr.ProjectID = l.ProjectID AND gpr.IsDeleted = 0
+WHERE l.CompanyID = @c
+  AND j.IsDeleted = 0 AND j.Status IN ('Posted', 'Reversed')
+  AND (@acc = 0 OR l.AccountID = @acc)
+  AND (@ctr = 0 OR j.CenterID = @ctr)
+  AND (@cc = 0 OR l.CostCenterID = @cc)
+  AND (@pr = 0 OR l.ProjectID = @pr)
+  AND (@party = 0 OR l.PartyID = @party)
+  AND (@fund = 0 OR l.FundID = @fund)
+  AND (@from = '' OR j.PostingDate >= @from)
+  AND (@to = '' OR j.PostingDate <= @to)
+  AND (l.DebitMinor > 0 OR l.CreditMinor > 0)
+ORDER BY j.PostingDate, j.JournalID, l.LineNo;",
+                P("@c", companyId),
+                P("@acc", accountId),
+                P("@from", fromDate ?? ""),
+                P("@to", toDate ?? ""),
+                P("@ctr", centerFilter),
+                P("@cc", costCenterId),
+                P("@pr", projectId),
+                P("@party", partyId),
+                P("@fund", fundId));
+        }
+
         public long QueryOpeningNet(int companyId, int centerFilter, long accountId, string fromDate,
             long costCenterId, long projectId)
         {
@@ -161,11 +218,96 @@ WHERE l.AccountID = @acc AND l.CompanyID = @c
   AND (@ctr = 0 OR j.CenterID = @ctr)
   AND (@cc = 0 OR l.CostCenterID = @cc)
   AND (@pr = 0 OR l.ProjectID = @pr)
-  AND (@from = '' OR j.PostingDate < @from);",
+  AND @from <> '' AND j.PostingDate < @from;",
                 P("@c", companyId), P("@acc", accountId), P("@from", fromDate ?? ""), P("@ctr", centerFilter),
                 P("@cc", costCenterId), P("@pr", projectId));
             if (v == null || v == DBNull.Value) return 0;
             return Convert.ToInt64(v);
+        }
+
+        public DataTable QueryOpeningNets(int companyId, int centerFilter, string fromDate,
+            long accountId, long costCenterId, long projectId, long partyId, long fundId)
+        {
+            return Query(@"
+SELECT l.AccountID, a.AccountCode, a.AccountName,
+  COALESCE(SUM(l.DebitBaseMinor - l.CreditBaseMinor), 0) AS OpenNet
+FROM GlJournalLine l
+JOIN GlJournal j ON j.JournalID = l.JournalID
+JOIN GlAccount a ON a.AccountID = l.AccountID
+WHERE l.CompanyID = @c
+  AND j.IsDeleted = 0 AND j.Status IN ('Posted', 'Reversed')
+  AND (@acc = 0 OR l.AccountID = @acc)
+  AND (@ctr = 0 OR j.CenterID = @ctr)
+  AND (@cc = 0 OR l.CostCenterID = @cc)
+  AND (@pr = 0 OR l.ProjectID = @pr)
+  AND (@party = 0 OR l.PartyID = @party)
+  AND (@fund = 0 OR l.FundID = @fund)
+  AND @from <> '' AND j.PostingDate < @from
+  AND (l.DebitMinor > 0 OR l.CreditMinor > 0)
+GROUP BY l.AccountID, a.AccountCode, a.AccountName;",
+                P("@c", companyId), P("@acc", accountId), P("@from", fromDate ?? ""),
+                P("@ctr", centerFilter), P("@cc", costCenterId), P("@pr", projectId),
+                P("@party", partyId), P("@fund", fundId));
+        }
+
+        public DataTable QueryOpeningNetsByDimension(int companyId, int centerFilter, string fromDate,
+            long accountId, long costCenterId, long projectId, long partyId, long fundId)
+        {
+            return Query(@"
+SELECT l.AccountID, a.AccountCode, a.AccountName,
+  COALESCE(l.PartyID, 0) AS PartyID, COALESCE(l.FundID, 0) AS FundID,
+  COALESCE(l.CostCenterID, 0) AS CostCenterID, COALESCE(l.ProjectID, 0) AS ProjectID,
+  COALESCE(pty.Name, '') AS PartyName, COALESCE(fnd.Name, '') AS FundName,
+  COALESCE(gcc.Code || ' ' || gcc.Name, '') AS CostCenterName,
+  COALESCE(gpr.Code || ' ' || gpr.Name, '') AS ProjectName,
+  COALESCE(SUM(l.DebitBaseMinor - l.CreditBaseMinor), 0) AS OpenNet
+FROM GlJournalLine l
+JOIN GlJournal j ON j.JournalID = l.JournalID
+JOIN GlAccount a ON a.AccountID = l.AccountID
+LEFT JOIN AccParty pty ON pty.PartyID = l.PartyID
+LEFT JOIN AccFund fnd ON fnd.FundID = l.FundID
+LEFT JOIN GlCostCenter gcc ON gcc.CostCenterID = l.CostCenterID AND gcc.IsDeleted = 0
+LEFT JOIN GlProject gpr ON gpr.ProjectID = l.ProjectID AND gpr.IsDeleted = 0
+WHERE l.CompanyID = @c
+  AND j.IsDeleted = 0 AND j.Status IN ('Posted', 'Reversed')
+  AND (@acc = 0 OR l.AccountID = @acc)
+  AND (@ctr = 0 OR j.CenterID = @ctr)
+  AND (@cc = 0 OR l.CostCenterID = @cc)
+  AND (@pr = 0 OR l.ProjectID = @pr)
+  AND (@party = 0 OR l.PartyID = @party)
+  AND (@fund = 0 OR l.FundID = @fund)
+  AND @from <> '' AND j.PostingDate < @from
+  AND (l.DebitMinor > 0 OR l.CreditMinor > 0)
+GROUP BY l.AccountID, a.AccountCode, a.AccountName,
+  COALESCE(l.PartyID, 0), COALESCE(l.FundID, 0), COALESCE(l.CostCenterID, 0), COALESCE(l.ProjectID, 0),
+  COALESCE(pty.Name, ''), COALESCE(fnd.Name, ''),
+  COALESCE(gcc.Code || ' ' || gcc.Name, ''), COALESCE(gpr.Code || ' ' || gpr.Name, '');",
+                P("@c", companyId), P("@acc", accountId), P("@from", fromDate ?? ""),
+                P("@ctr", centerFilter), P("@cc", costCenterId), P("@pr", projectId),
+                P("@party", partyId), P("@fund", fundId));
+        }
+
+        public DataTable QueryDocumentFlow(int companyId, int centerFilter, string fromDate, string toDate)
+        {
+            return Query(@"
+SELECT j.JournalID, j.JournalNumber, j.PostingDate, j.Description, j.Status, j.JournalSource,
+  j.SourceModule, j.SourceDocumentType, j.SourceDocumentID, j.ReversesJournalID,
+  COALESCE(SUM(CASE WHEN l.DebitMinor > 0 OR l.CreditMinor > 0 THEN l.DebitBaseMinor ELSE 0 END), 0) AS DebitBaseMinor,
+  COALESCE(SUM(CASE WHEN l.DebitMinor > 0 OR l.CreditMinor > 0 THEN l.CreditBaseMinor ELSE 0 END), 0) AS CreditBaseMinor
+FROM GlJournal j
+LEFT JOIN GlJournalLine l ON l.JournalID = j.JournalID
+WHERE j.CompanyID = @c AND j.IsDeleted = 0
+  AND (@ctr = 0 OR j.CenterID = @ctr)
+  AND (@from = '' OR j.PostingDate >= @from)
+  AND (@to = '' OR j.PostingDate <= @to)
+GROUP BY j.JournalID, j.JournalNumber, j.PostingDate, j.Description, j.Status, j.JournalSource,
+  j.SourceModule, j.SourceDocumentType, j.SourceDocumentID, j.ReversesJournalID
+ORDER BY j.PostingDate, j.JournalID
+LIMIT 10000;",
+                P("@c", companyId),
+                P("@from", fromDate ?? ""),
+                P("@to", toDate ?? ""),
+                P("@ctr", centerFilter));
         }
 
         public void InsertMasterAudit(string operation, string entity, long entityId,
@@ -382,6 +524,40 @@ WHERE CompanyID = @cid AND IsDeleted = 0;", con, tr))
                 P("@c", companyId), P("@code", code)));
         }
 
+        public GlAccount FindAccountByName(int companyId, string name, long excludeId)
+        {
+            return MapAccount(QueryRow(@"
+SELECT * FROM GlAccount
+WHERE CompanyID = @c AND IsDeleted = 0 AND LOWER(AccountName) = LOWER(@n)
+  AND (@ex = 0 OR AccountID <> @ex)
+LIMIT 1;",
+                P("@c", companyId), P("@n", name ?? ""), P("@ex", excludeId)));
+        }
+
+        public int AccountChildCount(long accountId)
+        {
+            return ScalarInt(
+                "SELECT COUNT(1) FROM GlAccount WHERE ParentAccountID = @id AND IsDeleted = 0;",
+                P("@id", accountId));
+        }
+
+        public void QueryAccountUsage(long accountId, out int postedLineCount, out string lastPostingDate)
+        {
+            postedLineCount = 0;
+            lastPostingDate = "";
+            DataTable table = Query(@"
+SELECT COUNT(1) AS Cnt, MAX(j.PostingDate) AS LastDate
+FROM GlJournalLine l
+JOIN GlJournal j ON j.JournalID = l.JournalID
+WHERE l.AccountID = @id AND j.IsDeleted = 0 AND j.Status IN ('Posted', 'Reversed')
+  AND (l.DebitMinor > 0 OR l.CreditMinor > 0);",
+                P("@id", accountId));
+            if (table.Rows.Count == 0) return;
+            postedLineCount = (int)Long(table.Rows[0]["Cnt"]);
+            object last = table.Rows[0]["LastDate"];
+            lastPostingDate = last == null || last == DBNull.Value ? "" : last.ToString();
+        }
+
         public IList<GlAccount> ListAccounts(int companyId, bool includeDeleted)
         {
             string sql = includeDeleted
@@ -428,11 +604,13 @@ VALUES (@cid, @ctr, @code, @name, @type, @parent, @lvl, @leaf, @post, @act, @con
         {
             int n = _db.ExecuteNonQuery(@"
 UPDATE GlAccount SET
-  AccountName = @name, IsLeaf = @leaf, AllowPosting = @post, IsActive = @act, IsContra = @contra,
+  AccountCode = @code, AccountName = @name, AccountTypeCode = @type, ParentAccountID = @parent,
+  Level = @lvl, IsLeaf = @leaf, AllowPosting = @post, IsActive = @act, IsContra = @contra,
   ControlCurrencyCode = @ccy, IsDeleted = @del, DeletedAt = @dat, DeletedBy = @dby,
   RowVersion = RowVersion + 1, UpdatedAt = @ua, UpdatedBy = @ub
 WHERE AccountID = @id AND RowVersion = @rv;",
-                P("@name", a.AccountName), P("@leaf", a.IsLeaf ? 1 : 0), P("@post", a.AllowPosting ? 1 : 0),
+                P("@code", a.AccountCode), P("@name", a.AccountName), P("@type", a.AccountTypeCode),
+                P("@parent", (object)a.ParentAccountId ?? DBNull.Value), P("@lvl", a.Level), P("@leaf", a.IsLeaf ? 1 : 0), P("@post", a.AllowPosting ? 1 : 0),
                 P("@act", a.IsActive ? 1 : 0), P("@contra", a.IsContra ? 1 : 0),
                 P("@ccy", (object)a.ControlCurrencyCode ?? DBNull.Value),
                 P("@del", a.IsDeleted ? 1 : 0), P("@dat", (object)a.DeletedAt ?? DBNull.Value),

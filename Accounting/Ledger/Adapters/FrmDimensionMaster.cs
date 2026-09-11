@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Windows.Forms;
+using CaseManagement.Accounting;
 using CaseManagement.Accounting.Ledger.Application;
 using CaseManagement.Accounting.Ledger.Domain;
 using CaseManagement.Helpers;
@@ -15,6 +16,7 @@ namespace CaseManagement.Accounting.Ledger.Adapters
         private readonly ICostCenterService _cc;
         private readonly IProjectService _pr;
         private TreeView _tree;
+        private string _filter = "";
 
         public static FrmDimensionMaster CostCenters()
         {
@@ -32,21 +34,29 @@ namespace CaseManagement.Accounting.Ledger.Adapters
             _identity = DesktopLedgerIdentity.FromSession();
             _cc = new CostCenterService();
             _pr = new ProjectService();
-            Text = costCenter ? "مراکز هزینه" : "پروژه‌ها";
-            RightToLeft = RightToLeft.Yes;
-            RightToLeftLayout = true;
-            BackColor = UiTheme.Background;
-            Font = UiTheme.Font(UiTheme.SizeBody);
-            UiTheme.MakeMainWindow(this, 720, 560);
+            string heading = costCenter ? "مراکز هزینه" : "پروژه‌ها";
+            Text = heading;
+            AccountingChrome.MakeWorkspace(this, 720, 560);
 
             _tree = new TreeView { Dock = DockStyle.Fill, RightToLeft = RightToLeft.Yes };
-            FlowLayoutPanel flow = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 44, RightToLeft = RightToLeft.Yes };
+            TextBox search = new TextBox { Width = 180 };
+            search.TextChanged += delegate { _filter = search.Text ?? ""; Reload(); };
+            FlowLayoutPanel flow = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Top, Height = 52, RightToLeft = RightToLeft.Yes,
+                FlowDirection = FlowDirection.LeftToRight, WrapContents = true, Padding = new Padding(6)
+            };
+            flow.Controls.Add(new Label { Text = "جستجو", AutoSize = true, Padding = new Padding(8, 8, 4, 0) });
+            flow.Controls.Add(search);
             flow.Controls.Add(Btn("فرزند", AddChild));
             flow.Controls.Add(Btn("غیرفعال", delegate { SetActive(false); }));
             flow.Controls.Add(Btn("فعال", delegate { SetActive(true); }));
             flow.Controls.Add(Btn("تازه‌سازی", Reload));
             Controls.Add(_tree);
             Controls.Add(flow);
+            Controls.Add(AccountingChrome.BuildStatusBar());
+            Controls.Add(AccountingChrome.BuildHeader(heading, AccountingChrome.Breadcrumb("دفتر کل", heading)));
+            AccountingChrome.Polish(this);
             Reload();
         }
 
@@ -66,6 +76,7 @@ namespace CaseManagement.Accounting.Ledger.Adapters
                         GlCostCenter n = list[i];
                         if (map.ContainsKey(n.CostCenterId)) continue;
                         if (n.ParentCostCenterId.HasValue && !map.ContainsKey(n.ParentCostCenterId.Value)) continue;
+                        if (!DimMatches(n.Code, n.Name)) continue;
                         TreeNode node = Node(n.CostCenterId, n.Code, n.Name, n.IsActive, n.IsLeaf, n.RowVersion);
                         if (!n.ParentCostCenterId.HasValue) _tree.Nodes.Add(node);
                         else map[n.ParentCostCenterId.Value].Nodes.Add(node);
@@ -86,6 +97,7 @@ namespace CaseManagement.Accounting.Ledger.Adapters
                         GlProject n = list[i];
                         if (map.ContainsKey(n.ProjectId)) continue;
                         if (n.ParentProjectId.HasValue && !map.ContainsKey(n.ParentProjectId.Value)) continue;
+                        if (!DimMatches(n.Code, n.Name)) continue;
                         TreeNode node = Node(n.ProjectId, n.Code, n.Name, n.IsActive, n.IsLeaf, n.RowVersion);
                         if (!n.ParentProjectId.HasValue) _tree.Nodes.Add(node);
                         else map[n.ParentProjectId.Value].Nodes.Add(node);
@@ -99,6 +111,14 @@ namespace CaseManagement.Accounting.Ledger.Adapters
             _tree.EndUpdate();
         }
 
+        private bool DimMatches(string code, string name)
+        {
+            string q = (_filter ?? "").Trim();
+            if (q.Length == 0) return true;
+            return (code ?? "").IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0
+                || (name ?? "").IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
         private void AddChild()
         {
             long? parent = SelectedId();
@@ -109,6 +129,7 @@ namespace CaseManagement.Accounting.Ledger.Adapters
                 MaximizeBox = false, MinimizeBox = false
             })
             {
+                AccountingChrome.PrepareDialog(dlg);
                 TextBox code = Field(dlg, "کد", 20, 40);
                 TextBox name = Field(dlg, "نام", 20, 90);
                 CheckBox leaf = new CheckBox { Text = "برگ (قابل ثبت روی سند)", Left = 20, Top = 125, Width = 280, Checked = true, Parent = dlg };

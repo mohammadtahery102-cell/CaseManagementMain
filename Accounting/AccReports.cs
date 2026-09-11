@@ -23,13 +23,13 @@ namespace CaseManagement.Accounting
 
         public AccReports(AccountingRepo repo) { _repo = repo; }
 
-        private static readonly Font TitleFont = new Font("B Nazanin", 15F, FontStyle.Bold);
-        private static readonly Font OrgFont = new Font("B Nazanin", 12F, FontStyle.Bold);
-        private static readonly Font HeaderFont = new Font("B Nazanin", 10.5F, FontStyle.Bold);
-        private static readonly Font LabelFont = new Font("B Nazanin", 10F, FontStyle.Bold);
-        private static readonly Font ValueFont = new Font("B Nazanin", 10F, FontStyle.Regular);
-        private static readonly Font TotalFont = new Font("B Nazanin", 10.5F, FontStyle.Bold);
-        private static readonly Font FooterFont = new Font("B Nazanin", 8.5F);
+        private static Font TitleFont { get { return UiTheme.FontBold(15F); } }
+        private static Font OrgFont { get { return UiTheme.FontBold(12F); } }
+        private static Font HeaderFont { get { return UiTheme.FontBold(10.5F); } }
+        private static Font LabelFont { get { return UiTheme.FontBold(10F); } }
+        private static Font ValueFont { get { return UiTheme.Font(10F); } }
+        private static Font TotalFont { get { return UiTheme.FontBold(10.5F); } }
+        private static Font FooterFont { get { return UiTheme.Font(8.5F); } }
 
         // ═══════════════════════════════════════════════════════════════════
         // زیرساخت مشترک چاپ: سربرگ/پاورقی/جدول صفحه‌بندی‌شده
@@ -381,7 +381,7 @@ namespace CaseManagement.Accounting
                     Rectangle amountBox = new Rectangle(left, y, width, 44);
                     g.FillRectangle(new SolidBrush(UiTheme.HoverTint), amountBox);
                     g.DrawRectangle(Pens.Gray, amountBox);
-                    g.DrawString("مبلغ :  " + N(amount) + "  افغانی", new Font("B Nazanin", 14F, FontStyle.Bold), Brushes.Black,
+                    g.DrawString("مبلغ :  " + N(amount) + "  افغانی", UiTheme.FontBold(14F), Brushes.Black,
                         new RectangleF(left + 8, y, width - 16, 44), new StringFormat { Alignment = StringAlignment.Far, LineAlignment = StringAlignment.Center });
                     y += 50;
 
@@ -466,7 +466,7 @@ namespace CaseManagement.Accounting
                     Rectangle amountBox = new Rectangle(left, y, width, 44);
                     g.FillRectangle(new SolidBrush(UiTheme.HoverTint), amountBox);
                     g.DrawRectangle(Pens.Gray, amountBox);
-                    g.DrawString("مبلغ :  " + N(amount) + "  افغانی", new Font("B Nazanin", 14F, FontStyle.Bold), Brushes.Black,
+                    g.DrawString("مبلغ :  " + N(amount) + "  افغانی", UiTheme.FontBold(14F), Brushes.Black,
                         new RectangleF(left + 8, y, width - 16, 44), new StringFormat { Alignment = StringAlignment.Far, LineAlignment = StringAlignment.Center });
                     y += 50;
 
@@ -1345,6 +1345,86 @@ namespace CaseManagement.Accounting
             {
                 var ws = NewSheet(wb, model.Title, model.SummaryRows);
                 WriteTable(ws, model.SummaryRows.Count + 6, model.ColumnHeaders, model.Rows, model.BoldRows);
+                wb.SaveAs(path);
+            }
+        }
+
+        private ReportModel BuildPartyBalance(int? periodId, bool debtors)
+        {
+            var model = new ReportModel
+            {
+                Title = debtors ? "گزارش بدهکاران" : "گزارش بستانکاران"
+            };
+            model.SummaryRows.Add(new KeyValuePair<string, string>("دوره",
+                periodId.HasValue ? _repo.GetPeriodTitle(periodId.Value) : "همه دوره‌ها"));
+            model.ColumnHeaders = new[] { "طرف حساب", "نوع", "پرداخت", "دریافت", "مانده" };
+            model.ColumnWeights = new float[] { 2f, 1f, 1f, 1f, 1f };
+            DataTable dt = _repo.GetPartyBalances(periodId, debtors);
+            double total = 0;
+            foreach (DataRow r in dt.Rows)
+            {
+                double bal = Convert.ToDouble(r["مانده"]);
+                total += Math.Abs(bal);
+                model.Rows.Add(new[]
+                {
+                    Convert.ToString(r["طرف حساب"]), Convert.ToString(r["نوع"]),
+                    N(Convert.ToDouble(r["پرداخت"])), N(Convert.ToDouble(r["دریافت"])), N(bal)
+                });
+            }
+            model.BoldRows.Add(model.Rows.Count);
+            model.Rows.Add(new[] { "جمع", "", "", "", N(total) });
+            return model;
+        }
+
+        public void PrintDebtors(IWin32Window owner, int? periodId) { Print(owner, BuildPartyBalance(periodId, true)); }
+        public void PrintCreditors(IWin32Window owner, int? periodId) { Print(owner, BuildPartyBalance(periodId, false)); }
+        public void ExportDebtorsExcel(string path, int? periodId)
+        {
+            using (var wb = new XLWorkbook())
+            {
+                var model = BuildPartyBalance(periodId, true);
+                WriteTable(NewSheet(wb, model.Title, model.SummaryRows), model.SummaryRows.Count + 6, model.ColumnHeaders, model.Rows, model.BoldRows);
+                wb.SaveAs(path);
+            }
+        }
+        public void ExportCreditorsExcel(string path, int? periodId)
+        {
+            using (var wb = new XLWorkbook())
+            {
+                var model = BuildPartyBalance(periodId, false);
+                WriteTable(NewSheet(wb, model.Title, model.SummaryRows), model.SummaryRows.Count + 6, model.ColumnHeaders, model.Rows, model.BoldRows);
+                wb.SaveAs(path);
+            }
+        }
+
+        private ReportModel BuildCashFlow(int? periodId)
+        {
+            var model = new ReportModel { Title = "جریان نقدی صندوق و بانک" };
+            model.SummaryRows.Add(new KeyValuePair<string, string>("دوره",
+                periodId.HasValue ? _repo.GetPeriodTitle(periodId.Value) : "همه دوره‌ها"));
+            model.ColumnHeaders = new[] { "دوره", "ورود نقد", "خروج نقد", "خالص" };
+            model.ColumnWeights = new float[] { 2f, 1f, 1f, 1f };
+            double inSum = 0, outSum = 0;
+            DataTable dt = _repo.GetCashFlowByPeriod(periodId);
+            foreach (DataRow r in dt.Rows)
+            {
+                double inn = Convert.ToDouble(r["ورود نقد"]);
+                double outt = Convert.ToDouble(r["خروج نقد"]);
+                inSum += inn; outSum += outt;
+                model.Rows.Add(new[] { Convert.ToString(r["دوره"]), N(inn), N(outt), N(Convert.ToDouble(r["خالص"])) });
+            }
+            model.BoldRows.Add(model.Rows.Count);
+            model.Rows.Add(new[] { "جمع", N(inSum), N(outSum), N(inSum - outSum) });
+            return model;
+        }
+
+        public void PrintCashFlow(IWin32Window owner, int? periodId) { Print(owner, BuildCashFlow(periodId)); }
+        public void ExportCashFlowExcel(string path, int? periodId)
+        {
+            using (var wb = new XLWorkbook())
+            {
+                var model = BuildCashFlow(periodId);
+                WriteTable(NewSheet(wb, model.Title, model.SummaryRows), model.SummaryRows.Count + 6, model.ColumnHeaders, model.Rows, model.BoldRows);
                 wb.SaveAs(path);
             }
         }

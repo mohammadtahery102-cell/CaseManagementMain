@@ -395,6 +395,8 @@ WHERE IsDeleted = 0;");
             Exec(con, "CREATE INDEX IF NOT EXISTS IX_GlJournalLine_AccountJournal ON GlJournalLine(AccountID, JournalID);");
             Exec(con, "CREATE INDEX IF NOT EXISTS IX_GlJournalLine_CostCenter ON GlJournalLine(CostCenterID);");
             Exec(con, "CREATE INDEX IF NOT EXISTS IX_GlJournalLine_Project ON GlJournalLine(ProjectID);");
+            Exec(con, "CREATE INDEX IF NOT EXISTS IX_GlJournalLine_Party ON GlJournalLine(PartyID);");
+            Exec(con, "CREATE INDEX IF NOT EXISTS IX_GlJournalLine_Fund ON GlJournalLine(FundID);");
             Exec(con, "CREATE INDEX IF NOT EXISTS IX_GlJournalLine_Currency ON GlJournalLine(CurrencyCode);");
             Exec(con, "CREATE INDEX IF NOT EXISTS IX_GlAccount_Parent ON GlAccount(CompanyID, CenterID, ParentAccountID);");
             Exec(con, "CREATE INDEX IF NOT EXISTS IX_GlAccount_Type ON GlAccount(CompanyID, AccountTypeCode);");

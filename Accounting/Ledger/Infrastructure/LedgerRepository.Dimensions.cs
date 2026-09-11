@@ -9,6 +9,28 @@ namespace CaseManagement.Accounting.Ledger.Infrastructure
 {
     public partial class LedgerRepository
     {
+        public GlCostCenter GetCostCenterByCode(int companyId, string code)
+        {
+            return MapCostCenter(QueryRow(
+                "SELECT * FROM GlCostCenter WHERE CompanyID = @c AND Code = @code AND IsDeleted = 0;",
+                P("@c", companyId), P("@code", code)));
+        }
+
+        public GlProject GetProjectByCode(int companyId, string code)
+        {
+            return MapProject(QueryRow(
+                "SELECT * FROM GlProject WHERE CompanyID = @c AND Code = @code AND IsDeleted = 0;",
+                P("@c", companyId), P("@code", code)));
+        }
+
+        public int DimensionLineCount(bool costCenter, long id)
+        {
+            string col = costCenter ? "CostCenterID" : "ProjectID";
+            object v = _db.ExecuteScalar(
+                "SELECT COUNT(1) FROM GlJournalLine WHERE " + col + " = @id;", P("@id", id));
+            return v == null || v == DBNull.Value ? 0 : Convert.ToInt32(v);
+        }
+
         public GlCostCenter GetCostCenter(long id)
         {
             return MapCostCenter(QueryRow("SELECT * FROM GlCostCenter WHERE CostCenterID = @id;", P("@id", id)));

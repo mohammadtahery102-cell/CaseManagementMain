@@ -58,15 +58,25 @@ namespace CaseManagement.Inventory.Application
             for (int i = 0; i < lines.Count; i++)
             {
                 InvDocumentLine line = lines[i];
-                if (line.QtyBase == 0)
+                if (line.QtyBase == 0 && doc.DocumentType != InventoryCodes.TypeCount)
                     return InventoryResult.Fail("VALIDATION", "QtyBase cannot be zero.");
                 InvItem item = _store.GetItem(line.ItemId);
-                if (item == null || !item.IsActive || !item.IsStockable)
+                if (item == null || !item.IsStockable)
                     return InventoryResult.Fail("VALIDATION", "Item is not stockable.");
+                if (!item.IsActive)
+                    return InventoryResult.Fail(InventoryCodes.InactiveItem, "Item is inactive.");
                 if (item.CompanyId != doc.CompanyId)
                     return InventoryResult.Fail("VALIDATION", "Item company mismatch.");
                 InvLocation loc = _store.GetLocation(line.LocationId);
-                if (loc == null || !loc.IsLeaf || loc.WarehouseId != doc.WarehouseId)
+                if (doc.DocumentType == InventoryCodes.TypeTransfer)
+                {
+                    if (loc == null || !loc.IsLeaf || loc.WarehouseId != doc.WarehouseId)
+                        return InventoryResult.Fail("VALIDATION", "Source location must belong to the source warehouse.");
+                    if (doc.ToLocationId.HasValue && doc.ToLocationId.Value == line.LocationId
+                        && (!doc.ToWarehouseId.HasValue || doc.ToWarehouseId.Value == doc.WarehouseId))
+                        return InventoryResult.Fail("VALIDATION", "Source and destination cannot be the same.");
+                }
+                else if (loc == null || !loc.IsLeaf || loc.WarehouseId != doc.WarehouseId)
                     return InventoryResult.Fail("VALIDATION", "Location must be a leaf of the document warehouse.");
 
                 bool outbound = IsOutbound(doc.DocumentType, line.QtyBase);
@@ -80,6 +90,35 @@ namespace CaseManagement.Inventory.Application
                         return InventoryResult.Fail(InventoryCodes.NegativeStock, "Insufficient quantity on hand.");
                 }
             }
+
+            if (doc.DocumentType == InventoryCodes.TypeTransfer)
+            {
+                InventoryResult tr = GuardTransfer(doc, identity);
+                if (!tr.Ok) return tr;
+            }
+            return InventoryResult.Success(doc.DocumentId, doc.RowVersion);
+        }
+
+        public InventoryResult GuardTransfer(InvDocument doc, ILedgerIdentity identity)
+        {
+            long destWhId = doc.ToWarehouseId.HasValue ? doc.ToWarehouseId.Value : 0;
+            InvLocation destLoc = doc.ToLocationId.HasValue ? _store.GetLocation(doc.ToLocationId.Value) : null;
+            if (destWhId <= 0 && destLoc != null) destWhId = destLoc.WarehouseId;
+            if (destWhId <= 0)
+                return InventoryResult.Fail("VALIDATION", "Destination warehouse is required.");
+            InvWarehouse dest = _store.GetWarehouse(destWhId);
+            if (dest == null || !dest.IsActive)
+                return InventoryResult.Fail("VALIDATION", "Destination warehouse not found.");
+            if (dest.CompanyId != doc.CompanyId)
+                return InventoryResult.Fail("VALIDATION", "Destination warehouse company mismatch.");
+            if (dest.CenterId != doc.CenterId)
+                return InventoryResult.Fail(InventoryCodes.InterBranch, "Same-branch transfer only.");
+            if (!TradeIsolation.CanSeeCenter(identity, dest.CenterId))
+                return InventoryResult.Fail("PERMISSION", "Cross-warehouse access is not allowed.");
+            if (destLoc == null)
+                destLoc = _store.GetLocation(_store.DefaultLocationId(destWhId));
+            if (destLoc == null || !destLoc.IsLeaf || destLoc.WarehouseId != destWhId)
+                return InventoryResult.Fail("VALIDATION", "Destination location must be a leaf of the destination warehouse.");
             return InventoryResult.Success(doc.DocumentId, doc.RowVersion);
         }
 
@@ -111,6 +150,8 @@ namespace CaseManagement.Inventory.Application
                 return InventoryCodes.RoleOpeningOffset;
             if (documentType == InventoryCodes.TypeAdjustment)
                 return inbound ? InventoryCodes.RoleAdjGain : InventoryCodes.RoleAdjLoss;
+            if (documentType == InventoryCodes.TypeCount)
+                return inbound ? InventoryCodes.RoleAdjGain : InventoryCodes.RoleAdjLoss;
             if (documentType == InventoryCodes.TypeRevalue)
                 return inbound ? InventoryCodes.RoleAdjGain : InventoryCodes.RoleAdjLoss;
             return null;
@@ -119,7 +160,9 @@ namespace CaseManagement.Inventory.Application
         public static bool IsOutbound(string documentType, long qtyBase)
         {
             if (documentType == InventoryCodes.TypeIssue) return true;
-            if (documentType == InventoryCodes.TypeAdjustment || documentType == InventoryCodes.TypeRevalue)
+            if (documentType == InventoryCodes.TypeTransfer) return true;
+            if (documentType == InventoryCodes.TypeAdjustment || documentType == InventoryCodes.TypeRevalue
+                || documentType == InventoryCodes.TypeCount)
                 return qtyBase < 0;
             return false;
         }

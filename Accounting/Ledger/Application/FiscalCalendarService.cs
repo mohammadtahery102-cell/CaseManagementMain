@@ -70,7 +70,10 @@ namespace CaseManagement.Accounting.Ledger.Application
 
         public LedgerResult AddPeriod(CreateFiscalPeriodCommand command, ILedgerIdentity identity)
         {
-            if (identity == null)
+            if (identity == null
+                || (!identity.HasPermission(LedgerPermissions.ClosePeriod)
+                    && !identity.HasPermission(LedgerPermissions.ManageCoA)
+                    && !identity.HasPermission(LedgerPermissions.CloseYear)))
                 return LedgerResult.Fail(LedgerErrorCodes.PermissionDenied, LedgerPermissions.ClosePeriod);
             if (command == null)
                 return LedgerResult.Fail(LedgerErrorCodes.Validation, "Fiscal period command is required.");
@@ -126,6 +129,15 @@ namespace CaseManagement.Accounting.Ledger.Application
             return SetPeriodStatus(command, identity, LedgerCodes.StatusLocked);
         }
 
+        public LedgerResult UnlockPeriod(CalendarStatusCommand command, ILedgerIdentity identity)
+        {
+            if (identity == null || !identity.HasPermission(LedgerPermissions.ClosePeriod))
+                return LedgerResult.Fail(LedgerErrorCodes.PermissionDenied, LedgerPermissions.ClosePeriod);
+            if (command == null)
+                return LedgerResult.Fail(LedgerErrorCodes.Validation, "Period command is required.");
+            return SetPeriodStatus(command, identity, LedgerCodes.StatusClosed, unlockLocked: true);
+        }
+
         public LedgerResult CloseYear(CalendarStatusCommand command, ILedgerIdentity identity)
         {
             if (identity == null || !identity.HasPermission(LedgerPermissions.CloseYear))
@@ -136,6 +148,8 @@ namespace CaseManagement.Accounting.Ledger.Application
             GlFiscalYear y = _repo.GetYear(command.EntityId);
             if (y == null || y.IsDeleted)
                 return LedgerResult.Fail(LedgerErrorCodes.Validation, "Fiscal year not found.");
+            if (y.Status != LedgerCodes.StatusOpen)
+                return LedgerResult.Fail(LedgerErrorCodes.InvalidStatus, "Only an Open year can be closed.");
 
             IList<GlFiscalPeriod> periods = _repo.ListPeriods(y.FiscalYearId, false);
             if (periods.Count == 0)
@@ -146,6 +160,7 @@ namespace CaseManagement.Accounting.Ledger.Application
                     return LedgerResult.Fail(LedgerErrorCodes.Validation, "All periods must be Closed or Locked.");
             }
 
+            string from = y.Status;
             y.Status = LedgerCodes.StatusClosed;
             y.ClosedAt = LedgerTime.UtcNow(identity.UtcNow);
             y.ClosedBy = identity.UserName;
@@ -153,6 +168,7 @@ namespace CaseManagement.Accounting.Ledger.Application
             y.UpdatedBy = identity.UserName;
             if (!_repo.UpdateYearConcurrency(y, command.ExpectedRowVersion))
                 return LedgerResult.Fail(LedgerErrorCodes.ConcurrencyConflict, "RowVersion mismatch.");
+            _repo.InsertMasterAudit("CloseYear", "GlFiscalYear", y.FiscalYearId, from, LedgerCodes.StatusClosed, identity);
             return LedgerResult.Entity(y.FiscalYearId, y.RowVersion + 1);
         }
 
@@ -170,6 +186,7 @@ namespace CaseManagement.Accounting.Ledger.Application
             if (y.Status != LedgerCodes.StatusClosed)
                 return LedgerResult.Fail(LedgerErrorCodes.InvalidStatus, "Year must be Closed before lock.");
 
+            string from = y.Status;
             y.Status = LedgerCodes.StatusLocked;
             y.LockedAt = LedgerTime.UtcNow(identity.UtcNow);
             y.LockedBy = identity.UserName;
@@ -177,6 +194,7 @@ namespace CaseManagement.Accounting.Ledger.Application
             y.UpdatedBy = identity.UserName;
             if (!_repo.UpdateYearConcurrency(y, command.ExpectedRowVersion))
                 return LedgerResult.Fail(LedgerErrorCodes.ConcurrencyConflict, "RowVersion mismatch.");
+            _repo.InsertMasterAudit("LockYear", "GlFiscalYear", y.FiscalYearId, from, LedgerCodes.StatusLocked, identity);
             return LedgerResult.Entity(y.FiscalYearId, y.RowVersion + 1);
         }
 
@@ -195,6 +213,7 @@ namespace CaseManagement.Accounting.Ledger.Application
             if (y.Status != LedgerCodes.StatusClosed)
                 return LedgerResult.Fail(LedgerErrorCodes.InvalidStatus, "Only a Closed year can be reopened.");
 
+            string from = y.Status;
             y.Status = LedgerCodes.StatusOpen;
             y.ClosedAt = null;
             y.ClosedBy = null;
@@ -202,6 +221,7 @@ namespace CaseManagement.Accounting.Ledger.Application
             y.UpdatedBy = identity.UserName;
             if (!_repo.UpdateYearConcurrency(y, command.ExpectedRowVersion))
                 return LedgerResult.Fail(LedgerErrorCodes.ConcurrencyConflict, "RowVersion mismatch.");
+            _repo.InsertMasterAudit("ReopenYear", "GlFiscalYear", y.FiscalYearId, from, LedgerCodes.StatusOpen, identity);
             return LedgerResult.Entity(y.FiscalYearId, y.RowVersion + 1);
         }
 
@@ -250,15 +270,53 @@ namespace CaseManagement.Accounting.Ledger.Application
 
         private LedgerResult SetPeriodStatus(CalendarStatusCommand command, ILedgerIdentity identity, string status)
         {
+            return SetPeriodStatus(command, identity, status, false);
+        }
+
+        private LedgerResult SetPeriodStatus(CalendarStatusCommand command, ILedgerIdentity identity, string status, bool unlockLocked)
+        {
             GlFiscalPeriod p = _repo.GetPeriod(command.EntityId);
             if (p == null || p.IsDeleted)
                 return LedgerResult.Fail(LedgerErrorCodes.Validation, "Period not found.");
+
+            string from = p.Status ?? "";
+            if (unlockLocked)
+            {
+                if (from != LedgerCodes.StatusLocked)
+                    return LedgerResult.Fail(LedgerErrorCodes.InvalidStatus, "Only a Locked period can be unlocked.");
+                status = LedgerCodes.StatusClosed;
+            }
+            else if (status == LedgerCodes.StatusClosed)
+            {
+                if (from != LedgerCodes.StatusOpen)
+                    return LedgerResult.Fail(LedgerErrorCodes.InvalidStatus, "Only an Open period can be closed.");
+            }
+            else if (status == LedgerCodes.StatusLocked)
+            {
+                if (from != LedgerCodes.StatusOpen && from != LedgerCodes.StatusClosed)
+                    return LedgerResult.Fail(LedgerErrorCodes.InvalidStatus, "Only Open or Closed periods can be locked.");
+            }
+            else if (status == LedgerCodes.StatusOpen)
+            {
+                if (from == LedgerCodes.StatusLocked)
+                    return LedgerResult.Fail(LedgerErrorCodes.PeriodLocked, "Locked period cannot be reopened without UnlockPeriod.");
+                if (from != LedgerCodes.StatusClosed)
+                    return LedgerResult.Fail(LedgerErrorCodes.InvalidStatus, "Only a Closed period can be reopened.");
+            }
+            else
+                return LedgerResult.Fail(LedgerErrorCodes.Validation, "Unknown period status.");
 
             p.Status = status;
             p.UpdatedAt = LedgerTime.UtcNow(identity.UtcNow);
             p.UpdatedBy = identity.UserName;
             if (!_repo.UpdatePeriodConcurrency(p, command.ExpectedRowVersion))
                 return LedgerResult.Fail(LedgerErrorCodes.ConcurrencyConflict, "RowVersion mismatch.");
+
+            string op = status == LedgerCodes.StatusOpen ? "ReopenPeriod"
+                : status == LedgerCodes.StatusLocked ? "LockPeriod"
+                : unlockLocked ? "UnlockPeriod"
+                : "ClosePeriod";
+            _repo.InsertMasterAudit(op, "GlFiscalPeriod", p.FiscalPeriodId, from, status, identity);
             return LedgerResult.Entity(p.FiscalPeriodId, p.RowVersion + 1);
         }
     }

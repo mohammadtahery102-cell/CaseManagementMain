@@ -357,11 +357,14 @@ namespace CaseManagement.Accounting.Ledger.Application
 
         private LedgerResult SetPeriod(GlFiscalPeriod period, string status, ILedgerIdentity identity)
         {
+            string from = period.Status ?? "";
             period.Status = status;
             period.UpdatedAt = LedgerTime.UtcNow(identity.UtcNow);
             period.UpdatedBy = identity.UserName;
             if (!_repo.UpdatePeriodConcurrency(period, period.RowVersion))
                 return LedgerResult.Fail(LedgerErrorCodes.ConcurrencyConflict, "Period RowVersion mismatch.");
+            string op = status == LedgerCodes.StatusOpen ? "YearEndReopenPeriod" : "YearEndClosePeriod";
+            _repo.InsertMasterAudit(op, "GlFiscalPeriod", period.FiscalPeriodId, from, status, identity);
             return LedgerResult.Entity(period.FiscalPeriodId, period.RowVersion + 1);
         }
 

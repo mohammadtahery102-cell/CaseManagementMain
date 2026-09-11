@@ -11,6 +11,7 @@ namespace CaseManagement.Inventory.Domain
         public const string TypeTransfer = "Transfer";
         public const string TypeRevalue = "Revalue";
         public const string TypeOpening = "Opening";
+        public const string TypeCount = "Count";
 
         public const string StatusDraft = "Draft";
         public const string StatusSubmitted = "Submitted";
@@ -36,6 +37,13 @@ namespace CaseManagement.Inventory.Domain
         public const string DefaultUom = "PCS";
         public const string NegativeStock = "NEGATIVE_STOCK";
         public const string InterBranch = "INTER_BRANCH";
+        public const string DuplicateCode = "DUPLICATE_CODE";
+        public const string DuplicateBarcode = "DUPLICATE_BARCODE";
+        public const string DuplicateName = "DUPLICATE_NAME";
+        public const string DuplicateMovement = "DUPLICATE_MOVEMENT";
+        public const string InactiveItem = "INACTIVE_ITEM";
+        public const string InUse = "IN_USE";
+        public const int MaxCategoryLevel = 8;
     }
 
     public static class InventoryPermissions
@@ -77,6 +85,10 @@ namespace CaseManagement.Inventory.Domain
         public int CompanyId { get; set; }
         public string Code { get; set; }
         public string Name { get; set; }
+        public long ParentCategoryId { get; set; }
+        public int Level { get; set; }
+        public bool IsLeaf { get; set; }
+        public bool IsActive { get; set; }
         public long RowVersion { get; set; }
     }
 
@@ -86,6 +98,8 @@ namespace CaseManagement.Inventory.Domain
         public int CompanyId { get; set; }
         public string Code { get; set; }
         public string Name { get; set; }
+        public int DecimalPlaces { get; set; }
+        public bool IsActive { get; set; }
         public long RowVersion { get; set; }
     }
 
@@ -95,6 +109,7 @@ namespace CaseManagement.Inventory.Domain
         public int CompanyId { get; set; }
         public string Code { get; set; }
         public string Name { get; set; }
+        public string Barcode { get; set; }
         public long CategoryId { get; set; }
         public long BaseUomId { get; set; }
         public string CostingMethod { get; set; }
@@ -105,6 +120,15 @@ namespace CaseManagement.Inventory.Domain
         public long RowVersion { get; set; }
         public string CreatedAt { get; set; }
         public string CreatedBy { get; set; }
+        public string CategoryName { get; set; }
+        public string UomName { get; set; }
+    }
+
+    public class InvItemFilter
+    {
+        public string Query { get; set; }
+        public long CategoryId { get; set; }
+        public int ActiveMode { get; set; }
     }
 
     public class InvWarehouse
@@ -150,6 +174,7 @@ namespace CaseManagement.Inventory.Domain
         public string Status { get; set; }
         public string PostingDate { get; set; }
         public long WarehouseId { get; set; }
+        public long? ToWarehouseId { get; set; }
         public long? ToLocationId { get; set; }
         public long? CostCenterId { get; set; }
         public long? ProjectId { get; set; }
@@ -199,6 +224,7 @@ namespace CaseManagement.Inventory.Domain
         public string PostingDate { get; set; }
         public long? CostCenterId { get; set; }
         public long? ProjectId { get; set; }
+        public long? ReversesLedgerId { get; set; }
         public string CreatedBy { get; set; }
     }
 
@@ -253,6 +279,8 @@ namespace CaseManagement.Inventory.Domain
         public string DocumentType { get; set; }
         public string PostingDate { get; set; }
         public long WarehouseId { get; set; }
+        public long ToWarehouseId { get; set; }
+        public long ToLocationId { get; set; }
         public string Description { get; set; }
         public string Reason { get; set; }
         public string SourceModule { get; set; }
@@ -260,5 +288,41 @@ namespace CaseManagement.Inventory.Domain
         public long? SourceDocumentId { get; set; }
         public int? PartyId { get; set; }
         public System.Collections.Generic.IList<InvDocumentLine> Lines { get; set; }
+    }
+
+    public class InventoryIntegrityRow
+    {
+        public long ItemId { get; set; }
+        public string ItemCode { get; set; }
+        public string ItemName { get; set; }
+        public long OpeningQty { get; set; }
+        public long ReceiptQty { get; set; }
+        public long IssueQty { get; set; }
+        public long AdjustmentQty { get; set; }
+        public long CountQty { get; set; }
+        public long TransferInQty { get; set; }
+        public long TransferOutQty { get; set; }
+        public long ComputedQty { get; set; }
+        public long BalanceQty { get; set; }
+        public long LedgerQty { get; set; }
+        public bool Balanced { get; set; }
+    }
+
+    public class InventoryIntegritySummary
+    {
+        public int TotalItems { get; set; }
+        public int BalancedItems { get; set; }
+        public int BrokenItems { get; set; }
+        public double IntegrityPercent { get; set; }
+        public System.Collections.Generic.IList<InventoryIntegrityRow> Rows { get; set; }
+    }
+
+    public class InventoryVelocityRow
+    {
+        public string ItemCode { get; set; }
+        public string ItemName { get; set; }
+        public long QuantityOnHand { get; set; }
+        public long IssuedQty { get; set; }
+        public long ReceiptQty { get; set; }
     }
 }

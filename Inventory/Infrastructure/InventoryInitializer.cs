@@ -16,9 +16,12 @@ namespace CaseManagement.Inventory.Infrastructure
             {
                 con.Open();
                 CreateTables(con);
+                MigrateV2(con);
+                MigrateV3(con);
                 Seed(con);
+                SeedSecondLocation(con);
             }
-            SchemaVersion.SetIfNewer(SchemaVersion.ComponentInventory, 1, "Inventory Foundation V1");
+            SchemaVersion.SetIfNewer(SchemaVersion.ComponentInventory, 3, "Inventory movements audit: transfer/count reverse unique index");
         }
 
         private static void CreateTables(SQLiteConnection con)
@@ -46,7 +49,7 @@ CREATE TABLE IF NOT EXISTS InvUnitOfMeasure (
             Exec(con, @"
 CREATE TABLE IF NOT EXISTS InvItem (
   ItemID INTEGER PRIMARY KEY, CompanyID INTEGER NOT NULL, CenterID INTEGER NOT NULL DEFAULT 0,
-  Code TEXT NOT NULL, Name TEXT NOT NULL, CategoryID INTEGER NOT NULL, BaseUomID INTEGER NOT NULL,
+  Code TEXT NOT NULL, Name TEXT NOT NULL, Barcode TEXT NULL, CategoryID INTEGER NOT NULL, BaseUomID INTEGER NOT NULL,
   CostingMethod TEXT NOT NULL, IsStockable INTEGER NOT NULL DEFAULT 1,
   MinQtyBase INTEGER NOT NULL DEFAULT 0, MaxQtyBase INTEGER NOT NULL DEFAULT 0,
   IsActive INTEGER NOT NULL DEFAULT 1, IsDeleted INTEGER NOT NULL DEFAULT 0,
@@ -54,6 +57,13 @@ CREATE TABLE IF NOT EXISTS InvItem (
   CreatedAt TEXT NOT NULL, UpdatedAt TEXT NOT NULL, CreatedBy TEXT NOT NULL, UpdatedBy TEXT NOT NULL
 );");
             Exec(con, "CREATE UNIQUE INDEX IF NOT EXISTS UX_InvItem_Code ON InvItem(CompanyID, Code) WHERE IsDeleted = 0;");
+            // Existing databases created before V2 still have InvItem without Barcode;
+            // CREATE TABLE IF NOT EXISTS will not add the column, so migrate it before
+            // any index or query that references Barcode.
+            EnsureColumn(con, "InvItem", "Barcode", "TEXT NULL");
+            Exec(con, "CREATE UNIQUE INDEX IF NOT EXISTS UX_InvItem_Barcode ON InvItem(CompanyID, Barcode) WHERE IsDeleted = 0 AND Barcode IS NOT NULL AND Barcode <> '';");
+            TryUniqueNameIndex(con);
+            Exec(con, "CREATE INDEX IF NOT EXISTS IX_InvItem_Name ON InvItem(CompanyID, Name);");
 
             Exec(con, @"
 CREATE TABLE IF NOT EXISTS InvWarehouse (
@@ -102,13 +112,14 @@ CREATE TABLE IF NOT EXISTS InvSetting (
 CREATE TABLE IF NOT EXISTS InvDocument (
   DocumentID INTEGER PRIMARY KEY, CompanyID INTEGER NOT NULL, CenterID INTEGER NOT NULL,
   DocNo TEXT NOT NULL, DocumentType TEXT NOT NULL, Status TEXT NOT NULL, PostingDate TEXT NOT NULL,
-  WarehouseID INTEGER NOT NULL, ToLocationID INTEGER NULL,
+  WarehouseID INTEGER NOT NULL, ToWarehouseID INTEGER NULL, ToLocationID INTEGER NULL,
   CostCenterID INTEGER NULL, ProjectID INTEGER NULL, PartyID INTEGER NULL,
   SourceModule TEXT NULL, SourceDocumentType TEXT NULL, SourceDocumentID INTEGER NULL, GroupId TEXT NULL,
   Description TEXT NULL, IsDeleted INTEGER NOT NULL DEFAULT 0,
   DeletedAt TEXT NULL, DeletedBy TEXT NULL, RowVersion INTEGER NOT NULL DEFAULT 1,
   CreatedAt TEXT NOT NULL, UpdatedAt TEXT NOT NULL, CreatedBy TEXT NOT NULL, UpdatedBy TEXT NOT NULL
 );");
+            EnsureColumn(con, "InvDocument", "ToWarehouseID", "INTEGER NULL");
             Exec(con, "CREATE INDEX IF NOT EXISTS IX_InvDoc_Source ON InvDocument(CompanyID, SourceModule, SourceDocumentType, SourceDocumentID);");
             Exec(con, "CREATE UNIQUE INDEX IF NOT EXISTS UX_InvDoc_No ON InvDocument(CompanyID, DocumentType, DocNo) WHERE IsDeleted = 0;");
 
@@ -132,6 +143,8 @@ CREATE TABLE IF NOT EXISTS InvItemLedger (
 );");
             Exec(con, "CREATE INDEX IF NOT EXISTS IX_InvLed_ItemWh ON InvItemLedger(CompanyID, ItemID, WarehouseID, LocationID);");
             Exec(con, "CREATE INDEX IF NOT EXISTS IX_InvLed_Doc ON InvItemLedger(DocumentID);");
+            Exec(con, "CREATE INDEX IF NOT EXISTS IX_InvLed_Date ON InvItemLedger(CompanyID, PostingDate);");
+            Exec(con, "CREATE UNIQUE INDEX IF NOT EXISTS UX_InvLed_Move ON InvItemLedger(DocumentID, DocumentLineNo, MovementType, WarehouseID, LocationID);");
 
             Exec(con, @"
 CREATE TABLE IF NOT EXISTS InvItemBalance (
@@ -144,6 +157,71 @@ CREATE TABLE IF NOT EXISTS InvItemBalance (
             Exec(con, @"
 CREATE UNIQUE INDEX IF NOT EXISTS UX_InvBal_Grain
 ON InvItemBalance(CompanyID, ItemID, WarehouseID, LocationID);");
+        }
+
+        private static void MigrateV2(SQLiteConnection con)
+        {
+            EnsureColumn(con, "InvItem", "Barcode", "TEXT NULL");
+            EnsureColumn(con, "InvDocument", "ToWarehouseID", "INTEGER NULL");
+            Exec(con, "CREATE UNIQUE INDEX IF NOT EXISTS UX_InvItem_Barcode ON InvItem(CompanyID, Barcode) WHERE IsDeleted = 0 AND Barcode IS NOT NULL AND Barcode <> '';");
+            TryUniqueNameIndex(con);
+            Exec(con, "CREATE INDEX IF NOT EXISTS IX_InvItem_Name ON InvItem(CompanyID, Name);");
+            Exec(con, "CREATE INDEX IF NOT EXISTS IX_InvLed_Date ON InvItemLedger(CompanyID, PostingDate);");
+            Exec(con, "CREATE UNIQUE INDEX IF NOT EXISTS UX_InvLed_Move ON InvItemLedger(DocumentID, DocumentLineNo, MovementType, WarehouseID, LocationID);");
+        }
+
+        private static void MigrateV3(SQLiteConnection con)
+        {
+            Exec(con, "DROP INDEX IF EXISTS UX_InvLed_Move;");
+            Exec(con, "CREATE UNIQUE INDEX IF NOT EXISTS UX_InvLed_Move ON InvItemLedger(DocumentID, DocumentLineNo, MovementType, WarehouseID, LocationID);");
+        }
+
+        private static void SeedSecondLocation(SQLiteConnection con)
+        {
+            int companyId = LedgerCodes.DefaultCompanyId;
+            long wh = Scalar(con, "SELECT WarehouseID FROM InvWarehouse WHERE CompanyID = " + companyId + " AND Code = 'MAIN' AND IsDeleted = 0");
+            if (wh <= 0) return;
+            if (Scalar(con, "SELECT COUNT(1) FROM InvLocation WHERE WarehouseID = " + wh + " AND IsDeleted = 0") >= 2)
+                return;
+            string now = LedgerTime.UtcNow(DateTime.UtcNow);
+            string user = LedgerCodes.SystemUser;
+            Exec(con, @"
+INSERT INTO InvLocation (WarehouseID, CompanyID, Code, Name, Level, IsLeaf, IsActive, IsDeleted, RowVersion, CreatedAt, UpdatedAt, CreatedBy, UpdatedBy)
+VALUES (@w, @c, 'BIN2', 'قفسه ۲', 1, 1, 1, 0, 1, @n, @n, @u, @u);",
+                P("@w", wh), P("@c", companyId), P("@n", now), P("@u", user));
+        }
+
+        private static void TryUniqueNameIndex(SQLiteConnection con)
+        {
+            try
+            {
+                Exec(con, @"
+CREATE UNIQUE INDEX IF NOT EXISTS UX_InvItem_Name
+ON InvItem(CompanyID, Name) WHERE IsDeleted = 0;");
+            }
+            catch (SQLiteException)
+            {
+                // Duplicate names already exist on older databases; application layer still rejects new ones.
+            }
+        }
+
+        private static void EnsureColumn(SQLiteConnection con, string table, string column, string def)
+        {
+            bool found = false;
+            using (SQLiteCommand cmd = new SQLiteCommand("PRAGMA table_info(" + table + ");", con))
+            using (SQLiteDataReader r = cmd.ExecuteReader())
+            {
+                while (r.Read())
+                {
+                    if (string.Equals(Convert.ToString(r["name"]), column, StringComparison.OrdinalIgnoreCase))
+                    {
+                        found = true;
+                        break;
+                    }
+                }
+            }
+            if (!found)
+                Exec(con, "ALTER TABLE " + table + " ADD COLUMN " + column + " " + def);
         }
 
         private static void Seed(SQLiteConnection con)

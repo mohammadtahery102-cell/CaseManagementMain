@@ -69,6 +69,14 @@ namespace CaseManagement.Accounting.Ledger.Domain
         public const string OutboxDeadLetter = "DeadLetter";
         public const string OutboxPost = "Post";
         public const string OutboxReverse = "Reverse";
+
+        public const string LineOpening = "Opening";
+        public const string LineMovement = "Movement";
+        public const string LineClosing = "Closing";
+        public const string DetailParty = "Party";
+        public const string DetailFund = "Fund";
+        public const string DetailCostCenter = "CostCenter";
+        public const string DetailProject = "Project";
     }
 
     public static class LedgerPermissions

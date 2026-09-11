@@ -53,19 +53,11 @@ namespace CaseManagement.Accounting
         private void BuildUi()
         {
             Text = "ابزار اصلاح داده‌های تاریخی حسابداری";
-            RightToLeft = RightToLeft.Yes;
-            RightToLeftLayout = true;
-            BackColor = UiTheme.Background;
-            Font = UiTheme.Font(UiTheme.SizeBody);
-            UiTheme.MakeMainWindow(this, 1180, 760);
+            AccountingChrome.MakeWorkspace(this, 1180, 760);
 
-            var banner = new Panel { Dock = DockStyle.Top, Height = 54, BackColor = UiTheme.PrimaryDark };
-            banner.Controls.Add(new Label
-            {
-                Text = "🛠  ابزار اصلاح داده‌های تاریخی حسابداری",
-                Dock = DockStyle.Fill, ForeColor = Color.White, Font = UiTheme.FontBold(15F),
-                TextAlign = ContentAlignment.MiddleRight, Padding = new Padding(0, 0, 20, 0)
-            });
+            Panel banner = AccountingChrome.BuildHeader(
+                "ابزار اصلاح داده‌های تاریخی حسابداری",
+                AccountingChrome.Breadcrumb("صحت حسابداری", "اصلاح تاریخی"));
 
             var warn = new Label
             {
@@ -107,6 +99,7 @@ namespace CaseManagement.Accounting
                 SelectionMode = DataGridViewSelectionMode.FullRowSelect, MultiSelect = false
             };
             UiTheme.StyleGrid(_grid);
+            AccountingChrome.PolishGrid(_grid);
 
             // هر دو رویداد لازم‌اند: بسته به این‌که کاربر با ماوس کلیک کند یا با
             // کلید جابه‌جا شود، ترتیب شلیک این دو فرق می‌کند. با گوش‌دادن به هر
@@ -119,11 +112,13 @@ namespace CaseManagement.Accounting
 
             Controls.Add(gridCard);
             Controls.Add(BuildDetailPanel());
+            Controls.Add(AccountingChrome.BuildStatusBar());
             Controls.Add(btnBar);
             Controls.Add(warn);
             Controls.Add(banner);
 
             ForceRtl(this);
+            AccountingChrome.Polish(this);
             Rescan();
         }
 
@@ -166,7 +161,7 @@ namespace CaseManagement.Accounting
 
             var fixRow = new FlowLayoutPanel
             {
-                Dock = DockStyle.Top, Height = 40, FlowDirection = FlowDirection.RightToLeft,
+                Dock = DockStyle.Top, Height = 40, FlowDirection = FlowDirection.LeftToRight,
                 WrapContents = false, BackColor = Color.Transparent
             };
             fixRow.Controls.Add(new Label
@@ -184,7 +179,7 @@ namespace CaseManagement.Accounting
             _txtReason = new TextBox { Width = 620, Font = UiTheme.Font(UiTheme.SizeBody) };
             var reasonRow = new FlowLayoutPanel
             {
-                Dock = DockStyle.Top, Height = 40, FlowDirection = FlowDirection.RightToLeft,
+                Dock = DockStyle.Top, Height = 40, FlowDirection = FlowDirection.LeftToRight,
                 WrapContents = false, BackColor = Color.Transparent
             };
             reasonRow.Controls.Add(new Label

@@ -105,7 +105,12 @@ namespace CaseManagement.Helpers
         internal static GraphicsPath RoundedRect(Rectangle rect, int radius)
         {
             GraphicsPath path = new GraphicsPath();
-            int d = radius * 2;
+            if (rect.Width < 2 || rect.Height < 2)
+            {
+                path.AddRectangle(new Rectangle(rect.X, rect.Y, Math.Max(1, rect.Width), Math.Max(1, rect.Height)));
+                return path;
+            }
+            int d = Math.Max(2, Math.Min(radius * 2, Math.Min(rect.Width, rect.Height)));
             path.AddArc(rect.X, rect.Y, d, d, 180, 90);
             path.AddArc(rect.Right - d, rect.Y, d, d, 270, 90);
             path.AddArc(rect.Right - d, rect.Bottom - d, d, d, 0, 90);

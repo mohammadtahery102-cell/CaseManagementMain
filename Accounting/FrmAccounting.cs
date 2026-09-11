@@ -19,6 +19,7 @@ namespace CaseManagement.Accounting
         private readonly string _navTitle;
         private readonly string _startTabTitle;
         private readonly string _startTxnDirection;
+        private readonly string _extraFilter;
 
         public const string TabTxn = "دریافت / پرداخت";
         public const string TabReports = "گزارش‌ها";
@@ -32,17 +33,28 @@ namespace CaseManagement.Accounting
         public const string TabExpenseItems = "هزینه‌های جاری";
         public const string DirectionReceive = "دریافت";
         public const string DirectionPay = "پرداخت";
+        public const string DirectionTransfer = "انتقال";
+        public const string ExtraCustomers = "مشتری";
+        public const string ExtraVendors = "تأمین‌کننده";
+        public const string ExtraCash = "نقدی";
+        public const string ExtraBank = "بانک";
 
         public FrmAccounting()
-            : this(null, null, null)
+            : this(null, null, null, null)
         {
         }
 
         public FrmAccounting(string title, string tabTitle, string txnDirection)
+            : this(title, tabTitle, txnDirection, null)
+        {
+        }
+
+        public FrmAccounting(string title, string tabTitle, string txnDirection, string extraFilter)
         {
             _navTitle = title;
             _startTabTitle = tabTitle;
             _startTxnDirection = txnDirection;
+            _extraFilter = extraFilter;
             BuildUi();
 
             // مثل فرم تنظیمات، این فرم هم چند تب با دکمه‌های هم‌نام دارد؛ پس
@@ -62,21 +74,10 @@ namespace CaseManagement.Accounting
             Text = !string.IsNullOrWhiteSpace(_navTitle) && ProductMode.IsErp
                 ? _navTitle + "  ·  " + ProductBranding.CommercialName + "  —  " + SecurityContext.CenterDisplay
                 : ProductBranding.CashBookWindowTitle(SecurityContext.CenterDisplay);
-            RightToLeft = RightToLeft.Yes;
-            RightToLeftLayout = true;
-            BackColor = UiTheme.Background;
-            Font = UiTheme.Font(UiTheme.SizeBody);
-            UiTheme.MakeMainWindow(this, 1280, 740);
+            AccountingChrome.MakeWorkspace(this, 1280, 740);
 
-            // سربرگ
-            Panel banner = new Panel { Dock = DockStyle.Top, Height = 54, BackColor = UiTheme.PrimaryDark };
-            Label lblTitle = new Label
-            {
-                Text = heading,
-                Dock = DockStyle.Fill, ForeColor = Color.White, Font = UiTheme.FontBold(15F),
-                TextAlign = ContentAlignment.MiddleRight, Padding = new Padding(0, 0, 20, 0)
-            };
-            banner.Controls.Add(lblTitle);
+            Panel header = AccountingChrome.BuildHeader(heading, AccountingChrome.Breadcrumb(_navTitle ?? heading));
+            Panel status = AccountingChrome.BuildStatusBar();
 
             _tabs = new TabControl();
             _tabs.Dock = DockStyle.Fill;
@@ -101,7 +102,8 @@ namespace CaseManagement.Accounting
 
             ApplyNavStart();
             Controls.Add(_tabs);
-            Controls.Add(banner);
+            Controls.Add(status);
+            Controls.Add(header);
 
             // آموزش — رفع باگ «عنوان‌ها و فیلدهای همه‌ی تب‌های حسابداری چپ‌چین
             // بودند»: علت «دو بار آینه‌شدن» بود. این فرم RightToLeft=Yes دارد و
@@ -116,6 +118,7 @@ namespace CaseManagement.Accounting
             // ForceRtl همچنان لازم است: با ساخت پویا (نه Designer)، وراثتِ
             // RightToLeft همیشه به‌موقع resolve نمی‌شود.
             ForceRtl(this);
+            AccountingChrome.Polish(this);
         }
 
         private static void ForceRtl(Control root)
@@ -148,6 +151,23 @@ namespace CaseManagement.Accounting
                 if (idx >= 0)
                     _txnDirection.SelectedIndex = idx;
             }
+            if (_txnDirection != null && string.Equals(_extraFilter, DirectionTransfer, StringComparison.Ordinal))
+            {
+                int idx = _txnDirection.Items.IndexOf(DirectionTransfer);
+                if (idx >= 0) _txnDirection.SelectedIndex = idx;
+            }
+            if (_paType != null && !string.IsNullOrWhiteSpace(_extraFilter)
+                && (_extraFilter == ExtraCustomers || _extraFilter == ExtraVendors))
+            {
+                int idx = _paType.Items.IndexOf(_extraFilter);
+                if (idx >= 0) _paType.SelectedIndex = idx;
+            }
+            if (_fType != null && !string.IsNullOrWhiteSpace(_extraFilter)
+                && (_extraFilter == ExtraCash || _extraFilter == ExtraBank))
+            {
+                int idx = _fType.Items.IndexOf(_extraFilter);
+                if (idx >= 0) _fType.SelectedIndex = idx;
+            }
         }
 
         // ═══════════════════════════════════════════════════════════════════
@@ -161,7 +181,7 @@ namespace CaseManagement.Accounting
                 AllowUserToDeleteRows = false, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
                 SelectionMode = DataGridViewSelectionMode.FullRowSelect, MultiSelect = false
             };
-            UiTheme.StyleGrid(g);
+            AccountingChrome.PolishGrid(g);
 
             // آموزش — چرا پنهان‌کردنِ ستون‌های شناسه اینجا تکرار می‌شود با
             // اینکه در هر Load* هم نوشته شده: آن خط‌ها بلافاصله بعد از
@@ -312,7 +332,7 @@ namespace CaseManagement.Accounting
         private static readonly string[] TechnicalColumns =
         {
             "TxnID", "StipendID", "SalaryID", "ItemID",
-            "PeriodID", "FundID", "PartyID", "CatID"
+            "PeriodID", "FundID", "PartyID", "CatID", "LinkedTxnID", "RevisesTxnID"
         };
 
         private static void HideTechnicalColumns(DataGridView g)
@@ -474,7 +494,13 @@ namespace CaseManagement.Accounting
 
         private ComboBox NewCombo(bool dropDownList = true)
         {
-            return new ComboBox { DropDownStyle = dropDownList ? ComboBoxStyle.DropDownList : ComboBoxStyle.DropDown, Font = UiTheme.Font(UiTheme.SizeBody) };
+            ComboBox cmb = new ComboBox
+            {
+                DropDownStyle = dropDownList ? ComboBoxStyle.DropDownList : ComboBoxStyle.DropDown,
+                Font = UiTheme.Font(UiTheme.SizeBody)
+            };
+            AccountingChrome.StyleCombo(cmb);
+            return cmb;
         }
 
         private void BindCombo(ComboBox cmb, DataTable dt, string valueCol, string displayCol, bool addEmpty = false)
@@ -490,6 +516,7 @@ namespace CaseManagement.Accounting
             cmb.ValueMember = valueCol;
             cmb.DisplayMember = displayCol;
             cmb.SelectedIndex = -1;
+            AccountingChrome.StyleCombo(cmb);
         }
 
         private static double ParseNum(string s)
@@ -516,9 +543,10 @@ namespace CaseManagement.Accounting
         // ═══════════════════════════════════════════════════════════════════
         // تب: دریافت / پرداخت + دفتر صندوق
         // ═══════════════════════════════════════════════════════════════════
-        private ComboBox _txnPeriod, _txnParty, _txnFund, _txnCategory;
+        private ComboBox _txnPeriod, _txnParty, _txnFund, _txnDestFund, _txnCategory;
         private ComboBox _txnDirection;
-        private TextBox _txnDocNo, _txnQty, _txnDesc;
+        private TextBox _txnDocNo, _txnQty, _txnDesc, _txnSearch;
+        private ComboBox _txnFilterPeriod, _txnFilterFund;
         private NumericUpDown _txnAmount, _txnDollar, _txnRate;
         private MaskedTextBox _txnDate;
         private DataGridView _gridTxn;
@@ -544,15 +572,15 @@ namespace CaseManagement.Accounting
             // فرم ورودی (بالا)
             var form = new Panel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, BackColor = Color.Transparent };
 
-            _txnDirection = NewCombo(); _txnDirection.Items.AddRange(new object[] { "دریافت", "پرداخت" }); _txnDirection.SelectedIndex = 0;
-            _txnDirection.SelectedIndexChanged += delegate { ReloadTxnCategories(); };
+            _txnDirection = NewCombo(); _txnDirection.Items.AddRange(new object[] { "دریافت", "پرداخت", "انتقال" }); _txnDirection.SelectedIndex = 0;
+            _txnDirection.SelectedIndexChanged += delegate { ReloadTxnCategories(); ApplyTransferUi(); };
             // آموزش — شماره سند مسلسل، خودکار و غیرقابل ویرایش (به‌درخواست کاربر
             // و طبق اصول حسابداری). ReadOnly + رنگ متمایز تا کاربر متوجه شود دستی نیست.
             // با تغییر «دوره مالی» (رویداد پایین‌تر پس از ساخت _txnPeriod)، این
             // شماره دوباره محاسبه می‌شود تا در هر دوره از ۱ ریستارت شود.
             _txnDocNo = new TextBox { Text = _repo.NextDocNo(null), ReadOnly = true, BackColor = UiTheme.Background, TabStop = false };
             _txnDate = NewDateBox();
-            _txnPeriod = NewCombo(); _txnParty = NewCombo(); _txnFund = NewCombo(); _txnCategory = NewCombo();
+            _txnPeriod = NewCombo(); _txnParty = NewCombo(); _txnFund = NewCombo(); _txnDestFund = NewCombo(); _txnCategory = NewCombo();
             _txnAmount = NewAmountBox(); _txnQty = new TextBox(); _txnDollar = NewAmountBox(2); _txnRate = NewAmountBox(2); _txnDesc = new TextBox();
 
             // آموزش — بازطراحی طبق طرح مرجع: به‌جای FlowLayoutPanel با عرض‌های
@@ -566,6 +594,7 @@ namespace CaseManagement.Accounting
             AddAccField(infoGrid, "دوره مالی",     _txnPeriod);
             AddAccField(infoGrid, "طرف حساب",      _txnParty);
             AddAccField(infoGrid, "صندوق",         _txnFund);
+            AddAccField(infoGrid, "صندوق مقصد (انتقال)", _txnDestFund);
             AddAccField(infoGrid, "دسته‌بندی",     _txnCategory);
             AddAccField(infoGrid, "مبلغ (افغانی)", _txnAmount);
             AddAccField(infoGrid, "تعداد/مقدار",   _txnQty);
@@ -659,9 +688,13 @@ namespace CaseManagement.Accounting
             btnContract.Size = new Size(175, 38); btnContract.Margin = new Padding(4, 0, 4, 0);
             btnContract.Click += delegate { ShowDriverContractForm(); };
 
+            var btnExcel = UiTheme.CreateSecondaryButton("خروجی اکسل", "📊");
+            btnExcel.Size = new Size(140, 38); btnExcel.Margin = new Padding(4, 0, 4, 0);
+            btnExcel.Click += delegate { AccountingChrome.ExportGrid(_gridTxn); };
+
             _btnSaveTxn = btnSave;
 
-            foreach (Button b in new[] { btnSave, btnNew, btnVoucher, btnVoucherTpl, btnEdit, btnDelete, btnContract })
+            foreach (Button b in new[] { btnSave, btnNew, btnVoucher, btnVoucherTpl, btnEdit, btnDelete, btnExcel, btnContract })
             {
                 Button bb = b;
                 bb.SizeChanged += delegate { UiTheme.RoundCorners(bb, 10); };
@@ -700,6 +733,16 @@ namespace CaseManagement.Accounting
 
             _gridTxn = NewGrid();
             _gridTxn.CellDoubleClick += delegate (object s, DataGridViewCellEventArgs e) { if (e.RowIndex >= 0) PrintSelectedVoucher(); };
+            _gridTxn.RowPrePaint += delegate (object s, DataGridViewRowPrePaintEventArgs e)
+            {
+                if (e.RowIndex < 0 || !_gridTxn.Columns.Contains("نوع")) return;
+                string kind = Convert.ToString(_gridTxn.Rows[e.RowIndex].Cells["نوع"].Value);
+                if (kind == "انتقال")
+                    _gridTxn.Rows[e.RowIndex].DefaultCellStyle.ForeColor = ColorTranslator.FromHtml("#1D4ED8");
+                else if (_gridTxn.Columns.Contains("وضعیت") &&
+                         Convert.ToString(_gridTxn.Rows[e.RowIndex].Cells["وضعیت"].Value) == "اصلاحی")
+                    _gridTxn.Rows[e.RowIndex].DefaultCellStyle.ForeColor = ColorTranslator.FromHtml("#B45309");
+            };
 
             var gridCard = new Helpers.SectionCard { Dock = DockStyle.Fill, Padding = new Padding(10, 8, 10, 10) };
             var gridHeader = new Label
@@ -710,6 +753,24 @@ namespace CaseManagement.Accounting
                 BackColor = Color.Transparent
             };
             gridCard.Controls.Add(_gridTxn);
+            var filterBar = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Top, Height = 56, FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = true, BackColor = Color.Transparent, Padding = new Padding(4, 4, 4, 0)
+            };
+            _txnSearch = new TextBox { Width = 180 };
+            _txnFilterPeriod = NewCombo();
+            _txnFilterFund = NewCombo();
+            BindCombo(_txnFilterPeriod, _repo.GetPeriodsForCombo(), "PeriodID", "Display", true);
+            BindCombo(_txnFilterFund, _repo.GetFundsForCombo(), "FundID", "Display", true);
+            var btnFilter = UiTheme.CreateSecondaryButton("جستجو", "🔍");
+            btnFilter.Width = 90;
+            btnFilter.Click += delegate { LoadTransactions(); };
+            filterBar.Controls.Add(Field("جستجو", _txnSearch, 200));
+            filterBar.Controls.Add(Field("دوره", _txnFilterPeriod, 180));
+            filterBar.Controls.Add(Field("صندوق", _txnFilterFund, 180));
+            filterBar.Controls.Add(btnFilter);
+            gridCard.Controls.Add(filterBar);
             gridCard.Controls.Add(gridHeader);
 
             var gridWrap = new Panel { Dock = DockStyle.Fill, Padding = new Padding(10, 4, 10, 10), BackColor = Color.Transparent };
@@ -776,6 +837,7 @@ namespace CaseManagement.Accounting
             _txnPeriod.SelectedIndexChanged += delegate { RefreshDocNo(); };
             BindCombo(_txnParty, _repo.GetPartiesForCombo(), "PartyID", "Display", true);
             BindCombo(_txnFund, _repo.GetFundsForCombo(), "FundID", "Display", true);
+            BindCombo(_txnDestFund, _repo.GetFundsForCombo(), "FundID", "Display", true);
             _txnFund.SelectedIndexChanged += delegate { UpdateFundBalanceLabel(); };
         }
 
@@ -788,6 +850,20 @@ namespace CaseManagement.Accounting
             bool showDollar = income;
             _txnDollar.Enabled = showDollar;
             _txnRate.Enabled = showDollar;
+            ApplyTransferUi();
+        }
+
+        private void ApplyTransferUi()
+        {
+            bool transfer = _txnDirection != null && _txnDirection.Text == DirectionTransfer;
+            if (_txnDestFund != null) _txnDestFund.Enabled = transfer;
+            if (_txnParty != null) _txnParty.Enabled = !transfer;
+            if (_txnCategory != null) _txnCategory.Enabled = !transfer;
+            if (transfer)
+            {
+                _txnDollar.Enabled = false;
+                _txnRate.Enabled = false;
+            }
         }
 
         private void UpdateFundBalanceLabel()
@@ -819,7 +895,7 @@ namespace CaseManagement.Accounting
                     ? "حالت اصلاح — با ثبت، سند شماره " + docNo + " باطل می‌شود و یک سند اصلاحی تازه صادر می‌گردد."
                     : "";
             if (_btnSaveTxn != null)
-                _btnSaveTxn.Text = on ? "ثبت سند اصلاحی" : "ثبت";
+                _btnSaveTxn.Text = on ? "ثبت سند اصلاحی" : "ثبت تراکنش";
         }
 
         private void BeginReviseSelectedTxn()
@@ -839,6 +915,11 @@ namespace CaseManagement.Accounting
             if (r == null) { UiTheme.ShowWarning(this, "سند پیدا نشد. فهرست را تازه کنید."); return; }
             if (Convert.ToInt32(r["IsReversed"]) != 0)
             { UiTheme.ShowWarning(this, "این سند قبلاً باطل شده و دیگر قابل اصلاح نیست."); return; }
+            if (r.Table.Columns.Contains("LinkedTxnID") && r["LinkedTxnID"] != DBNull.Value)
+            {
+                UiTheme.ShowWarning(this, "این سند بخشی از انتقال وجه است. برای اصلاح، انتقال را ابطال کنید و انتقال تازه ثبت کنید.");
+                return;
+            }
 
             // دوره‌ی خودِ سند باید باز باشد؛ در دوره‌ی بسته هیچ سندی نه باطل
             // می‌شود و نه صادر. زودتر از ذخیره به کاربر می‌گوییم تا وقتش را
@@ -928,6 +1009,27 @@ namespace CaseManagement.Accounting
 
             try
             {
+                if (_txnDirection.Text == DirectionTransfer)
+                {
+                    int? dest = ComboIntValue(_txnDestFund);
+                    if (dest == null) { UiTheme.ShowWarning(this, "صندوق مقصد را انتخاب کنید."); return; }
+                    int fromFund = Convert.ToInt32(_txnFund.SelectedValue);
+                    if (dest.Value == fromFund)
+                    { UiTheme.ShowWarning(this, "صندوق مبدأ و مقصد نباید یکی باشند."); return; }
+                    double balAfter = _repo.GetFundBalance(fromFund) - amount;
+                    if (balAfter < 0 &&
+                        !UiTheme.ShowConfirm(this, "بعد از این انتقال، مانده صندوق مبدأ منفی می‌شود (" + balAfter.ToString("N0") + " افغانی).\nآیا ادامه می‌دهید؟", "هشدار کسری صندوق"))
+                        return;
+                    AccountingRepo.TransactionSaveResult moved = _repo.TransferBetweenFundsAtomic(
+                        fromFund, dest.Value, period.Value, _txnDate.Text, amount, _txnDesc.Text.Trim());
+                    UiTheme.ShowSuccess(this, "انتقال وجه ثبت شد. شماره‌های سند: " + moved.DocNo);
+                    AccGlOutboxDrain.AfterAccCommit();
+                    SoftResetTxnForm();
+                    LoadTransactions();
+                    UpdateFundBalanceLabel();
+                    return;
+                }
+
                 bool income = _txnDirection.Text == "دریافت";
                 int? party = ComboIntValue(_txnParty);
                 int fund = Convert.ToInt32(_txnFund.SelectedValue);
@@ -1095,6 +1197,7 @@ namespace CaseManagement.Accounting
                 dlg.ClientSize = new Size(460, 190);
                 dlg.BackColor = UiTheme.Background;
                 dlg.Font = UiTheme.Font(UiTheme.SizeBody);
+                AccountingChrome.PrepareDialog(dlg);
 
                 var info = new Label
                 {
@@ -1136,7 +1239,9 @@ namespace CaseManagement.Accounting
 
         private void LoadTransactions()
         {
-            _gridTxn.DataSource = _repo.GetTransactions(null, null);
+            _gridTxn.DataSource = _repo.GetTransactions(
+                ComboIntValue(_txnFilterPeriod), ComboIntValue(_txnFilterFund),
+                _txnSearch != null ? _txnSearch.Text : "", null);
             if (_gridTxn.Columns.Contains("TxnID")) _gridTxn.Columns["TxnID"].Visible = false;
             FormatAmountColumn(_gridTxn, "مبلغ");
             UpdateTxnSummary();
@@ -1214,12 +1319,13 @@ namespace CaseManagement.Accounting
             // اگر «تا برج» کمتر از «از برج» شود، خودکار برابرش می‌کنیم (بازه معتبر)
             _pMonthFrom.ValueChanged += delegate { if (_pMonthTo.Value < _pMonthFrom.Value) _pMonthTo.Value = _pMonthFrom.Value; };
 
-            var btnBar = new Panel { Dock = DockStyle.Top, Height = 46, BackColor = UiTheme.CardBack };
-            var btnSave = UiTheme.CreateButton("ذخیره دوره", "✔", UiTheme.Success); btnSave.SetBounds(14, 6, 130, 34); btnSave.Click += delegate { SavePeriod(); };
-            var btnNew = UiTheme.CreateSecondaryButton("جدید", "＋"); btnNew.SetBounds(152, 6, 90, 34); btnNew.Click += delegate { ClearPeriodForm(); };
-            var btnCarry = UiTheme.CreateSecondaryButton("انتقال مانده از دوره قبل", "↺"); btnCarry.SetBounds(250, 6, 200, 34); btnCarry.Click += delegate { CarryForwardOpening(); };
-            var btnClose = UiTheme.CreateButton("بستن دوره انتخاب‌شده", "🔒", UiTheme.Warning); btnClose.SetBounds(458, 6, 190, 34); btnClose.Click += delegate { CloseSelectedPeriod(); };
-            btnBar.Controls.Add(btnSave); btnBar.Controls.Add(btnNew); btnBar.Controls.Add(btnCarry); btnBar.Controls.Add(btnClose);
+            var btnSave = UiTheme.CreateButton("ذخیره دوره", "✔", UiTheme.Success); btnSave.Width = 130; btnSave.Click += delegate { SavePeriod(); };
+            var btnNew = UiTheme.CreateSecondaryButton("جدید", "＋"); btnNew.Width = 90; btnNew.Click += delegate { ClearPeriodForm(); };
+            var btnCarry = UiTheme.CreateSecondaryButton("انتقال مانده از دوره قبل", "↺"); btnCarry.Width = 200; btnCarry.Click += delegate { CarryForwardOpening(); };
+            var btnClose = UiTheme.CreateButton("بستن دوره انتخاب‌شده", "🔒", UiTheme.Warning); btnClose.Width = 190; btnClose.Click += delegate { CloseSelectedPeriod(); };
+            var btnReopen = UiTheme.CreateSecondaryButton("بازگشایی دوره", "🔓"); btnReopen.Width = 150; btnReopen.Click += delegate { ReopenSelectedPeriod(); };
+            var btnBar = MakeButtonBar(new Control[] { btnSave, btnNew, btnCarry, btnClose, btnReopen });
+            btnBar.Height = 88;
 
             _gridPeriod = NewGrid();
             _gridPeriod.CellClick += delegate (object s, DataGridViewCellEventArgs e)
@@ -1236,6 +1342,7 @@ namespace CaseManagement.Accounting
             };
             var gw = new Panel { Dock = DockStyle.Fill, Padding = new Padding(8) };
             gw.Controls.Add(_gridPeriod);
+            form.Controls.Add(Field("جستجو", AccountingChrome.AttachQuickSearch(null, _gridPeriod, "جستجوی دوره..."), 220));
             page.Controls.Add(gw); page.Controls.Add(btnBar); page.Controls.Add(form);
 
             LoadPeriods();
@@ -1255,6 +1362,8 @@ namespace CaseManagement.Accounting
 
         private void SavePeriod()
         {
+            if (!CaseManagement.Enterprise.PermissionService.Require("Accounting.Edit"))
+            { UiTheme.ShowWarning(this, "کاربر فقط مشاهده اجازه ذخیره دوره ندارد."); return; }
             int year = (int)ParseNum(_pYear.Text);
             int monthFrom = (int)_pMonthFrom.Value, monthTo = (int)_pMonthTo.Value;
             if (year < 1300) { UiTheme.ShowWarning(this, "سال معتبر وارد کنید."); return; }
@@ -1285,6 +1394,8 @@ namespace CaseManagement.Accounting
 
         private void CarryForwardOpening()
         {
+            if (!CaseManagement.Enterprise.PermissionService.Require("Accounting.ClosePeriod"))
+            { UiTheme.ShowWarning(this, "انتقال مانده فقط برای مدیر مجاز است."); return; }
             // مانده پایان آخرین دوره را به‌عنوان مانده ابتدای دوره جدید بگذارد
             DataTable dt = _repo.GetPeriodsForCombo();
             if (dt.Rows.Count == 0) { UiTheme.ShowWarning(this, "دوره‌ای برای انتقال مانده وجود ندارد."); return; }
@@ -1306,6 +1417,18 @@ namespace CaseManagement.Accounting
             try { _repo.SetPeriodStatus(_editingPeriodId, "بسته"); }
             catch (AccountingRuleException ex) { UiTheme.ShowWarning(this, ex.Message); return; }
             catch (Exception ex) { UiTheme.ShowError(this, "خطا در بستن دوره: " + ex.Message); return; }
+            LoadPeriods();
+        }
+
+        private void ReopenSelectedPeriod()
+        {
+            if (!CaseManagement.Enterprise.PermissionService.Require("Accounting.ClosePeriod"))
+            { UiTheme.ShowWarning(this, "بازگشایی دوره فقط برای مدیر مجاز است."); return; }
+            if (_editingPeriodId == 0) { UiTheme.ShowWarning(this, "ابتدا یک دوره را از جدول انتخاب کنید."); return; }
+            if (!UiTheme.ShowConfirm(this, "دوره انتخاب‌شده دوباره باز شود؟", "بازگشایی دوره")) return;
+            try { _repo.SetPeriodStatus(_editingPeriodId, "باز"); }
+            catch (AccountingRuleException ex) { UiTheme.ShowWarning(this, ex.Message); return; }
+            catch (Exception ex) { UiTheme.ShowError(this, "خطا در بازگشایی دوره: " + ex.Message); return; }
             LoadPeriods();
         }
 
@@ -1341,6 +1464,7 @@ namespace CaseManagement.Accounting
             var btnBar = MakeButtonBar(new Control[] { btnSave, btnNew, btnToggle });
 
             _gridFund = NewGrid();
+            form.Controls.Add(Field("جستجو", AccountingChrome.AttachQuickSearch(null, _gridFund, "جستجوی صندوق..."), 220));
             _gridFund.CellClick += delegate (object s, DataGridViewCellEventArgs e)
             {
                 if (e.RowIndex < 0 || !_gridFund.Columns.Contains("FundID")) return;
@@ -1359,6 +1483,8 @@ namespace CaseManagement.Accounting
 
         private void SaveFund()
         {
+            if (!CaseManagement.Enterprise.PermissionService.Require("Accounting.Edit"))
+            { UiTheme.ShowWarning(this, "کاربر فقط مشاهده اجازه ذخیره صندوق ندارد."); return; }
             if (string.IsNullOrWhiteSpace(_fName.Text)) { UiTheme.ShowWarning(this, "نام صندوق را وارد کنید."); return; }
             double opening = (double)_fOpening.Value;
             try
@@ -1376,14 +1502,17 @@ namespace CaseManagement.Accounting
         private void ToggleFund()
         {
             if (_editingFundId == 0) { UiTheme.ShowWarning(this, "ابتدا یک صندوق را انتخاب کنید."); return; }
-            _repo.ToggleFund(_editingFundId); LoadFunds();
+            try { _repo.ToggleFund(_editingFundId); }
+            catch (AccountingRuleException ex) { UiTheme.ShowWarning(this, ex.Message); return; }
+            LoadFunds();
         }
 
         private void LoadFunds()
         {
-            _gridFund.DataSource = _repo.GetFunds();
+            _gridFund.DataSource = _repo.GetFunds(_extraFilter == ExtraBank || _extraFilter == ExtraCash ? _extraFilter : null);
             if (_gridFund.Columns.Contains("FundID")) _gridFund.Columns["FundID"].Visible = false;
             FormatAmountColumn(_gridFund, "مانده اولیه");
+            FormatAmountColumn(_gridFund, "مانده جاری");
         }
 
         // ═══════════════════════════════════════════════════════════════════
@@ -1399,19 +1528,23 @@ namespace CaseManagement.Accounting
             var page = new TabPage("طرف حساب") { BackColor = UiTheme.Background };
             var form = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 92, FlowDirection = FlowDirection.LeftToRight, WrapContents = true, BackColor = UiTheme.CardBack, Padding = new Padding(10, 6, 10, 2), AutoScroll = true };
             _paName = new TextBox(); _paPhone = new TextBox(); _paNote = new TextBox();
-            _paType = NewCombo(); _paType.Items.AddRange(new object[] { "خیر", "دفتر مرکزی", "ولایت", "ولسوالی", "مرکز", "کارمند", "فروشنده", "شخص" });
+            _paType = NewCombo(); _paType.Items.AddRange(new object[] { "خیر", "دفتر مرکزی", "ولایت", "ولسوالی", "مرکز", "کارمند", "فروشنده", "شخص", "مشتری", "تأمین‌کننده" });
             form.Controls.Add(Field("نام طرف حساب", _paName, 220));
             form.Controls.Add(Field("نوع", _paType, 150));
             form.Controls.Add(Field("شماره تماس", _paPhone, 150));
             form.Controls.Add(Field("توضیح", _paNote, 240));
 
-            var btnBar = new Panel { Dock = DockStyle.Top, Height = 46, BackColor = UiTheme.CardBack };
-            var btnSave = UiTheme.CreateButton("ذخیره", "✔", UiTheme.Success); btnSave.SetBounds(14, 6, 110, 34); btnSave.Click += delegate { SaveParty(); };
-            var btnNew = UiTheme.CreateSecondaryButton("جدید", "＋"); btnNew.SetBounds(132, 6, 90, 34); btnNew.Click += delegate { _editingPartyId = 0; _paName.Text = ""; _paPhone.Text = ""; _paNote.Text = ""; _paType.SelectedIndex = -1; };
-            var btnToggle = UiTheme.CreateSecondaryButton("فعال/غیرفعال", "⊙"); btnToggle.SetBounds(230, 6, 140, 34); btnToggle.Click += delegate { if (_editingPartyId > 0) { _repo.ToggleParty(_editingPartyId); LoadParties(); } };
-            btnBar.Controls.Add(btnSave); btnBar.Controls.Add(btnNew); btnBar.Controls.Add(btnToggle);
+            var btnSave = UiTheme.CreateButton("ذخیره", "✔", UiTheme.Success); btnSave.Width = 110; btnSave.Click += delegate { SaveParty(); };
+            var btnNew = UiTheme.CreateSecondaryButton("جدید", "＋"); btnNew.Width = 90; btnNew.Click += delegate { _editingPartyId = 0; _paName.Text = ""; _paPhone.Text = ""; _paNote.Text = ""; _paType.SelectedIndex = -1; };
+            var btnToggle = UiTheme.CreateSecondaryButton("فعال/غیرفعال", "⊙"); btnToggle.Width = 140; btnToggle.Click += delegate {
+                if (_editingPartyId <= 0) return;
+                try { _repo.ToggleParty(_editingPartyId); LoadParties(); }
+                catch (AccountingRuleException ex) { UiTheme.ShowWarning(this, ex.Message); }
+            };
+            var btnBar = MakeButtonBar(new Control[] { btnSave, btnNew, btnToggle });
 
             _gridParty = NewGrid();
+            form.Controls.Add(Field("جستجو", AccountingChrome.AttachQuickSearch(null, _gridParty, "جستجوی طرف حساب..."), 220));
             _gridParty.CellClick += delegate (object s, DataGridViewCellEventArgs e)
             {
                 if (e.RowIndex < 0 || !_gridParty.Columns.Contains("PartyID")) return;
@@ -1430,6 +1563,8 @@ namespace CaseManagement.Accounting
 
         private void SaveParty()
         {
+            if (!CaseManagement.Enterprise.PermissionService.Require("Accounting.Edit"))
+            { UiTheme.ShowWarning(this, "کاربر فقط مشاهده اجازه ذخیره طرف حساب ندارد."); return; }
             if (string.IsNullOrWhiteSpace(_paName.Text)) { UiTheme.ShowWarning(this, "نام طرف حساب را وارد کنید."); return; }
             try
             {
@@ -1445,8 +1580,10 @@ namespace CaseManagement.Accounting
 
         private void LoadParties()
         {
-            _gridParty.DataSource = _repo.GetParties();
+            _gridParty.DataSource = _repo.GetParties(
+                _extraFilter == ExtraCustomers || _extraFilter == ExtraVendors ? _extraFilter : null);
             if (_gridParty.Columns.Contains("PartyID")) _gridParty.Columns["PartyID"].Visible = false;
+            FormatAmountColumn(_gridParty, "مانده");
         }
 
         // ═══════════════════════════════════════════════════════════════════
@@ -1461,6 +1598,7 @@ namespace CaseManagement.Accounting
 
             var form = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 92, FlowDirection = FlowDirection.LeftToRight, WrapContents = true, BackColor = UiTheme.CardBack, Padding = new Padding(10, 6, 10, 2), AutoScroll = true };
             form.Controls.Add(Field(income ? "عنوان دسته درآمد" : "عنوان دسته هزینه", txtName, 260));
+            form.Controls.Add(Field("جستجو", AccountingChrome.AttachQuickSearch(null, grid, "جستجوی دسته..."), 220));
 
             Action reload = delegate
             {
@@ -1470,21 +1608,30 @@ namespace CaseManagement.Accounting
                 if (grid.Columns.Contains("CatID")) grid.Columns["CatID"].Visible = false;
             };
 
-            var btnBar = new Panel { Dock = DockStyle.Top, Height = 46, BackColor = UiTheme.CardBack };
-            var btnSave = UiTheme.CreateButton("ذخیره", "✔", UiTheme.Success); btnSave.SetBounds(14, 6, 110, 34);
-            var btnNew = UiTheme.CreateSecondaryButton("جدید", "＋"); btnNew.SetBounds(132, 6, 90, 34);
-            var btnToggle = UiTheme.CreateSecondaryButton("فعال/غیرفعال", "⊙"); btnToggle.SetBounds(230, 6, 140, 34);
-            btnBar.Controls.Add(btnSave); btnBar.Controls.Add(btnNew); btnBar.Controls.Add(btnToggle);
+            var btnSave = UiTheme.CreateButton("ذخیره", "✔", UiTheme.Success); btnSave.Width = 110;
+            var btnNew = UiTheme.CreateSecondaryButton("جدید", "＋"); btnNew.Width = 90;
+            var btnToggle = UiTheme.CreateSecondaryButton("فعال/غیرفعال", "⊙"); btnToggle.Width = 140;
+            var btnBar = MakeButtonBar(new Control[] { btnSave, btnNew, btnToggle });
 
             btnSave.Click += delegate
             {
+                if (!CaseManagement.Enterprise.PermissionService.Require("Accounting.Edit"))
+                { UiTheme.ShowWarning(this, "کاربر فقط مشاهده اجازه ذخیره دسته ندارد."); return; }
                 if (string.IsNullOrWhiteSpace(txtName.Text)) { UiTheme.ShowWarning(this, "عنوان را وارد کنید."); return; }
-                if (editingId == 0) _repo.AddCategory(income, txtName.Text.Trim());
-                else _repo.UpdateCategory(income, editingId, txtName.Text.Trim());
+                try
+                {
+                    if (editingId == 0) _repo.AddCategory(income, txtName.Text.Trim());
+                    else _repo.UpdateCategory(income, editingId, txtName.Text.Trim());
+                }
+                catch (AccountingRuleException ex) { UiTheme.ShowWarning(this, ex.Message); return; }
                 editingId = 0; txtName.Text = ""; reload();
             };
             btnNew.Click += delegate { editingId = 0; txtName.Text = ""; };
-            btnToggle.Click += delegate { if (editingId > 0) { _repo.ToggleCategory(income, editingId); reload(); } };
+            btnToggle.Click += delegate {
+                if (editingId <= 0) return;
+                try { _repo.ToggleCategory(income, editingId); reload(); }
+                catch (AccountingRuleException ex) { UiTheme.ShowWarning(this, ex.Message); }
+            };
             grid.CellClick += delegate (object s, DataGridViewCellEventArgs e)
             {
                 if (e.RowIndex < 0 || !grid.Columns.Contains("CatID")) return;
@@ -1533,19 +1680,17 @@ namespace CaseManagement.Accounting
             form.Controls.Add(Field("مبلغ شهریه هر خانواده", _stAmount, 160));
             form.Controls.Add(Field("پرداخت از صندوق", _stFund, 170));
 
-            var btnBar = new Panel { Dock = DockStyle.Top, Height = 46, BackColor = UiTheme.CardBack };
-            var btnSave = UiTheme.CreateButton("ذخیره", "✔", UiTheme.Success); btnSave.SetBounds(14, 6, 110, 34); btnSave.Click += delegate { SaveStipend(); };
-            var btnNew = UiTheme.CreateSecondaryButton("جدید", "＋"); btnNew.SetBounds(132, 6, 90, 34); btnNew.Click += delegate { ClearStipendForm(); };
-            var btnDelete = UiTheme.CreateButton("حذف", "✕", UiTheme.Danger); btnDelete.SetBounds(230, 6, 100, 34); btnDelete.Click += delegate { DeleteSelectedStipend(); };
-            // آموزش — به‌درخواست کاربر: هر رویداد مالی (از جمله ردیف شهریه) باید
-            // یک فاکتور/رسید رسمی قابل چاپ داشته باشد.
-            var btnVoucherSt = UiTheme.CreateButton("چاپ رسید شهریه", "🧾", UiTheme.Primary); btnVoucherSt.SetBounds(340, 6, 150, 34);
+            var btnSave = UiTheme.CreateButton("ذخیره", "✔", UiTheme.Success); btnSave.Width = 110; btnSave.Click += delegate { SaveStipend(); };
+            var btnNew = UiTheme.CreateSecondaryButton("جدید", "＋"); btnNew.Width = 90; btnNew.Click += delegate { ClearStipendForm(); };
+            var btnDelete = UiTheme.CreateButton("حذف", "✕", UiTheme.Danger); btnDelete.Width = 100; btnDelete.Click += delegate { DeleteSelectedStipend(); };
+            var btnVoucherSt = UiTheme.CreateButton("چاپ رسید شهریه", "🧾", UiTheme.Primary); btnVoucherSt.Width = 150;
             btnVoucherSt.Click += delegate { PrintSelectedStipendVoucher(); };
-            _lblStipendTotal = new Label { AutoSize = false, Font = UiTheme.FontBold(11F), ForeColor = UiTheme.PrimaryDark, TextAlign = ContentAlignment.MiddleRight };
-            _lblStipendTotal.SetBounds(500, 6, 500, 34);
-            btnBar.Controls.Add(btnSave); btnBar.Controls.Add(btnNew); btnBar.Controls.Add(btnDelete); btnBar.Controls.Add(btnVoucherSt); btnBar.Controls.Add(_lblStipendTotal);
+            _lblStipendTotal = new Label { AutoSize = true, Font = UiTheme.FontBold(11F), ForeColor = UiTheme.PrimaryDark, TextAlign = ContentAlignment.MiddleRight };
+            var btnBar = MakeButtonBar(new Control[] { btnSave, btnNew, btnDelete, btnVoucherSt }, _lblStipendTotal);
+            btnBar.Height = 64;
 
             _gridStipend = NewGrid();
+            form.Controls.Add(Field("جستجو", AccountingChrome.AttachQuickSearch(null, _gridStipend, "جستجوی شهریه..."), 220));
             _gridStipend.CellDoubleClick += delegate (object s, DataGridViewCellEventArgs e) { if (e.RowIndex >= 0) PrintSelectedStipendVoucher(); };
             _gridStipend.CellClick += delegate (object s, DataGridViewCellEventArgs e)
             {
@@ -1601,6 +1746,8 @@ namespace CaseManagement.Accounting
 
         private void SaveStipend()
         {
+            if (!CaseManagement.Enterprise.PermissionService.Require("Accounting.Edit"))
+            { UiTheme.ShowWarning(this, "کاربر فقط مشاهده اجازه ثبت ندارد."); return; }
             int? period = ComboIntValue(_stPeriod);
             if (period == null) { UiTheme.ShowWarning(this, "دوره مالی را انتخاب کنید. هر ردیف شهریه باید به یک دوره متصل باشد."); _stPeriod.Focus(); return; }
             if (!_repo.IsPeriodOpen(period.Value)) { UiTheme.ShowWarning(this, "این دوره مالی «بسته» است و امکان ثبت شهریه در آن وجود ندارد."); return; }
@@ -1630,6 +1777,8 @@ namespace CaseManagement.Accounting
 
         private void DeleteSelectedStipend()
         {
+            if (!CaseManagement.Enterprise.PermissionService.Require("Accounting.Reverse"))
+            { UiTheme.ShowWarning(this, "ابطال فقط برای مدیر مجاز است."); return; }
             if (_editingStipendId == 0) { UiTheme.ShowWarning(this, "ابتدا یک ردیف را انتخاب کنید."); return; }
 
             string reason = AskVoidReason("ابطال ردیف شهریه");
@@ -1696,22 +1845,19 @@ namespace CaseManagement.Accounting
             form.Controls.Add(Field("پرداخت از صندوق", _saFund, 170));
             form.Controls.Add(Field("توضیح", _saNote, 220));
 
-            var btnBar = new Panel { Dock = DockStyle.Top, Height = 46, BackColor = UiTheme.CardBack };
-            var btnSave = UiTheme.CreateButton("ذخیره", "✔", UiTheme.Success); btnSave.SetBounds(14, 6, 110, 34); btnSave.Click += delegate { SaveSalary(); };
-            var btnNew = UiTheme.CreateSecondaryButton("جدید", "＋"); btnNew.SetBounds(132, 6, 90, 34); btnNew.Click += delegate { ClearSalaryForm(); };
-            var btnDelete = UiTheme.CreateButton("حذف", "✕", UiTheme.Danger); btnDelete.SetBounds(230, 6, 100, 34); btnDelete.Click += delegate { DeleteSelectedSalary(); };
-            var btnVoucherSa = UiTheme.CreateButton("چاپ فیش حقوق", "🧾", UiTheme.Primary); btnVoucherSa.SetBounds(340, 6, 150, 34);
+            var btnSave = UiTheme.CreateButton("ذخیره", "✔", UiTheme.Success); btnSave.Width = 110; btnSave.Click += delegate { SaveSalary(); };
+            var btnNew = UiTheme.CreateSecondaryButton("جدید", "＋"); btnNew.Width = 90; btnNew.Click += delegate { ClearSalaryForm(); };
+            var btnDelete = UiTheme.CreateButton("حذف", "✕", UiTheme.Danger); btnDelete.Width = 100; btnDelete.Click += delegate { DeleteSelectedSalary(); };
+            var btnVoucherSa = UiTheme.CreateButton("چاپ فیش حقوق", "🧾", UiTheme.Primary); btnVoucherSa.Width = 150;
             btnVoucherSa.Click += delegate { PrintSelectedSalaryVoucher(); };
-            // «فورم دریافت حقوق ماهانه» — فورمِ رسمیِ Word که کارمند هنگام
-            // گرفتن معاش امضاء می‌کند. جدا از «فیش حقوق» چاپیِ موجود است و آن
-            // را دست نمی‌زند.
-            var btnSalaryReceipt = UiTheme.CreateSecondaryButton("فورم دریافت حقوق", "📄"); btnSalaryReceipt.SetBounds(498, 6, 170, 34);
+            var btnSalaryReceipt = UiTheme.CreateSecondaryButton("فورم دریافت حقوق", "📄"); btnSalaryReceipt.Width = 170;
             btnSalaryReceipt.Click += delegate { ExportSalaryReceiptForm(); };
-            _lblSalaryTotal = new Label { AutoSize = false, Font = UiTheme.FontBold(11F), ForeColor = UiTheme.PrimaryDark, TextAlign = ContentAlignment.MiddleRight };
-            _lblSalaryTotal.SetBounds(678, 6, 400, 34);
-            btnBar.Controls.Add(btnSave); btnBar.Controls.Add(btnNew); btnBar.Controls.Add(btnDelete); btnBar.Controls.Add(btnVoucherSa); btnBar.Controls.Add(btnSalaryReceipt); btnBar.Controls.Add(_lblSalaryTotal);
+            _lblSalaryTotal = new Label { AutoSize = true, Font = UiTheme.FontBold(11F), ForeColor = UiTheme.PrimaryDark, TextAlign = ContentAlignment.MiddleRight };
+            var btnBar = MakeButtonBar(new Control[] { btnSave, btnNew, btnDelete, btnVoucherSa, btnSalaryReceipt }, _lblSalaryTotal);
+            btnBar.Height = 88;
 
             _gridSalary = NewGrid();
+            form.Controls.Add(Field("جستجو", AccountingChrome.AttachQuickSearch(null, _gridSalary, "جستجوی حقوق..."), 220));
             _gridSalary.CellDoubleClick += delegate (object s, DataGridViewCellEventArgs e) { if (e.RowIndex >= 0) PrintSelectedSalaryVoucher(); };
             _gridSalary.CellClick += delegate (object s, DataGridViewCellEventArgs e)
             {
@@ -1739,6 +1885,8 @@ namespace CaseManagement.Accounting
 
         private void SaveSalary()
         {
+            if (!CaseManagement.Enterprise.PermissionService.Require("Accounting.Edit"))
+            { UiTheme.ShowWarning(this, "کاربر فقط مشاهده اجازه ثبت ندارد."); return; }
             int? period = ComboIntValue(_saPeriod);
             if (period == null) { UiTheme.ShowWarning(this, "دوره مالی را انتخاب کنید. هر ردیف حقوق باید به یک دوره متصل باشد."); _saPeriod.Focus(); return; }
             if (!_repo.IsPeriodOpen(period.Value)) { UiTheme.ShowWarning(this, "این دوره مالی «بسته» است و امکان ثبت حقوق در آن وجود ندارد."); return; }
@@ -1759,6 +1907,8 @@ namespace CaseManagement.Accounting
 
         private void DeleteSelectedSalary()
         {
+            if (!CaseManagement.Enterprise.PermissionService.Require("Accounting.Reverse"))
+            { UiTheme.ShowWarning(this, "ابطال فقط برای مدیر مجاز است."); return; }
             if (_editingSalaryId == 0) { UiTheme.ShowWarning(this, "ابتدا یک ردیف را انتخاب کنید."); return; }
 
             string reason = AskVoidReason("ابطال ردیف حقوق");
@@ -2010,17 +2160,17 @@ VALUES
             form.Controls.Add(Field("شماره سند", _exDocNo, 110));
             form.Controls.Add(DateField("تاریخ", _exDate));
 
-            var btnBar = new Panel { Dock = DockStyle.Top, Height = 46, BackColor = UiTheme.CardBack };
-            var btnSave = UiTheme.CreateButton("ذخیره", "✔", UiTheme.Success); btnSave.SetBounds(14, 6, 110, 34); btnSave.Click += delegate { SaveExpenseItem(); };
-            var btnNew = UiTheme.CreateSecondaryButton("جدید", "＋"); btnNew.SetBounds(132, 6, 90, 34); btnNew.Click += delegate { ClearExpenseForm(); };
-            var btnDelete = UiTheme.CreateButton("حذف", "✕", UiTheme.Danger); btnDelete.SetBounds(230, 6, 100, 34); btnDelete.Click += delegate { DeleteSelectedExpenseItem(); };
-            var btnVoucherEx = UiTheme.CreateButton("چاپ سند هزینه", "🧾", UiTheme.Primary); btnVoucherEx.SetBounds(340, 6, 150, 34);
+            var btnSave = UiTheme.CreateButton("ذخیره", "✔", UiTheme.Success); btnSave.Width = 110; btnSave.Click += delegate { SaveExpenseItem(); };
+            var btnNew = UiTheme.CreateSecondaryButton("جدید", "＋"); btnNew.Width = 90; btnNew.Click += delegate { ClearExpenseForm(); };
+            var btnDelete = UiTheme.CreateButton("حذف", "✕", UiTheme.Danger); btnDelete.Width = 100; btnDelete.Click += delegate { DeleteSelectedExpenseItem(); };
+            var btnVoucherEx = UiTheme.CreateButton("چاپ سند هزینه", "🧾", UiTheme.Primary); btnVoucherEx.Width = 150;
             btnVoucherEx.Click += delegate { PrintSelectedExpenseVoucher(); };
-            _lblExpenseTotal = new Label { AutoSize = false, Font = UiTheme.FontBold(11F), ForeColor = UiTheme.PrimaryDark, TextAlign = ContentAlignment.MiddleRight };
-            _lblExpenseTotal.SetBounds(500, 6, 500, 34);
-            btnBar.Controls.Add(btnSave); btnBar.Controls.Add(btnNew); btnBar.Controls.Add(btnDelete); btnBar.Controls.Add(btnVoucherEx); btnBar.Controls.Add(_lblExpenseTotal);
+            _lblExpenseTotal = new Label { AutoSize = true, Font = UiTheme.FontBold(11F), ForeColor = UiTheme.PrimaryDark, TextAlign = ContentAlignment.MiddleRight };
+            var btnBar = MakeButtonBar(new Control[] { btnSave, btnNew, btnDelete, btnVoucherEx }, _lblExpenseTotal);
+            btnBar.Height = 64;
 
             _gridExpense = NewGrid();
+            form.Controls.Add(Field("جستجو", AccountingChrome.AttachQuickSearch(null, _gridExpense, "جستجوی هزینه..."), 220));
             _gridExpense.CellDoubleClick += delegate (object s, DataGridViewCellEventArgs e) { if (e.RowIndex >= 0) PrintSelectedExpenseVoucher(); };
             _gridExpense.CellClick += delegate (object s, DataGridViewCellEventArgs e)
             {
@@ -2063,6 +2213,8 @@ VALUES
 
         private void SaveExpenseItem()
         {
+            if (!CaseManagement.Enterprise.PermissionService.Require("Accounting.Edit"))
+            { UiTheme.ShowWarning(this, "کاربر فقط مشاهده اجازه ثبت ندارد."); return; }
             int? period = ComboIntValue(_exPeriod);
             if (period == null) { UiTheme.ShowWarning(this, "دوره مالی را انتخاب کنید. هر قلم هزینه باید به یک دوره متصل باشد."); _exPeriod.Focus(); return; }
             if (!_repo.IsPeriodOpen(period.Value)) { UiTheme.ShowWarning(this, "این دوره مالی «بسته» است و امکان ثبت هزینه در آن وجود ندارد."); return; }
@@ -2087,6 +2239,8 @@ VALUES
 
         private void DeleteSelectedExpenseItem()
         {
+            if (!CaseManagement.Enterprise.PermissionService.Require("Accounting.Reverse"))
+            { UiTheme.ShowWarning(this, "ابطال فقط برای مدیر مجاز است."); return; }
             if (_editingExpenseId == 0) { UiTheme.ShowWarning(this, "ابتدا یک ردیف را انتخاب کنید."); return; }
 
             string reason = AskVoidReason("ابطال قلم هزینه");
@@ -2152,6 +2306,9 @@ VALUES
             AddReportButton(flow, "۶) دفتر صندوق", delegate { RunReport(6); });
             AddReportButton(flow, "۷) دفتر طرف حساب", delegate { RunReport(7); });
             AddReportButton(flow, "۸) ریز تراکنش‌های دوره", delegate { RunReport(8); });
+            AddReportButton(flow, "۹) بدهکاران", delegate { RunReport(9); });
+            AddReportButton(flow, "۱۰) بستانکاران", delegate { RunReport(10); });
+            AddReportButton(flow, "۱۱) جریان نقدی", delegate { RunReport(11); });
 
             page.Controls.Add(flow);
             page.Controls.Add(filterPanel);
@@ -2202,6 +2359,9 @@ VALUES
                     case 8:
                         if (SelectedReportPeriod == null) { UiTheme.ShowWarning(this, "ابتدا دوره مالی را انتخاب کنید."); return; }
                         reports.PrintPeriodDetail(this, SelectedReportPeriod.Value); break;
+                    case 9: reports.PrintDebtors(this, SelectedReportPeriod); break;
+                    case 10: reports.PrintCreditors(this, SelectedReportPeriod); break;
+                    case 11: reports.PrintCashFlow(this, SelectedReportPeriod); break;
                 }
             }
             catch (Exception ex) { UiTheme.ShowError(this, "خطا در تولید گزارش: " + ex.Message); }
@@ -2268,6 +2428,9 @@ VALUES
                         if (SelectedReportPeriod == null) { UiTheme.ShowWarning(this, "ابتدا دوره مالی را انتخاب کنید."); return; }
                         reports.ExportPeriodDetailExcel(sfd.FileName, SelectedReportPeriod.Value);
                     }
+                    else if (title.StartsWith("۹")) reports.ExportDebtorsExcel(sfd.FileName, SelectedReportPeriod);
+                    else if (title.StartsWith("۱۰")) reports.ExportCreditorsExcel(sfd.FileName, SelectedReportPeriod);
+                    else if (title.StartsWith("۱۱")) reports.ExportCashFlowExcel(sfd.FileName, SelectedReportPeriod);
                     UiTheme.ShowSuccess(this, "فایل اکسل ذخیره شد:\n" + sfd.FileName);
                 }
                 catch (Exception ex) { UiTheme.ShowError(this, "خطا در ساخت اکسل: " + ex.Message); }
@@ -2296,33 +2459,19 @@ VALUES
                 Font = UiTheme.Font(9.5F), ForeColor = UiTheme.TextMuted, Padding = new Padding(14, 8, 14, 4)
             };
 
-            var btnBar = new Panel { Dock = DockStyle.Top, Height = 56, BackColor = UiTheme.CardBack };
-
-            var btnRun = UiTheme.CreateButton("اجرای بررسی صحت", "🛡", UiTheme.Primary);
-            btnRun.SetBounds(14, 10, 190, 36);
+            var btnRun = UiTheme.CreateButton("اجرای بررسی صحت", "🛡", UiTheme.Primary); btnRun.Width = 190;
             btnRun.Click += delegate { RunIntegrityCheck(); };
-
-            var btnExport = UiTheme.CreateSecondaryButton("خروجی اکسل", "📊");
-            btnExport.SetBounds(214, 10, 150, 36);
+            var btnExport = UiTheme.CreateSecondaryButton("خروجی اکسل", "📊"); btnExport.Width = 150;
             btnExport.Click += delegate { ExportIntegrityReport(); };
-
-            // ابزار اصلاح داده‌های تاریخی — جدا از این بررسی. بررسی فقط گزارش
-            // می‌دهد؛ اصلاح در آن ابزار و فقط با تأیید تک‌به‌تک انجام می‌شود.
-            var btnRepair = UiTheme.CreateSecondaryButton("ابزار اصلاح داده‌های تاریخی", "🛠");
-            btnRepair.SetBounds(374, 10, 230, 36);
+            var btnRepair = UiTheme.CreateSecondaryButton("ابزار اصلاح داده‌های تاریخی", "🛠"); btnRepair.Width = 230;
             btnRepair.Click += delegate { OpenRepairTool(); };
-
             _lblIntegritySummary = new Label
             {
-                AutoSize = false, Font = UiTheme.FontBold(11F), ForeColor = UiTheme.PrimaryDark,
+                AutoSize = true, Font = UiTheme.FontBold(11F), ForeColor = UiTheme.PrimaryDark,
                 TextAlign = ContentAlignment.MiddleRight, BackColor = Color.Transparent
             };
-            _lblIntegritySummary.SetBounds(614, 10, 520, 36);
-
-            btnBar.Controls.Add(btnRun);
-            btnBar.Controls.Add(btnExport);
-            btnBar.Controls.Add(btnRepair);
-            btnBar.Controls.Add(_lblIntegritySummary);
+            var btnBar = MakeButtonBar(new Control[] { btnRun, btnExport, btnRepair }, _lblIntegritySummary);
+            btnBar.Height = 64;
 
             _gridIntegrity = NewGrid();
             // رنگ‌آمیزی بر اساس شدت، تا موارد بحرانی در یک نگاه دیده شوند.

@@ -2,6 +2,7 @@
 using CaseManagement.Enterprise;
 using CaseManagement.Helpers;
 using CaseManagement.Inventory.Adapters;
+using CaseManagement.Inventory.Domain;
 using ClosedXML.Excel;
 using System;
 using System.Collections.Generic;
@@ -473,7 +474,7 @@ namespace CaseManagement
             _sidebar.EndGroup();
             _sidebar.AddItem(IconFont.Home, "داشبورد", delegate { SelectTabByTitle("داشبورد"); });
 
-            _sidebar.AddGroup("حسابداری", startExpanded: false);
+            _sidebar.AddGroup("حسابداری", IconFont.Calculator, false);
             _sidebar.AddCaption("تراکنش‌های مالی");
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleAccounting, IconFont.Edit, "ثبت سند",
                 OpenLedgerScreen("ثبت سند", CaseManagement.Accounting.Ledger.Adapters.FrmLedger.TabJournals), "Ledger.View");
@@ -488,39 +489,83 @@ namespace CaseManagement
                 OpenCashScreen("پرداخت وجه", CaseManagement.Accounting.FrmAccounting.TabTxn,
                     CaseManagement.Accounting.FrmAccounting.DirectionPay), "Accounting.View");
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleAccounting, IconFont.Sync, "انتقال وجه",
-                OpenCashScreen("انتقال وجه", CaseManagement.Accounting.FrmAccounting.TabTxn), "Accounting.View");
+                OpenCashScreen("انتقال وجه", CaseManagement.Accounting.FrmAccounting.TabTxn,
+                    CaseManagement.Accounting.FrmAccounting.DirectionTransfer, CaseManagement.Accounting.FrmAccounting.DirectionTransfer), "Accounting.View");
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleAccounting, IconFont.Edit, "اصلاح سند",
                 OpenCashScreen("اصلاح سند", CaseManagement.Accounting.FrmAccounting.TabTxn), "Accounting.View");
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleAccounting, IconFont.Cancel, "ابطال سند",
                 OpenCashScreen("ابطال سند", CaseManagement.Accounting.FrmAccounting.TabTxn), "Accounting.View");
+            AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleAccounting, IconFont.Card, "چک‌ها",
+                delegate { using (var frm = new CaseManagement.Accounting.FrmAccCheques()) frm.ShowDialog(this); }, "Accounting.View");
+            AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleAccounting, IconFont.Chart, "بودجه",
+                delegate { using (var frm = new CaseManagement.Accounting.FrmAccBudget()) frm.ShowDialog(this); }, "Accounting.View");
+            AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleSales, IconFont.Sync, "برگشت فروش",
+                delegate { using (var frm = new CaseManagement.Accounting.FrmAccReturns("Sale")) frm.ShowDialog(this); }, "Accounting.View");
+            AddModuleNav(CaseManagement.Enterprise.ModuleService.ModulePurchase, IconFont.Sync, "برگشت خرید",
+                delegate { using (var frm = new CaseManagement.Accounting.FrmAccReturns("Purchase")) frm.ShowDialog(this); }, "Accounting.View");
+            AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleAssets, IconFont.Folder, "دارایی ثابت",
+                OpenAssets, "Assets.View");
             _sidebar.AddCaption("دفترها");
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleAccounting, IconFont.Book, "دفتر روزنامه",
-                OpenLedgerScreen("دفتر روزنامه", CaseManagement.Accounting.Ledger.Adapters.FrmLedger.TabJournals), "Ledger.View");
+                OpenLedgerScreen("دفتر روزنامه", CaseManagement.Accounting.Ledger.Adapters.FrmLedger.TabReports,
+                    CaseManagement.Accounting.Ledger.Adapters.FrmLedger.ReportDaybook), "Ledger.View");
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleAccounting, IconFont.Calculator, "دفتر کل",
                 OpenLedgerScreen("دفتر کل", CaseManagement.Accounting.Ledger.Adapters.FrmLedger.TabReports,
                     CaseManagement.Accounting.Ledger.Adapters.FrmLedger.ReportGl), "Ledger.View");
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleAccounting, IconFont.Document, "دفتر معین",
                 OpenLedgerScreen("دفتر معین", CaseManagement.Accounting.Ledger.Adapters.FrmLedger.TabReports,
-                    CaseManagement.Accounting.Ledger.Adapters.FrmLedger.ReportGl), "Ledger.View");
+                    CaseManagement.Accounting.Ledger.Adapters.FrmLedger.ReportSubsidiary), "Ledger.View");
+            AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleAccounting, IconFont.Document, "دفتر تفصیلی",
+                OpenLedgerScreen("دفتر تفصیلی", CaseManagement.Accounting.Ledger.Adapters.FrmLedger.TabReports,
+                    CaseManagement.Accounting.Ledger.Adapters.FrmLedger.ReportDetail), "Ledger.View");
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleAccounting, IconFont.Document, "حساب‌های تفصیلی",
                 OpenLedgerScreen("حساب‌های تفصیلی", CaseManagement.Accounting.Ledger.Adapters.FrmLedger.TabCoa), "Ledger.View");
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleAccounting, IconFont.Sync, "گردش اسناد",
-                OpenLedgerScreen("گردش اسناد", CaseManagement.Accounting.Ledger.Adapters.FrmLedger.TabJournals), "Ledger.View");
+                OpenLedgerScreen("گردش اسناد", CaseManagement.Accounting.Ledger.Adapters.FrmLedger.TabReports,
+                    CaseManagement.Accounting.Ledger.Adapters.FrmLedger.ReportDocFlow), "Ledger.View");
             _sidebar.AddCaption("حساب‌ها");
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleAccounting, IconFont.People, "مشتریان",
-                OpenCashScreen("مشتریان", CaseManagement.Accounting.FrmAccounting.TabParties), "Accounting.View");
+                OpenCashScreen("مشتریان", CaseManagement.Accounting.FrmAccounting.TabParties, null,
+                    CaseManagement.Accounting.FrmAccounting.ExtraCustomers), "Accounting.View");
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleAccounting, IconFont.Contact, "تأمین‌کنندگان",
-                OpenCashScreen("تأمین‌کنندگان", CaseManagement.Accounting.FrmAccounting.TabParties), "Accounting.View");
+                OpenCashScreen("تأمین‌کنندگان", CaseManagement.Accounting.FrmAccounting.TabParties, null,
+                    CaseManagement.Accounting.FrmAccounting.ExtraVendors), "Accounting.View");
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleAccounting, IconFont.Money, "صندوق‌ها",
-                OpenCashScreen("صندوق‌ها", CaseManagement.Accounting.FrmAccounting.TabFunds), "Accounting.View");
+                OpenCashScreen("صندوق‌ها", CaseManagement.Accounting.FrmAccounting.TabFunds, null,
+                    CaseManagement.Accounting.FrmAccounting.ExtraCash), "Accounting.View");
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleAccounting, IconFont.Card, "حساب‌های بانکی",
-                OpenCashScreen("حساب‌های بانکی", CaseManagement.Accounting.FrmAccounting.TabFunds), "Accounting.View");
+                OpenCashScreen("حساب‌های بانکی", CaseManagement.Accounting.FrmAccounting.TabFunds, null,
+                    CaseManagement.Accounting.FrmAccounting.ExtraBank), "Accounting.View");
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleAccounting, IconFont.Add, "درآمدها",
                 OpenCashScreen("درآمدها", CaseManagement.Accounting.FrmAccounting.TabIncome), "Accounting.View");
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleAccounting, IconFont.Cancel, "هزینه‌ها",
                 OpenCashScreen("هزینه‌ها", CaseManagement.Accounting.FrmAccounting.TabExpense), "Accounting.View");
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleAccounting, IconFont.Folder, "سایر حساب‌ها",
                 OpenLedgerScreen("سایر حساب‌ها", CaseManagement.Accounting.Ledger.Adapters.FrmLedger.TabCoa), "Ledger.View");
+            _sidebar.AddCaption("گزارشات مالی");
+            AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleAccounting, IconFont.Chart, "تراز آزمایشی",
+                OpenLedgerScreen("تراز آزمایشی", CaseManagement.Accounting.Ledger.Adapters.FrmLedger.TabReports,
+                    CaseManagement.Accounting.Ledger.Adapters.FrmLedger.ReportTrial), "Ledger.View");
+            AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleAccounting, IconFont.Chart, "سود و زیان",
+                OpenLedgerScreen("سود و زیان", CaseManagement.Accounting.Ledger.Adapters.FrmLedger.TabReports,
+                    CaseManagement.Accounting.Ledger.Adapters.FrmLedger.ReportPnl), "Ledger.View");
+            AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleAccounting, IconFont.Chart, "ترازنامه",
+                OpenLedgerScreen("ترازنامه", CaseManagement.Accounting.Ledger.Adapters.FrmLedger.TabReports,
+                    CaseManagement.Accounting.Ledger.Adapters.FrmLedger.ReportBalance), "Ledger.View");
+            AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleAccounting, IconFont.Sync, "جریان نقدی",
+                OpenLedgerScreen("جریان نقدی", CaseManagement.Accounting.Ledger.Adapters.FrmLedger.TabReports,
+                    CaseManagement.Accounting.Ledger.Adapters.FrmLedger.ReportCashFlow), "Ledger.View");
+            AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleAccounting, IconFont.Book, "گردش حساب",
+                OpenLedgerScreen("گردش حساب", CaseManagement.Accounting.Ledger.Adapters.FrmLedger.TabReports,
+                    CaseManagement.Accounting.Ledger.Adapters.FrmLedger.ReportGl), "Ledger.View");
+            AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleAccounting, IconFont.Money, "گزارش صندوق",
+                OpenCashScreen("گزارش صندوق", CaseManagement.Accounting.FrmAccounting.TabReports), "Accounting.View");
+            AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleAccounting, IconFont.Card, "گزارش بانک",
+                OpenCashScreen("گزارش بانک", CaseManagement.Accounting.FrmAccounting.TabReports), "Accounting.View");
+            AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleAccounting, IconFont.People, "بدهکاران",
+                OpenCashScreen("بدهکاران", CaseManagement.Accounting.FrmAccounting.TabReports), "Accounting.View");
+            AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleAccounting, IconFont.Contact, "بستانکاران",
+                OpenCashScreen("بستانکاران", CaseManagement.Accounting.FrmAccounting.TabReports), "Accounting.View");
             _sidebar.AddCaption("دوره مالی");
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleAccounting, IconFont.Add, "افتتاح دوره مالی",
                 OpenCashScreen("افتتاح دوره مالی", CaseManagement.Accounting.FrmAccounting.TabPeriod), "Accounting.View");
@@ -533,27 +578,29 @@ namespace CaseManagement
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleAccounting, IconFont.Settings, "عملیات پایان دوره",
                 OpenLedgerScreen("عملیات پایان دوره", CaseManagement.Accounting.Ledger.Adapters.FrmLedger.TabCalendar), "Ledger.View");
 
-            _sidebar.AddGroup("انبارداری", startExpanded: false);
+            _sidebar.AddGroup("انبارداری", IconFont.Folder, false);
             _sidebar.AddCaption("کالاها");
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleInventory, IconFont.Folder, "کالاها",
                 OpenInvScreen("کالاها", FrmInventory.TabItems), "Inventory.View");
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleInventory, IconFont.Menu, "دسته‌بندی کالا",
-                OpenSoon("دسته‌بندی کالا"), "Inventory.View");
+                OpenInvScreen("دسته‌بندی کالا", FrmInventory.TabItems, null, FrmInventory.MasterCategories), "Inventory.View");
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleInventory, IconFont.Calculator, "واحدهای اندازه‌گیری",
-                OpenSoon("واحدهای اندازه‌گیری"), "Inventory.View");
+                OpenInvScreen("واحدهای اندازه‌گیری", FrmInventory.TabItems, null, FrmInventory.MasterUoms), "Inventory.View");
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleInventory, IconFont.Edit, "مشخصات کالا",
-                OpenSoon("مشخصات کالا"), "Inventory.View");
+                OpenInvScreen("مشخصات کالا", FrmInventory.TabItems, null, FrmInventory.MasterSpecs), "Inventory.View");
+            AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleInventory, IconFont.Folder, "انبارها",
+                OpenInvScreen("انبارها", FrmInventory.TabWarehouses), "Inventory.View");
             _sidebar.AddCaption("ورود و خروج");
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleInventory, IconFont.Add, "ورود کالا",
-                OpenInvScreen("ورود کالا", FrmInventory.TabDocuments), "Inventory.View");
+                OpenInvScreen("ورود کالا", FrmInventory.TabDocuments, InventoryCodes.TypeReceipt), "Inventory.View");
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleInventory, IconFont.Cancel, "خروج کالا",
-                OpenInvScreen("خروج کالا", FrmInventory.TabDocuments), "Inventory.View");
+                OpenInvScreen("خروج کالا", FrmInventory.TabDocuments, InventoryCodes.TypeIssue), "Inventory.View");
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleInventory, IconFont.Sync, "انتقال کالا",
-                OpenSoon("انتقال کالا"), "Inventory.View");
+                OpenInvScreen("انتقال کالا", FrmInventory.TabDocuments, InventoryCodes.TypeTransfer), "Inventory.View");
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleInventory, IconFont.Edit, "تعدیل موجودی",
-                OpenInvScreen("تعدیل موجودی", FrmInventory.TabDocuments), "Inventory.View");
+                OpenInvScreen("اصلاح موجودی", FrmInventory.TabDocuments, InventoryCodes.TypeAdjustment), "Inventory.View");
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleInventory, IconFont.Check, "انبارگردانی",
-                OpenSoon("انبارگردانی"), "Inventory.View");
+                OpenInvScreen("شمارش موجودی", FrmInventory.TabDocuments, InventoryCodes.TypeCount), "Inventory.View");
             _sidebar.AddCaption("موجودی");
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleInventory, IconFont.Search, "موجودی کالا",
                 OpenInvScreen("موجودی کالا", FrmInventory.TabReports,
@@ -565,9 +612,9 @@ namespace CaseManagement
                 OpenInvScreen("کالاهای کم‌موجود", FrmInventory.TabReports,
                     FrmInventory.ReportReorder), "Inventory.View");
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleInventory, IconFont.Clock, "حداقل موجودی",
-                OpenSoon("حداقل موجودی"), "Inventory.View");
+                OpenInvScreen("حداقل موجودی", FrmInventory.TabItems, null, FrmInventory.MasterMinMax), "Inventory.View");
 
-            _sidebar.AddGroup("گزارشات", startExpanded: false);
+            _sidebar.AddGroup("گزارشات", IconFont.Chart, false);
             _sidebar.AddItem(IconFont.Chart, "داشبوردهای مدیریتی", OpenReporting(ReportingCatalog.Dashboards));
             _sidebar.AddItem(IconFont.Money, "گزارشات مالی", OpenReporting(ReportingCatalog.Finance));
             _sidebar.AddItem(IconFont.Folder, "گزارشات عملیات", OpenReporting(ReportingCatalog.Operations));
@@ -578,15 +625,15 @@ namespace CaseManagement
             _sidebar.AddItem(IconFont.Settings, "گزارشات سیستم", OpenReporting(ReportingCatalog.System));
             _sidebar.AddItem(IconFont.Document, "خروجی و چاپ", OpenReporting(ReportingCatalog.Output));
 
-            _sidebar.AddGroup("هوش مصنوعی", startExpanded: false);
+            _sidebar.AddGroup("هوش مصنوعی", IconFont.Search, false);
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleAiPlatform, IconFont.Chart, "داشبورد هوشمند", OpenAi, "AI.View");
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleAiPlatform, IconFont.Search, "گفتگو با هوش مصنوعی", OpenAi, "AI.View");
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleAiPlatform, IconFont.Settings, "تنظیمات AI", OpenAi, "AI.View");
 
-            _sidebar.AddGroup("ابزارها", startExpanded: false);
+            _sidebar.AddGroup("ابزارها", IconFont.Edit, false);
             _sidebar.AddItem(IconFont.Clock, "در نسخه‌های بعدی تکمیل می‌شود", OpenSoon("ابزارها"));
 
-            _sidebar.AddGroup("تنظیمات", startExpanded: false);
+            _sidebar.AddGroup("تنظیمات", IconFont.Settings, false);
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleUsers, IconFont.People, "کاربران", OpenUsers, "User.Manage");
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModulePermissions, IconFont.Shield, "نقش‌ها و دسترسی‌ها",
                 delegate { using (var frm = new CaseManagement.Enterprise.FrmPermissionMatrix()) frm.ShowDialog(this); }, "Permission.Manage");
@@ -599,8 +646,16 @@ namespace CaseManagement
                 delegate { SelectTabByTitle("گزارش رویدادها"); }, "Security.View");
 
             _sidebar.EndGroup();
+            _sidebar.AddDivider();
+            _sidebar.AddItem(IconFont.Document, "درباره ما", OpenErpAbout);
             _sidebar.AddItem(IconFont.Exit, "خروج از حساب", delegate { LogoutCurrentUser(); });
             _sidebar.SetActive(0);
+        }
+
+        private void OpenErpAbout(object sender, EventArgs e)
+        {
+            using (var frm = new FrmErpAbout())
+                frm.ShowDialog(this);
         }
 
         private void OpenLedger(object sender, EventArgs e)
@@ -635,14 +690,19 @@ namespace CaseManagement
 
         private EventHandler OpenInvScreen(string title, int tab)
         {
-            return OpenInvScreen(title, tab, null);
+            return OpenInvScreen(title, tab, null, null);
         }
 
         private EventHandler OpenInvScreen(string title, int tab, string reportKind)
         {
+            return OpenInvScreen(title, tab, reportKind, null);
+        }
+
+        private EventHandler OpenInvScreen(string title, int tab, string reportKind, string masterFocus)
+        {
             return delegate
             {
-                using (var frm = new FrmInventory(title, tab, reportKind))
+                using (var frm = new FrmInventory(title, tab, reportKind, masterFocus))
                     frm.ShowDialog(this);
             };
         }
@@ -668,9 +728,14 @@ namespace CaseManagement
 
         private EventHandler OpenCashScreen(string title, string tabTitle, string txnDirection)
         {
+            return OpenCashScreen(title, tabTitle, txnDirection, null);
+        }
+
+        private EventHandler OpenCashScreen(string title, string tabTitle, string txnDirection, string extraFilter)
+        {
             return delegate
             {
-                using (var frm = new CaseManagement.Accounting.FrmAccounting(title, tabTitle, txnDirection))
+                using (var frm = new CaseManagement.Accounting.FrmAccounting(title, tabTitle, txnDirection, extraFilter))
                     frm.ShowDialog(this);
             };
         }

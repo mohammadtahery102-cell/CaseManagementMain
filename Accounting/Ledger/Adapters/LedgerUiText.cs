@@ -34,7 +34,8 @@ namespace CaseManagement.Accounting.Ledger.Adapters
                 case LedgerErrorCodes.Overlap: return "بازه تاریخ با رکورد موجود تداخل دارد.";
                 case LedgerErrorCodes.InvalidDate: return "تاریخ نامعتبر است.";
                 case LedgerErrorCodes.HasChildren: return "حساب زیرمجموعه دارد.";
-                case LedgerErrorCodes.HasPostings: return "حساب گردش دفتر کل دارد.";
+                case LedgerErrorCodes.HasPostings: return "حساب گردش دفتر کل دارد. به‌جای حذف، غیرفعال کنید.";
+                case LedgerErrorCodes.Cycle: return "رابطهٔ والد-فرزند حلقوی است.";
                 case LedgerErrorCodes.PostedImmutable: return "سند ثبت‌شده قابل ویرایش یا حذف نیست.";
                 case LedgerErrorCodes.MappingMissing: return "نگاشت صندوق/دسته به حساب دفتر کل تعریف نشده است.";
                 case LedgerErrorCodes.DimensionMissing: return "مرکز هزینه یا پروژه پیدا نشد.";

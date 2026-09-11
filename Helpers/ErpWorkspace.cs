@@ -45,10 +45,16 @@ namespace CaseManagement.Helpers
                     return;
                 case "daybook":
                 case "ledger-journal":
-                    Show(owner, new FrmLedger("دفتر روزنامه", FrmLedger.TabJournals, null));
+                    Show(owner, new FrmLedger("دفتر روزنامه", FrmLedger.TabReports, FrmLedger.ReportDaybook));
                     return;
                 case "subsidiary":
-                    Show(owner, new FrmLedger("دفتر معین", FrmLedger.TabReports, FrmLedger.ReportGl));
+                    Show(owner, new FrmLedger("دفتر معین", FrmLedger.TabReports, FrmLedger.ReportSubsidiary));
+                    return;
+                case "ledger-detail":
+                    Show(owner, new FrmLedger("دفتر تفصیلی", FrmLedger.TabReports, FrmLedger.ReportDetail));
+                    return;
+                case "doc-flow":
+                    Show(owner, new FrmLedger("گردش اسناد", FrmLedger.TabReports, FrmLedger.ReportDocFlow));
                     return;
                 case "detail":
                     Show(owner, new FrmLedger("حساب‌های تفصیلی", FrmLedger.TabCoa, null));
@@ -76,10 +82,12 @@ namespace CaseManagement.Helpers
                     Show(owner, new FrmLedger("عملیات پایان دوره", FrmLedger.TabCalendar, null));
                     return;
                 case "cash":
-                case "transfer":
                 case "revise":
                 case "void":
                     Show(owner, new FrmAccounting("تراکنش‌های مالی", FrmAccounting.TabTxn, null));
+                    return;
+                case "transfer":
+                    Show(owner, new FrmAccounting("انتقال وجه", FrmAccounting.TabTxn, FrmAccounting.DirectionTransfer, FrmAccounting.DirectionTransfer));
                     return;
                 case "receive":
                     Show(owner, new FrmAccounting("دریافت وجه", FrmAccounting.TabTxn, FrmAccounting.DirectionReceive));
@@ -88,14 +96,20 @@ namespace CaseManagement.Helpers
                     Show(owner, new FrmAccounting("پرداخت وجه", FrmAccounting.TabTxn, FrmAccounting.DirectionPay));
                     return;
                 case "banks":
-                    Show(owner, new FrmAccounting("حساب‌های بانکی", FrmAccounting.TabFunds, null));
+                    Show(owner, new FrmAccounting("حساب‌های بانکی", FrmAccounting.TabFunds, null, FrmAccounting.ExtraBank));
                     return;
                 case "funds":
-                    Show(owner, new FrmAccounting("صندوق‌ها", FrmAccounting.TabFunds, null));
+                    Show(owner, new FrmAccounting("صندوق‌ها", FrmAccounting.TabFunds, null, FrmAccounting.ExtraCash));
                     return;
                 case "parties":
                 case "cash-parties":
                     Show(owner, new FrmAccounting("طرف حساب", FrmAccounting.TabParties, null));
+                    return;
+                case "cash-customers":
+                    Show(owner, new FrmAccounting("مشتریان", FrmAccounting.TabParties, null, FrmAccounting.ExtraCustomers));
+                    return;
+                case "cash-vendors":
+                    Show(owner, new FrmAccounting("تأمین‌کنندگان", FrmAccounting.TabParties, null, FrmAccounting.ExtraVendors));
                     return;
                 case "income":
                     Show(owner, new FrmAccounting("درآمدها", FrmAccounting.TabIncome, null));
@@ -103,11 +117,20 @@ namespace CaseManagement.Helpers
                 case "expense":
                     Show(owner, new FrmAccounting("هزینه‌ها", FrmAccounting.TabExpense, null));
                     return;
+                case "cashflow":
+                case "ledger-cashflow":
+                    Show(owner, new FrmLedger("جریان نقدی", FrmLedger.TabReports, FrmLedger.ReportCashFlow));
+                    return;
                 case "cash-report":
                 case "bank-report":
-                case "cashflow":
                 case "cash-reports":
                     Show(owner, new FrmAccounting("گزارشات مالی", FrmAccounting.TabReports, null));
+                    return;
+                case "cash-debtors":
+                    Show(owner, new FrmAccounting("بدهکاران", FrmAccounting.TabReports, null));
+                    return;
+                case "cash-creditors":
+                    Show(owner, new FrmAccounting("بستانکاران", FrmAccounting.TabReports, null));
                     return;
                 case "open-period":
                 case "close-month":
@@ -116,15 +139,19 @@ namespace CaseManagement.Helpers
                     return;
                 case "invoice":
                 case "sale":
-                case "sale-return":
                     Show(owner, new FrmSales());
+                    return;
+                case "sale-return":
+                    Show(owner, new FrmAccReturns("Sale"));
                     return;
                 case "sales-top":
                     Show(owner, new FrmSales("فروش مشتری"));
                     return;
                 case "purchase":
-                case "purchase-return":
                     Show(owner, new FrmPurchase());
+                    return;
+                case "purchase-return":
+                    Show(owner, new FrmAccReturns("Purchase"));
                     return;
                 case "purchase-top":
                     Show(owner, new FrmPurchase("خرید تامین‌کننده"));
@@ -235,9 +262,13 @@ namespace CaseManagement.Helpers
                     return;
                 case "soon":
                 case "tools":
-                case "cheques":
-                case "budget":
                     Show(owner, new FrmErpPlaceholder("این بخش"));
+                    return;
+                case "cheques":
+                    Show(owner, new FrmAccCheques());
+                    return;
+                case "budget":
+                    Show(owner, new FrmAccBudget());
                     return;
                 default:
                     Show(owner, new FrmErpPlaceholder("این بخش"));

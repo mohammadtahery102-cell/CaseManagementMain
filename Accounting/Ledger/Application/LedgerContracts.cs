@@ -155,6 +155,30 @@ namespace CaseManagement.Accounting.Ledger.Application
         public long ExpectedRowVersion { get; set; }
     }
 
+    public class UpdateAccountCommand
+    {
+        public long AccountId { get; set; }
+        public long ExpectedRowVersion { get; set; }
+        public string AccountCode { get; set; }
+        public string AccountName { get; set; }
+        public string AccountTypeCode { get; set; }
+        public long? ParentAccountId { get; set; }
+        public bool IsContra { get; set; }
+    }
+
+    public class AccountUsageInfo
+    {
+        public long AccountId { get; set; }
+        public string AccountCode { get; set; }
+        public string AccountName { get; set; }
+        public int ChildCount { get; set; }
+        public int PostedLineCount { get; set; }
+        public string LastPostingDate { get; set; }
+        public bool HasChildren { get { return ChildCount > 0; } }
+        public bool HasPostings { get { return PostedLineCount > 0; } }
+        public bool CanDelete { get { return !HasChildren && !HasPostings; } }
+    }
+
     public class CreateFiscalYearCommand
     {
         public int CompanyId { get; set; }
@@ -202,14 +226,17 @@ namespace CaseManagement.Accounting.Ledger.Application
         LedgerResult SoftDeleteDraft(JournalStatusCommand command, ILedgerIdentity identity);
         LedgerResult GetJournal(long journalId, ILedgerIdentity identity);
         IList<GlJournal> ListJournals(string fromDate, string toDate, ILedgerIdentity identity);
+        IList<GlJournal> ListJournals(string fromDate, string toDate, string statusFilter, ILedgerIdentity identity);
     }
 
     public interface IChartOfAccountsService
     {
         LedgerResult Create(CreateAccountCommand command, ILedgerIdentity identity);
+        LedgerResult Update(UpdateAccountCommand command, ILedgerIdentity identity);
         LedgerResult SoftDelete(SoftDeleteCommand command, ILedgerIdentity identity);
         LedgerResult Deactivate(SoftDeleteCommand command, ILedgerIdentity identity);
         LedgerResult Activate(SoftDeleteCommand command, ILedgerIdentity identity);
+        AccountUsageInfo GetUsage(long accountId, ILedgerIdentity identity);
         IList<GlAccount> List(int companyId, bool includeDeleted);
         IList<GlAccountType> ListTypes(int companyId);
         GlAccount Get(long accountId);
@@ -222,6 +249,7 @@ namespace CaseManagement.Accounting.Ledger.Application
         LedgerResult AddPeriod(CreateFiscalPeriodCommand command, ILedgerIdentity identity);
         LedgerResult ClosePeriod(CalendarStatusCommand command, ILedgerIdentity identity);
         LedgerResult LockPeriod(CalendarStatusCommand command, ILedgerIdentity identity);
+        LedgerResult UnlockPeriod(CalendarStatusCommand command, ILedgerIdentity identity);
         LedgerResult CloseYear(CalendarStatusCommand command, ILedgerIdentity identity);
         LedgerResult LockYear(CalendarStatusCommand command, ILedgerIdentity identity);
         LedgerResult UnlockYear(CalendarStatusCommand command, ILedgerIdentity identity);
@@ -288,6 +316,9 @@ namespace CaseManagement.Accounting.Ledger.Application
         public string FromDate { get; set; }
         public string ToDate { get; set; }
         public long AccountId { get; set; }
+        public long PartyId { get; set; }
+        public long FundId { get; set; }
+        public string DetailKind { get; set; }
     }
 
     public class TrialBalanceRow
@@ -313,6 +344,12 @@ namespace CaseManagement.Accounting.Ledger.Application
         public long DebitBaseMinor { get; set; }
         public long CreditBaseMinor { get; set; }
         public long RunningNet { get; set; }
+        public long JournalId { get; set; }
+        public string LineKind { get; set; }
+        public string Status { get; set; }
+        public string SourceModule { get; set; }
+        public string SourceDocumentType { get; set; }
+        public long? SourceDocumentId { get; set; }
     }
 
     public class StatementLine
@@ -351,6 +388,74 @@ namespace CaseManagement.Accounting.Ledger.Application
         BalanceSheetResult GetBalanceSheet(LedgerReportQuery query, ILedgerIdentity identity);
         ProfitAndLossResult GetProfitAndLoss(LedgerReportQuery query, ILedgerIdentity identity);
         IList<CurrencyPositionRow> GetCurrencyPositions(LedgerReportQuery query, ILedgerIdentity identity);
+        IList<DaybookLineRow> GetDaybook(LedgerReportQuery query, ILedgerIdentity identity);
+        IList<DaybookLineRow> GetSubsidiary(LedgerReportQuery query, ILedgerIdentity identity);
+        IList<DaybookLineRow> GetDetailLedger(LedgerReportQuery query, ILedgerIdentity identity);
+        IList<DocumentFlowRow> GetDocumentFlow(LedgerReportQuery query, ILedgerIdentity identity);
+        AccountLedgerSummary GetAccountSummary(LedgerReportQuery query, ILedgerIdentity identity);
+        CashFlowResult GetCashFlow(LedgerReportQuery query, ILedgerIdentity identity);
+    }
+
+    public class DaybookLineRow
+    {
+        public string PostingDate { get; set; }
+        public string JournalNumber { get; set; }
+        public string Status { get; set; }
+        public string AccountCode { get; set; }
+        public string AccountName { get; set; }
+        public string Description { get; set; }
+        public long DebitBaseMinor { get; set; }
+        public long CreditBaseMinor { get; set; }
+        public long RunningNet { get; set; }
+        public long JournalId { get; set; }
+        public long AccountId { get; set; }
+        public string LineKind { get; set; }
+        public string SourceModule { get; set; }
+        public string SourceDocumentType { get; set; }
+        public long? SourceDocumentId { get; set; }
+        public long PartyId { get; set; }
+        public long FundId { get; set; }
+        public long CostCenterId { get; set; }
+        public long ProjectId { get; set; }
+        public string DimensionKey { get; set; }
+        public string DimensionName { get; set; }
+    }
+
+    public class DocumentFlowRow
+    {
+        public long JournalId { get; set; }
+        public string JournalNumber { get; set; }
+        public string PostingDate { get; set; }
+        public string Description { get; set; }
+        public string Status { get; set; }
+        public string JournalSource { get; set; }
+        public string SourceModule { get; set; }
+        public string SourceDocumentType { get; set; }
+        public long? SourceDocumentId { get; set; }
+        public long? ReversesJournalId { get; set; }
+        public long DebitBaseMinor { get; set; }
+        public long CreditBaseMinor { get; set; }
+        public bool Balanced { get { return DebitBaseMinor == CreditBaseMinor; } }
+    }
+
+    public class AccountLedgerSummary
+    {
+        public long OpeningNet { get; set; }
+        public long PeriodDebit { get; set; }
+        public long PeriodCredit { get; set; }
+        public long ClosingNet { get; set; }
+        public int MovementCount { get; set; }
+        public bool OpeningPlusMovementEqualsClosing { get; set; }
+        public bool PeriodDebitsEqualCredits { get; set; }
+    }
+
+    public class CashFlowResult
+    {
+        public long OpeningMinor { get; set; }
+        public long InflowMinor { get; set; }
+        public long OutflowMinor { get; set; }
+        public long ClosingMinor { get; set; }
+        public IList<StatementLine> Lines { get; set; }
     }
 
     public class CurrencyPositionRow

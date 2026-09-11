@@ -296,6 +296,7 @@
     <Compile Include="Accounting\AccRepair.cs" />
     <Compile Include="Accounting\Money.cs" />
     <Compile Include="Accounting\AccReports.cs" />
+    <Compile Include="Accounting\AccountingChrome.cs" />
     <Compile Include="Accounting\AccTemplateExport.cs" />
     <Compile Include="Accounting\Ledger\Domain\LedgerCodes.cs" />
     <Compile Include="Accounting\Ledger\Domain\LedgerEntities.cs" />
@@ -331,6 +332,7 @@
     <Compile Include="Inventory\Infrastructure\InventoryStore.cs" />
     <Compile Include="Inventory\Application\InventoryValidationService.cs" />
     <Compile Include="Inventory\Application\InventoryPostingService.cs" />
+    <Compile Include="Inventory\Application\InventoryItemService.cs" />
     <Compile Include="Inventory\Application\InventoryQueryService.cs" />
     <Compile Include="Inventory\Application\InventoryOutboxAdapter.cs" />
     <Compile Include="Inventory\Adapters\FrmInventory.cs">
@@ -446,6 +448,15 @@
       <SubType>Form</SubType>
     </Compile>
     <Compile Include="Accounting\FrmAccounting.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Accounting\FrmAccCheques.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Accounting\FrmAccBudget.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Accounting\FrmAccReturns.cs">
       <SubType>Form</SubType>
     </Compile>
     <Compile Include="Accounting\FrmAccountingRepair.cs">
@@ -623,6 +634,9 @@
     <Compile Include="Helpers\ErpFormChrome.cs" />
     <Compile Include="Helpers\ErpAccess.cs" />
     <Compile Include="Helpers\FrmErpPlaceholder.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Helpers\FrmErpAbout.cs">
       <SubType>Form</SubType>
     </Compile>
     <Compile Include="Helpers\ReportingCatalog.cs" />

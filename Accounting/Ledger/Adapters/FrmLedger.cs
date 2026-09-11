@@ -4,6 +4,7 @@ using System.Data;
 using System.Drawing;
 using System.Drawing.Printing;
 using System.Windows.Forms;
+using CaseManagement.Accounting;
 using CaseManagement.Accounting.Ledger.Application;
 using CaseManagement.Accounting.Ledger.Domain;
 using CaseManagement.Helpers;
@@ -49,6 +50,18 @@ namespace CaseManagement.Accounting.Ledger.Adapters
         public const string ReportBalance = "ترازنامه";
         public const string ReportPnl = "سود و زیان";
         public const string ReportFx = "موقعیت ارزی";
+        public const string ReportDaybook = "دفتر روزنامه";
+        public const string ReportSubsidiary = "دفتر معین";
+        public const string ReportCashFlow = "جریان نقدی";
+        public const string ReportDocFlow = "گردش اسناد";
+        public const string ReportDetail = "دفتر تفصیلی";
+
+        private ComboBox _cmbJournalStatus;
+        private ComboBox _cmbDetailKind;
+        private TextBox _txtCoaSearch;
+        private ComboBox _cmbCoaType;
+        private Label _lblCoaInfo;
+        private string _journalStatusFilter;
 
         public FrmLedger()
             : this("دفتر کل", TabCoa, null)
@@ -72,6 +85,12 @@ namespace CaseManagement.Accounting.Ledger.Adapters
             ReloadCalendar();
             ReloadJournals();
             ReloadReportFilters();
+            if (!string.IsNullOrWhiteSpace(title) && title.IndexOf("پیش‌نویس", StringComparison.Ordinal) >= 0)
+            {
+                _journalStatusFilter = LedgerCodes.JournalDraft;
+                if (_cmbJournalStatus != null) _cmbJournalStatus.SelectedItem = "پیش‌نویس";
+                ReloadJournals();
+            }
             if (_tabs != null && startTab >= 0 && startTab < _tabs.TabPages.Count)
                 _tabs.SelectedIndex = startTab;
             SelectReport(reportKind);
@@ -92,15 +111,10 @@ namespace CaseManagement.Accounting.Ledger.Adapters
             Text = ProductMode.IsErp
                 ? heading + "  ·  " + ProductBranding.CommercialName + "  —  " + SecurityContext.CenterDisplay
                 : heading + "  —  " + SecurityContext.CenterDisplay;
-            RightToLeft = RightToLeft.Yes;
-            RightToLeftLayout = true;
-            BackColor = UiTheme.Background;
-            Font = UiTheme.Font(UiTheme.SizeBody);
-            UiTheme.MakeMainWindow(this, 1280, 760);
+            AccountingChrome.MakeWorkspace(this, 1280, 760);
 
-            Panel banner = ProductMode.IsErp
-                ? ErpFormChrome.Header(heading + "  ·  " + ProductBranding.CommercialName)
-                : ErpFormChrome.Header(heading);
+            Panel header = AccountingChrome.BuildHeader(heading, AccountingChrome.Breadcrumb("دفتر کل", heading));
+            Panel status = AccountingChrome.BuildStatusBar();
 
             _tabs = new TabControl
             {
@@ -115,21 +129,43 @@ namespace CaseManagement.Accounting.Ledger.Adapters
             _tabs.TabPages.Add(BuildReportTab());
 
             Controls.Add(_tabs);
-            Controls.Add(banner);
+            Controls.Add(status);
+            Controls.Add(header);
+            AccountingChrome.Polish(this);
         }
 
         private TabPage BuildCoaTab()
         {
             TabPage page = new TabPage("سرفصل حساب‌ها");
             _tree = new TreeView { Dock = DockStyle.Fill, RightToLeft = RightToLeft.Yes, Font = UiTheme.Font(10F) };
+            _tree.AfterSelect += delegate { ShowCoaUsage(); };
+            _lblCoaInfo = new Label
+            {
+                Dock = DockStyle.Bottom, Height = 32, TextAlign = ContentAlignment.MiddleRight,
+                Padding = new Padding(8, 0, 8, 0), Font = UiTheme.Font(9F)
+            };
+            _txtCoaSearch = new TextBox { Width = 180 };
+            _txtCoaSearch.TextChanged += delegate { ReloadCoa(); };
+            _cmbCoaType = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 140 };
+            _cmbCoaType.Items.AddRange(new object[] { "همه انواع", "دارایی", "بدهی", "حقوق مالکانه", "درآمد", "هزینه" });
+            _cmbCoaType.SelectedIndex = 0;
+            _cmbCoaType.SelectedIndexChanged += delegate { ReloadCoa(); };
             Panel tools = Toolbar(
+                Lbl("جستجو"),
+                _txtCoaSearch,
+                Lbl("نوع"),
+                _cmbCoaType,
                 Btn("حساب فرزند", AddChildAccount),
+                Btn("ویرایش", EditAccount),
                 Btn("غیرفعال", DeactivateAccount),
                 Btn("فعال", ActivateAccount),
+                Btn("حذف بدون گردش", DeleteAccountSafe),
+                Btn("وابستگی‌ها", ShowAccountDependencies),
                 Btn("مراکز هزینه", delegate { using (FrmDimensionMaster f = FrmDimensionMaster.CostCenters()) f.ShowDialog(this); }),
                 Btn("پروژه‌ها", delegate { using (FrmDimensionMaster f = FrmDimensionMaster.Projects()) f.ShowDialog(this); }),
                 Btn("تازه‌سازی", delegate { ReloadCoa(); }));
             page.Controls.Add(_tree);
+            page.Controls.Add(_lblCoaInfo);
             page.Controls.Add(tools);
             return page;
         }
@@ -156,6 +192,7 @@ namespace CaseManagement.Accounting.Ledger.Adapters
                 Btn("دوره جدید", AddPeriod),
                 Btn("بستن دوره", delegate { PeriodAction(true); }),
                 Btn("قفل دوره", delegate { PeriodAction(false); }),
+                Btn("رفع قفل دوره", UnlockSelectedPeriod),
                 Btn("بازگشایی دوره", ReopenSelectedPeriod)));
             page.Controls.Add(split);
             return page;
@@ -165,16 +202,27 @@ namespace CaseManagement.Accounting.Ledger.Adapters
         {
             TabPage page = new TabPage("اسناد حسابداری");
             _gridJournals = Grid();
+            _gridJournals.CellDoubleClick += delegate { OpenSelectedJournal(); };
+            TextBox journalSearch = AccountingChrome.AttachQuickSearch(null, _gridJournals, "جستجوی سند...");
             page.Controls.Add(_gridJournals);
+            _cmbJournalStatus = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 140 };
+            _cmbJournalStatus.Items.AddRange(new object[] { "همه", "پیش‌نویس", "تأییدشده", "ثبت‌شده", "برگشت‌خورده" });
+            _cmbJournalStatus.SelectedIndex = 0;
+            _cmbJournalStatus.SelectedIndexChanged += delegate { ReloadJournals(); };
             page.Controls.Add(Toolbar(
+                Lbl("وضعیت"),
+                _cmbJournalStatus,
                 Btn("سند جدید", NewJournal),
                 Btn("پیش‌نویس/ویرایش", EditDraft),
+                Btn("حذف پیش‌نویس", DeleteDraft),
                 Btn("تأیید", ApproveJournal),
                 Btn("رد تأیید", RejectJournal),
                 Btn("ثبت قطعی", PostJournal),
                 Btn("برگشت", ReverseJournal),
+                Btn("ردیابی سند", OpenSelectedJournal),
                 Btn("صندوق → دفتر کل", delegate { using (FrmCashBookGl f = new FrmCashBookGl()) f.ShowDialog(this); ReloadJournals(); }),
-                Btn("تازه‌سازی", delegate { ReloadJournals(); })));
+                Btn("تازه‌سازی", delegate { ReloadJournals(); }),
+                journalSearch));
             return page;
         }
 
@@ -183,7 +231,7 @@ namespace CaseManagement.Accounting.Ledger.Adapters
             TabPage page = new TabPage("گزارش‌ها");
             _gridReport = Grid();
             _lblReportNote = new Label { Dock = DockStyle.Bottom, Height = 28, TextAlign = ContentAlignment.MiddleRight, Padding = new Padding(8, 0, 8, 0) };
-            Panel filters = new Panel { Dock = DockStyle.Top, Height = 88 };
+            Panel filters = new Panel { Dock = DockStyle.Top, Height = 112 };
             FlowLayoutPanel flow = new FlowLayoutPanel
             {
                 Dock = DockStyle.Fill,
@@ -193,7 +241,9 @@ namespace CaseManagement.Accounting.Ledger.Adapters
                 Padding = new Padding(6)
             };
             _cmbReport = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 160 };
-            _cmbReport.Items.AddRange(new object[] { "دفتر کل", "تراز آزمایشی", "ترازنامه", "سود و زیان", "موقعیت ارزی" });
+            _cmbReport.Items.AddRange(new object[] {
+                "دفتر کل", "دفتر روزنامه", "دفتر معین", "دفتر تفصیلی", "گردش اسناد",
+                "تراز آزمایشی", "ترازنامه", "سود و زیان", "جریان نقدی", "موقعیت ارزی" });
             _cmbReport.SelectedIndex = 1;
             _txtFrom = new TextBox { Width = 90, Text = DateTime.UtcNow.Year + "-01-01" };
             _txtTo = new TextBox { Width = 90, Text = DateTime.UtcNow.ToString("yyyy-MM-dd") };
@@ -202,6 +252,9 @@ namespace CaseManagement.Accounting.Ledger.Adapters
             _cmbYear = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 140 };
             _cmbCostCenter = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 160 };
             _cmbProject = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 160 };
+            _cmbDetailKind = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 140 };
+            _cmbDetailKind.Items.AddRange(new object[] { "طرف‌حساب", "صندوق/بانک", "مرکز هزینه", "پروژه" });
+            _cmbDetailKind.SelectedIndex = 0;
             flow.Controls.Add(Lbl("گزارش"));
             flow.Controls.Add(_cmbReport);
             flow.Controls.Add(Lbl("سال مالی"));
@@ -218,12 +271,20 @@ namespace CaseManagement.Accounting.Ledger.Adapters
             flow.Controls.Add(_cmbProject);
             flow.Controls.Add(Lbl("حساب"));
             flow.Controls.Add(_cmbGlAccount);
+            flow.Controls.Add(Lbl("تفصیل"));
+            flow.Controls.Add(_cmbDetailKind);
             flow.Controls.Add(Btn("اجرا", RunReport));
             flow.Controls.Add(Btn("چاپ", PrintReport));
+            flow.Controls.Add(Btn("چاپ مستقیم", PrintReportDirect));
+            flow.Controls.Add(Btn("خروجی اکسل", ExportReportExcel));
+            flow.Controls.Add(Btn("ردیابی", DrillFromReport));
+            flow.Controls.Add(AccountingChrome.AttachQuickSearch(null, _gridReport, "جستجوی گزارش..."));
             filters.Controls.Add(flow);
             page.Controls.Add(_gridReport);
             page.Controls.Add(_lblReportNote);
             page.Controls.Add(filters);
+            _gridReport.CellDoubleClick += delegate { DrillFromReport(); };
+            _gridReport.CellFormatting += ColorLedgerCells;
             return page;
         }
 
@@ -233,7 +294,9 @@ namespace CaseManagement.Accounting.Ledger.Adapters
             _tree.Nodes.Clear();
             IList<GlAccount> accounts = _coa.List(CompanyId(), false);
             Dictionary<long, TreeNode> map = new Dictionary<long, TreeNode>();
-            List<GlAccount> pending = new List<GlAccount>(accounts);
+            List<GlAccount> pending = new List<GlAccount>();
+            for (int i = 0; i < accounts.Count; i++)
+                if (CoaMatchesFilter(accounts[i])) pending.Add(accounts[i]);
             int guard = 0;
             while (pending.Count > 0 && guard++ < 64)
             {
@@ -246,16 +309,20 @@ namespace CaseManagement.Accounting.Ledger.Adapters
                         next.Add(a);
                         continue;
                     }
-                    TreeNode node = new TreeNode(a.AccountCode + "  " + a.AccountName +
-                        (a.IsActive ? "" : "  [غیرفعال]") +
-                        (a.AllowPosting ? "" : "  [سرفصل]"));
-                    node.Tag = a;
+                    TreeNode node = CoaNode(a, false);
                     if (!a.ParentAccountId.HasValue) _tree.Nodes.Add(node);
                     else map[a.ParentAccountId.Value].Nodes.Add(node);
                     map[a.AccountId] = node;
                 }
                 if (next.Count == pending.Count) break;
                 pending = next;
+            }
+            for (int i = 0; i < pending.Count; i++)
+            {
+                if (map.ContainsKey(pending[i].AccountId)) continue;
+                TreeNode orphan = CoaNode(pending[i], true);
+                _tree.Nodes.Add(orphan);
+                map[pending[i].AccountId] = orphan;
             }
             _tree.ExpandAll();
             _tree.EndUpdate();
@@ -267,6 +334,114 @@ namespace CaseManagement.Accounting.Ledger.Adapters
                     _cmbGlAccount.Items.Add(new AccountItem(accounts[i]));
             }
             if (_cmbGlAccount.Items.Count > 0) _cmbGlAccount.SelectedIndex = 0;
+            _cmbGlAccount.DropDownStyle = ComboBoxStyle.DropDown;
+            _cmbGlAccount.AutoCompleteMode = AutoCompleteMode.SuggestAppend;
+            _cmbGlAccount.AutoCompleteSource = AutoCompleteSource.ListItems;
+        }
+
+        private TreeNode CoaNode(GlAccount a, bool orphan)
+        {
+            TreeNode node = new TreeNode(a.AccountCode + "  " + a.AccountName +
+                (a.IsActive ? "" : "  [غیرفعال]") +
+                (a.AllowPosting ? "" : "  [سرفصل]") +
+                (orphan ? "  [بدون والد]" : ""));
+            node.Tag = a;
+            if (!a.IsActive) node.ForeColor = UiTheme.TextMuted;
+            else if (!a.IsLeaf) node.ForeColor = UiTheme.Primary;
+            return node;
+        }
+
+        private bool CoaMatchesFilter(GlAccount a)
+        {
+            if (a == null) return false;
+            string typeSel = _cmbCoaType != null && _cmbCoaType.SelectedItem != null
+                ? _cmbCoaType.SelectedItem.ToString() : "همه انواع";
+            if (typeSel == "دارایی" && a.AccountTypeCode != LedgerCodes.TypeAsset) return false;
+            if (typeSel == "بدهی" && a.AccountTypeCode != LedgerCodes.TypeLiability) return false;
+            if (typeSel == "حقوق مالکانه" && a.AccountTypeCode != LedgerCodes.TypeEquity) return false;
+            if (typeSel == "درآمد" && a.AccountTypeCode != LedgerCodes.TypeRevenue) return false;
+            if (typeSel == "هزینه" && a.AccountTypeCode != LedgerCodes.TypeExpense) return false;
+            string q = _txtCoaSearch != null ? (_txtCoaSearch.Text ?? "").Trim() : "";
+            if (q.Length == 0) return true;
+            return (a.AccountCode ?? "").IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0
+                || (a.AccountName ?? "").IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private void ShowCoaUsage()
+        {
+            if (_lblCoaInfo == null) return;
+            GlAccount a = SelectedAccount();
+            if (a == null) { _lblCoaInfo.Text = ""; return; }
+            AccountUsageInfo u = _coa.GetUsage(a.AccountId, _identity);
+            _lblCoaInfo.Text = a.AccountCode + "  " + a.AccountName
+                + "  ·  نوع " + LedgerUiText.TypeName(a.AccountTypeCode)
+                + "  ·  زیرمجموعه " + u.ChildCount
+                + "  ·  گردش " + u.PostedLineCount
+                + (string.IsNullOrEmpty(u.LastPostingDate) ? "" : ("  ·  آخرین سند " + u.LastPostingDate))
+                + (u.CanDelete ? "  ·  قابل حذف" : "  ·  حذف مجاز نیست (غیرفعال کنید)");
+        }
+
+        private void EditAccount()
+        {
+            GlAccount a = SelectedAccount();
+            if (a == null) return;
+            using (Form dlg = SmallDialog("ویرایش حساب", 420, 260))
+            {
+                TextBox code = Field(dlg, "کد", 16, 40, 240);
+                code.Text = a.AccountCode;
+                TextBox name = Field(dlg, "نام", 16, 90, 240);
+                name.Text = a.AccountName;
+                ComboBox type = Combo(dlg, "نوع", 16, 140, 240);
+                IList<GlAccountType> types = _coa.ListTypes(CompanyId());
+                for (int i = 0; i < types.Count; i++)
+                    type.Items.Add(types[i].AccountTypeCode + " — " + LedgerUiText.TypeName(types[i].AccountTypeCode));
+                for (int i = 0; i < type.Items.Count; i++)
+                    if (type.Items[i].ToString().StartsWith(a.AccountTypeCode))
+                        type.SelectedIndex = i;
+                Button ok = Btn("ذخیره", delegate
+                {
+                    string typeCode = type.SelectedItem != null ? type.SelectedItem.ToString().Split('—')[0].Trim() : a.AccountTypeCode;
+                    LedgerResult r = _coa.Update(new UpdateAccountCommand
+                    {
+                        AccountId = a.AccountId,
+                        ExpectedRowVersion = a.RowVersion,
+                        AccountCode = code.Text,
+                        AccountName = name.Text,
+                        AccountTypeCode = typeCode,
+                        ParentAccountId = a.ParentAccountId,
+                        IsContra = a.IsContra
+                    }, _identity);
+                    ShowResult(r);
+                    if (r.Ok) { dlg.DialogResult = DialogResult.OK; dlg.Close(); }
+                });
+                ok.Left = 16; ok.Top = 190; dlg.Controls.Add(ok);
+                dlg.ShowDialog(this);
+            }
+            ReloadCoa();
+        }
+
+        private void DeleteAccountSafe()
+        {
+            GlAccount a = SelectedAccount();
+            if (a == null) return;
+            if (!UiTheme.ShowConfirm(this, "اگر حساب گردش یا زیرمجموعه داشته باشد حذف نمی‌شود. ادامه؟", "حذف حساب"))
+                return;
+            ShowResult(_coa.SoftDelete(new SoftDeleteCommand { EntityId = a.AccountId, ExpectedRowVersion = a.RowVersion }, _identity));
+            ReloadCoa();
+        }
+
+        private void ShowAccountDependencies()
+        {
+            GlAccount a = SelectedAccount();
+            if (a == null) return;
+            AccountUsageInfo u = _coa.GetUsage(a.AccountId, _identity);
+            string msg = "حساب: " + a.AccountCode + "  " + a.AccountName + Environment.NewLine
+                + "نوع: " + LedgerUiText.TypeName(a.AccountTypeCode) + Environment.NewLine
+                + "زیرمجموعه: " + u.ChildCount + Environment.NewLine
+                + "خطوط دفتر کل: " + u.PostedLineCount + Environment.NewLine
+                + "آخرین سند: " + (string.IsNullOrEmpty(u.LastPostingDate) ? "—" : u.LastPostingDate) + Environment.NewLine
+                + (u.CanDelete ? "حذف نرم مجاز است." : "حذف مجاز نیست؛ در صورت نیاز غیرفعال کنید.");
+            UiTheme.ShowInfo(this, msg);
         }
 
         private void AddChildAccount()
@@ -340,7 +515,7 @@ namespace CaseManagement.Accounting.Ledger.Adapters
             for (int i = 0; i < years.Count; i++)
             {
                 GlFiscalYear y = years[i];
-                table.Rows.Add(y.FiscalYearId, y.Code, y.Name, y.StartDate, y.EndDate, y.Status, y.RowVersion);
+                table.Rows.Add(y.FiscalYearId, y.Code, y.Name, y.StartDate, y.EndDate, AccountingChrome.StatusFa(y.Status), y.RowVersion);
             }
             _gridYears.DataSource = table;
             HideCol(_gridYears, "Id"); HideCol(_gridYears, "RV");
@@ -364,7 +539,7 @@ namespace CaseManagement.Accounting.Ledger.Adapters
                 for (int i = 0; i < periods.Count; i++)
                 {
                     GlFiscalPeriod p = periods[i];
-                    table.Rows.Add(p.FiscalPeriodId, p.PeriodNo, p.Name, p.StartDate, p.EndDate, p.Status, p.RowVersion);
+                    table.Rows.Add(p.FiscalPeriodId, p.PeriodNo, p.Name, p.StartDate, p.EndDate, AccountingChrome.StatusFa(p.Status), p.RowVersion);
                 }
             }
             _gridPeriods.DataSource = table;
@@ -466,6 +641,15 @@ namespace CaseManagement.Accounting.Ledger.Adapters
             ReloadCalendar();
         }
 
+        private void UnlockSelectedPeriod()
+        {
+            long id = SelectedId(_gridPeriods);
+            long rv = SelectedRv(_gridPeriods);
+            if (id <= 0) return;
+            ShowResult(_calendar.UnlockPeriod(new CalendarStatusCommand { EntityId = id, ExpectedRowVersion = rv }, _identity));
+            ReloadCalendar();
+        }
+
         private void InitNextYear()
         {
             long id = SelectedId(_gridYears);
@@ -536,7 +720,12 @@ namespace CaseManagement.Accounting.Ledger.Adapters
 
         private void ReloadJournals()
         {
-            IList<GlJournal> list = _gl.ListJournals(_txtFrom != null ? _txtFrom.Text : "", _txtTo != null ? _txtTo.Text : "", _identity);
+            string status = JournalStatusFilter();
+            IList<GlJournal> list = _gl.ListJournals(
+                _txtFrom != null ? _txtFrom.Text : "",
+                _txtTo != null ? _txtTo.Text : "",
+                status,
+                _identity);
             DataTable table = new System.Data.DataTable();
             table.Columns.Add("Id", typeof(long));
             table.Columns.Add("شماره");
@@ -544,14 +733,32 @@ namespace CaseManagement.Accounting.Ledger.Adapters
             table.Columns.Add("شرح");
             table.Columns.Add("وضعیت");
             table.Columns.Add("منبع");
+            table.Columns.Add("ماژول");
+            table.Columns.Add("سند مبدأ");
             table.Columns.Add("RV", typeof(long));
             for (int i = 0; i < list.Count; i++)
             {
                 GlJournal j = list[i];
-                table.Rows.Add(j.JournalId, j.JournalNumber, j.PostingDate, j.Description, j.Status, j.JournalSource, j.RowVersion);
+                table.Rows.Add(j.JournalId, j.JournalNumber, j.PostingDate, j.Description,
+                    AccountingChrome.StatusFa(j.Status), AccountingChrome.SourceFa(j.JournalSource),
+                    j.SourceModule ?? "",
+                    j.SourceDocumentId.HasValue ? j.SourceDocumentType + " #" + j.SourceDocumentId.Value : "",
+                    j.RowVersion);
             }
             _gridJournals.DataSource = table;
             HideCol(_gridJournals, "Id"); HideCol(_gridJournals, "RV");
+        }
+
+        private string JournalStatusFilter()
+        {
+            if (!string.IsNullOrWhiteSpace(_journalStatusFilter)) return _journalStatusFilter;
+            string s = _cmbJournalStatus != null && _cmbJournalStatus.SelectedItem != null
+                ? _cmbJournalStatus.SelectedItem.ToString() : "همه";
+            if (s == "پیش‌نویس") return LedgerCodes.JournalDraft;
+            if (s == "تأییدشده") return LedgerCodes.JournalApproved;
+            if (s == "ثبت‌شده") return LedgerCodes.JournalPosted;
+            if (s == "برگشت‌خورده") return LedgerCodes.JournalReversed;
+            return "";
         }
 
         private void NewJournal()
@@ -567,10 +774,91 @@ namespace CaseManagement.Accounting.Ledger.Adapters
             if (!loaded.Ok) { ShowResult(loaded); return; }
             if (loaded.Journal.Status != LedgerCodes.JournalDraft)
             {
-                UiTheme.ShowWarning(this, "فقط پیش‌نویس قابل ویرایش است.");
+                ShowJournalLines(loaded.Journal);
                 return;
             }
             EditJournal(loaded.Journal.JournalId, loaded.Journal.RowVersion);
+        }
+
+        private void DeleteDraft()
+        {
+            long id = SelectedId(_gridJournals);
+            long rv = SelectedRv(_gridJournals);
+            if (id <= 0) return;
+            if (!UiTheme.ShowConfirm(this, "پیش‌نویس انتخاب‌شده حذف شود؟", "حذف پیش‌نویس")) return;
+            ShowResult(_gl.SoftDeleteDraft(new JournalStatusCommand
+            {
+                JournalId = id,
+                ExpectedRowVersion = rv
+            }, _identity));
+            ReloadJournals();
+        }
+
+        private void OpenSelectedJournal()
+        {
+            long id = SelectedId(_gridJournals);
+            if (id <= 0) return;
+            LedgerResult loaded = _gl.GetJournal(id, _identity);
+            if (!loaded.Ok) { ShowResult(loaded); return; }
+            ShowJournalLines(loaded.Journal);
+        }
+
+        private void ShowJournalLines(GlJournal journal)
+        {
+            using (Form dlg = SmallDialog("گردش سند " + journal.JournalNumber, 720, 420))
+            {
+                DataGridView g = Grid();
+                g.Dock = DockStyle.Fill;
+                DataTable t = new DataTable();
+                t.Columns.Add("ردیف");
+                t.Columns.Add("حساب");
+                t.Columns.Add("شرح");
+                t.Columns.Add("بدهکار");
+                t.Columns.Add("بستانکار");
+                t.Columns.Add("مرکز هزینه");
+                t.Columns.Add("پروژه");
+                t.Columns.Add("طرف‌حساب");
+                t.Columns.Add("صندوق");
+                long dr = 0, cr = 0;
+                if (journal.Lines != null)
+                {
+                    for (int i = 0; i < journal.Lines.Count; i++)
+                    {
+                        GlJournalLine line = journal.Lines[i];
+                        if (line.DebitMinor == 0 && line.CreditMinor == 0) continue;
+                        dr += line.DebitBaseMinor;
+                        cr += line.CreditBaseMinor;
+                        t.Rows.Add(line.LineNo, line.AccountId, line.Description,
+                            LedgerUiText.Money(line.DebitBaseMinor, _minorUnits),
+                            LedgerUiText.Money(line.CreditBaseMinor, _minorUnits),
+                            line.CostCenterId.HasValue ? line.CostCenterId.Value.ToString() : "",
+                            line.ProjectId.HasValue ? line.ProjectId.Value.ToString() : "",
+                            line.PartyId.HasValue ? line.PartyId.Value.ToString() : "",
+                            line.FundId.HasValue ? line.FundId.Value.ToString() : "");
+                    }
+                }
+                g.DataSource = t;
+                g.CellFormatting += ColorLedgerCells;
+                dlg.Controls.Add(g);
+                string src = "";
+                if (!string.IsNullOrWhiteSpace(journal.SourceModule))
+                    src = "   ·   مبدأ: " + journal.SourceModule + " / " + journal.SourceDocumentType +
+                        (journal.SourceDocumentId.HasValue ? " #" + journal.SourceDocumentId.Value : "");
+                if (journal.ReversesJournalId.HasValue)
+                    src += "   ·   برگشت سند #" + journal.ReversesJournalId.Value;
+                Label info = new Label
+                {
+                    Dock = DockStyle.Top, Height = 52, TextAlign = ContentAlignment.MiddleRight,
+                    Text = "وضعیت: " + AccountingChrome.StatusFa(journal.Status)
+                        + "   ·   تاریخ: " + journal.PostingDate
+                        + "   ·   منبع: " + AccountingChrome.SourceFa(journal.JournalSource)
+                        + src
+                        + "   ·   بدهکار " + Money(dr) + " / بستانکار " + Money(cr)
+                        + (dr == cr ? "  —  تراز" : "  —  نامتراز")
+                };
+                dlg.Controls.Add(info);
+                dlg.ShowDialog(this);
+            }
         }
 
         private void EditJournal(long journalId, long expected)
@@ -656,6 +944,8 @@ namespace CaseManagement.Accounting.Ledger.Adapters
             long id = SelectedId(_gridJournals);
             long rv = SelectedRv(_gridJournals);
             if (id <= 0) return;
+            if (!UiTheme.ShowConfirm(this, "سند برگشت برای سند انتخاب‌شده صادر شود؟ سند اصلی باطل نمی‌شود؛ یک سند معکوس ثبت می‌گردد.", "برگشت سند"))
+                return;
             ShowResult(_gl.Reverse(new ReverseJournalCommand
             {
                 JournalId = id,
@@ -681,24 +971,107 @@ namespace CaseManagement.Accounting.Ledger.Adapters
                 CenterId = ParseLong(_txtCenter.Text),
                 FiscalYearId = SelectedFilterId(_cmbYear),
                 CostCenterId = SelectedFilterId(_cmbCostCenter),
-                ProjectId = SelectedFilterId(_cmbProject)
+                ProjectId = SelectedFilterId(_cmbProject),
+                DetailKind = SelectedDetailKind()
             };
             string kind = _cmbReport.SelectedItem != null ? _cmbReport.SelectedItem.ToString() : "";
             DataTable table = new System.Data.DataTable();
             _lblReportNote.Text = "";
             if (kind == "دفتر کل")
             {
+                table.Columns.Add("JournalId", typeof(long));
+                table.Columns.Add("LineKind");
                 table.Columns.Add("تاریخ"); table.Columns.Add("شماره"); table.Columns.Add("شرح");
                 table.Columns.Add("بدهکار"); table.Columns.Add("بستانکار"); table.Columns.Add("مانده");
                 IList<GeneralLedgerLineRow> rows = _reports.GetGeneralLedger(q, _identity);
                 for (int i = 0; i < rows.Count; i++)
                 {
                     GeneralLedgerLineRow r = rows[i];
-                    table.Rows.Add(r.PostingDate, r.JournalNumber, r.Description,
+                    table.Rows.Add(r.JournalId, r.LineKind ?? "", r.PostingDate, r.JournalNumber, r.Description,
                         LedgerUiText.Money(r.DebitBaseMinor, _minorUnits),
                         LedgerUiText.Money(r.CreditBaseMinor, _minorUnits),
                         LedgerUiText.Money(r.RunningNet, _minorUnits));
                 }
+                AccountLedgerSummary sum = _reports.GetAccountSummary(q, _identity);
+                _lblReportNote.Text = q.AccountId <= 0
+                    ? "برای دفتر کل یک حساب برگ انتخاب کنید."
+                    : ("افتتاح " + Money(sum.OpeningNet)
+                        + "  ·  گردش بدهکار " + Money(sum.PeriodDebit)
+                        + " / بستانکار " + Money(sum.PeriodCredit)
+                        + "  ·  اختتام " + Money(sum.ClosingNet)
+                        + (sum.OpeningPlusMovementEqualsClosing ? "  —  افتتاح + گردش = اختتام" : "  —  هشدار مانده"));
+            }
+            else if (kind == "دفتر روزنامه" || kind == "دفتر معین" || kind == "دفتر تفصیلی")
+            {
+                table.Columns.Add("JournalId", typeof(long));
+                table.Columns.Add("LineKind");
+                table.Columns.Add("تاریخ"); table.Columns.Add("شماره");
+                if (kind == "دفتر تفصیلی") table.Columns.Add("تفصیل");
+                table.Columns.Add("حساب"); table.Columns.Add("نام حساب");
+                table.Columns.Add("شرح"); table.Columns.Add("بدهکار"); table.Columns.Add("بستانکار");
+                if (kind != "دفتر روزنامه") table.Columns.Add("مانده");
+                IList<DaybookLineRow> rows = kind == "دفتر تفصیلی"
+                    ? _reports.GetDetailLedger(q, _identity)
+                    : (kind == "دفتر معین" ? _reports.GetSubsidiary(q, _identity) : _reports.GetDaybook(q, _identity));
+                long dr = 0, cr = 0;
+                for (int i = 0; i < rows.Count; i++)
+                {
+                    DaybookLineRow r = rows[i];
+                    if (r.LineKind == LedgerCodes.LineMovement)
+                    {
+                        dr += r.DebitBaseMinor;
+                        cr += r.CreditBaseMinor;
+                    }
+                    if (kind == "دفتر تفصیلی")
+                        table.Rows.Add(r.JournalId, r.LineKind ?? "", r.PostingDate, r.JournalNumber, r.DimensionName,
+                            r.AccountCode, r.AccountName, r.Description,
+                            LedgerUiText.Money(r.DebitBaseMinor, _minorUnits),
+                            LedgerUiText.Money(r.CreditBaseMinor, _minorUnits),
+                            LedgerUiText.Money(r.RunningNet, _minorUnits));
+                    else if (kind == "دفتر معین")
+                        table.Rows.Add(r.JournalId, r.LineKind ?? "", r.PostingDate, r.JournalNumber, r.AccountCode, r.AccountName, r.Description,
+                            LedgerUiText.Money(r.DebitBaseMinor, _minorUnits),
+                            LedgerUiText.Money(r.CreditBaseMinor, _minorUnits),
+                            LedgerUiText.Money(r.RunningNet, _minorUnits));
+                    else
+                        table.Rows.Add(r.JournalId, r.LineKind ?? "", r.PostingDate, r.JournalNumber, r.AccountCode, r.AccountName, r.Description,
+                            LedgerUiText.Money(r.DebitBaseMinor, _minorUnits),
+                            LedgerUiText.Money(r.CreditBaseMinor, _minorUnits));
+                }
+                _lblReportNote.Text = rows.Count.ToString() + " ردیف  ·  بدهکار " + Money(dr) + " / بستانکار " + Money(cr)
+                    + (kind == "دفتر روزنامه" ? (dr == cr ? "  —  تراز روزنامه برقرار است." : "  —  هشدار: بدهکار ≠ بستانکار") : "");
+            }
+            else if (kind == "گردش اسناد")
+            {
+                table.Columns.Add("JournalId", typeof(long));
+                table.Columns.Add("شماره"); table.Columns.Add("تاریخ"); table.Columns.Add("شرح");
+                table.Columns.Add("وضعیت"); table.Columns.Add("منبع"); table.Columns.Add("ماژول");
+                table.Columns.Add("سند مبدأ"); table.Columns.Add("بدهکار"); table.Columns.Add("بستانکار");
+                IList<DocumentFlowRow> docs = _reports.GetDocumentFlow(q, _identity);
+                int unbalanced = 0;
+                for (int i = 0; i < docs.Count; i++)
+                {
+                    DocumentFlowRow d = docs[i];
+                    if (!d.Balanced) unbalanced++;
+                    table.Rows.Add(d.JournalId, d.JournalNumber, d.PostingDate, d.Description,
+                        AccountingChrome.StatusFa(d.Status), AccountingChrome.SourceFa(d.JournalSource),
+                        d.SourceModule ?? "",
+                        d.SourceDocumentId.HasValue ? d.SourceDocumentType + " #" + d.SourceDocumentId.Value : "",
+                        Money(d.DebitBaseMinor), Money(d.CreditBaseMinor));
+                }
+                _lblReportNote.Text = docs.Count.ToString() + " سند"
+                    + (unbalanced == 0 ? "  —  همهٔ اسناد تراز هستند." : ("  —  هشدار: " + unbalanced + " سند نامتراز"));
+            }
+            else if (kind == "جریان نقدی")
+            {
+                table.Columns.Add("بخش"); table.Columns.Add("کد"); table.Columns.Add("حساب"); table.Columns.Add("مبلغ");
+                CashFlowResult cf = _reports.GetCashFlow(q, _identity);
+                table.Rows.Add("افتتاح نقد", "", "", Money(cf.OpeningMinor));
+                table.Rows.Add("ورود نقد", "", "", Money(cf.InflowMinor));
+                table.Rows.Add("خروج نقد", "", "", Money(cf.OutflowMinor));
+                table.Rows.Add("اختتام نقد", "", "", Money(cf.ClosingMinor));
+                FillStatement(table, "حساب نقدی", cf.Lines);
+                _lblReportNote.Text = "مانده نقد: " + Money(cf.ClosingMinor);
             }
             else if (kind == "تراز آزمایشی")
             {
@@ -752,6 +1125,42 @@ namespace CaseManagement.Accounting.Ledger.Adapters
                 _lblReportNote.Text = "سود (زیان) خالص: " + Money(pl.NetIncome);
             }
             _gridReport.DataSource = table;
+            HideCol(_gridReport, "JournalId");
+            HideCol(_gridReport, "LineKind");
+            HideCol(_gridReport, "Id");
+            HideCol(_gridReport, "RV");
+        }
+
+        private void ExportReportExcel()
+        {
+            if (_gridReport.DataSource == null) RunReport();
+            DataTable table = _gridReport.DataSource as System.Data.DataTable;
+            if (table == null || table.Rows.Count == 0)
+            {
+                UiTheme.ShowWarning(this, "ابتدا گزارش را اجرا کنید.");
+                return;
+            }
+            string title = _cmbReport.SelectedItem != null ? _cmbReport.SelectedItem.ToString() : "گزارش";
+            using (SaveFileDialog sfd = new SaveFileDialog { Filter = "فایل اکسل|*.xlsx", FileName = title + ".xlsx" })
+            {
+                if (sfd.ShowDialog(this) != DialogResult.OK) return;
+                try
+                {
+                    using (ClosedXML.Excel.XLWorkbook wb = new ClosedXML.Excel.XLWorkbook())
+                    {
+                        ClosedXML.Excel.IXLWorksheet ws = wb.Worksheets.Add("گزارش");
+                        List<int> vis = VisibleColumnIndexes(table);
+                        for (int c = 0; c < vis.Count; c++)
+                            ws.Cell(1, c + 1).Value = table.Columns[vis[c]].ColumnName;
+                        for (int r = 0; r < table.Rows.Count; r++)
+                            for (int c = 0; c < vis.Count; c++)
+                                ws.Cell(r + 2, c + 1).Value = Convert.ToString(table.Rows[r][vis[c]]);
+                        wb.SaveAs(sfd.FileName);
+                    }
+                    UiTheme.ShowSuccess(this, "فایل اکسل ذخیره شد:\n" + sfd.FileName);
+                }
+                catch (Exception ex) { UiTheme.ShowError(this, "خطا در خروجی اکسل: " + ex.Message); }
+            }
         }
 
         private void PrintReport()
@@ -760,6 +1169,25 @@ namespace CaseManagement.Accounting.Ledger.Adapters
             DataTable table = _gridReport.DataSource as System.Data.DataTable;
             if (table == null) return;
             string title = _cmbReport.SelectedItem != null ? _cmbReport.SelectedItem.ToString() : "گزارش";
+            PrintLedgerTable(table, title, true);
+        }
+
+        private void PrintReportDirect()
+        {
+            if (_gridReport.DataSource == null) RunReport();
+            DataTable table = _gridReport.DataSource as System.Data.DataTable;
+            if (table == null || table.Rows.Count == 0)
+            {
+                UiTheme.ShowWarning(this, "ابتدا گزارش را اجرا کنید.");
+                return;
+            }
+            string title = _cmbReport.SelectedItem != null ? _cmbReport.SelectedItem.ToString() : "گزارش";
+            PrintLedgerTable(table, title, false);
+        }
+
+        private void PrintLedgerTable(DataTable table, string title, bool preview)
+        {
+            List<int> vis = VisibleColumnIndexes(table);
             int rowIndex = 0;
             using (PrintDocument doc = new PrintDocument())
             {
@@ -767,31 +1195,113 @@ namespace CaseManagement.Accounting.Ledger.Adapters
                 doc.PrintPage += delegate (object s, PrintPageEventArgs e)
                 {
                     float y = e.MarginBounds.Top;
+                    using (StringFormat rtl = new StringFormat(StringFormatFlags.DirectionRightToLeft))
                     using (Font f = UiTheme.FontBold(14F))
-                        e.Graphics.DrawString(title, f, Brushes.Black, e.MarginBounds.Right - 200, y);
+                    {
+                        rtl.Alignment = StringAlignment.Far;
+                        e.Graphics.DrawString(title, f, Brushes.Black, e.MarginBounds, rtl);
+                    }
                     y += 36;
-                    int cols = table.Columns.Count;
+                    int cols = vis.Count;
                     float colW = e.MarginBounds.Width / Math.Max(1, cols);
                     using (Font hf = UiTheme.FontBold(9F))
                     using (Font bf = UiTheme.Font(9F))
+                    using (StringFormat rtl = new StringFormat(StringFormatFlags.DirectionRightToLeft))
                     {
+                        rtl.Trimming = StringTrimming.EllipsisCharacter;
                         for (int c = 0; c < cols; c++)
-                            e.Graphics.DrawString(table.Columns[c].ColumnName, hf, Brushes.Black, e.MarginBounds.Left + c * colW, y);
+                            e.Graphics.DrawString(table.Columns[vis[c]].ColumnName, hf, Brushes.Black,
+                                e.MarginBounds.Left + c * colW, y);
                         y += 22;
                         while (rowIndex < table.Rows.Count)
                         {
                             if (y > e.MarginBounds.Bottom - 24) { e.HasMorePages = true; return; }
                             for (int c = 0; c < cols; c++)
-                                e.Graphics.DrawString(Convert.ToString(table.Rows[rowIndex][c]), bf, Brushes.Black, e.MarginBounds.Left + c * colW, y);
+                                e.Graphics.DrawString(Convert.ToString(table.Rows[rowIndex][vis[c]]), bf, Brushes.Black,
+                                    new RectangleF(e.MarginBounds.Left + c * colW, y, colW, 18), rtl);
                             y += 18;
                             rowIndex++;
                         }
                     }
                     e.HasMorePages = false;
                 };
-                using (PrintPreviewDialog preview = new PrintPreviewDialog { Document = doc, Width = 900, Height = 700 })
-                    preview.ShowDialog(this);
+                if (preview)
+                {
+                    using (PrintPreviewDialog previewDlg = new PrintPreviewDialog { Document = doc, Width = 900, Height = 700 })
+                        previewDlg.ShowDialog(this);
+                }
+                else
+                {
+                    using (PrintDialog dlg = new PrintDialog { Document = doc, UseEXDialog = true })
+                    {
+                        if (dlg.ShowDialog(this) == DialogResult.OK)
+                            doc.Print();
+                    }
+                }
             }
+        }
+
+        private List<int> VisibleColumnIndexes(DataTable table)
+        {
+            List<int> vis = new List<int>();
+            if (table == null) return vis;
+            for (int c = 0; c < table.Columns.Count; c++)
+            {
+                string name = table.Columns[c].ColumnName;
+                if (name == "JournalId" || name == "LineKind" || name == "Id" || name == "RV") continue;
+                vis.Add(c);
+            }
+            return vis;
+        }
+
+        private void DrillFromReport()
+        {
+            if (_gridReport == null || _gridReport.CurrentRow == null) return;
+            if (!_gridReport.Columns.Contains("JournalId")) return;
+            object v = _gridReport.CurrentRow.Cells["JournalId"].Value;
+            if (v == null || v == DBNull.Value) return;
+            long id = Convert.ToInt64(v);
+            if (id <= 0) return;
+            LedgerResult loaded = _gl.GetJournal(id, _identity);
+            if (!loaded.Ok) { ShowResult(loaded); return; }
+            ShowJournalLines(loaded.Journal);
+        }
+
+        private void ColorLedgerCells(object sender, DataGridViewCellFormattingEventArgs e)
+        {
+            DataGridView grid = sender as DataGridView;
+            if (grid == null || e.RowIndex < 0 || e.ColumnIndex < 0) return;
+            DataGridViewRow row = grid.Rows[e.RowIndex];
+            string kind = "";
+            if (grid.Columns.Contains("LineKind") && row.Cells["LineKind"].Value != null)
+                kind = Convert.ToString(row.Cells["LineKind"].Value);
+            if (kind == LedgerCodes.LineOpening || kind == LedgerCodes.LineClosing)
+            {
+                e.CellStyle.BackColor = kind == LedgerCodes.LineOpening ? UiTheme.HoverTint : UiTheme.WarningLight;
+                e.CellStyle.Font = UiTheme.FontBold(9F);
+            }
+            string col = grid.Columns[e.ColumnIndex].Name;
+            if (col == "بدهکار" && !IsZeroMoney(e.Value))
+                e.CellStyle.ForeColor = UiTheme.Success;
+            if (col == "بستانکار" && !IsZeroMoney(e.Value))
+                e.CellStyle.ForeColor = UiTheme.Danger;
+        }
+
+        private static bool IsZeroMoney(object value)
+        {
+            string s = Convert.ToString(value) ?? "";
+            s = s.Replace("۰", "0").Replace("٫", "").Replace(",", "").Replace(" ", "");
+            return s.Length == 0 || s == "0" || s == "0.00" || s == "۰";
+        }
+
+        private string SelectedDetailKind()
+        {
+            string s = _cmbDetailKind != null && _cmbDetailKind.SelectedItem != null
+                ? _cmbDetailKind.SelectedItem.ToString() : "طرف‌حساب";
+            if (s == "صندوق/بانک") return LedgerCodes.DetailFund;
+            if (s == "مرکز هزینه") return LedgerCodes.DetailCostCenter;
+            if (s == "پروژه") return LedgerCodes.DetailProject;
+            return LedgerCodes.DetailParty;
         }
 
         private SaveDraftJournalCommand BuildDraft(string date, string desc, System.Data.DataTable lines, long journalId, long expected)
@@ -969,18 +1479,19 @@ namespace CaseManagement.Accounting.Ledger.Adapters
                 MultiSelect = false
             };
             UiTheme.StyleGrid(g);
+            AccountingChrome.PolishGrid(g);
             return g;
         }
 
         private Panel Toolbar(params Control[] buttons)
         {
-            Panel p = new Panel { Dock = DockStyle.Top, Height = 44, Padding = new Padding(6) };
+            Panel p = new Panel { Dock = DockStyle.Top, Height = 84, Padding = new Padding(6) };
             FlowLayoutPanel flow = new FlowLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 FlowDirection = FlowDirection.LeftToRight,
                 RightToLeft = RightToLeft.Yes,
-                WrapContents = false
+                WrapContents = true
             };
             for (int i = 0; i < buttons.Length; i++) flow.Controls.Add(buttons[i]);
             p.Controls.Add(flow);
@@ -1009,6 +1520,8 @@ namespace CaseManagement.Accounting.Ledger.Adapters
                 MaximizeBox = false,
                 MinimizeBox = false
             };
+            AccountingChrome.PrepareDialog(f);
+            f.Shown += delegate { AccountingChrome.Polish(f); };
             return f;
         }
 

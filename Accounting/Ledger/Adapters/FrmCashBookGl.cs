@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.Drawing;
 using System.Windows.Forms;
+using CaseManagement.Accounting;
 using CaseManagement.Accounting.Ledger.Application;
 using CaseManagement.Accounting.Ledger.Domain;
 using CaseManagement.Helpers;
@@ -30,20 +31,18 @@ namespace CaseManagement.Accounting.Ledger.Adapters
             IntegrationOutboxProcessor box = new IntegrationOutboxProcessor();
             _outbox = box;
             _monitor = box;
-            Text = ProductMode.IsErp ? "اتصال صندوق به دفتر کل" : "صندوق → دفتر کل";
-            RightToLeft = RightToLeft.Yes;
-            RightToLeftLayout = true;
-            BackColor = UiTheme.Background;
-            Font = UiTheme.Font(UiTheme.SizeBody);
-            UiTheme.MakeMainWindow(this, 1100, 640);
+            string heading = ProductMode.IsErp ? "اتصال صندوق به دفتر کل" : "صندوق → دفتر کل";
+            Text = heading;
+            AccountingChrome.MakeWorkspace(this, 1100, 640);
 
             TabControl tabs = new TabControl { Dock = DockStyle.Fill, RightToLeft = RightToLeft.Yes, RightToLeftLayout = true };
             tabs.TabPages.Add(BuildTxnTab());
             tabs.TabPages.Add(BuildMapTab());
             tabs.TabPages.Add(BuildOutboxTab());
             Controls.Add(tabs);
-            if (ProductMode.IsErp)
-                Controls.Add(ErpFormChrome.Header("اتصال صندوق به دفتر کل"));
+            Controls.Add(AccountingChrome.BuildStatusBar());
+            Controls.Add(AccountingChrome.BuildHeader(heading, AccountingChrome.Breadcrumb("دفتر کل", heading)));
+            AccountingChrome.Polish(this);
             ReloadTxn();
             ReloadMap();
             ReloadOutbox();
@@ -273,6 +272,7 @@ namespace CaseManagement.Accounting.Ledger.Adapters
                 AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill
             };
             UiTheme.StyleGrid(g);
+            AccountingChrome.PolishGrid(g);
             return g;
         }
 

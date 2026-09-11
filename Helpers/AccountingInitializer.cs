@@ -53,6 +53,9 @@ CREATE TABLE IF NOT EXISTS AccFund (
     CreatedAt      TEXT    NOT NULL DEFAULT (datetime('now'))
 );");
 
+                Exec(con, "CREATE INDEX IF NOT EXISTS IX_AccFund_Name ON AccFund(Name);");
+                Exec(con, "CREATE INDEX IF NOT EXISTS IX_AccFund_Center ON AccFund(CenterID);");
+
                 // ─── طرف حساب ────────────────────────────────────────────────
                 Exec(con, @"
 CREATE TABLE IF NOT EXISTS AccParty (
@@ -65,6 +68,8 @@ CREATE TABLE IF NOT EXISTS AccParty (
     CenterID   INTEGER NULL,
     CreatedAt  TEXT    NOT NULL DEFAULT (datetime('now'))
 );");
+                Exec(con, "CREATE INDEX IF NOT EXISTS IX_AccParty_Name ON AccParty(Name);");
+                Exec(con, "CREATE INDEX IF NOT EXISTS IX_AccParty_Center ON AccParty(CenterID);");
 
                 // ─── دسته‌بندی درآمد ─────────────────────────────────────────
                 Exec(con, @"
@@ -235,7 +240,7 @@ CREATE TABLE IF NOT EXISTS AccAudit (
                 // دیتابیس فعلی باعث شکست مهاجرت نشوند — گزارش صحت آن‌ها را
                 // فهرست می‌کند تا کاربر خودش تصمیم بگیرد).
                 Exec(con, "CREATE INDEX IF NOT EXISTS IX_AccTxn_DocNo ON AccTransaction(PeriodID, DocNo);");
-                Exec(con, "CREATE INDEX IF NOT EXISTS IX_AccTxn_Reversed ON AccTransaction(IsReversed);");
+                Exec(con, "CREATE INDEX IF NOT EXISTS IX_AccTxn_Date ON AccTransaction(TxnDate);");
                 Exec(con, "CREATE INDEX IF NOT EXISTS IX_AccStipend_Fund ON AccStipend(FundID);");
                 Exec(con, "CREATE INDEX IF NOT EXISTS IX_AccSalary_Fund ON AccSalary(FundID);");
                 Exec(con, "CREATE INDEX IF NOT EXISTS IX_AccExpItem_Fund ON AccExpenseItem(FundID);");
@@ -268,6 +273,62 @@ CREATE UNIQUE INDEX IF NOT EXISTS UX_AccOutbox_SourceOp
 ON AccOutbox(SourceModule, DocumentType, DocumentID, Operation);");
                 Exec(con, "CREATE INDEX IF NOT EXISTS IX_AccOutbox_Due ON AccOutbox(Status, NextAttemptAt, OutboxID);");
 
+                EnsureColumn(con, "AccTransaction", "LinkedTxnID", "INTEGER NULL");
+                Exec(con, "CREATE INDEX IF NOT EXISTS IX_AccTxn_Linked ON AccTransaction(LinkedTxnID);");
+
+                Exec(con, @"
+CREATE TABLE IF NOT EXISTS AccCheque (
+    ChequeID     INTEGER PRIMARY KEY AUTOINCREMENT,
+    ChequeNo     TEXT    NOT NULL,
+    ChequeDate   TEXT    NOT NULL,
+    DueDate      TEXT    NULL,
+    Direction    TEXT    NOT NULL,
+    PartyID      INTEGER NULL,
+    FundID       INTEGER NULL,
+    Amount       REAL    NOT NULL DEFAULT 0,
+    Status       TEXT    NOT NULL DEFAULT 'در جریان',
+    Note         TEXT    NULL,
+    TxnID        INTEGER NULL,
+    CenterID     INTEGER NULL,
+    CreatedBy    TEXT    NULL,
+    CreatedAt    TEXT    NOT NULL DEFAULT (datetime('now'))
+);");
+                Exec(con, "CREATE INDEX IF NOT EXISTS IX_AccCheque_Center ON AccCheque(CenterID, Status);");
+
+                Exec(con, @"
+CREATE TABLE IF NOT EXISTS AccBudget (
+    BudgetID     INTEGER PRIMARY KEY AUTOINCREMENT,
+    PeriodID     INTEGER NULL,
+    CategoryType TEXT    NULL,
+    CategoryID   INTEGER NULL,
+    Title        TEXT    NOT NULL,
+    Amount       REAL    NOT NULL DEFAULT 0,
+    Note         TEXT    NULL,
+    CenterID     INTEGER NULL,
+    CreatedBy    TEXT    NULL,
+    CreatedAt    TEXT    NOT NULL DEFAULT (datetime('now'))
+);");
+                Exec(con, "CREATE INDEX IF NOT EXISTS IX_AccBudget_Period ON AccBudget(PeriodID, CenterID);");
+
+                Exec(con, @"
+CREATE TABLE IF NOT EXISTS AccTradeReturn (
+    ReturnID       INTEGER PRIMARY KEY AUTOINCREMENT,
+    Kind           TEXT    NOT NULL,
+    DocNo          TEXT    NULL,
+    ReturnDate     TEXT    NOT NULL,
+    PartyID        INTEGER NULL,
+    FundID         INTEGER NULL,
+    PeriodID       INTEGER NULL,
+    Amount         REAL    NOT NULL DEFAULT 0,
+    OriginalDocNo  TEXT    NULL,
+    Description    TEXT    NULL,
+    LinkedTxnID    INTEGER NULL,
+    CenterID       INTEGER NULL,
+    CreatedBy      TEXT    NULL,
+    CreatedAt      TEXT    NOT NULL DEFAULT (datetime('now'))
+);");
+                Exec(con, "CREATE INDEX IF NOT EXISTS IX_AccTradeReturn_Kind ON AccTradeReturn(Kind, CenterID);");
+
                 SeedDefaults(con);
             }
 
@@ -282,6 +343,8 @@ ON AccOutbox(SourceModule, DocumentType, DocumentID, Operation);");
             CaseManagement.AiPlatform.Infrastructure.AiPlatformInitializer.Ensure();
             SchemaVersion.SetIfNewer(
                 SchemaVersion.ComponentAccounting, 6, "Accounting V1: year-end close and FX");
+            SchemaVersion.SetIfNewer(
+                SchemaVersion.ComponentAccounting, 8, "Accounting suite: transfer, cheques, budget, trade returns");
         }
 
         private static void SeedDefaults(SQLiteConnection con)

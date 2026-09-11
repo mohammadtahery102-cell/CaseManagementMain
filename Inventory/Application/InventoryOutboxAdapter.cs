@@ -46,6 +46,8 @@ namespace CaseManagement.Inventory.Application
             InvDocument doc = _store.GetDocument(row.DocumentId);
             if (doc == null)
                 return LedgerResult.Fail(LedgerErrorCodes.JournalMissing, "Inventory document not found.");
+            if (doc.Status == InventoryCodes.StatusReversed)
+                return LedgerResult.Success(0, 0);
 
             int companyId = doc.CompanyId > 0 ? doc.CompanyId : LedgerCodes.DefaultCompanyId;
             GlJournal existing = _repo.GetJournalBySource(companyId, LedgerCodes.SourceInventory,
@@ -55,7 +57,16 @@ namespace CaseManagement.Inventory.Application
             if (existing != null && existing.Status == LedgerCodes.JournalReversed)
                 return LedgerResult.Fail(LedgerErrorCodes.AlreadyReversed, "Inventory source journal was reversed.");
 
-            IList<InvItemLedger> ledgers = _store.ListLedgerForDocument(doc.DocumentId);
+            IList<InvItemLedger> ledgers = _store.ListOriginalLedgerForDocument(doc.DocumentId);
+            if (doc.DocumentType == InventoryCodes.TypeTransfer)
+            {
+                long signed = 0;
+                for (int i = 0; i < ledgers.Count; i++)
+                    signed += ledgers[i].QtyBase;
+                if (signed != 0)
+                    return LedgerResult.Fail(LedgerErrorCodes.Validation, "Transfer quantity is not conserved.");
+                return LedgerResult.Success(0, 0);
+            }
             long absValue = 0;
             for (int i = 0; i < ledgers.Count; i++)
             {
