@@ -3141,7 +3141,7 @@ WHERE UserID = @ID", con))
                 {
                     BackupHelper helper = new BackupHelper();
                     string path = helper.ExportEncryptedBackup(fbd.SelectedPath, password);
-                    SettingsHelper.Set(SettingsHelper.LastBackupDate, DateTime.Today.ToString("yyyy-MM-dd"));
+                    SettingsHelper.Set(SettingsHelper.LastBackupDate, DateTime.Today.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture));
                     AppendBackupOutput("Backup رمزنگاری‌شده با موفقیت ساخته شد: " + path);
                     LoadBackupSettings();
                 }

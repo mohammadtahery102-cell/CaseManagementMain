@@ -78,8 +78,8 @@ ORDER BY a.AssistanceDate DESC, a.AssistanceID DESC", con))
                 cmd.Parameters.AddWithValue("@District", (district ?? "").Trim());
                 cmd.Parameters.AddWithValue("@FormNo", formNo);
                 cmd.Parameters.AddWithValue("@ProgramName", (programName ?? "").Trim());
-                cmd.Parameters.AddWithValue("@DateFrom", dateFrom.HasValue ? dateFrom.Value.ToString("yyyy-MM-dd") : "");
-                cmd.Parameters.AddWithValue("@DateTo", dateTo.HasValue ? dateTo.Value.ToString("yyyy-MM-dd") : "");
+                cmd.Parameters.AddWithValue("@DateFrom", dateFrom.HasValue ? dateFrom.Value.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) : "");
+                cmd.Parameters.AddWithValue("@DateTo", dateTo.HasValue ? dateTo.Value.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) : "");
                 cmd.Parameters.AddWithValue("@AssistanceType", (assistanceType ?? "").Trim());
                 cmd.Parameters.AddWithValue("@PrintedMode", printedMode);
                 con.Open();
@@ -145,14 +145,14 @@ WHERE a.ReceiptNo IS NOT NULL AND (@CID = 0 OR c.CenterID = @CID)", con, tr))
             {
                 AssistanceID = Convert.ToInt32(row["AssistanceID"]),
                 CasID = Convert.ToInt32(row["CasID"]),
-                AssistanceDate = row["AssistanceDate"] == DBNull.Value ? DateTime.MinValue : Convert.ToDateTime(row["AssistanceDate"]),
+                AssistanceDate = row["AssistanceDate"] == DBNull.Value ? DateTime.MinValue : Convert.ToDateTime(row["AssistanceDate"], System.Globalization.CultureInfo.InvariantCulture),
                 Amount = row["Amount"] == DBNull.Value ? 0m : Convert.ToDecimal(row["Amount"]),
                 AssistanceType = GetString(row, "AssistanceType"),
                 Description = GetString(row, "Description"),
-                CreatedAt = row["CreatedAt"] == DBNull.Value ? (DateTime?)null : Convert.ToDateTime(row["CreatedAt"]),
+                CreatedAt = row["CreatedAt"] == DBNull.Value ? (DateTime?)null : Convert.ToDateTime(row["CreatedAt"], System.Globalization.CultureInfo.InvariantCulture),
                 CreatedBy = GetString(row, "CreatedBy"),
                 ReceiptNo = row.Table.Columns.Contains("ReceiptNo") && row["ReceiptNo"] != DBNull.Value ? (int?)Convert.ToInt32(row["ReceiptNo"]) : null,
-                PrintedAt = row.Table.Columns.Contains("PrintedAt") && row["PrintedAt"] != DBNull.Value ? (DateTime?)Convert.ToDateTime(row["PrintedAt"]) : null,
+                PrintedAt = row.Table.Columns.Contains("PrintedAt") && row["PrintedAt"] != DBNull.Value ? (DateTime?)Convert.ToDateTime(row["PrintedAt"], System.Globalization.CultureInfo.InvariantCulture) : null,
                 ProgramName = GetString(row, "ProgramName"),
                 PickupLocation = GetString(row, "PickupLocation"),
                 CoordinatorPhone = GetString(row, "CoordinatorPhone"),

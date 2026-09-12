@@ -1204,7 +1204,7 @@ LIMIT 1;", con))
         public static string ToPersianExportDate(string value)
         {
             DateTime dt;
-            if (!DateTime.TryParse(value, out dt))
+            if (!DateTime.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out dt))
                 return value;   // مقدارِ غیرتاریخ دست‌نخورده می‌ماند
 
             // ToPersianDateString → «1405/05/18»؛ برعکس می‌شود به «18/05/1405».

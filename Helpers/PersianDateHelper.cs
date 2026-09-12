@@ -188,7 +188,7 @@ namespace CaseManagement.Helpers
                         continue;
 
                     DateTime dt;
-                    if (DateTime.TryParse(row[columnName].ToString(), out dt))
+                    if (DateTime.TryParse(row[columnName].ToString(), CultureInfo.InvariantCulture, DateTimeStyles.None, out dt))
                         row[columnName] = ToPersianDateString(dt);
                 }
             }

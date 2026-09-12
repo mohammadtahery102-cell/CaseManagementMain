@@ -38,7 +38,7 @@ namespace CaseManagement.Helpers
                 DateTime lastDate;
 
                 int intervalDays = GetScheduleIntervalDays();
-                if (DateTime.TryParse(lastBackupDate, out lastDate) &&
+                if (DateTime.TryParse(lastBackupDate, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out lastDate) &&
                     (today - lastDate.Date).TotalDays < intervalDays)
                     return;
 
@@ -85,8 +85,8 @@ namespace CaseManagement.Helpers
                     TryWriteErrorLog(accMsg);
                 }
 
-                SetSetting(LastBackupDateKey, today.ToString("yyyy-MM-dd"));
-                SetSetting(SettingsHelper.LastBackupDate, today.ToString("yyyy-MM-dd"));
+                SetSetting(LastBackupDateKey, today.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture));
+                SetSetting(SettingsHelper.LastBackupDate, today.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture));
                 PruneOldBackups(autoBackupFolder);
                 AuditLogger.Log("بکاپ خودکار (رمزنگاری‌شده)", "Backup", 0, "",
                     accBackupPath == null ? backupPath : backupPath + " + " + accBackupPath);

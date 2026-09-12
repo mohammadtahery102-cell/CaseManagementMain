@@ -64,7 +64,7 @@ namespace CaseManagement.AI.Handlers
             if (string.IsNullOrWhiteSpace(title))
                 title = Truncate(rawQuery, 120);
 
-            string remindAtText = entities.ResolvedDate.Value.ToString("yyyy-MM-dd HH:mm");
+            string remindAtText = entities.ResolvedDate.Value.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture);
             int reminderId;
             try
             {

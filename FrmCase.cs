@@ -847,8 +847,8 @@ namespace CaseManagement
                     { "MigrationCardNumber", TextOrNull(txtMigrationCardNumber.Text) },
                     { "OriginCountry",       TextOrNull(txtOriginCountry.Text) },
                     { "DestinationCountry",  TextOrNull(txtDestinationCountry.Text) },
-                    { "DepartureDate",       dtpDepartureDate.Value.Date.ToString("yyyy-MM-dd") },
-                    { "ArrivalDate",         dtpArrivalDate.Value.Date.ToString("yyyy-MM-dd") },
+                    { "DepartureDate",       dtpDepartureDate.Value.Date.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) },
+                    { "ArrivalDate",         dtpArrivalDate.Value.Date.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) },
                     // یک‌طرفه از کنترلِ عمومیِ موجود (توضیح در Designer).
                     { "MaritalStatus",       TextOrNull(txtMaritalStatus.Text) },
                     { "AssistanceDuration",  hasDuration ? (object)duration : null },
