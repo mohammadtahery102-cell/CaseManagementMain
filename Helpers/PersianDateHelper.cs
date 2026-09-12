@@ -169,6 +169,56 @@ namespace CaseManagement.Helpers
             return ReinterpretIfJalali(parsed).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         }
 
+        // ─── مقدارِ ذخیره‌شده → متنِ شمسیِ آمادهٔ نمایش ──────────────────────
+        // آموزش — چرا این متد لازم شد: چند برچسب، مقدارِ خامِ ستونِ تاریخ را
+        // مستقیم به کاربر نشان می‌دادند. تا وقتی نویسنده هم معیوب بود و شمسی
+        // می‌نوشت، خروجی «درست» به‌نظر می‌رسید؛ پس رفعِ *تنهای* نویسنده، رابط
+        // را میلادی می‌کرد — یعنی رگرسیون. نویسنده و نمایش باید با هم عوض
+        // شوند و این متد سمتِ نمایش است.
+        //
+        // ⚠ مدارا با دادهٔ قدیمی عمدی است: تا پیش از اجرای «اصلاح تاریخ‌های
+        // شمسی» در مرکز کنترل، همین ستون‌ها هنوز مقدارِ شمسی دارند. بدونِ
+        // ReinterpretIfJalali، «1405-06-21» میلادی خوانده می‌شد و سالِ شمسیِ
+        // ~۷۸۴ نمایش داده می‌شد. پس این متد روی دیتابیسِ مهاجرت‌نکرده هم درست
+        // کار می‌کند.
+        //
+        // مقدارِ غیرتاریخ خام برگردانده می‌شود — هرگز پنهان نمی‌شود.
+        public static string StoredToPersianDisplay(object storedValue, string fallback = "")
+        {
+            if (storedValue == null || storedValue == DBNull.Value) return fallback;
+
+            string s = storedValue.ToString().Trim();
+            if (s.Length == 0) return fallback;
+
+            DateTime dt;
+            if (!DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.None, out dt))
+                return s;
+
+            dt = ReinterpretIfJalali(dt);
+
+            // ساعتِ صفر یعنی مقدار «فقط تاریخ» بوده؛ «۰۰:۰۰»ِ ساختگی نشان نده.
+            return dt.TimeOfDay == TimeSpan.Zero
+                ? ToPersianDateStringSafe(dt, fallback)
+                : ToPersianDateTimeStringSafe(dt, fallback);
+        }
+
+        // همتای فقط-تاریخِ ToPersianDateTimeStringSafe — همان محافظت در برابر
+        // مقدارِ خارج از بازهٔ PersianCalendar.
+        public static string ToPersianDateStringSafe(DateTime dt, string fallback = "—")
+        {
+            try
+            {
+                if (dt < _pc.MinSupportedDateTime || dt > _pc.MaxSupportedDateTime)
+                    return fallback;
+
+                return ToPersianDateString(dt);
+            }
+            catch
+            {
+                return fallback;
+            }
+        }
+
         public static DateTime Today()
         {
             DateTime now = DateTime.Now;
@@ -235,7 +285,12 @@ namespace CaseManagement.Helpers
 
                     DateTime dt;
                     if (DateTime.TryParse(row[columnName].ToString(), CultureInfo.InvariantCulture, DateTimeStyles.None, out dt))
-                        row[columnName] = ToPersianDateString(dt);
+                        // ReinterpretIfJalali: ستون ممکن است هنوز مقدارِ شمسیِ
+                        // به‌جامانده از نویسنده‌های معیوب داشته باشد (تا پیش از
+                        // اجرای «اصلاح تاریخ‌های شمسی» در مرکز کنترل). بدونِ آن،
+                        // «1405-06-21» میلادی خوانده و سالِ ~۷۸۴ چاپ می‌شد.
+                        row[columnName] = ToPersianDateStringSafe(ReinterpretIfJalali(dt),
+                                                                  row[columnName].ToString());
                 }
             }
         }

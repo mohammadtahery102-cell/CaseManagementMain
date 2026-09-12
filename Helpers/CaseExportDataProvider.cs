@@ -211,7 +211,12 @@ ORDER BY d.ScoreValue DESC, d.DetailID;", caseId);
         // ─── وضعیت اسناد (شاملِ تأییدیه) ────────────────────────────────────
         public static DataTable GetDocumentStatus(int caseId)
         {
-            return Query(@"
+            // آموزش — «تاریخ تأیید» تنها ستونِ تاریخِ این فراهم‌کننده است که
+            // خام از دیتابیس می‌آید. تا وقتی نویسنده‌اش شمسی می‌نوشت، خروجی
+            // تصادفاً درست به‌نظر می‌رسید؛ حالا که میلادی ذخیره می‌شود، بدونِ
+            // این تبدیل سندِ فارسی تاریخِ میلادی نشان می‌داد. بقیهٔ ستون‌های
+            // این کلاس تاریخ نیستند، پس تبدیل عمداً فقط روی همین یکی است.
+            DataTable table = Query(@"
 SELECT IFNULL(dc.Name, IFNULL(d.DocCategory, '')) AS [دسته سند],
        IFNULL(d.DocType, '')                      AS [نوع سند],
        IFNULL(d.OriginalFileName, '')             AS [نام فایل],
@@ -222,6 +227,9 @@ FROM TblDocs d
 LEFT JOIN TblDocumentCategory dc ON dc.DocumentCategoryID = d.DocumentCategoryID
 WHERE d.CasID = @CasID AND IFNULL(d.IsArchived, 0) = 0
 ORDER BY d.DocID;", caseId);
+
+            PersianDateHelper.ConvertDateColumnsToPersian(table, "تاریخ تأیید");
+            return table;
         }
 
         // ─── اسنادِ الزامیِ کم ───────────────────────────────────────────────

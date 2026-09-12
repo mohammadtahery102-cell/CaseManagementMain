@@ -1916,7 +1916,7 @@ namespace CaseManagement
                         {
                             double score = Convert.ToDouble(dr["VulnerabilityScore"]);
                             string band = dr["VulnerabilityBand"] == DBNull.Value ? "" : dr["VulnerabilityBand"].ToString();
-                            string date = dr["VulnerabilityScoreDate"] == DBNull.Value ? "" : dr["VulnerabilityScoreDate"].ToString();
+                            string date = dr["VulnerabilityScoreDate"] == DBNull.Value ? "" : Helpers.PersianDateHelper.StoredToPersianDisplay(dr["VulnerabilityScoreDate"]);
 
                             lblVulnScoreValue.Text = string.Format("امتیاز آسیب‌پذیری: {0} از ۱۰۰   |   سطح: {1}",
                                 score.ToString("0.#"),

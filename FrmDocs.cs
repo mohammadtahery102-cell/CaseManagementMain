@@ -490,7 +490,7 @@ namespace CaseManagement
                     ? (object)(SecurityContext.Username ?? "") : _loadedVerifiedBy);
             cmd.Parameters.AddWithValue("@VerifiedDate",
                 string.IsNullOrWhiteSpace(_loadedVerifiedDate)
-                    ? DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") : _loadedVerifiedDate);
+                    ? DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture) : _loadedVerifiedDate);
             cmd.Parameters.AddWithValue("@VerificationNotes",
                 string.IsNullOrWhiteSpace(txtVerificationNotes.Text)
                     ? (object)DBNull.Value : txtVerificationNotes.Text.Trim());
@@ -512,7 +512,8 @@ namespace CaseManagement
             if (chkIsVerified.Checked && !string.IsNullOrWhiteSpace(_loadedVerifiedBy))
             {
                 lblVerifiedInfo.Text = "تأییدکننده: " + _loadedVerifiedBy +
-                                       "   |   تاریخ تأیید: " + _loadedVerifiedDate;
+                                       "   |   تاریخ تأیید: " +
+                                       PersianDateHelper.StoredToPersianDisplay(_loadedVerifiedDate);
                 lblVerifiedInfo.ForeColor = UiTheme.Success;
             }
             else if (chkIsVerified.Checked)

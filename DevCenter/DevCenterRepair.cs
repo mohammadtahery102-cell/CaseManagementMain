@@ -488,7 +488,12 @@ namespace CaseManagement.DevCenter
                 new string[] { "TblCase",        "SurveyDate" },
                 new string[] { "TblFieldVisit",  "VisitDate"  },
                 new string[] { "TblCaseFunding", "StartDate"  },
-                new string[] { "TblCaseFunding", "EndDate"    }
+                new string[] { "TblCaseFunding", "EndDate"    },
+
+                // نویسنده‌ها در رفعِ جفتیِ موارد ۱۰/۱۱ اصلاح شدند (نویسنده +
+                // محلِ نمایش با هم، وگرنه رابط کاربری میلادی می‌شد)
+                new string[] { "TblCase", "VulnerabilityScoreDate" },
+                new string[] { "TblDocs", "VerifiedDate"           }
             };
 
             foreach (string[] pair in jalaliColumns)
