@@ -1617,7 +1617,7 @@ namespace CaseManagement
                 Helpers.FieldVisitService.SaveVisit(
                     currentVisitId,
                     currentCaseId,
-                    dtpVisitDate.Value.Date.ToString("yyyy-MM-dd"),
+                    dtpVisitDate.Value.Date.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
                     txtVisitorName.Text.Trim(),
                     txtVisitResult.Text.Trim(),
                     txtVisitRecommendation.Text.Trim(),
@@ -2191,7 +2191,7 @@ namespace CaseManagement
                 "تخصیص منبع تأمین مالی",
                 CaseManagement.Enterprise.EntField.Combo("Source", "منبع تأمین مالی", sourceItems[0].Key, sourceItems),
                 CaseManagement.Enterprise.EntField.Combo("Sponsor", "خیّر", "0", sponsorItems),
-                CaseManagement.Enterprise.EntField.Text("Start", "از تاریخ (yyyy-MM-dd)", DateTime.Today.ToString("yyyy-MM-dd")),
+                CaseManagement.Enterprise.EntField.Text("Start", "از تاریخ (yyyy-MM-dd)", DateTime.Today.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)),
                 CaseManagement.Enterprise.EntField.Text("End", "تا تاریخ (اختیاری)", ""),
                 CaseManagement.Enterprise.EntField.Multiline("Notes", "یادداشت", ""));
 

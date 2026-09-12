@@ -196,7 +196,7 @@ WHERE VisitID = @VisitID;", con))
             string visitResult, string recommendation, string notes)
         {
             cmd.Parameters.AddWithValue("@CasID", casId);
-            cmd.Parameters.AddWithValue("@VisitDate", visitDate ?? DateTime.Today.ToString("yyyy-MM-dd"));
+            cmd.Parameters.AddWithValue("@VisitDate", visitDate ?? DateTime.Today.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture));
             cmd.Parameters.AddWithValue("@VisitorUserID",
                 SecurityContext.IsLoggedIn ? (object)SecurityContext.UserId : DBNull.Value);
             cmd.Parameters.AddWithValue("@VisitorName", NullIfEmpty(visitorName));

@@ -475,12 +475,20 @@ namespace CaseManagement.DevCenter
             // آرایه اضافه کنید — بقیهٔ کار خودکار است.
             string[][] jalaliColumns = new string[][]
             {
+                // نویسنده‌ها در 4bf5e9a اصلاح شدند
                 new string[] { "TblCase",       "DepartureDate" },
                 new string[] { "TblCase",       "ArrivalDate"   },
                 new string[] { "TblMigrant",    "DepartureDate" },
                 new string[] { "TblMigrant",    "ArrivalDate"   },
                 new string[] { "TblReminder",   "RemindAt"      },
-                new string[] { "TblAppSettings","SettingValue"  }
+                new string[] { "TblAppSettings","SettingValue"  },
+
+                // نویسنده‌ها در رفعِ موارد ۷/۱۲/۱۳ اصلاح شدند
+                new string[] { "TblCase",        "CaseDate"   },
+                new string[] { "TblCase",        "SurveyDate" },
+                new string[] { "TblFieldVisit",  "VisitDate"  },
+                new string[] { "TblCaseFunding", "StartDate"  },
+                new string[] { "TblCaseFunding", "EndDate"    }
             };
 
             foreach (string[] pair in jalaliColumns)

@@ -371,8 +371,17 @@ VALUES (@CasID, @FundingSourceID, @SponsorID, @StartDate, @EndDate, @Notes,
                     cmd.Parameters.AddWithValue("@CasID", casId);
                     cmd.Parameters.AddWithValue("@FundingSourceID", fundingSourceId);
                     cmd.Parameters.AddWithValue("@SponsorID", sponsorId.HasValue ? (object)sponsorId.Value : DBNull.Value);
-                    cmd.Parameters.AddWithValue("@StartDate", NullIfEmpty(startDate));
-                    cmd.Parameters.AddWithValue("@EndDate", NullIfEmpty(endDate));
+                    // آموزش — این دو ستون از یک فیلدِ متنیِ آزاد پر می‌شوند
+                    // (EntField.Text در FrmCase)، نه از تاریخ‌گزین. پس کاربر
+                    // می‌تواند «1405/06/21» تایپ کند و آن رشته عیناً در ستونی
+                    // می‌نشست که قراردادش میلادیِ ISO است. نتیجه: فیلترِ تاریخِ
+                    // گزارش‌ساز روی این ستون مقایسهٔ رشته‌ای می‌کند و ردیفِ
+                    // شمسی را غلط می‌سنجد. نرمال‌سازی همین‌جا انجام می‌شود تا
+                    // هر سه مسیرِ فراخوان (افزودن/ویرایش/سینک) پوشش داده شوند.
+                    cmd.Parameters.AddWithValue("@StartDate",
+                        NullIfEmpty(PersianDateHelper.NormalizeUserDateToStored(startDate)));
+                    cmd.Parameters.AddWithValue("@EndDate",
+                        NullIfEmpty(PersianDateHelper.NormalizeUserDateToStored(endDate)));
                     cmd.Parameters.AddWithValue("@Notes", NullIfEmpty(notes));
                     cmd.Parameters.AddWithValue("@CenterID",
                         SecurityContext.CurrentCenterId > 0 ? (object)SecurityContext.CurrentCenterId : DBNull.Value);

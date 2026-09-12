@@ -232,9 +232,19 @@ SELECT last_insert_rowid();", con))
                 if (cell.DataType == XLDataType.DateTime)
                     return cell.GetDateTime().Date;
 
+                // آموزش — دو نکته که با هم یک باگِ خاموش را می‌ساختند:
+                // ۱. بدونِ InvariantCulture، «2026-09-12» با تقویمِ شمسیِ ترد
+                //    پارس می‌شد و *بدونِ خطا* سالِ ۲۶۴۷ می‌داد (TryParse مقدار
+                //    true برمی‌گرداند) — دادهٔ غلط بی‌صدا وارد می‌شد.
+                // ۲. ولی ستونِ «تاریخ تشکیل»/«تاریخ سروی» در خروجیِ خودِ
+                //    برنامه شمسی نوشته می‌شود (ExcelReportExporter با
+                //    ConvertDateColumnsToPersian)، و کاربر همان فایل را ویرایش
+                //    و دوباره وارد می‌کند. پس ورودیِ شمسی یک حالتِ واقعی است،
+                //    نه استثنا — و ReinterpretIfJalali همان را می‌پوشاند.
                 DateTime parsed;
-                if (DateTime.TryParse(cell.GetString(), out parsed))
-                    return parsed.Date;
+                if (DateTime.TryParse(cell.GetString(), System.Globalization.CultureInfo.InvariantCulture,
+                                      System.Globalization.DateTimeStyles.None, out parsed))
+                    return PersianDateHelper.ReinterpretIfJalali(parsed).Date;
             }
 
             return DateTime.Today;
@@ -262,7 +272,8 @@ SELECT last_insert_rowid();", con))
 
         private void AddDate(SQLiteCommand cmd, string name, DateTime value)
         {
-            cmd.Parameters.AddWithValue(name, value.Date.ToString("yyyy-MM-dd"));
+            cmd.Parameters.AddWithValue(name,
+                value.Date.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture));
         }
     }
 }

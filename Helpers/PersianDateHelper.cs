@@ -123,6 +123,52 @@ namespace CaseManagement.Helpers
             catch { return fallback; }
         }
 
+        // ─── ورودیِ کاربر: عددهای شمسی که مثل میلادی پارس شده‌اند ───────────
+        // آموزش — چرا لازم است: ورودیِ متنیِ کاربر (سلولِ اکسل، فیلدِ تاریخِ
+        // دیالوگ) می‌تواند شمسی باشد. «1405/06/21» با InvariantCulture یک
+        // تاریخِ *میلادیِ معتبر* است (سال ۱۴۰۵ میلادی)، پس TryParse موفق
+        // می‌شود و هیچ خطایی نمی‌دهد — ولی تاریخ ۶۲۱ سال غلط است.
+        //
+        // چرا بازهٔ سال کافی است: سالِ شمسیِ واقعی (۱۳۰۰–۱۵۰۰) و سالِ میلادیِ
+        // واقعی (۱۹۰۰–۲۱۰۰) هیچ هم‌پوشانی ندارند. همین تشخیص در ابزارِ
+        // Migration مرکز کنترل هم استفاده می‌شود (DevCenterRepair).
+        //
+        // ⚠ فقط برای *ورودیِ کاربر*. برای مقدارِ خوانده‌شده از دیتابیس
+        // ParseStoredDate را صدا بزنید — قراردادِ آنجا میلادی است.
+        public static DateTime ReinterpretIfJalali(DateTime parsed)
+        {
+            if (parsed.Year < 1300 || parsed.Year > 1500)
+                return parsed;
+
+            try
+            {
+                if (parsed.Day > _pc.GetDaysInMonth(parsed.Year, parsed.Month))
+                    return parsed;
+
+                return _pc.ToDateTime(parsed.Year, parsed.Month, parsed.Day,
+                                      parsed.Hour, parsed.Minute, parsed.Second, 0);
+            }
+            catch
+            {
+                // تاریخِ شمسیِ نامعتبر — دست‌نخورده برگردان، حدس نزن.
+                return parsed;
+            }
+        }
+
+        // متنِ آزادِ کاربر → رشتهٔ میلادیِ ISO آمادهٔ ذخیره. رشتهٔ خالی و
+        // ورودیِ غیرقابل‌پارس عیناً برمی‌گردند (اعتبارسنجی کارِ فرم است).
+        public static string NormalizeUserDateToStored(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return text;
+
+            DateTime parsed;
+            if (!DateTime.TryParse(text.Trim(), CultureInfo.InvariantCulture,
+                                   DateTimeStyles.None, out parsed))
+                return text;
+
+            return ReinterpretIfJalali(parsed).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        }
+
         public static DateTime Today()
         {
             DateTime now = DateTime.Now;
