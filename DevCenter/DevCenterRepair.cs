@@ -457,7 +457,221 @@ namespace CaseManagement.DevCenter
                 });
             }
 
+            // ── ۷) تاریخِ شمسی که در ستونِ میلادی نشسته ──────────────────────
+            //
+            // آموزش — ریشه: Program.cs کالچرِ ترد را روی fa-IR با
+            // PersianCalendar می‌گذارد، پس هر ToString("yyyy-MM-dd") بدونِ
+            // InvariantCulture به‌جای «2026-09-12» رشتهٔ «1405-06-21» می‌سازد.
+            // قراردادِ پایگاه‌داده میلادیِ ISO است — هم datetime('now') و هم
+            // PersianDateHelper.ParseStoredDate میلادی‌اند — پس چنین ردیفی در
+            // مقایسه، مرتب‌سازی و فیلترِ تاریخ خاموش و اشتباه رفتار می‌کند.
+            //
+            // نویسنده‌های معیوب در کامیت 4bf5e9a اصلاح شدند؛ این ترمیم فقط
+            // ردیف‌هایی را برمی‌گرداند که *پیش از آن* نوشته شده‌اند.
+            //
+            // ⚠ عمداً فقط ستون‌هایی اینجا هستند که نویسنده‌شان اصلاح شده.
+            // افزودنِ ستونِ تازه پیش از رفعِ نویسنده‌اش بی‌فایده است: همان روز
+            // دوباره شمسی می‌شود. با اصلاحِ هر نویسندهٔ تازه، یک سطر به همین
+            // آرایه اضافه کنید — بقیهٔ کار خودکار است.
+            string[][] jalaliColumns = new string[][]
+            {
+                new string[] { "TblCase",       "DepartureDate" },
+                new string[] { "TblCase",       "ArrivalDate"   },
+                new string[] { "TblMigrant",    "DepartureDate" },
+                new string[] { "TblMigrant",    "ArrivalDate"   },
+                new string[] { "TblReminder",   "RemindAt"      },
+                new string[] { "TblAppSettings","SettingValue"  }
+            };
+
+            foreach (string[] pair in jalaliColumns)
+            {
+                string tableName  = pair[0];
+                string columnName = pair[1];
+
+                // TblAppSettings یک جدولِ کلید/مقدار است و بیشترِ مقدارهایش
+                // اصلاً تاریخ نیستند؛ پس فقط دو کلیدِ تاریخ‌دار غربال می‌شوند.
+                string extra = tableName == "TblAppSettings"
+                    ? " AND SettingKey IN ('LastBackupDate','AutoBackupLastDate')"
+                    : "";
+
+                string where = JalaliWhere(columnName) + extra;
+
+                list.Add(new RepairAction
+                {
+                    Key = "jalali_" + tableName + "_" + columnName,
+                    Title = "تاریخِ شمسی در ستونِ میلادی — " + tableName + "." + columnName,
+                    Explanation =
+                        "مقدارهایی که سالشان بین ۱۳۰۰ و ۱۵۰۰ است (یعنی شمسی نوشته شده‌اند) " +
+                        "به میلادیِ معادل برگردانده می‌شوند؛ مثلاً «1405-06-21» به «2026-09-12». " +
+                        "جزءِ ساعت اگر باشد دست‌نخورده می‌ماند. ردیف‌هایی که از قبل میلادی‌اند " +
+                        "اصلاً لمس نمی‌شوند، پس اجرای دوباره‌ی این ترمیم بی‌خطر است. " +
+                        "هر مقداری که قابلِ تبدیل نباشد عمداً دست‌نخورده رها می‌شود — " +
+                        "این ترمیم هرگز دادهٔ نامفهوم را با حدس جایگزین نمی‌کند.",
+                    Requires = new string[] { tableName + "." + columnName },
+                    Count = () => Scalar(
+                        "SELECT COUNT(1) FROM [" + tableName + "] WHERE " + where + ";"),
+                    Apply = (con, tr) =>
+                        ConvertJalaliColumn(con, tr, tableName, columnName, where)
+                });
+            }
+
             return list;
+        }
+
+        // ═════════════════════════════════════════════════════════════════════
+        // نقطهٔ ورودِ تبِ «نگهداری» — فقط ترمیم‌های تاریخ
+        // ═════════════════════════════════════════════════════════════════════
+        //
+        // آموزش — چرا جدا از ApplySelected و نه صدا زدنِ مستقیمِ آن از فرم:
+        // ApplySelected کلیدها را از رابطِ چک‌باکسیِ تبِ «ترمیم خودکار»
+        // می‌گیرد، ولی آن تب هنوز به برنامه وصل نیست. این متد همان کار را
+        // بدونِ رابطِ انتخاب انجام می‌دهد: کلیدهای jalali_ را خودش برمی‌گزیند.
+        //
+        // امضا عمداً با DevCenterService.DevOperation یکی است تا مستقیماً به
+        // یک دکمهٔ تبِ نگهداری وصل شود، بدونِ لایه‌ی واسط.
+        //
+        // ⚠ دو غربال پیش از سپردن به ApplySelected — هیچ‌کدام تزئینی نیست:
+        //   ۱. جدول/ستونِ نبوده رد می‌شود. ApplySelected پیش‌نیازها را
+        //      بررسی نمی‌کند و مستقیم Apply را صدا می‌زند؛ روی پایگاه‌داده‌ی
+        //      قدیمی که مثلاً TblMigrant ندارد، استثنا کلِ تراکنش — از جمله
+        //      ستون‌های سالم — را برمی‌گرداند.
+        //   ۲. ترمیمِ صفرردیف اصلاً فرستاده نمی‌شود (قاعده‌ی ۴ سرآیندِ فایل)،
+        //      وگرنه گزارش پر می‌شود از «۰ ردیف اصلاح شد» و عددِ واقعی گم.
+        internal static string ApplyJalaliMigration(
+            IProgress<DevCenterService.DevProgress> progress,
+            System.Threading.CancellationToken cancel)
+        {
+            var keys    = new List<string>();
+            var skipped = new List<string>();
+
+            foreach (RepairAction action in All())
+            {
+                if (!action.Key.StartsWith("jalali_", StringComparison.Ordinal)) continue;
+
+                string missing = FirstMissing(action.Requires);
+                if (missing != null)
+                {
+                    skipped.Add(action.Title + " (" + missing + " موجود نیست)");
+                    continue;
+                }
+
+                if (action.Count() == 0) continue;
+                keys.Add(action.Key);
+            }
+
+            string tail = skipped.Count == 0
+                ? ""
+                : Environment.NewLine + Environment.NewLine +
+                  "رد شد: " + string.Join(" · ", skipped.ToArray());
+
+            if (keys.Count == 0)
+                return "هیچ تاریخِ شمسی‌ای در ستون‌های میلادی پیدا نشد — " +
+                       "پایگاه‌داده از این بابت سالم است." + tail;
+
+            return ApplySelected(keys, progress, cancel) + tail;
+        }
+
+        // ═════════════════════════════════════════════════════════════════════
+        // تبدیلِ تاریخِ شمسیِ ذخیره‌شده به میلادی
+        // ═════════════════════════════════════════════════════════════════════
+
+        // شرطِ تشخیص. سالِ شمسی (۱۳۰۰–۱۵۰۰) و سالِ میلادی (۱۹۰۰–۲۱۰۰) هیچ
+        // هم‌پوشانی ندارند، پس چهار رقمِ اول قاطعانه تصمیم می‌گیرد. جداکننده
+        // هم بررسی می‌شود تا رشته‌ای مثل «1400 عدد» تاریخ فرض نشود.
+        private static string JalaliWhere(string columnName)
+        {
+            string c = "[" + columnName + "]";
+            return "substr(" + c + ",1,4) BETWEEN '1300' AND '1500' " +
+                   "AND (substr(" + c + ",5,1) = '-' OR substr(" + c + ",5,1) = '/')";
+        }
+
+        // خواندنِ ردیف‌های هدف، تبدیل در C#، سپس UPDATE روی همان اتصال و
+        // تراکنش. SQLite تقویمِ جلالی ندارد و قاعده‌ی کبیسه‌اش با SQL خالص
+        // قابلِ پیاده‌سازیِ امن نیست، پس تبدیل حتماً باید اینجا انجام شود.
+        //
+        // rowid به‌جای نامِ کلیدِ اصلی استفاده می‌شود تا این متد برای هر شش
+        // جدول یکسان کار کند (هیچ‌کدام WITHOUT ROWID نیستند).
+        private static int ConvertJalaliColumn(SQLiteConnection con, SQLiteTransaction tr,
+                                               string tableName, string columnName, string where)
+        {
+            var pending = new List<KeyValuePair<long, string>>();
+
+            using (var cmd = new SQLiteCommand(
+                "SELECT rowid, [" + columnName + "] FROM [" + tableName + "] WHERE " + where + ";",
+                con, tr))
+            using (var dr = cmd.ExecuteReader())
+            {
+                while (dr.Read())
+                {
+                    if (dr.IsDBNull(1)) continue;
+
+                    string stored    = dr.GetValue(1).ToString();
+                    string converted = StoredJalaliToGregorian(stored);
+
+                    // برابر بودن یعنی تبدیل انجام نشد (میلادی بود یا نامعتبر).
+                    if (converted != stored)
+                        pending.Add(new KeyValuePair<long, string>(dr.GetInt64(0), converted));
+                }
+            }
+
+            int changed = 0;
+            foreach (KeyValuePair<long, string> row in pending)
+            {
+                changed += Exec(con, tr,
+                    "UPDATE [" + tableName + "] SET [" + columnName + "] = @V WHERE rowid = @R;",
+                    new SQLiteParameter("@V", row.Value),
+                    new SQLiteParameter("@R", row.Key));
+            }
+
+            return changed;
+        }
+
+        // «1405-06-21 14:30» → «2026-09-12 14:30».
+        //
+        // idempotent و محافظه‌کار: هر ورودی‌ای که شمسیِ معتبر نباشد — از جمله
+        // مقدارِ از قبل میلادی — عیناً برگردانده می‌شود. این متد هرگز استثنا
+        // پرتاب نمی‌کند و هرگز حدس نمی‌زند.
+        internal static string StoredJalaliToGregorian(string stored)
+        {
+            if (string.IsNullOrWhiteSpace(stored)) return stored;
+
+            string trimmed = stored.Trim();
+            if (trimmed.Length < 10) return stored;
+
+            string datePart = trimmed.Substring(0, 10).Replace('/', '-');
+            string timePart = trimmed.Substring(10);          // ممکن است خالی باشد
+
+            string[] parts = datePart.Split('-');
+            if (parts.Length != 3) return stored;
+
+            int year, month, day;
+            if (!int.TryParse(parts[0], System.Globalization.NumberStyles.None,
+                              System.Globalization.CultureInfo.InvariantCulture, out year) ||
+                !int.TryParse(parts[1], System.Globalization.NumberStyles.None,
+                              System.Globalization.CultureInfo.InvariantCulture, out month) ||
+                !int.TryParse(parts[2], System.Globalization.NumberStyles.None,
+                              System.Globalization.CultureInfo.InvariantCulture, out day))
+                return stored;
+
+            // خارج از بازه‌ی شمسی ⇒ میلادی است یا اصلاً تاریخ نیست. دست نزن.
+            if (year < 1300 || year > 1500) return stored;
+            if (month < 1 || month > 12 || day < 1 || day > 31) return stored;
+
+            try
+            {
+                var pc = new System.Globalization.PersianCalendar();
+                if (day > pc.GetDaysInMonth(year, month)) return stored;
+
+                DateTime gregorian = pc.ToDateTime(year, month, day, 0, 0, 0, 0);
+                return gregorian.ToString("yyyy-MM-dd",
+                           System.Globalization.CultureInfo.InvariantCulture) + timePart;
+            }
+            catch
+            {
+                // تاریخِ شمسیِ نامعتبر (مثلاً ۳۱ اسفند در سالِ غیرکبیسه).
+                // رهایش کن — گزارشِ «تبدیل نشد» بهتر از دادهٔ حدسی است.
+                return stored;
+            }
         }
 
         // ═════════════════════════════════════════════════════════════════════

@@ -207,6 +207,7 @@
     <Compile Include="DAL\DatabaseHelper.cs" />
     <Compile Include="DevCenter\DevCenterAccess.cs" />
     <Compile Include="DevCenter\DevCenterHealthReport.cs" />
+    <Compile Include="DevCenter\DevCenterRepair.cs" />
     <Compile Include="DevCenter\DevCenterService.cs" />
     <Compile Include="DevCenter\FrmDevCenter.cs">
       <SubType>Form</SubType>

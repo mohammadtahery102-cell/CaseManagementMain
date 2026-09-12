@@ -632,6 +632,16 @@ namespace CaseManagement.DevCenter
                 RunMaintenance("پاکسازی فایل‌های موقت",
                     new DevCenterService.DevOperation(DevCenterService.ClearTemporaryFiles)); }));
 
+            // ─── اصلاح تاریخ‌های شمسی ───
+            // آموزش — این دکمه بازماندهٔ یک باگِ رفع‌شده را پاک می‌کند، نه یک
+            // نگهداریِ دوره‌ای: نویسنده‌های معیوب در کامیت 4bf5e9a اصلاح شدند،
+            // ولی ردیف‌هایی که *پیش از آن* نوشته شده‌اند همچنان تاریخِ شمسی
+            // در ستونِ میلادی دارند. اجرای دوباره‌اش بی‌خطر است (idempotent)
+            // و روی پایگاه‌داده‌ی سالم فقط می‌گوید چیزی پیدا نشد.
+            actions.Controls.Add(MakeButton("اصلاح تاریخ‌های شمسی", delegate {
+                RunMaintenance("اصلاح تاریخ‌های شمسیِ ذخیره‌شده در ستون‌های میلادی",
+                    new DevCenterService.DevOperation(DevCenterRepair.ApplyJalaliMigration)); }));
+
             // ─── اتصال به سرور ───
             // آموزش — تا پیش از این، «آدرس سرور» و «ورود به سرور» هیچ رابط
             // کاربری نداشتند: آدرس فقط با ویرایشِ دستیِ جدول SyncState قابل
