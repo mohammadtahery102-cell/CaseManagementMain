@@ -32,7 +32,13 @@ namespace CaseManagement.Helpers
         // فهرستی که در الزاماتِ «Timeline Output Integration» آمده.
         public static DataTable GetTimeline(int caseId)
         {
-            return Query(@"
+            // آموزش — هر دو ستونِ تاریخ اینجا خام می‌آمدند و نتیجه‌اش یک
+            // ناهماهنگیِ دیدنی بود: «تاریخ» (EventDate) شمسی بود چون
+            // نویسنده‌اش معیوب بود، و «زمان ثبت» (EventAt، با
+            // DEFAULT datetime('now')) میلادی — کنار هم در یک سند فارسی.
+            // حالا نویسنده اصلاح شده، پس هر دو میلادیِ ISO ذخیره می‌شوند و
+            // هر دو اینجا با هم شمسی می‌شوند.
+            DataTable table = Query(@"
 SELECT t.EventDate                AS [تاریخ],
        t.Title                    AS [رویداد],
        IFNULL(t.Details, '')      AS [شرح],
@@ -43,6 +49,9 @@ SELECT t.EventDate                AS [تاریخ],
 FROM TblCaseTimeline t
 WHERE t.CasID = @CasID
 ORDER BY t.EventAt DESC, t.TimelineID DESC;", caseId);
+
+            PersianDateHelper.ConvertDateColumnsToPersian(table, "تاریخ", "زمان ثبت");
+            return table;
         }
 
         // ─── اعضای خانواده ──────────────────────────────────────────────────

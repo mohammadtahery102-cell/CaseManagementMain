@@ -180,7 +180,7 @@ WHERE CasID = @CasID;", con))
                 {
                     cmd.Parameters.AddWithValue("@Percent", result.OverallPercent);
                     cmd.Parameters.AddWithValue("@Status", result.StatusCode);
-                    cmd.Parameters.AddWithValue("@CalculatedAt", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+                    cmd.Parameters.AddWithValue("@CalculatedAt", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture));
                     cmd.Parameters.AddWithValue("@CasID", casId);
                     con.Open();
                     cmd.ExecuteNonQuery();

@@ -481,9 +481,18 @@ namespace CaseManagement.Helpers
                     // اگر رشته اصلی ساعت هم داشت (مثلاً CreatedAt گزارش رویدادها)،
                     // ساعت در نمایش شمسی هم حفظ می‌شود؛ برای ستون‌های فقط-تاریخ
                     // (CaseDate/BirthDate/...) فقط yyyy/MM/dd نمایش داده می‌شود.
+                    // ReinterpretIfJalali: روی پایگاه‌داده‌ای که هنوز «اصلاح
+                    // تاریخ‌های شمسی» روی آن اجرا نشده، بعضی ستون‌ها مقدارِ
+                    // شمسیِ به‌جامانده دارند. بدونِ این، «1405-06-21» میلادی
+                    // پارس می‌شد و سالِ شمسیِ ~۷۸۴ در گرید ظاهر می‌شد.
+                    //
+                    // نسخه‌های Safe: مقدارِ خارج از بازهٔ PersianCalendar
+                    // استثنای «Specified time is not supported in this
+                    // calendar» می‌داد و کلِ رندرِ گرید را می‌شکست.
+                    DateTime shown = PersianDateHelper.ReinterpretIfJalali(dt);
                     e.Value = raw.Trim().Length > 10
-                        ? PersianDateHelper.ToPersianDateTimeString(dt)
-                        : PersianDateHelper.ToPersianDateString(dt);
+                        ? PersianDateHelper.ToPersianDateTimeStringSafe(shown, raw)
+                        : PersianDateHelper.ToPersianDateStringSafe(shown, raw);
                     e.FormattingApplied = true;
                 }
             };

@@ -501,7 +501,7 @@ VALUES
                     cmd.Parameters.AddWithValue("@CasID", casId);
                     cmd.Parameters.AddWithValue("@Category", eventCategoryCode ?? CategorySystem);
                     cmd.Parameters.AddWithValue("@Type", eventTypeCode ?? "");
-                    cmd.Parameters.AddWithValue("@EventDate", DateTime.Now.ToString("yyyy-MM-dd"));
+                    cmd.Parameters.AddWithValue("@EventDate", DateTime.Now.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture));
                     cmd.Parameters.AddWithValue("@SourceTable", (object)sourceTable ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@SourceID", (object)sourceId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@FamID", (object)famId ?? DBNull.Value);

@@ -2540,8 +2540,9 @@ ORDER BY SortOrder, Value", con))
                         Lang.T("حجم دیتابیس: {0} مگابایت     |     تعداد پرونده‌ها: {1}     |     تعداد اعضای خانواده: {2}     |     تعداد اسناد: {3}\nتعداد کاربران: {4}     |     تعداد مراکز: {5}     |     آخرین Backup: {6}     |     آخرین Restore: {7}"),
                         (dbSizeBytes / 1024.0 / 1024.0).ToString("N2"),
                         cases, families, docs, users, centers,
-                        string.IsNullOrEmpty(lastBackup) ? "—" : lastBackup,
-                        string.IsNullOrEmpty(lastRestore) ? "—" : lastRestore);
+                        // هر دو میلادیِ ISO ذخیره می‌شوند؛ نمایش باید شمسی باشد.
+                        PersianDateHelper.StoredToPersianDisplay(lastBackup, "—"),
+                        PersianDateHelper.StoredToPersianDisplay(lastRestore, "—"));
                 }
             }
             catch (Exception ex)
@@ -3064,7 +3065,10 @@ WHERE UserID = @ID", con))
             _numBackupRetention.Value = SettingsHelper.GetInt(SettingsHelper.BackupRetentionCount, 14);
 
             string lastBackup = SettingsHelper.Get(SettingsHelper.LastBackupDate, "");
-            _lblBackupStatus.Text = string.Format(Lang.T("آخرین Backup: {0}"), string.IsNullOrEmpty(lastBackup) ? Lang.T("هنوز گرفته نشده") : lastBackup);
+            _lblBackupStatus.Text = string.Format(Lang.T("آخرین Backup: {0}"),
+                string.IsNullOrEmpty(lastBackup)
+                    ? Lang.T("هنوز گرفته نشده")
+                    : PersianDateHelper.StoredToPersianDisplay(lastBackup));
 
             UpdateAutoBackupPasswordStatus();
         }
@@ -3182,7 +3186,7 @@ WHERE UserID = @ID", con))
                 {
                     BackupHelper helper = new BackupHelper();
                     BackupHelper.ImportResult res = helper.ImportEncryptedBackup(ofd.FileName, password);
-                    SettingsHelper.Set(SettingsHelper.LastRestoreDate, DateTime.Today.ToString("yyyy-MM-dd"));
+                    SettingsHelper.Set(SettingsHelper.LastRestoreDate, DateTime.Today.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture));
                     AppendBackupOutput("Restore انجام شد — جدید: " + res.CasesInserted + "، تکراری/رد شده: " + res.CasesSkipped);
                 }
                 catch (BackupEncryption.IntegrityException ex)
@@ -3220,7 +3224,7 @@ WHERE UserID = @ID", con))
                 {
                     BackupHelper helper = new BackupHelper();
                     BackupHelper.ImportResult res = helper.ImportBackup(fbd.SelectedPath);
-                    SettingsHelper.Set(SettingsHelper.LastRestoreDate, DateTime.Today.ToString("yyyy-MM-dd"));
+                    SettingsHelper.Set(SettingsHelper.LastRestoreDate, DateTime.Today.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture));
                     AppendBackupOutput("Restore (قدیمی) انجام شد — جدید: " + res.CasesInserted + "، تکراری/رد شده: " + res.CasesSkipped);
                 }
                 catch (Exception ex)

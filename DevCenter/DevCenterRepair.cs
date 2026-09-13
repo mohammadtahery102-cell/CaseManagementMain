@@ -493,7 +493,11 @@ namespace CaseManagement.DevCenter
                 // نویسنده‌ها در رفعِ جفتیِ موارد ۱۰/۱۱ اصلاح شدند (نویسنده +
                 // محلِ نمایش با هم، وگرنه رابط کاربری میلادی می‌شد)
                 new string[] { "TblCase", "VulnerabilityScoreDate" },
-                new string[] { "TblDocs", "VerifiedDate"           }
+                new string[] { "TblDocs", "VerifiedDate"           },
+
+                // نویسنده‌ها در تعیین‌تکلیفِ موارد ۸/۹ اصلاح شدند
+                new string[] { "TblCaseTimeline", "EventDate"              },
+                new string[] { "TblCase",         "CompletionCalculatedAt" }
             };
 
             foreach (string[] pair in jalaliColumns)
@@ -504,7 +508,7 @@ namespace CaseManagement.DevCenter
                 // TblAppSettings یک جدولِ کلید/مقدار است و بیشترِ مقدارهایش
                 // اصلاً تاریخ نیستند؛ پس فقط دو کلیدِ تاریخ‌دار غربال می‌شوند.
                 string extra = tableName == "TblAppSettings"
-                    ? " AND SettingKey IN ('LastBackupDate','AutoBackupLastDate')"
+                    ? " AND SettingKey IN ('LastBackupDate','AutoBackupLastDate','LastRestoreDate')"
                     : "";
 
                 string where = JalaliWhere(columnName) + extra;

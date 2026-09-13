@@ -1537,7 +1537,8 @@ LIMIT  2000;", new SQLiteParameter("@Days", days)); });
             {
                 string lastBackup = SettingsHelper.Get(SettingsHelper.LastBackupDate);
                 return string.IsNullOrWhiteSpace(lastBackup)
-                    ? "تاکنون اجرا نشده" : "آخرین اجرا: " + lastBackup;
+                    ? "تاکنون اجرا نشده"
+                    : "آخرین اجرا: " + PersianDateHelper.StoredToPersianDisplay(lastBackup);
             });
 
             return t;
