@@ -261,6 +261,26 @@ namespace CaseManagement
                 return;
             }
 
+            // آموزش — چرا بررسیِ تکراریِ بی‌توجه به حروف لازم است: قید UNIQUE
+            // روی ستون Username با مقایسهٔ پیش‌فرضِ SQLite کار می‌کند که حساس
+            // به حروف است، پس «admin» و «Admin» هر دو با موفقیت درج می‌شدند و
+            // دو حسابِ جداگانه می‌ساختند — زمینهٔ جعلِ هویتِ یک حسابِ مدیر.
+            // ورود از این پس COLLATE NOCASE می‌کند، پس نامِ هم‌شکل هم مبهم
+            // می‌شود؛ جلوی ساختش همین‌جا گرفته می‌شود.
+            using (SQLiteConnection dupCon = _db.GetConnection())
+            using (SQLiteCommand dupCmd = new SQLiteCommand(
+                "SELECT COUNT(1) FROM TblUsers WHERE Username = @u COLLATE NOCASE", dupCon))
+            {
+                dupCmd.Parameters.AddWithValue("@u", _txtUsername.Text.Trim());
+                dupCon.Open();
+                if (Convert.ToInt32(dupCmd.ExecuteScalar()) > 0)
+                {
+                    UiTheme.ShowWarning(this,
+                        "نام کاربری تکراری است (بدون توجه به بزرگی/کوچکی حروف).");
+                    return;
+                }
+            }
+
             byte[] hash;
             byte[] salt;
             int iterations;
@@ -348,6 +368,8 @@ VALUES
                 return;
             }
 
+            if (!EnsureTargetNotSuperAdmin(userId)) return;
+
             using (SQLiteConnection con = _db.GetConnection())
             using (SQLiteCommand cmd = new SQLiteCommand(@"
 UPDATE TblUsers
@@ -404,25 +426,91 @@ WHERE  UserID = @UserID AND (@CID = 0 OR CenterID = @CID)", con))
                     "حذف کاربر"))
                 return;
 
+            if (!EnsureTargetNotSuperAdmin(userId)) return;
+
             using (SQLiteConnection con = _db.GetConnection())
-            using (SQLiteCommand cmd = new SQLiteCommand(
-                "DELETE FROM TblUsers WHERE UserID = @UserID AND UserID <> @Current AND (@CID = 0 OR CenterID = @CID)", con))
             {
-                cmd.Parameters.AddWithValue("@UserID", userId);
-                cmd.Parameters.AddWithValue("@Current", SecurityContext.UserId);
-                cmd.Parameters.AddWithValue("@CID", SecurityContext.CenterFilterId);
                 con.Open();
-                int affected = cmd.ExecuteNonQuery();
-                if (affected == 0)
+                using (SQLiteTransaction tr = con.BeginTransaction())
                 {
-                    UiTheme.ShowWarning(this, "این کاربر حذف نشد (متعلق به مرکز دیگر یا کاربر جاری).");
-                    return;
+                    int affected;
+                    using (SQLiteCommand cmd = new SQLiteCommand(
+                        "DELETE FROM TblUsers WHERE UserID = @UserID AND UserID <> @Current AND (@CID = 0 OR CenterID = @CID)", con, tr))
+                    {
+                        cmd.Parameters.AddWithValue("@UserID", userId);
+                        cmd.Parameters.AddWithValue("@Current", SecurityContext.UserId);
+                        cmd.Parameters.AddWithValue("@CID", SecurityContext.CenterFilterId);
+                        affected = cmd.ExecuteNonQuery();
+                    }
+
+                    if (affected == 0)
+                    {
+                        UiTheme.ShowWarning(this, "این کاربر حذف نشد (متعلق به مرکز دیگر یا کاربر جاری).");
+                        return;
+                    }
+
+                    // آموزش — چرا این پاک‌سازی حیاتی است: EntUserPermission هیچ
+                    // کلید خارجی به TblUsers ندارد (PRIMARY KEY (UserID, PermKey)
+                    // و بس)، پس حذف کاربر استثناهای مجوزش را جا می‌گذاشت. آن
+                    // ردیف‌ها فقط «زباله» نیستند: اگر شناسهٔ کاربر دوباره به کسی
+                    // برسد — مسیرِ واقعی‌اش ادغام/بازیابیِ بکاپ است که شناسه‌ها
+                    // را از نو نگاشت می‌کند — کاربرِ تازه بی‌سروصدا استثناهای
+                    // «اجازهٔ صریح»ِ کاربرِ حذف‌شده را به ارث می‌برد؛ و استثنای
+                    // کاربر بر مجوزِ نقش اولویت دارد.
+                    //
+                    // داخل همان تراکنش است تا هرگز نیمه‌کاره نماند.
+                    using (SQLiteCommand permCmd = new SQLiteCommand(
+                        "DELETE FROM EntUserPermission WHERE UserID = @UserID", con, tr))
+                    {
+                        permCmd.Parameters.AddWithValue("@UserID", userId);
+                        permCmd.ExecuteNonQuery();
+                    }
+
+                    tr.Commit();
                 }
             }
 
             AuditLogger.Log("حذف کاربر", "TblUsers", userId, username, "");
             UiTheme.ShowSuccess(this, "کاربر حذف شد.");
             LoadUsers();
+        }
+
+        // ─── محافظِ نقشِ هدف ─────────────────────────────────────────────────
+        // آموزش — شکافی که می‌بندد: بررسی‌های موجود همه دربارهٔ *مرکزِ* کاربرِ
+        // هدف بودند، نه *نقشِ* او. تنها چیزی که یک «مدیر سیستم» را از حذف یا
+        // غیرفعال‌کردنِ یک «مدیر کل» بازمی‌داشت این بود که حسابِ مدیر کلِ
+        // پیش‌فرض CenterID ندارد و در فیلترِ مرکز نمی‌افتد — یعنی محافظت
+        // تصادفی بود، نه عمدی. اگر روزی مدیر کلی مرکز بگیرد (بازیابیِ بکاپ،
+        // ادغام، اصلاح دستی)، آن محافظتِ تصادفی از بین می‌رفت.
+        //
+        // مدیر کل خودش مجاز است روی مدیر کلِ دیگر عمل کند؛ محدودیت فقط برای
+        // نقش‌های پایین‌تر است.
+        private bool EnsureTargetNotSuperAdmin(int userId)
+        {
+            if (SecurityContext.IsSuperAdmin()) return true;
+
+            using (SQLiteConnection con = _db.GetConnection())
+            using (SQLiteCommand cmd = new SQLiteCommand(
+                "SELECT Role FROM TblUsers WHERE UserID = @UserID", con))
+            {
+                cmd.Parameters.AddWithValue("@UserID", userId);
+                con.Open();
+                object role = cmd.ExecuteScalar();
+
+                if (role != null && role != DBNull.Value &&
+                    string.Equals(role.ToString(), "SuperAdmin", StringComparison.OrdinalIgnoreCase))
+                {
+                    CaseManagement.Enterprise.SecurityAudit.Log(
+                        CaseManagement.Enterprise.SecurityAudit.EventPermissionDenied,
+                        CaseManagement.Enterprise.SecurityAudit.SeverityCritical, false,
+                        "تلاش برای تغییر حسابِ «مدیر کل» توسط کاربرِ غیرِ مدیر کل");
+
+                    UiTheme.ShowWarning(this, "تغییر حسابِ «مدیر کل» فقط توسط مدیر کل مجاز است.");
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         // ─── بارگذاری لیست کاربران ───────────────────────────────────────────

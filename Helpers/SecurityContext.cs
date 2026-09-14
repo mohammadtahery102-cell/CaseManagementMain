@@ -106,7 +106,16 @@ namespace CaseManagement.Helpers
         // اگر CenterID دقیقاً همان مرکز انتخاب‌شده کاربر باشد.
         public static bool CanAccessCenter(int centerId)
         {
-            return IsAllCenters || centerId == CurrentCenterId;
+            // آموزش — چرا شرطِ CurrentCenterId > 0 اضافه شد: تا پیش از این،
+            // وقتی هنوز هیچ مرکزی انتخاب نشده بود (CurrentCenterId = 0 و
+            // IsAllCenters = false)، فراخوانیِ CanAccessCenter(0) مقدار true
+            // برمی‌گرداند — چون 0 == 0. و رکوردهایی با CenterID تهی دقیقاً
+            // همین‌طور خوانده می‌شوند: CenterGuard.EnsureUserAccess مقدار
+            // DBNull را به 0 تبدیل می‌کند. نتیجه: در فاصلهٔ بینِ SignIn و
+            // SelectCenter، رکوردهای بی‌مرکز باز بودند.
+            //
+            // حالا «مرکز انتخاب نشده» یعنی هیچ دسترسی — نه دسترسیِ کامل.
+            return IsAllCenters || (CurrentCenterId > 0 && centerId == CurrentCenterId);
         }
 
         // ─── ذخیره آخرین مرکز در TblUsers ───────────────────────────────────

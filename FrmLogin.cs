@@ -602,7 +602,8 @@ SELECT UserID, Role, PasswordHash, PasswordSalt, PasswordIterations,
        MustChangePassword, FailedLoginCount, LockoutUntil,
        LastPasswordChangeAt, CreatedAt
 FROM   TblUsers
-WHERE  Username = @u AND IsActive = 1
+WHERE  Username = @u COLLATE NOCASE AND IsActive = 1
+ORDER  BY UserID
 LIMIT  1", con))
                     {
                         cmd.Parameters.AddWithValue("@u", username);

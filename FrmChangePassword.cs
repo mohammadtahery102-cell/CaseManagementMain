@@ -1,8 +1,10 @@
 using CaseManagement.DAL;
+using CaseManagement.Enterprise;
 using CaseManagement.Helpers;
 using System;
 using System.Data.SQLite;
 using System.Drawing;
+using System.Globalization;
 using System.Windows.Forms;
 
 namespace CaseManagement
@@ -159,11 +161,21 @@ namespace CaseManagement
                     byte[] oldSalt;
                     int    oldIterations;
                     int    userId;
+                    int    failedCount;
+                    DateTime? lockoutUntil = null;
 
+                    // آموزش — چرا COLLATE NOCASE: ستون Username یونیک است ولی
+                    // مقایسهٔ پیش‌فرضِ SQLite حساس به حروف است. ورود و تغییر رمز
+                    // باید یک قاعده داشته باشند، وگرنه کاربری که در فرمِ ورود
+                    // «Ali» را می‌پذیرد، اینجا «کاربر یافت نشد» می‌گیرد.
+                    // ORDER BY UserID برای قطعی‌بودن نتیجه روی دیتابیس‌هایی که
+                    // پیش از این اصلاح، نام‌های هم‌شکل ساخته‌اند.
                     using (var readCmd = new SQLiteCommand(@"
-SELECT UserID, PasswordHash, PasswordSalt, PasswordIterations
+SELECT UserID, PasswordHash, PasswordSalt, PasswordIterations,
+       FailedLoginCount, LockoutUntil
 FROM   TblUsers
-WHERE  Username = @u AND IsActive = 1
+WHERE  Username = @u COLLATE NOCASE AND IsActive = 1
+ORDER  BY UserID
 LIMIT  1", con))
                     {
                         readCmd.Parameters.AddWithValue("@u", _username);
@@ -179,7 +191,34 @@ LIMIT  1", con))
                             oldSalt = (byte[])dr["PasswordSalt"];
                             oldIterations = dr["PasswordIterations"] == DBNull.Value
                                 ? 0 : Convert.ToInt32(dr["PasswordIterations"]);
+                            failedCount = dr["FailedLoginCount"] == DBNull.Value
+                                ? 0 : Convert.ToInt32(dr["FailedLoginCount"]);
+
+                            if (dr["LockoutUntil"] != DBNull.Value)
+                            {
+                                DateTime parsedLock;
+                                if (DateTime.TryParse(dr["LockoutUntil"].ToString(),
+                                        CultureInfo.InvariantCulture, DateTimeStyles.None, out parsedLock))
+                                    lockoutUntil = parsedLock;
+                            }
                         }
+                    }
+
+                    // ─── قفلِ حساب — همان کنترلی که فرمِ ورود دارد ─────────
+                    // آموزش — چرا این بلاک حیاتی است: این فرم از دکمهٔ «تغییر
+                    // رمز» صفحهٔ ورود، *بدون هیچ احراز هویتی*، فقط با یک نام
+                    // کاربری باز می‌شود. تا پیش از این، رمزِ فعلی را بی‌نهایت
+                    // بار می‌شد امتحان کرد: نه شمارنده‌ای بالا می‌رفت، نه قفلی
+                    // اعمال می‌شد، نه رویدادی ثبت می‌شد — یعنی قفلِ ۵-تلاشیِ
+                    // صفحهٔ ورود کاملاً دور زده می‌شد و حتی حسابِ قفل‌شده هم
+                    // از این مسیر قابل حمله بود.
+                    if (lockoutUntil.HasValue && lockoutUntil.Value > DateTime.Now)
+                    {
+                        int minutesLeft = (int)Math.Ceiling((lockoutUntil.Value - DateTime.Now).TotalMinutes);
+                        SecurityAudit.LoginFailed(_username, "تلاش تغییر رمز در زمان قفل بودن حساب");
+                        _lblMessage.Text = "حساب قفل است. حدود " + minutesLeft +
+                                           " دقیقه دیگر دوباره امتحان کنید.";
+                        return;
                     }
 
                     // ─── تأیید رمز فعلی — قلب امنیت این فرم ─────────────
@@ -188,7 +227,31 @@ LIMIT  1", con))
                     // از FixedTimeEquals استفاده می‌شود تا Timing Attack ناممکن باشد.
                     if (!PasswordHelper.Verify(current, oldHash, oldSalt, oldIterations))
                     {
-                        _lblMessage.Text = "رمز فعلی نادرست است.";
+                        // شکستِ اینجا دقیقاً مثل شکستِ ورود شمرده و قفل می‌شود.
+                        int maxFailed      = SettingsHelper.GetInt(SettingsHelper.MaxFailedAttempts, 5);
+                        int lockoutMinutes = SettingsHelper.GetInt(SettingsHelper.LockoutMinutes, 15);
+
+                        int  newFailedCount = failedCount + 1;
+                        bool shouldLock     = newFailedCount >= maxFailed;
+
+                        using (var lockCmd = new SQLiteCommand(@"
+UPDATE TblUsers SET FailedLoginCount = @fc, LockoutUntil = @lu WHERE UserID = @id", con))
+                        {
+                            lockCmd.Parameters.AddWithValue("@fc", newFailedCount);
+                            lockCmd.Parameters.AddWithValue("@lu", shouldLock
+                                ? (object)DateTime.Now.AddMinutes(lockoutMinutes)
+                                        .ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)
+                                : DBNull.Value);
+                            lockCmd.Parameters.AddWithValue("@id", userId);
+                            lockCmd.ExecuteNonQuery();
+                        }
+
+                        SecurityAudit.LoginFailed(_username,
+                            "رمز فعلی نادرست در تغییر رمز (تلاش " + newFailedCount + ")");
+
+                        _lblMessage.Text = shouldLock
+                            ? "به‌دلیل تلاش‌های ناموفق پیاپی، حساب برای " + lockoutMinutes + " دقیقه قفل شد."
+                            : "رمز فعلی نادرست است.";
                         return;
                     }
 
@@ -210,7 +273,12 @@ SET    PasswordHash       = @h,
        PasswordSalt       = @s,
        PasswordIterations = @it,
        MustChangePassword = 0,
-       LastPasswordChangeAt = datetime('now')
+       LastPasswordChangeAt = datetime('now'),
+       -- تغییرِ موفقِ رمز، مثل ورودِ موفق، شمارندهٔ تلاشِ ناموفق را صفر
+       -- و قفل را باز می‌کند؛ وگرنه کاربری که رمزش را درست عوض کرده،
+       -- با شمارندهٔ باقی‌مانده از تلاش‌های قبلی وارد می‌شد.
+       FailedLoginCount   = 0,
+       LockoutUntil       = NULL
 WHERE  UserID = @id", con))
                     {
                         updCmd.Parameters.AddWithValue("@h",  newHash);

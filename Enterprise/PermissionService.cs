@@ -222,6 +222,42 @@ ON CONFLICT(RoleName, PermKey) DO UPDATE SET IsGranted = @Granted;",
             if (userId <= 0)
                 return WorkflowActionResult.Fail("کاربر معتبر انتخاب نشده است.");
 
+            // ─── جلوگیری از ارتقای امتیازِ خودی ───────────────────────────
+            // آموزش — شکافی که این بلاک می‌بندد: نقشِ «Admin» به‌صورت پیش‌فرض
+            // خودش «Permission.Manage» را دارد (EnterpriseInitializer). پس تا
+            // پیش از این، هر Admin می‌توانست برای *حساب خودش* استثنای «اجازه»
+            // روی هر کلیدی بگذارد و از سقفِ نقشش بالا برود — و چون
+            // Permission.Manage هم یکی از همان کلیدهاست، ارتقا خودتداوم بود.
+            //
+            // SetRolePermission از قبل نقشِ «مدیر کل» را قفل کرده بود؛ این
+            // همان محافظ برای مسیرِ استثنای کاربر است که جا افتاده بود.
+            //
+            // مدیر کل مستثناست: او در HasPermission همیشه مجاز است، پس محدود
+            // کردنش فقط کار را بدون افزودن امنیت سخت می‌کند.
+            if (!SecurityContext.IsSuperAdmin() && userId == SecurityContext.UserId)
+            {
+                SecurityAudit.Log(SecurityAudit.EventPermissionDenied, SecurityAudit.SeverityCritical, false,
+                    "تلاش برای تغییر مجوزِ حسابِ خودِ کاربر (کلید: " + permissionKey + ")");
+                return WorkflowActionResult.Fail(
+                    "تغییر مجوزهای حسابِ خودتان مجاز نیست. از یک حساب مدیر کل استفاده کنید.");
+            }
+
+            // ─── کاربرِ هدف باید در دسترسِ مرکزِ کاربر جاری باشد ───────────
+            // FrmPermissionMatrix فهرست را با فیلترِ مرکز نشان می‌دهد، ولی این
+            // سرویس تا امروز هر UserID ای را می‌پذیرفت. همان الگوی دو-لایه‌ی
+            // FrmUsers (فیلترِ UI + تأییدِ لایهٔ داده) اینجا هم لازم است.
+            string targetRole;
+            if (!TryGetUserRole(userId, out targetRole))
+                return WorkflowActionResult.Fail("کاربر پیدا نشد.");
+
+            if (string.Equals(targetRole, "SuperAdmin", StringComparison.OrdinalIgnoreCase) &&
+                !SecurityContext.IsSuperAdmin())
+            {
+                SecurityAudit.Log(SecurityAudit.EventPermissionDenied, SecurityAudit.SeverityCritical, false,
+                    "تلاش برای تغییر مجوزِ یک «مدیر کل» توسط کاربرِ غیرِ مدیر کل");
+                return WorkflowActionResult.Fail("تغییر مجوزهای «مدیر کل» مجاز نیست.");
+            }
+
             if (!granted.HasValue)
             {
                 // حذف استثنا → کاربر دوباره از مجوز نقش خودش پیروی می‌کند.
@@ -244,6 +280,25 @@ ON CONFLICT(UserID, PermKey) DO UPDATE SET IsGranted = @Granted;",
                 (granted.HasValue ? (granted.Value ? "اجازه" : "منع") : "حذف استثنا"));
 
             return new WorkflowActionResult { Applied = true, Message = "استثنای کاربر به‌روزرسانی شد." };
+        }
+
+        // نقشِ کاربرِ هدف + تأییدِ مالکیتِ مرکز، در یک رفت‌وبرگشت.
+        // false یعنی کاربر وجود ندارد یا در دسترسِ مرکزِ کاربرِ جاری نیست —
+        // از دیدِ فراخوان هر دو یکسان‌اند («پیدا نشد»)، تا فهرستِ کاربرانِ
+        // مراکزِ دیگر از این مسیر قابل کشف نباشد.
+        private static bool TryGetUserRole(int userId, out string role)
+        {
+            role = null;
+
+            DataTable rows = EntDb.Query(
+                "SELECT Role FROM TblUsers " +
+                "WHERE UserID = @Id AND (@Center = 0 OR IFNULL(CenterID, 0) = @Center);",
+                "@Id", userId, "@Center", SecurityContext.CenterFilterId);
+
+            if (rows.Rows.Count == 0) return false;
+
+            role = EntDb.ToText(rows.Rows[0]["Role"]);
+            return true;
         }
 
         // استثناهای یک کاربر، همراه با مقدار مؤثر نقش او.
