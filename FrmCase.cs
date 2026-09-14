@@ -3822,11 +3822,11 @@ namespace CaseManagement
                 dgvCases.Columns.Add(photoColumn);
             }
 
-            // ۳) ستون ثابت + انتخاب‌شده‌ها به ترتیب.
+            // ۳) ستون ثابت + انتخاب‌شده‌ها. DisplayIndex را یک‌جا می‌گذاریم؛
+            //    تنظیم تکی هنگام وجود ستون‌های پنهان در WinForms جابه‌جا می‌شود.
             SetGridHeader(CaseGridColumns.FixedColumn, CaseGridColumns.FixedColumnTitle);
-            ShowGridColumn(CaseGridColumns.FixedColumn, 0);
+            ShowGridColumn(CaseGridColumns.FixedColumn);
 
-            int displayIndex = 1;
             foreach (CaseGridColumn column in selected)
             {
                 string name = column.IsPhoto ? column.ThumbColumnName : column.DataColumn;
@@ -3834,59 +3834,37 @@ namespace CaseManagement
                 if (!column.IsPhoto)
                     SetGridHeader(name, column.DisplayName);
 
-                ShowGridColumn(name, displayIndex);
-                displayIndex++;
+                ShowGridColumn(name);
             }
+
+            ApplyCaseGridDisplayOrder(selected);
 
             dgvCases.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
             dgvCases.MultiSelect = true;
             dgvCases.ReadOnly = true;
             dgvCases.AllowUserToAddRows = false;
             dgvCases.AllowUserToDeleteRows = false;
-            dgvCases.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-            // با عکس، ردیف بلندتر لازم است تا thumbnail بریده نشود.
-            dgvCases.RowTemplate.Height = wantsPhoto ? PhotoRowHeight : 32;
-
-            // آموزش — با شش ستون در ستونِ باریکِ سمت چپ، حالتِ Fill عرض را
-            // مساوی پخش می‌کرد و عنوان‌ها بریده می‌شدند («کد اختصاصی» → «کد»).
-            // دو کار این را حل می‌کند بدون اینکه اسکرولِ افقی لازم شود:
-            //   ۱) عنوان‌ها اجازهٔ شکستنِ خط دارند و ارتفاعِ سرستون خودکار
-            //      می‌شود، پس عنوانِ دوکلمه‌ای در دو خط کامل دیده می‌شود.
-            //   ۲) ستونِ عکس فقط به‌اندازهٔ خودِ thumbnail وزن می‌گیرد، نه یک
-            //      ششمِ عرض؛ فضای آزادشده به ستون‌های متنی می‌رسد.
-            dgvCases.ColumnHeadersDefaultCellStyle.WrapMode = DataGridViewTriState.True;
-            dgvCases.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+            dgvCases.ScrollBars = ScrollBars.Both;
+            dgvCases.ColumnHeadersDefaultCellStyle.WrapMode = DataGridViewTriState.False;
+            dgvCases.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
 
             foreach (DataGridViewColumn column in dgvCases.Columns)
             {
                 if (!column.Visible) continue;
 
                 if (!(column is DataGridViewImageColumn))
-                {
-                    column.FillWeight = 100f;
                     continue;
-                }
 
-                // آموزش — ستونِ تصویری عرضِ *ثابت* می‌گیرد، نه وزنِ Fill.
-                //
-                // در رندرِ واقعی دیده شد که با FillWeight، ستونِ «عکس جمعی»
-                // ۳۱۵ پیکسل عرض می‌گرفت برای تصویری ۱۱۴ پیکسلی — چون
-                // FillWeight یک *نسبت* است، نه عرض: هر ستون سهمی از کلِ عرضِ
-                // باقی‌مانده می‌گیرد. نتیجه‌اش دریایی از فضای خالی دورِ عکس بود
-                // و تنگیِ ستون‌های متنی.
-                //
-                // AutoSizeMode.None روی همین ستون، حالتِ Fillِ گرید را فقط برای
-                // او لغو می‌کند: عرض دقیقاً اندازهٔ کادر (+ حاشیه) می‌شود و کلِ
-                // فضای آزادشده به ستون‌های متنی می‌رسد.
                 CaseGridColumn spec = selected.FirstOrDefault(
                     c => c.IsPhoto && c.ThumbColumnName == column.Name);
 
                 int boxWidth = spec == null ? PhotoBoxHeight : ThumbBoxWidth(spec);
 
                 column.AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
-                // کفِ ۷۲ تا عنوانِ ستون («عکس جمعی») بریده نشود.
                 column.Width = Math.Max(72, boxWidth + 16);
             }
+
+            GridLayout.Apply(dgvCases);
         }
 
         // ─── ابعادِ thumbnailِ گرید ───────────────────────────────────────────
@@ -3918,23 +3896,53 @@ namespace CaseManagement
         {
             string current = CaseGridColumns.ToCsv(CaseGridColumns.GetSelected());
 
-            if (string.Equals(current, _appliedGridColumnsCsv, StringComparison.OrdinalIgnoreCase))
-                return;
-
-            ConfigureCasesGrid();
-            LoadCaseThumbnails();
+            if (!string.Equals(current, _appliedGridColumnsCsv, StringComparison.OrdinalIgnoreCase))
+            {
+                ConfigureCasesGrid();
+                LoadCaseThumbnails();
+            }
+            else if (dgvCases != null)
+            {
+                GridLayout.Apply(dgvCases);
+            }
         }
 
-        private void ShowGridColumn(string columnName, int displayIndex)
+        private void ApplyCaseGridDisplayOrder(List<CaseGridColumn> selected)
+        {
+            var ordered = new List<DataGridViewColumn>();
+
+            if (dgvCases.Columns.Contains(CaseGridColumns.FixedColumn))
+            {
+                DataGridViewColumn code = dgvCases.Columns[CaseGridColumns.FixedColumn];
+                if (code.Visible) ordered.Add(code);
+            }
+
+            foreach (CaseGridColumn column in selected)
+            {
+                if (column.IsPhoto) continue;
+                if (!dgvCases.Columns.Contains(column.DataColumn)) continue;
+                DataGridViewColumn col = dgvCases.Columns[column.DataColumn];
+                if (col.Visible) ordered.Add(col);
+            }
+
+            foreach (CaseGridColumn column in selected)
+            {
+                if (!column.IsPhoto) continue;
+                if (!dgvCases.Columns.Contains(column.ThumbColumnName)) continue;
+                DataGridViewColumn col = dgvCases.Columns[column.ThumbColumnName];
+                if (col.Visible) ordered.Add(col);
+            }
+
+            for (int i = 0; i < ordered.Count; i++)
+                ordered[i].DisplayIndex = i;
+        }
+
+        private void ShowGridColumn(string columnName)
         {
             if (!dgvCases.Columns.Contains(columnName))
                 return;
 
-            DataGridViewColumn column = dgvCases.Columns[columnName];
-            column.Visible = true;
-
-            if (displayIndex < dgvCases.Columns.Count)
-                column.DisplayIndex = displayIndex;
+            dgvCases.Columns[columnName].Visible = true;
         }
 
         private void HideGridColumn(string columnName)

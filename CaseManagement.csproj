@@ -429,6 +429,8 @@
     <Compile Include="Helpers\FileCleanupHelper.cs" />
     <Compile Include="Helpers\CaseDomain.cs" />
     <Compile Include="Helpers\CaseGridColumns.cs" />
+    <Compile Include="Helpers\GridDisplaySettings.cs" />
+    <Compile Include="Helpers\GridLayout.cs" />
     <Compile Include="Helpers\GridReportExporter.cs" />
     <Compile Include="Helpers\ReportDefinitions.cs" />
     <Compile Include="Helpers\LicenseInfo.cs" />

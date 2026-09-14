@@ -134,6 +134,12 @@ namespace CaseManagement
         private Panel _pnlFontColorSwatch;
         private Color _selectedFontColor = UiTheme.TextDark;
         private ComboBox _cmbDashboardRows;
+        private ComboBox _cmbGridDensity;
+        private ComboBox _cmbGridForm;
+        private NumericUpDown _numGridFontSize;
+        private NumericUpDown _numGridRowHeight;
+        private CheckBox _chkGridAutoFit;
+        private bool _loadingGridPrefs;
         private PictureBox _picLogoPreview;
         // آموزش — امضا/مهر مؤسسه (برای کارت شناسایی سرپرست و اسناد چاپی):
         // فیلدهای _txtSignaturePath/_txtStampPath از قبل برای یک تب «چاپ و
@@ -1136,6 +1142,44 @@ LIMIT " + MaxDeleteGridRows, con))
             _cmbDashboardRows.Items.AddRange(new object[] { "۲ ردیف (فشرده‌تر)", "۳ ردیف", "۴ ردیف (کارت‌های بزرگ‌تر)" });
             appFlow.Controls.Add(_cmbDashboardRows);
 
+            appFlow.Controls.Add(new Label
+            {
+                Text = "نمایش گریدها (برای همین کاربر و همین فرم)", AutoSize = false, Width = 320, Height = 22,
+                TextAlign = ContentAlignment.MiddleRight, Font = UiTheme.FontBold(UiTheme.SizeSmall),
+                ForeColor = UiTheme.TextDark, Margin = new Padding(0, 12, 0, 4)
+            });
+            _cmbGridForm = new ComboBox
+            {
+                DropDownStyle = ComboBoxStyle.DropDownList, Width = 320, Height = 30,
+                Font = UiTheme.Font(UiTheme.SizeBody), Margin = new Padding(0, 0, 0, 6)
+            };
+            _cmbGridForm.Items.AddRange(GridDisplaySettings.FormTitles);
+            _cmbGridForm.SelectedIndex = 0;
+            _cmbGridForm.SelectedIndexChanged += delegate { LoadGridDisplaySettings(); };
+            appFlow.Controls.Add(_cmbGridForm);
+
+            _cmbGridDensity = new ComboBox
+            {
+                DropDownStyle = ComboBoxStyle.DropDownList, Width = 320, Height = 30,
+                Font = UiTheme.Font(UiTheme.SizeBody), Margin = new Padding(0, 0, 0, 6)
+            };
+            _cmbGridDensity.Items.AddRange(new object[] { "فشرده (Compact)", "معمولی (Normal)", "بزرگ (Large)" });
+            _cmbGridDensity.SelectedIndexChanged += GridDensityPresetChanged;
+            appFlow.Controls.Add(_cmbGridDensity);
+
+            appFlow.Controls.Add(MakeGridNumericRow("اندازه فونت گرید", out _numGridFontSize, 9, 12, 1));
+            _numGridFontSize.DecimalPlaces = 1;
+            _numGridFontSize.Increment = 0.5M;
+            appFlow.Controls.Add(MakeGridNumericRow("ارتفاع ردیف‌ها", out _numGridRowHeight, 22, 48, 0));
+            _chkGridAutoFit = new CheckBox
+            {
+                Text = "Auto Fit Columns — عرض ستون بر اساس محتوا",
+                AutoSize = false, Width = 320, Height = 28, Checked = true,
+                TextAlign = ContentAlignment.MiddleRight, RightToLeft = RightToLeft.Yes,
+                Font = UiTheme.Font(UiTheme.SizeSmall), Margin = new Padding(0, 4, 0, 8)
+            };
+            appFlow.Controls.Add(_chkGridAutoFit);
+
             cardAppearance.Content.Controls.Add(appFlow);
             rightHost.Controls.Add(cardAppearance);
 
@@ -1370,6 +1414,8 @@ LIMIT " + MaxDeleteGridRows, con))
             int dashRows = SettingsHelper.GetInt(SettingsHelper.DashboardSummaryRows, 2);
             _cmbDashboardRows.SelectedIndex = dashRows == 3 ? 1 : (dashRows == 4 ? 2 : 0);
 
+            LoadGridDisplaySettings();
+
             ShowImagePreview(_picLogoPreview, _txtLogoPath.Text);
             ShowImagePreview(_picSignaturePreview, _txtSignaturePath.Text);
             ShowImagePreview(_picStampPreview, _txtStampPath.Text);
@@ -1398,6 +1444,7 @@ LIMIT " + MaxDeleteGridRows, con))
 
             int dashRowsToSave = _cmbDashboardRows.SelectedIndex == 1 ? 3 : (_cmbDashboardRows.SelectedIndex == 2 ? 4 : 2);
             SettingsHelper.Set(SettingsHelper.DashboardSummaryRows, dashRowsToSave.ToString());
+            SaveGridDisplaySettings();
 
             UiTheme.ShowSuccess(this, "تنظیمات مؤسسه ذخیره شد. برای اعمال کامل رنگ‌ها/فونت/چیدمان داشبورد روی همه پنجره‌ها، برنامه را دوباره باز کنید.");
         }
@@ -2423,7 +2470,7 @@ ORDER BY SortOrder, Value", con))
                     e.NewValue = CheckState.Unchecked;
                     UiTheme.ShowWarning(this,
                         "حداکثر " + CaseGridColumns.MaxSelectable +
-                        " ستون می‌توانید انتخاب کنید تا جدول بدون اسکرول افقی جا شود." +
+                        " ستون می‌توانید انتخاب کنید." +
                         Environment.NewLine + "ابتدا یکی از ستون‌های انتخاب‌شده را بردارید.");
                 }
             };
@@ -3913,6 +3960,82 @@ WHERE UserID = @ID", con))
         }
 
         // ─── کمکی‌ها ────────────────────────────────────────────────────────
+        private Control MakeGridNumericRow(string label, out NumericUpDown num, int min, int max, int decimals)
+        {
+            Panel row = new Panel
+            {
+                Width = 320, Height = 32, Margin = new Padding(0, 0, 0, 6)
+            };
+            num = new NumericUpDown
+            {
+                Minimum = min, Maximum = max, DecimalPlaces = decimals,
+                Width = 88, Dock = DockStyle.Left, Font = UiTheme.Font(UiTheme.SizeBody)
+            };
+            Label lbl = new Label
+            {
+                Text = label, Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleRight,
+                Font = UiTheme.Font(UiTheme.SizeSmall), ForeColor = UiTheme.TextDark
+            };
+            row.Controls.Add(lbl);
+            row.Controls.Add(num);
+            return row;
+        }
+
+        private void GridDensityPresetChanged(object sender, EventArgs e)
+        {
+            if (_loadingGridPrefs || _cmbGridDensity == null || _numGridFontSize == null) return;
+            GridDisplayPrefs preset = GridDisplaySettings.FromDensity(
+                GridDisplaySettings.ParseDensity(
+                    _cmbGridDensity.SelectedIndex == 0 ? "Compact" :
+                    _cmbGridDensity.SelectedIndex == 2 ? "Large" : "Normal"));
+            _numGridFontSize.Value = (decimal)preset.CellFont;
+            _numGridRowHeight.Value = preset.RowHeight;
+        }
+
+        private string SelectedGridFormKey()
+        {
+            if (_cmbGridForm == null || _cmbGridForm.SelectedIndex < 0
+                || _cmbGridForm.SelectedIndex >= GridDisplaySettings.FormKeys.Length)
+                return GridDisplaySettings.DefaultFormKey;
+            return GridDisplaySettings.FormKeys[_cmbGridForm.SelectedIndex];
+        }
+
+        private void LoadGridDisplaySettings()
+        {
+            if (_cmbGridDensity == null) return;
+            _loadingGridPrefs = true;
+            try
+            {
+                GridDisplayPrefs prefs = GridDisplaySettings.LoadFor(
+                    SecurityContext.UserId, SelectedGridFormKey());
+                _cmbGridDensity.SelectedIndex = (int)prefs.Density;
+                decimal font = (decimal)Math.Max(GridDisplaySettings.MinCellFont, prefs.CellFont);
+                if (font < _numGridFontSize.Minimum) font = _numGridFontSize.Minimum;
+                if (font > _numGridFontSize.Maximum) font = _numGridFontSize.Maximum;
+                _numGridFontSize.Value = font;
+                _numGridRowHeight.Value = prefs.RowHeight;
+                _chkGridAutoFit.Checked = prefs.AutoFit;
+            }
+            finally
+            {
+                _loadingGridPrefs = false;
+            }
+        }
+
+        private void SaveGridDisplaySettings()
+        {
+            if (_cmbGridDensity == null) return;
+            var prefs = new GridDisplayPrefs
+            {
+                Density = (GridDensity)_cmbGridDensity.SelectedIndex,
+                CellFont = (float)_numGridFontSize.Value,
+                RowHeight = (int)_numGridRowHeight.Value,
+                AutoFit = _chkGridAutoFit.Checked
+            };
+            GridDisplaySettings.SaveFor(SecurityContext.UserId, SelectedGridFormKey(), prefs);
+        }
+
         private DataGridView CreateGrid()
         {
             DataGridView g = new DataGridView

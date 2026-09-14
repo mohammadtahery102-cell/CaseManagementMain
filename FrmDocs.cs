@@ -220,7 +220,7 @@ namespace CaseManagement
             dgvDocs.ReadOnly = true;
             dgvDocs.AllowUserToAddRows = false;
             dgvDocs.AllowUserToDeleteRows = false;
-            dgvDocs.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+            GridLayout.Apply(dgvDocs);
         }
 
         // قفلِ سندِ جاری را آزاد و تایمرِ تمدید را متوقف می‌کند — قبل از
@@ -615,7 +615,7 @@ namespace CaseManagement
             if (dgvDocs.Columns.Contains("DocTags"))
                 dgvDocs.Columns["DocTags"].DisplayIndex = 5;
 
-            dgvDocs.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+            GridLayout.Apply(dgvDocs);
         }
 
         private void txtSearch_TextChanged(object sender, EventArgs e)

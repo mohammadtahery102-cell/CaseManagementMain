@@ -349,25 +349,40 @@ namespace CaseManagement.Helpers
             grid.EnableHeadersVisualStyles = false;
             grid.ColumnHeadersDefaultCellStyle.BackColor = Primary;
             grid.ColumnHeadersDefaultCellStyle.ForeColor = Color.White;
-            grid.ColumnHeadersDefaultCellStyle.Font = FontBold(10f);
-            grid.ColumnHeadersDefaultCellStyle.Padding = new Padding(4);
             grid.ColumnHeadersDefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
-            grid.ColumnHeadersHeight = 34;
-            grid.DefaultCellStyle.Font = Font(9.5f);
-            grid.DefaultCellStyle.Padding = new Padding(3, 0, 3, 0);
             grid.DefaultCellStyle.SelectionBackColor = PrimaryLight;
             grid.DefaultCellStyle.SelectionForeColor = Color.White;
             grid.AlternatingRowsDefaultCellStyle.BackColor = ColorTranslator.FromHtml("#F7F9FB");
-            grid.RowTemplate.Height = 30;
             grid.RowHeadersVisible = false;
             grid.AllowUserToResizeRows = false;
             grid.GridColor = Border;
+            GridLayout.ApplyChrome(grid);
 
             // هدر فارسی خودکار: بعد از هر بار bind، ستون‌هایی که هنوز نام
             // انگلیسی دیتابیس را نشان می‌دهند به فارسی ترجمه می‌شوند. ستون‌هایی
             // که فرم خودش هدر فارسی برایشان گذاشته دست‌نخورده می‌مانند.
             grid.DataBindingComplete -= LocalizeHeadersHandler;
             grid.DataBindingComplete += LocalizeHeadersHandler;
+            grid.DataBindingComplete -= FitColumnsHandler;
+            grid.DataBindingComplete += FitColumnsHandler;
+            grid.SizeChanged -= GridSizeChangedHandler;
+            grid.SizeChanged += GridSizeChangedHandler;
+        }
+
+        private static void GridSizeChangedHandler(object sender, EventArgs e)
+        {
+            DataGridView grid = sender as DataGridView;
+            if (grid == null || !grid.IsHandleCreated || grid.Columns.Count == 0)
+                return;
+            if (grid.ClientSize.Width < 80) return;
+            GridLayout.FitColumns(grid);
+        }
+
+        private static void FitColumnsHandler(object sender, DataGridViewBindingCompleteEventArgs e)
+        {
+            DataGridView grid = sender as DataGridView;
+            if (grid == null) return;
+            GridLayout.Apply(grid);
         }
 
         private static void LocalizeHeadersHandler(object sender, DataGridViewBindingCompleteEventArgs e)

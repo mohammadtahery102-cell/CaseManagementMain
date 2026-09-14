@@ -448,7 +448,6 @@ namespace CaseManagement
             dgvFamily.ReadOnly = true;
             dgvFamily.AllowUserToAddRows = false;
             dgvFamily.AllowUserToDeleteRows = false;
-            dgvFamily.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
             UiTheme.ApplyPersianDateColumns(dgvFamily, "BirthDate");
         }
 
@@ -855,8 +854,10 @@ namespace CaseManagement
             if (dgvFamily.Columns.Contains("Age"))
                 dgvFamily.Columns["Age"].HeaderText = "سن";
 
+            if (dgvFamily.Columns.Contains("Gender"))
+                dgvFamily.Columns["Gender"].HeaderText = "جنسیت";
+
             HideFamilyGridColumn("FamID");
-            HideFamilyGridColumn("Gender");
             HideFamilyGridColumn("MemberRole");
             HideFamilyGridColumn("BirthDate");
             HideFamilyGridColumn("MemberEducation");
@@ -885,16 +886,16 @@ namespace CaseManagement
                 dgvFamily.Columns["MemberName"].DisplayIndex = 0;
             if (dgvFamily.Columns.Contains("MemberFatherName"))
                 dgvFamily.Columns["MemberFatherName"].DisplayIndex = 1;
+            if (dgvFamily.Columns.Contains("Gender"))
+                dgvFamily.Columns["Gender"].DisplayIndex = 2;
             if (dgvFamily.Columns.Contains("Age"))
-                dgvFamily.Columns["Age"].DisplayIndex = 2;
+                dgvFamily.Columns["Age"].DisplayIndex = 3;
             dgvFamily.Columns[MemberPhotoThumbColumnName].DisplayIndex = dgvFamily.Columns.Count - 1;
-
-            dgvFamily.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-            dgvFamily.RowTemplate.Height = 44;
 
             LoadMemberThumbnails();
             UpdateMembersHeader();
             StyleFamilyGrid();
+            GridLayout.Apply(dgvFamily);
         }
 
         // ─── شمارنده‌ی اعضا در سربرگ کارت لیست (فقط نمایشی) ──────────────────
@@ -925,19 +926,12 @@ namespace CaseManagement
 
             dgvFamily.ColumnHeadersDefaultCellStyle.BackColor = UiTheme.CardBack;
             dgvFamily.ColumnHeadersDefaultCellStyle.ForeColor = UiTheme.TextMuted;
-            dgvFamily.ColumnHeadersDefaultCellStyle.Font = UiTheme.FontBold(UiTheme.SizeSmall - 1F);
             dgvFamily.ColumnHeadersDefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
-            dgvFamily.ColumnHeadersDefaultCellStyle.Padding = new Padding(6, 0, 6, 0);
-            dgvFamily.ColumnHeadersHeight = 38;
             dgvFamily.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.Single;
 
-            dgvFamily.DefaultCellStyle.Font = UiTheme.Font(UiTheme.SizeSmall);
             dgvFamily.DefaultCellStyle.ForeColor = UiTheme.TextDark;
             dgvFamily.DefaultCellStyle.BackColor = UiTheme.CardBack;
             dgvFamily.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
-            dgvFamily.DefaultCellStyle.Padding = new Padding(6, 0, 6, 0);
-            // ردیف انتخاب‌شده: آبیِ کم‌رنگ با متن تیره (مثل طرح مرجع) به‌جای
-            // آبیِ پررنگِ پیش‌فرض ویندوز که متن را ناخوانا می‌کند.
             dgvFamily.DefaultCellStyle.SelectionBackColor = UiTheme.HoverTint;
             dgvFamily.DefaultCellStyle.SelectionForeColor = UiTheme.TextDark;
             dgvFamily.AlternatingRowsDefaultCellStyle.BackColor = UiTheme.CardBack;

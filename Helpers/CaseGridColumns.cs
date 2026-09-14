@@ -59,11 +59,10 @@ namespace CaseManagement.Helpers
         public const string FixedColumn = "Code";
         public const string FixedColumnTitle = "کد اختصاصی";
 
-        // آموزش — سقف از ۴ به ۵ رفت چون چیدمانِ خواسته‌شدهٔ گرید (تصویرِ
-        // مرجعِ FrmCase) شش ستون دارد: «کد اختصاصی»ِ ثابت + پنج ستونِ انتخابی
-        // (نام سرپرست، نوع پرونده، ولسوالی، شماره تذکره، عکس). با سقفِ ۴،
-        // یکی از این‌ها همیشه از قلم می‌افتاد.
-        public const int MaxSelectable = 5;
+        // سقف از ۵ به ۸ رفت تا با عرضِ مبتنی بر محتوا، ستون‌های بیشتری در
+        // همان صفحه دیده شوند (هدف ۱٫۵ برابر نسبت به ۶ ستون قبلی). «کد اختصاصی»
+        // همچنان خارج از سقف است.
+        public const int MaxSelectable = 8;
 
         public static readonly List<CaseGridColumn> Available = new List<CaseGridColumn>
         {
@@ -81,7 +80,8 @@ namespace CaseManagement.Helpers
             new CaseGridColumn("FamilyPhoto",          "عکس جمعی",          "FamilyPhotoPath",      true, 16, 9),
             new CaseGridColumn("HeadCurrentResidence", "آدرس (سکونت فعلی)", "HeadCurrentResidence", false),
             new CaseGridColumn("Province",             "ولایت",             "Province",             false),
-            new CaseGridColumn("District",             "ولسوالی",           "District",             false)
+            new CaseGridColumn("District",             "ولسوالی",           "District",             false),
+            new CaseGridColumn("ServiceStatus",        "وضعیت خدمات",       "ServiceStatus",        false)
         };
 
         // پیش‌فرض = دقیقاً ستون‌های تصویرِ مرجعِ FrmCase. ترتیب مهم است:
@@ -89,9 +89,13 @@ namespace CaseManagement.Helpers
         // همین ترتیب پشتِ آن، و چون گرید راست‌به‌چپ است جایگاهِ ۰ سمتِ راست
         // می‌نشیند. نتیجه از راست به چپ:
         //   کد اختصاصی │ نام سرپرست │ نوع پرونده │ ولسوالی │ شماره تذکره │ عکس
+        // پیش‌فرض: ستون‌های قبلی به‌علاوه تلفن، ولایت و وضعیت — تا در عرضِ
+        // Full HD حدود ۱٫۵ برابر ستونِ بیشتر دیده شود، نه اینکه پنج ستونِ
+        // عریض صفحه را پر کنند.
         public static readonly string[] DefaultKeys =
         {
-            "HeadFullName", "RequestType", "District", "HeadTazkiraNo", "Photo"
+            "HeadFullName", "Phone", "HeadTazkiraNo", "RequestType",
+            "ServiceStatus", "District", "Province", "Photo"
         };
 
         public static CaseGridColumn Find(string key)
