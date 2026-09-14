@@ -64,6 +64,23 @@ namespace CaseManagement
                 // شبکه‌ای برقرار نمی‌کند.
                 CaseManagement.Sync.OfflineSyncInitializer.EnsureOfflineSyncObjects();
 
+                // ذخیره‌سازی نسخهٔ ۲: copy-first + hash verification.
+                // شکست مهاجرت برنامه را قفل نمی‌کند؛ حالت ایمن است و بکاپ/
+                // پاکسازی فقط روی نتیجهٔ موفق اجرا می‌شود.
+                FileStorageMigrationService.Result layout =
+                    FileStorageMigrationService.EnsureCurrentLayout();
+                FileStorageMigrationService.RecordStartupLayout(layout);
+                FileStorageMigrationService.RunMaintenanceIfSafe();
+                if (FileStorageMigrationService.IsSafeMode)
+                {
+                    string layoutError;
+                    FileStorageMigrationService.CanContinueStartup(layout, out layoutError);
+                    CaseManagement.Enterprise.ErrorLogger.LogMessage(
+                        "مهاجرت پوشه ناتمام؛ حالت ایمن. " + layoutError,
+                        "Program.Startup", null,
+                        CaseManagement.Enterprise.ErrorLogger.SeverityWarning);
+                }
+
                 // دستیار هوشمند — فاز ۱: جدول‌های Ai* (گفتگو/پیام/گزارش قصد) و
                 // نمایه‌ی جست‌وجوی FTS5. کاملاً افزایشی؛ بعد از Enterprise چون به
                 // TblAuditLog برای آشتیِ یادآوری‌ها نیاز دارد.
@@ -75,14 +92,34 @@ namespace CaseManagement
                 // چون خودش برای ثبت به جدول EntErrorLog نیاز دارد.
                 CaseManagement.Enterprise.ErrorLogger.Install();
 
+                try
+                {
+                    CaseManagement.Sync.SyncDeferredApplyStore.Counts deferred =
+                        CaseManagement.Sync.SyncDeferredApplyStore.GetCounts();
+                    if (deferred.Total > 0)
+                    {
+                        CaseManagement.Enterprise.ErrorLogger.LogMessage(
+                            CaseManagement.Sync.SyncDeferredApplyStore.FormatReport(),
+                            "Program.Startup", null,
+                            CaseManagement.Enterprise.ErrorLogger.SeverityWarning);
+                    }
+                }
+                catch { }
+
                 // مرکز کنترل توسعه‌دهنده (مخفی) — فقط یک فیلترِ پیامِ صفحه‌کلید
                 // نصب می‌شود. هیچ گزینه‌ای به منو/نوار کناری/داشبورد/تنظیمات
                 // اضافه نمی‌کند و برای هر کاربری غیر از «مدیر کل» کاملاً بی‌اثر
                 // است (توضیح کامل در DevCenter/DevCenterAccess.cs).
                 CaseManagement.DevCenter.DevCenterAccess.Install();
 
-                AutoBackupService.RunDailyBackupIfDue();
+                if (FileStorageMigrationService.ShouldRunMaintenanceJobs())
+                    AutoBackupService.RunDailyBackupIfDue();
                 ApplyOrganizationTheme();
+
+                if (FileStorageMigrationService.IsSafeMode)
+                {
+                    Msg.Show(FileStorageMigrationService.SafeModeMessage());
+                }
             }
             catch (Exception ex)
             {

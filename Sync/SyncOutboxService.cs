@@ -37,7 +37,11 @@ namespace CaseManagement.Sync
         private static readonly HashSet<string> SkippedColumns =
             new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
-                "RowVersion", "LastModifiedAt", "LastModifiedBy", "SyncStatus"
+                "RowVersion", "LastModifiedAt", "LastModifiedBy", "SyncStatus",
+                // مسیر فیزیکی متعلق به ماشین محلی است. بایت و logical identity
+                // فقط از manifest فایل منتقل می‌شوند.
+                "PhotoPath", "FamilyPhotoPath", "MemberPhotoPath",
+                "GuardianPhotoPath", "DocFilePath", "FilePath"
             };
 
         // ─────────────────────────────────────────────────────────────────────
@@ -212,7 +216,8 @@ namespace CaseManagement.Sync
                 // فعلاً فقط نام فایل و اندازه ثبت می‌شود. هش و وضعیت آپلود در
                 // فاز ۷ اضافه می‌گردد؛ عمداً اینجا هشِ ساختگی تولید نمی‌شود.
                 var payload = new StringBuilder();
-                payload.Append("FilePath=").Append(filePath).AppendLine();
+                string relative = CaseFileInventory.ToRelativePath(filePath);
+                payload.Append("RelativePath=").Append(relative).AppendLine();
                 try
                 {
                     var info = new System.IO.FileInfo(filePath);
@@ -220,6 +225,8 @@ namespace CaseManagement.Sync
                     {
                         payload.Append("FileName=").Append(info.Name).AppendLine();
                         payload.Append("SizeBytes=").Append(info.Length).AppendLine();
+                        payload.Append("ContentHash=")
+                            .Append(CaseFileInventory.ComputeHash(filePath)).AppendLine();
                     }
                 }
                 catch { }
@@ -440,6 +447,18 @@ VALUES
         private static string ParentGlobalId(string entityName, DataRow row)
         {
             if (string.Equals(entityName, "TblCase", StringComparison.OrdinalIgnoreCase)) return null;
+            if (string.Equals(entityName, "TblFieldVisitPhoto", StringComparison.OrdinalIgnoreCase) &&
+                row.Table.Columns.Contains("VisitID") && row["VisitID"] != DBNull.Value)
+            {
+                try
+                {
+                    object visit = Db.ExecuteScalar(
+                        "SELECT GlobalID FROM TblFieldVisit WHERE VisitID=@Id;",
+                        new SQLiteParameter("@Id", Convert.ToInt32(row["VisitID"])));
+                    return visit == null || visit == DBNull.Value ? null : Convert.ToString(visit);
+                }
+                catch { return null; }
+            }
             if (!row.Table.Columns.Contains("CasID")) return null;
             if (row["CasID"] == DBNull.Value) return null;
 

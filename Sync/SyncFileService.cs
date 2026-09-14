@@ -37,6 +37,7 @@ namespace CaseManagement.Sync
         private const int HashBufferSize = 81920;
 
         public const int UploadBatchSize = 10;
+        private const string CatalogColumnPrefix = "FileAsset|";
 
         // منابع فایل — دقیقاً همان ستون‌هایی که از قبل در برنامه وجود دارند.
         private static readonly string[][] FileSources =
@@ -44,6 +45,9 @@ namespace CaseManagement.Sync
             new[] { "TblCase",   "CasID", "PhotoPath",       "عکس سرپرست" },
             new[] { "TblCase",   "CasID", "FamilyPhotoPath", "عکس خانواده" },
             new[] { "TblFamily", "FamID", "MemberPhotoPath", "عکس عضو" },
+            new[] { "TblOrphan", "OrphanID", "GuardianPhotoPath", "عکس سرپرست کودک" },
+            new[] { "TblCaseRepresentative", "RepresentativeID", "PhotoPath", "عکس نماینده" },
+            new[] { "TblFieldVisitPhoto", "PhotoID", "FilePath", "عکس بازدید" },
             new[] { "TblDocs",   "DocID", "DocFilePath",     "سند" }
         };
 
@@ -109,7 +113,50 @@ namespace CaseManagement.Sync
                 }
             }
 
+            ScanCatalogAssets(result, progress, cancel);
             return result;
+        }
+
+        private static void ScanCatalogAssets(ScanResult result,
+            IProgress<SyncProgress> progress, CancellationToken cancel)
+        {
+            if (!TableExists("TblFileAsset")) return;
+
+            DataTable rows;
+            try
+            {
+                rows = Db.Query(@"
+SELECT FileGlobalID,CaseGlobalID,RelativePath,Kind
+FROM TblFileAsset
+WHERE Status='Active' AND Kind IN ('CaseFile','Export')
+  AND NULLIF(CaseGlobalID,'') IS NOT NULL;");
+            }
+            catch { return; }
+
+            int index = 0;
+            foreach (DataRow row in rows.Rows)
+            {
+                if (cancel.IsCancellationRequested)
+                {
+                    result.Cancelled = true;
+                    return;
+                }
+
+                index++;
+                if (index % 20 == 0 || index == rows.Rows.Count)
+                    Report(progress, "بررسی فایل‌های تولیدی و خروجی", index, rows.Rows.Count);
+
+                string fileGlobalId = Convert.ToString(row["FileGlobalID"]);
+                string caseGlobalId = Convert.ToString(row["CaseGlobalID"]);
+                string kind = Convert.ToString(row["Kind"]);
+                string path = CaseFileInventory.ResolveStoredPath(
+                    Convert.ToString(row["RelativePath"]));
+                if (string.IsNullOrWhiteSpace(fileGlobalId) ||
+                    string.IsNullOrWhiteSpace(caseGlobalId)) continue;
+
+                Register("TblCase", caseGlobalId,
+                    BuildCatalogColumn(fileGlobalId, kind), path, result);
+            }
         }
 
         private static void Register(string entityName, string entityGlobalId,
@@ -117,6 +164,7 @@ namespace CaseManagement.Sync
         {
             try
             {
+                path = CaseFileInventory.ResolveStoredPath(path);
                 DataRow existing = FindRow(entityName, entityGlobalId, columnName);
 
                 // ── اعتبارسنجی امنیتی پیش از هر کاری ──
@@ -434,6 +482,16 @@ namespace CaseManagement.Sync
             {
                 if (!File.Exists(downloadedPath))
                 {
+                    DataRow alreadyApplied = FindRow(entityName, entityGlobalId, columnName);
+                    if (alreadyApplied != null &&
+                        string.Equals(Convert.ToString(alreadyApplied["ContentHash"]), expectedHash,
+                            StringComparison.OrdinalIgnoreCase) &&
+                        LocalFileExists(alreadyApplied))
+                    {
+                        outcome.Applied = true;
+                        outcome.Message = "همان فایل از قبل اعمال شده است.";
+                        return outcome;
+                    }
                     outcome.Message = "فایل دریافتی پیدا نشد.";
                     return outcome;
                 }
@@ -488,20 +546,36 @@ namespace CaseManagement.Sync
                 // ── همان محتوا از قبل هست ⇒ کاری لازم نیست (جلوگیری از تکرار) ──
                 if (existing != null &&
                     string.Equals(Convert.ToString(existing["ContentHash"]), actualHash,
-                                  StringComparison.OrdinalIgnoreCase))
+                                  StringComparison.OrdinalIgnoreCase) &&
+                    LocalFileExists(existing))
                 {
                     outcome.Applied = true;
                     outcome.Message = "همان فایل از قبل موجود است.";
                     return outcome;
                 }
 
-                Upsert(entityName, entityGlobalId, columnName, downloadedPath, actualHash,
-                       new FileInfo(downloadedPath).Length,
+                string canonicalPath = BuildCanonicalDownloadPath(
+                    entityName, entityGlobalId, columnName, Path.GetFileName(downloadedPath));
+                if (string.IsNullOrWhiteSpace(canonicalPath)) canonicalPath = downloadedPath;
+                if (!string.Equals(Path.GetFullPath(downloadedPath), Path.GetFullPath(canonicalPath),
+                    StringComparison.OrdinalIgnoreCase))
+                {
+                    string placement = PlaceFile(downloadedPath, canonicalPath);
+                    if (placement != null)
+                    {
+                        outcome.Message = placement;
+                        return outcome;
+                    }
+                }
+
+                Upsert(entityName, entityGlobalId, columnName, canonicalPath, actualHash,
+                       new FileInfo(canonicalPath).Length,
                        OfflineSyncInitializer.FileDownloaded, null, existing);
 
                 // ⚠ اتصال به رکوردِ درست: مسیر روی همان ستونی نوشته می‌شود که
                 // مالکش با هویت سراسری پیدا شده — نه با حدسِ نام فایل.
-                LinkToRecord(entityName, entityGlobalId, columnName, downloadedPath);
+                LinkToRecord(entityName, entityGlobalId, columnName, canonicalPath);
+                TryCatalogDownload(entityName, entityGlobalId, columnName, canonicalPath);
 
                 outcome.Applied = true;
                 outcome.Message = "فایل ثبت و به رکورد وصل شد.";
@@ -524,6 +598,125 @@ namespace CaseManagement.Sync
                 "UPDATE [" + entityName + "] SET [" + columnName + "] = @p WHERE GlobalID = @g;",
                 new SQLiteParameter("@p", path),
                 new SQLiteParameter("@g", entityGlobalId));
+        }
+
+        private static string BuildCanonicalDownloadPath(string entityName,
+            string entityGlobalId, string columnName, string fileName)
+        {
+            try
+            {
+                DataRow owner = OwnerAndCase(entityName, entityGlobalId);
+                if (owner == null) return "";
+                string code = Convert.ToString(owner["Code"]);
+                if (string.IsNullOrWhiteSpace(code)) return "";
+
+                FileHelper.RememberLayout(code,
+                    Convert.ToString(owner["Province"]),
+                    Convert.ToString(owner["District"]),
+                    Convert.ToString(owner["RequestType"]),
+                    Convert.ToString(owner["ServiceStatus"]));
+
+                string kind = KindOf(entityName, columnName);
+                string folder = FileHelper.GetSectionFolder(code,
+                    FileKindPolicy.SectionForKind(kind));
+                string context = entityGlobalId == null ? "" :
+                    entityGlobalId.Replace("-", "").Substring(0,
+                        Math.Min(8, entityGlobalId.Replace("-", "").Length));
+                return FileNamingPolicy.NextAvailablePath(folder, code, kind, context,
+                    DateTime.Now, Path.GetExtension(fileName));
+            }
+            catch { return ""; }
+        }
+
+        private static void TryCatalogDownload(string entityName, string entityGlobalId,
+            string columnName, string path)
+        {
+            try
+            {
+                DataRow owner = OwnerAndCase(entityName, entityGlobalId);
+                if (owner == null) return;
+                string fileGlobalId, catalogKind;
+                bool catalogAsset = TryParseCatalogColumn(
+                    columnName, out fileGlobalId, out catalogKind);
+                new FileCatalogService().Register(
+                    Convert.ToString(owner["Code"]),
+                    catalogAsset ? catalogKind : KindOf(entityName, columnName), path,
+                    catalogAsset ? "" : entityName,
+                    catalogAsset ? 0 : Convert.ToInt32(owner["OwnerLocalID"]),
+                    catalogAsset ? "" : entityGlobalId,
+                    catalogAsset ? "" : columnName,
+                    Path.GetFileName(path), FileHelper.GetBaseRootFolder(),
+                    catalogAsset ? fileGlobalId : "");
+            }
+            catch { }
+        }
+
+        private static DataRow OwnerAndCase(string entityName, string entityGlobalId)
+        {
+            string primaryKey = PrimaryKey(entityName);
+            if (string.IsNullOrWhiteSpace(primaryKey)) return null;
+            string caseJoin = string.Equals(entityName, "TblCase", StringComparison.OrdinalIgnoreCase)
+                ? "o.CasID" : "o.CasID";
+            DataTable rows = Db.Query(
+                "SELECT o.[" + primaryKey + "] AS OwnerLocalID,c.Code,c.Province,c.District," +
+                "IFNULL(NULLIF(TRIM(rt.Name),''),IFNULL(c.RequestType,'')) AS RequestType," +
+                "IFNULL(NULLIF(TRIM(ss.Name),''),IFNULL(c.ServiceStatus,'')) AS ServiceStatus " +
+                "FROM [" + entityName + "] o JOIN TblCase c ON c.CasID=" + caseJoin + " " +
+                "LEFT JOIN TblRequestType rt ON rt.RequestTypeID=c.RequestTypeID " +
+                "LEFT JOIN TblServiceStatus ss ON ss.ServiceStatusID=c.ServiceStatusID " +
+                "WHERE o.GlobalID=@g LIMIT 1;",
+                new SQLiteParameter("@g", entityGlobalId));
+            return rows.Rows.Count == 0 ? null : rows.Rows[0];
+        }
+
+        private static string PrimaryKey(string entityName)
+        {
+            if (string.Equals(entityName, "TblCase", StringComparison.OrdinalIgnoreCase)) return "CasID";
+            if (string.Equals(entityName, "TblFamily", StringComparison.OrdinalIgnoreCase)) return "FamID";
+            if (string.Equals(entityName, "TblOrphan", StringComparison.OrdinalIgnoreCase)) return "OrphanID";
+            if (string.Equals(entityName, "TblCaseRepresentative", StringComparison.OrdinalIgnoreCase)) return "RepresentativeID";
+            if (string.Equals(entityName, "TblFieldVisitPhoto", StringComparison.OrdinalIgnoreCase)) return "PhotoID";
+            if (string.Equals(entityName, "TblDocs", StringComparison.OrdinalIgnoreCase)) return "DocID";
+            return "";
+        }
+
+        private static string KindOf(string entityName, string columnName)
+        {
+            string fileGlobalId, catalogKind;
+            if (TryParseCatalogColumn(columnName, out fileGlobalId, out catalogKind))
+                return catalogKind;
+            if (string.Equals(entityName, "TblCase", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(columnName, "FamilyPhotoPath", StringComparison.OrdinalIgnoreCase))
+                return FileKinds.Family;
+            if (string.Equals(entityName, "TblCase", StringComparison.OrdinalIgnoreCase)) return FileKinds.HeadGuardian;
+            if (string.Equals(entityName, "TblFamily", StringComparison.OrdinalIgnoreCase)) return FileKinds.Member;
+            if (string.Equals(entityName, "TblOrphan", StringComparison.OrdinalIgnoreCase)) return FileKinds.OrphanGuardian;
+            if (string.Equals(entityName, "TblCaseRepresentative", StringComparison.OrdinalIgnoreCase)) return FileKinds.Representative;
+            if (string.Equals(entityName, "TblFieldVisitPhoto", StringComparison.OrdinalIgnoreCase)) return FileKinds.Visit;
+            if (string.Equals(entityName, "TblDocs", StringComparison.OrdinalIgnoreCase)) return FileKinds.Document;
+            return FileKinds.Other;
+        }
+
+        private static string BuildCatalogColumn(string fileGlobalId, string kind)
+        {
+            return CatalogColumnPrefix + (fileGlobalId ?? "").Replace("|", "") + "|" +
+                (string.IsNullOrWhiteSpace(kind) ? FileKinds.Other : kind.Replace("|", ""));
+        }
+
+        private static bool TryParseCatalogColumn(string columnName,
+            out string fileGlobalId, out string kind)
+        {
+            fileGlobalId = "";
+            kind = "";
+            if (string.IsNullOrWhiteSpace(columnName) ||
+                !columnName.StartsWith(CatalogColumnPrefix,
+                    StringComparison.OrdinalIgnoreCase)) return false;
+
+            string[] parts = columnName.Split('|');
+            if (parts.Length != 3 || string.IsNullOrWhiteSpace(parts[1])) return false;
+            fileGlobalId = parts[1];
+            kind = string.IsNullOrWhiteSpace(parts[2]) ? FileKinds.Other : parts[2];
+            return true;
         }
 
         private static void RecordAttachmentConflict(string entityName, string entityGlobalId,
@@ -755,12 +948,30 @@ namespace CaseManagement.Sync
             long remoteSize    = Convert.ToInt64(row["SizeBytes"]);
             int remoteVersion  = Convert.ToInt32(row["FileVersion"]);
             bool remoteDeleted = Convert.ToInt64(row["RemoteDeleted"]) != 0;
+            DataRow existing = FindRow(entityName, entityGuid, columnName);
 
             // ── فایل در سرور حذف شده ──
-            // ⚠ فایلِ محلی *پاک نمی‌شود*. حذفِ سرور فقط ثبت می‌شود؛ تنها نسخهٔ
-            // موجودِ یک سند نباید با یک تصمیمِ راه دور نابود شود.
             if (remoteDeleted)
             {
+                if (existing != null)
+                {
+                    if (HasUnsentLocalChange(existing))
+                    {
+                        RecordAttachmentConflict(entityName, entityGuid, columnName,
+                            existing, remoteHash, remoteVersion, "",
+                            "فایل محلی تغییرِ ارسال‌نشده دارد ولی در سرور حذف شده است");
+                        MarkFileState(existing, OfflineSyncInitializer.FileConflict);
+                        MarkDownload(id, OfflineSyncInitializer.DownloadConflict,
+                            "تعارض حذف سرور با تغییر محلی ثبت شد", false);
+                        result.Conflicts++;
+                        return;
+                    }
+
+                    string localPath = Convert.ToString(existing["LocalPath"]);
+                    FileHelper.DeleteFileIfExists(localPath);
+                    try { new FileCatalogService().MarkPathDeleted(localPath); } catch { }
+                    LinkToRecord(entityName, entityGuid, columnName, "");
+                }
                 MarkDownload(id, OfflineSyncInitializer.DownloadRemoved, null, false);
                 result.RemovedRemotely++;
                 return;
@@ -779,8 +990,6 @@ namespace CaseManagement.Sync
             }
 
             // ── از قبل همین محتوا را داریم؟ ──
-            DataRow existing = FindRow(entityName, entityGuid, columnName);
-
             if (existing != null && !string.IsNullOrEmpty(remoteHash) &&
                 string.Equals(Convert.ToString(existing["ContentHash"]), remoteHash,
                               StringComparison.OrdinalIgnoreCase) &&
@@ -865,8 +1074,10 @@ namespace CaseManagement.Sync
             // ── جای‌گذاری ──
             string finalPath = localExists
                 ? Convert.ToString(existing["LocalPath"])
-                : Path.Combine(incoming, SafeName(entityName),
-                               SafeName(entityGuid) + "_" + SafeName(columnName) + extension);
+                : BuildCanonicalDownloadPath(entityName, entityGuid, columnName, fileName);
+            if (string.IsNullOrWhiteSpace(finalPath))
+                finalPath = Path.Combine(incoming, SafeName(entityName),
+                    SafeName(entityGuid) + "_" + SafeName(columnName) + extension);
 
             string placement = PlaceFile(staging, finalPath);
             if (placement != null)
@@ -971,6 +1182,7 @@ namespace CaseManagement.Sync
                    OfflineSyncInitializer.FileDownloaded, null, existing);
 
             LinkToRecord(entityName, entityGlobalId, columnName, path);
+            TryCatalogDownload(entityName, entityGlobalId, columnName, path);
         }
 
         // «تغییرِ محلیِ ارسال‌نشده» — تنها حالتی که بازنویسی ممنوع است.
@@ -1000,7 +1212,7 @@ namespace CaseManagement.Sync
                 string root = FileHelper.GetBaseRootFolder();
                 if (string.IsNullOrWhiteSpace(root)) return null;
 
-                string folder = Path.Combine(root, IncomingFolderName);
+                string folder = Path.Combine(root, "_System", IncomingFolderName);
                 Directory.CreateDirectory(folder);
                 return folder;
             }

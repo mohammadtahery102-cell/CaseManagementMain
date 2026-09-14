@@ -370,7 +370,8 @@ namespace CaseManagement.Sync
             if (!string.IsNullOrWhiteSpace(configured)) return configured;
 
             string baseDir = System.IO.Path.Combine(
-                AppDomain.CurrentDomain.BaseDirectory, "SyncBackups");
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "CaseManagement", "Backups", "Sync");
             System.IO.Directory.CreateDirectory(baseDir);
             return baseDir;
         }

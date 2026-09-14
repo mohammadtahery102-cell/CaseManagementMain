@@ -269,6 +269,8 @@ namespace CaseManagement.Sync
 
             try
             {
+            ApplyDeferred(result, affectedCases);
+
             while (!cancel.IsCancellationRequested)
             {
                 SyncPullResult pull;
@@ -325,6 +327,10 @@ namespace CaseManagement.Sync
                                 result.Conflicts++;
                                 break;
 
+                            case SyncApplier.ApplyOutcome.Deferred:
+                                SyncDeferredApplyStore.Enqueue(change);
+                                break;
+
                             default:
                                 result.DownloadSkipped++;
                                 break;
@@ -343,6 +349,8 @@ namespace CaseManagement.Sync
                 // می‌گردد — و چون اعمال بر اساس GlobalID و idempotent است،
                 // رکورد تکراری ساخته نمی‌شود.
                 if (cancel.IsCancellationRequested) return;
+
+                ApplyDeferred(result, affectedCases);
 
                 string previousCursor = cursor;
                 cursor = SaveCursor(pull.NextCursor, cursor);
@@ -380,6 +388,17 @@ namespace CaseManagement.Sync
                 // پایانِ صفحات، نشانگرِ پیش‌نرونده). بدونِ آن، بازمحاسبه فقط
                 // در یکی از مسیرها اجرا می‌شد و بقیه امتیازِ کهنه می‌ماندند.
                 RecalculateScoresAfterSync(affectedCases);
+            }
+        }
+
+        private static void ApplyDeferred(SyncRunResult result, HashSet<int> affectedCases)
+        {
+            List<SyncChange> recovered = SyncDeferredApplyStore.Retry();
+            foreach (SyncChange change in recovered)
+            {
+                result.Downloaded++;
+                int affected = ResolveAffectedCaseId(change);
+                if (affected > 0) affectedCases.Add(affected);
             }
         }
 

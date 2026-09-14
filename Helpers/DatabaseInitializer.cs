@@ -902,6 +902,10 @@ CREATE TABLE IF NOT EXISTS TblApplicantStatusHistory (
                 // ═══════════════════════════════════════════════════════════════
                 EnsureFoundationLayerObjects(con);
             }
+
+            // زیرساخت catalog/migration/deletion افزایشی است و هیچ جدول یا
+            // ستون کسب‌وکار موجود را حذف یا بازتعریف نمی‌کند.
+            FileCatalogService.EnsureSchema();
         }
 
         // ─────────────────────────────────────────────────────────────────────

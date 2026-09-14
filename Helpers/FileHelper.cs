@@ -1,5 +1,7 @@
-﻿using System;
+﻿using CaseManagement.DAL;
+using System;
 using System.Collections.Generic;
+using System.Data.SQLite;
 using System.IO;
 using System.Text;
 using System.Threading.Tasks;
@@ -9,6 +11,8 @@ namespace CaseManagement.Helpers
 {
     public static class FileHelper
     {
+        // روی دیسک: پوشهٔ عکس تکی «Photo» است؛ ثابتِ کد همان HeadPhoto می‌ماند
+        // تا فراخوان‌های موجود نشکنند.
         public const string SectionHeadPhoto = "HeadPhoto";
         public const string SectionFamilyPhoto = "FamilyPhoto";
         public const string SectionMemberPhotos = "MemberPhotos";
@@ -25,9 +29,19 @@ namespace CaseManagement.Helpers
         // جدا از SectionHeadPhoto: سرپرستِ کودک با سرپرستِ خانوار یکی نیست
         // و باید مستقلاً جایگزین/حذف شود.
         public const string SectionGuardianPhotos = "GuardianPhotos";
+        public const string SectionCaseFiles = "CaseFiles";
+        public const string SectionExports = "Exports";
+        public const string SectionTemp = "Temp";
+
+        public const string DiskGuardianPhotosFolder = "GuardianPhotos";
+        public const string DiskFamilyPhotosFolder = "FamilyPhotos";
+        public const string DiskDocumentsFolder = "Documents";
+        public const string LegacyDiskPhotoFolder = "Photo";
+        public const string LegacyDocsFolder = "Docs";
+        public const string DiskPhotoFolder = LegacyDiskPhotoFolder;
 
         private const int MaxSegmentLength = 100;
-        private const int MaxFullPathLength = 240;
+        private const int MaxFullPathLength = 320;
 
         public static long MaxPhotoFileSizeBytes = 15L * 1024 * 1024;
         public static long MaxDocumentFileSizeBytes = 50L * 1024 * 1024;
@@ -36,6 +50,20 @@ namespace CaseManagement.Helpers
 
         private static string _baseRootFolder = "";
         private static string _lastError = "";
+
+        // چیدمانِ چهارسطحی برای پرونده‌ای که هنوز در دیتابیس نیست (مثلاً
+        // ذخیرهٔ عکس قبل از INSERT). کلید = کد اختصاصی پاک‌شده.
+        private static readonly Dictionary<string, CaseStorageLayout> _pendingLayouts =
+            new Dictionary<string, CaseStorageLayout>(StringComparer.OrdinalIgnoreCase);
+
+        public sealed class CaseStorageLayout
+        {
+            public string Province;
+            public string District;
+            public string RequestType;
+            public string ServiceStatus;
+            public string CaseCode;
+        }
 
         private static readonly string AppFolder =
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CaseManagement");
@@ -62,7 +90,9 @@ namespace CaseManagement.Helpers
 
         private static string GetDefaultRootFolder()
         {
-            return Path.Combine(Application.StartupPath, "CaseFiles");
+            return Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "CaseManagement", "Storage");
         }
 
         private static readonly HashSet<string> AllowedSections =
@@ -74,7 +104,10 @@ namespace CaseManagement.Helpers
                 SectionDocs,
                 SectionVisitPhotos,
                 SectionRepresentativePhotos,
-                SectionGuardianPhotos
+                SectionGuardianPhotos,
+                SectionCaseFiles,
+                SectionExports,
+                SectionTemp
             };
 
         private static readonly HashSet<string> AllowedPhotoExtensions =
@@ -207,6 +240,82 @@ namespace CaseManagement.Helpers
                 return "";
             }
         }
+
+        // چهار پوشهٔ طبقه‌بندی: ولایت / ولسوالی / نوع پرونده / وضعیت خدمات.
+        // مقدار خالی → «نامشخص» تا خروجی بی‌صاحب در ریشه پخش نشود.
+        public static string ClassifySegment(string value)
+        {
+            string cleaned = CleanName(string.IsNullOrWhiteSpace(value) ? "نامشخص" : value.Trim());
+            return string.IsNullOrWhiteSpace(cleaned) ? "نامشخص" : cleaned;
+        }
+
+        public static void RememberLayout(string caseCode, string province, string district,
+                                          string requestType, string serviceStatus)
+        {
+            string key = CleanName(caseCode);
+            if (string.IsNullOrWhiteSpace(key) || key == "Unknown") return;
+
+            var layout = new CaseStorageLayout
+            {
+                CaseCode = key,
+                Province = ClassifySegment(province),
+                District = ClassifySegment(district),
+                RequestType = ClassifySegment(requestType),
+                ServiceStatus = ClassifySegment(serviceStatus)
+            };
+
+            lock (SyncRoot)
+                _pendingLayouts[key] = layout;
+        }
+
+        public static string GetClassifiedFolder(string province, string district,
+                                                 string requestType, string serviceStatus)
+        {
+            string root = GetBaseRootFolder();
+            if (string.IsNullOrWhiteSpace(root)) return "";
+
+            string folder = Path.Combine(
+                root,
+                ClassifySegment(province),
+                ClassifySegment(district),
+                ClassifySegment(requestType),
+                ClassifySegment(serviceStatus));
+
+            if (!IsPathInsideFolder(folder, root))
+            {
+                SetLastError("مسیر طبقه‌بندی نامعتبر است.", null);
+                return "";
+            }
+
+            Directory.CreateDirectory(folder);
+            return folder;
+        }
+
+        public static string GetCaseFolderPath(string caseCode)
+        {
+            string root, clean, folder;
+            if (!TryGetCaseContext(caseCode, false, false, out root, out clean, out folder))
+                return "";
+            return folder;
+        }
+
+        public static void OpenFolder(string folder)
+        {
+            if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder)) return;
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = folder,
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                SetLastError("باز کردن پوشه ممکن نشد.", ex);
+            }
+        }
+
         public static void ClearBaseRootFolder()
         {
             lock (SyncRoot)
@@ -339,7 +448,7 @@ namespace CaseManagement.Helpers
         // ساختارِ تازه). categoryFolderName از TblDocumentCategory.FolderName
         // می‌آید و از قبل انگلیسی/امن است (Code-محور)، پس فقط CleanName روی آن
         // اجرا می‌شود تا از ورودیِ نامعتبر محافظت کند.
-        // مسیر: <Root>/<CaseCode>/<CaseCode>-Docs/<CategoryFolderName>/
+        // مسیر: <Root>/<ولایت>/<ولسوالی>/<نوع>/<وضعیت>/<کد>/Docs/<CategoryFolderName>/
         // ═══════════════════════════════════════════════════════════════════
         public static string GetDocumentCategoryFolder(string caseCode, string categoryFolderName)
         {
@@ -392,7 +501,8 @@ namespace CaseManagement.Helpers
             string caseCode,
             string sectionName,
             string baseFileName,
-            string existingStoredPath = "")
+            string existingStoredPath = "",
+            bool replaceExisting = true)
         {
             existingStoredPath = existingStoredPath ?? "";
 
@@ -439,24 +549,40 @@ namespace CaseManagement.Helpers
                     string.Equals(Path.GetExtension(existingFullPath), extension, StringComparison.OrdinalIgnoreCase))
                 {
                     if (AreSamePath(sourceFullPath, existingFullPath))
-                        return existingFullPath;
-
-                    try
                     {
-                        CopyFileAtomically(sourceFullPath, existingFullPath);
+                        TryCatalogSavedFile(cleanCaseCode, normalizedSection, existingFullPath, sourceFullPath);
                         return existingFullPath;
                     }
-                    catch (Exception ex)
+
+                    // replaceExisting=false: فایل زنده را قبل از Commit دیتابیس
+                    // بازنویسی نکن؛ نسخهٔ جدید با نام یکتا کنار قبلی می‌ماند.
+                    if (replaceExisting)
                     {
-                        SetLastError("جایگزینی فایل قبلی انجام نشد؛ فایل جدید ساخته می‌شود.", ex);
+                        try
+                        {
+                            CopyFileAtomically(sourceFullPath, existingFullPath);
+                            TryCatalogSavedFile(cleanCaseCode, normalizedSection, existingFullPath, sourceFullPath);
+                            return existingFullPath;
+                        }
+                        catch (Exception ex)
+                        {
+                            SetLastError("جایگزینی فایل قبلی انجام نشد؛ فایل جدید ساخته می‌شود.", ex);
+                        }
                     }
                 }
 
-                string targetPath = CopyToUniquePath(sourceFullPath, folder, baseFileName, extension);
+                string kind = FileKindPolicy.FromSection(normalizedSection);
+                string context = NormalizeNamingContext(baseFileName, cleanCaseCode);
+                string targetPath = FileNamingPolicy.NextAvailablePath(
+                    folder, cleanCaseCode, kind, context, DateTime.Now, extension);
+                CopyFileAtomically(sourceFullPath, targetPath);
 
-                if (canUseExistingPath && File.Exists(existingFullPath) && !AreSamePath(existingFullPath, targetPath))
-                    DeleteFileIfExists(existingFullPath);
+                if (replaceExisting &&
+                    canUseExistingPath && File.Exists(existingFullPath) && !AreSamePath(existingFullPath, targetPath))
+                    DeletePreviousFileAfterCommit(existingFullPath, targetPath);
 
+                if (replaceExisting)
+                    TryCatalogSavedFile(cleanCaseCode, normalizedSection, targetPath, sourceFullPath);
                 return targetPath;
             }
             catch (Exception ex)
@@ -471,7 +597,8 @@ namespace CaseManagement.Helpers
             string caseCode,
             string sectionName,
             string baseFileName,
-            string existingStoredPath = "")
+            string existingStoredPath = "",
+            bool replaceExisting = true)
         {
             if (string.IsNullOrWhiteSpace(GetBaseRootFolder()))
             {
@@ -480,7 +607,114 @@ namespace CaseManagement.Helpers
             }
 
             return Task.Run(() =>
-                SaveFileToCaseFolder(sourceFilePath, caseCode, sectionName, baseFileName, existingStoredPath));
+                SaveFileToCaseFolder(sourceFilePath, caseCode, sectionName, baseFileName,
+                    existingStoredPath, replaceExisting));
+        }
+
+        /// <summary>
+        /// After the database pointer has moved to <paramref name="committedStoredPath"/>,
+        /// delete the previous file. No-op when paths are empty or the same.
+        /// </summary>
+        public static void DeletePreviousFileAfterCommit(string previousStoredPath, string committedStoredPath)
+        {
+            if (string.IsNullOrWhiteSpace(previousStoredPath))
+                return;
+
+            if (!string.IsNullOrWhiteSpace(committedStoredPath))
+            {
+                try
+                {
+                    if (AreSamePath(
+                        CaseFileInventory.ResolveStoredPath(previousStoredPath),
+                        CaseFileInventory.ResolveStoredPath(committedStoredPath)))
+                        return;
+                }
+                catch
+                {
+                    if (string.Equals(previousStoredPath.Trim(), committedStoredPath.Trim(),
+                        StringComparison.OrdinalIgnoreCase))
+                        return;
+                }
+            }
+
+            DeleteFileAndCatalog(previousStoredPath);
+        }
+
+        public static void DiscardStagedFileAfterFailure(string stagedPath, string committedPath)
+        {
+            if (string.IsNullOrWhiteSpace(stagedPath))
+                return;
+
+            if (!string.IsNullOrWhiteSpace(committedPath))
+            {
+                try
+                {
+                    if (AreSamePath(
+                        CaseFileInventory.ResolveStoredPath(stagedPath),
+                        CaseFileInventory.ResolveStoredPath(committedPath)))
+                        return;
+                }
+                catch
+                {
+                    if (string.Equals(stagedPath.Trim(), committedPath.Trim(),
+                        StringComparison.OrdinalIgnoreCase))
+                        return;
+                }
+            }
+
+            DeleteFileAndCatalog(stagedPath);
+        }
+
+        public static void CatalogCommittedFile(string caseCode, string sectionName, string fullPath)
+        {
+            if (string.IsNullOrWhiteSpace(fullPath) || !File.Exists(fullPath))
+                return;
+            string normalizedSection;
+            if (!TryNormalizeSectionName(sectionName, out normalizedSection))
+                normalizedSection = sectionName ?? "";
+            TryCatalogSavedFile(caseCode ?? "", normalizedSection, fullPath, fullPath);
+        }
+
+        private static void DeleteFileAndCatalog(string filePath)
+        {
+            string resolved = "";
+            try { resolved = CaseFileInventory.ResolveStoredPath(filePath); }
+            catch { resolved = filePath ?? ""; }
+
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(resolved))
+                    new FileCatalogService().MarkPathDeleted(resolved);
+            }
+            catch { }
+
+            DeleteFileIfExists(filePath);
+        }
+
+        private static string NormalizeNamingContext(string requestedName, string caseCode)
+        {
+            string value = CleanName(requestedName);
+            if (string.Equals(value, CleanName(caseCode), StringComparison.OrdinalIgnoreCase))
+                return "";
+            if (value.StartsWith(CleanName(caseCode) + "_", StringComparison.OrdinalIgnoreCase))
+                value = value.Substring(CleanName(caseCode).Length + 1);
+            return value;
+        }
+
+        private static void TryCatalogSavedFile(string caseCode, string section,
+            string fullPath, string originalSource)
+        {
+            try
+            {
+                new FileCatalogService().Register(caseCode,
+                    FileKindPolicy.FromSection(section), fullPath,
+                    "", 0, "", "", Path.GetFileName(originalSource));
+            }
+            catch
+            {
+                // catalog is additive metadata. A temporary database problem must
+                // not turn a successfully persisted user file into a failed save.
+            }
         }
 
         public static void DeleteFileIfExists(string filePath)
@@ -491,7 +725,7 @@ namespace CaseManagement.Helpers
                     return;
 
                 string root = GetBaseRootFolder();
-                string fullPath = Path.GetFullPath(filePath);
+                string fullPath = CaseFileInventory.ResolveStoredPath(filePath);
 
                 if (string.IsNullOrWhiteSpace(root) || !IsPathInsideFolder(fullPath, root))
                 {
@@ -556,7 +790,14 @@ namespace CaseManagement.Helpers
             if (string.IsNullOrWhiteSpace(root))
                 return false;
 
-            caseFolder = Path.Combine(root, cleanCaseCode);
+            CaseStorageLayout layout = ResolveLayout(cleanCaseCode);
+            caseFolder = Path.Combine(
+                root,
+                ClassifySegment(layout != null ? layout.Province : null),
+                ClassifySegment(layout != null ? layout.District : null),
+                ClassifySegment(layout != null ? layout.RequestType : null),
+                ClassifySegment(layout != null ? layout.ServiceStatus : null),
+                cleanCaseCode);
 
             if (!IsPathInsideFolder(caseFolder, root))
             {
@@ -603,9 +844,79 @@ namespace CaseManagement.Helpers
             return false;
         }
 
+        // layout نسخهٔ ۲: هر نوع فایل پوشهٔ صریح خودش را دارد. نام‌های logical
+        // قدیمی فقط برای سازگاری API در این نقطه ترجمه می‌شوند.
+        public static string DiskFolderForSection(string sectionName)
+        {
+            if (string.Equals(sectionName, SectionHeadPhoto, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(sectionName, SectionGuardianPhotos, StringComparison.OrdinalIgnoreCase))
+                return DiskGuardianPhotosFolder;
+            if (string.Equals(sectionName, SectionFamilyPhoto, StringComparison.OrdinalIgnoreCase))
+                return DiskFamilyPhotosFolder;
+            if (string.Equals(sectionName, SectionDocs, StringComparison.OrdinalIgnoreCase))
+                return DiskDocumentsFolder;
+            return sectionName;
+        }
+
+        // i=0 → همان نام؛ i>=1 → «نام - 1». برای جلوگیری از overwrite بی‌سؤال.
+        public static string UniqueName(string baseName, int duplicateIndex)
+        {
+            string clean = CleanName(baseName);
+            if (duplicateIndex <= 0) return clean;
+            return clean + " - " + duplicateIndex.ToString();
+        }
+
         private static string BuildSectionFolderPath(string caseFolder, string cleanCaseCode, string sectionName)
         {
-            return Path.Combine(caseFolder, cleanCaseCode + "-" + sectionName);
+            return Path.Combine(caseFolder, DiskFolderForSection(sectionName));
+        }
+
+        private static CaseStorageLayout ResolveLayout(string cleanCaseCode)
+        {
+            if (string.IsNullOrWhiteSpace(cleanCaseCode)) return null;
+
+            lock (SyncRoot)
+            {
+                CaseStorageLayout pending;
+                if (_pendingLayouts.TryGetValue(cleanCaseCode, out pending) && pending != null)
+                    return pending;
+            }
+
+            try
+            {
+                using (var con = new DatabaseHelper().GetConnection())
+                using (var cmd = new SQLiteCommand(@"
+SELECT IFNULL(c.Province, ''),
+       IFNULL(c.District, ''),
+       IFNULL(NULLIF(TRIM(rt.Name), ''), IFNULL(c.RequestType, '')),
+       IFNULL(NULLIF(TRIM(ss.Name), ''), IFNULL(c.ServiceStatus, ''))
+FROM TblCase c
+LEFT JOIN TblRequestType rt ON rt.RequestTypeID = c.RequestTypeID
+LEFT JOIN TblServiceStatus ss ON ss.ServiceStatusID = c.ServiceStatusID
+WHERE c.Code = @Code
+LIMIT 1;", con))
+                {
+                    cmd.Parameters.AddWithValue("@Code", cleanCaseCode);
+                    con.Open();
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        if (!reader.Read()) return null;
+                        return new CaseStorageLayout
+                        {
+                            CaseCode = cleanCaseCode,
+                            Province = reader.GetString(0),
+                            District = reader.GetString(1),
+                            RequestType = reader.GetString(2),
+                            ServiceStatus = reader.GetString(3)
+                        };
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                SetLastError("خواندن طبقه‌بندی پوشهٔ پرونده ممکن نشد.", ex);
+                return null;
+            }
         }
 
         private static bool ValidateFileForSection(string sourceFullPath, string sectionName, string extension)
@@ -691,7 +1002,7 @@ namespace CaseManagement.Helpers
             return true;
         }
 
-        private static bool IsPhotoSection(string sectionName)
+        public static bool IsPhotoSection(string sectionName)
         {
             return string.Equals(sectionName, SectionHeadPhoto, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(sectionName, SectionFamilyPhoto, StringComparison.OrdinalIgnoreCase)
@@ -702,7 +1013,8 @@ namespace CaseManagement.Helpers
                 || string.Equals(sectionName, SectionRepresentativePhotos, StringComparison.OrdinalIgnoreCase)
                 // Feature 3 — عکسِ سرپرستِ کودک، به همان دلیل: بدونِ این خط
                 // بررسیِ پسوند و هدرِ واقعیِ تصویر روی آن اجرا نمی‌شد.
-                || string.Equals(sectionName, SectionGuardianPhotos, StringComparison.OrdinalIgnoreCase);
+                || string.Equals(sectionName, SectionGuardianPhotos, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(sectionName, SectionVisitPhotos, StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool LooksLikeImageFile(string path, string extension)
@@ -747,7 +1059,8 @@ namespace CaseManagement.Helpers
 
             try
             {
-                string candidate = Path.GetFullPath(storedPath);
+                string candidate = CaseFileInventory.ResolveStoredPath(storedPath);
+                if (string.IsNullOrWhiteSpace(candidate)) return false;
 
                 if (candidate.Length >= MaxFullPathLength)
                     return false;
@@ -776,8 +1089,8 @@ namespace CaseManagement.Helpers
 
             for (int i = 0; i < 10000; i++)
             {
-                string suffix = i == 0 ? "" : " " + i.ToString();
-                string candidateBaseName = TrimBaseNameForPath(folder, baseName, suffix, extension);
+                string suffix = i == 0 ? "" : " - " + i.ToString();
+                string candidateBaseName = TrimBaseNameForPath(folder, UniqueName(baseName, 0), suffix, extension);
                 string targetPath = Path.Combine(folder, candidateBaseName + suffix + extension);
 
                 if (!IsPathInsideFolder(targetPath, folder))

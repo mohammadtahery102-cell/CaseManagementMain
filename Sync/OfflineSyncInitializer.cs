@@ -72,15 +72,10 @@ namespace CaseManagement.Sync
             // CasID + GlobalID دارد، پس ResolveParent دقیقاً مثل
             // TblFamily/TblDocs کار می‌کند — برخلافِ TblFieldVisitPhoto که
             // «نوه» است و به‌همین‌دلیل از این فهرست بیرون ماند (تصمیم #۲۵).
-            new[] { "TblCaseRepresentative", "RepresentativeID" }
-            // ⚠ TblFieldVisitPhoto عمداً اینجا *نیست*. والدش TblFieldVisit
-            // است، نه TblCase؛ و ResolveParent در SyncApplier فقط می‌تواند
-            // ParentGlobalID را به CasID ترجمه کند — هیچ مسیری برای ترجمهٔ
-            // VisitIDِ راه دور به VisitIDِ محلی ندارد. ثبتش در این فهرست
-            // باعث می‌شد عکس به بازدیدی بچسبد که اتفاقاً همان شمارهٔ محلی را
-            // دارد (خرابیِ خاموشِ داده). بکاپ/بازیابی عکس‌ها را پوشش می‌دهد
-            // (BackupHelper با visitIdMap)؛ همگام‌سازیِ عکسِ بازدید نیازمندِ
-            // پشتیبانیِ «نوه» در SyncApplier است — کارِ فازِ بعد.
+            new[] { "TblCaseRepresentative", "RepresentativeID" },
+            // والد این موجودیت TblFieldVisit است. SyncOutboxService و
+            // SyncApplier اکنون ParentGlobalID را برای Visit ترجمه می‌کنند.
+            new[] { "TblFieldVisitPhoto", "PhotoID" }
         };
 
         public static void EnsureOfflineSyncObjects()
@@ -95,6 +90,7 @@ namespace CaseManagement.Sync
                 EnsureBaseline(con);
                 EnsureFiles(con);
                 EnsureFileDownloads(con);
+                EnsureDeferredApply(con);
                 EnsureTrackingColumns(con);
                 EnsureGlobalIdentity(con);
             }
@@ -371,6 +367,35 @@ CREATE TABLE IF NOT EXISTS SyncFileDownload (
 
             Exec(con, "CREATE INDEX IF NOT EXISTS IX_SyncFileDownload_State ON SyncFileDownload(State, DownloadID);");
             Exec(con, "CREATE INDEX IF NOT EXISTS IX_SyncFileDownload_Owner ON SyncFileDownload(EntityName, EntityGlobalID, ColumnName);");
+        }
+
+        // صفِ اعمالِ به‌تعویق‌افتاده: وقتی فرزند (مثلاً TblFieldVisitPhoto)
+        // پیش از والد برسد، نشانگر pull نباید آن را «پردازش‌شده» بداند.
+        // ردیف اینجا می‌ماند تا والد محلی ساخته شود؛ Retry بعداً اعمالش می‌کند.
+        private static void EnsureDeferredApply(SQLiteConnection con)
+        {
+            Exec(con, @"
+CREATE TABLE IF NOT EXISTS SyncDeferredApply (
+    DeferredID     INTEGER PRIMARY KEY AUTOINCREMENT,
+    EntityName     TEXT    NOT NULL,
+    EntityGlobalID TEXT    NOT NULL,
+    ParentGlobalID TEXT    NULL,
+    OperationType  TEXT    NULL,
+    RowVersion     INTEGER NOT NULL DEFAULT 1,
+    Payload        TEXT    NULL,
+    CenterID       INTEGER NULL,
+    Username       TEXT    NULL,
+    MachineName    TEXT    NULL,
+    OccurredAt     TEXT    NULL,
+    SourceCursor   TEXT    NULL,
+    AttemptCount   INTEGER NOT NULL DEFAULT 0,
+    LastError      TEXT    NULL,
+    CreatedAt      TEXT    NOT NULL DEFAULT (datetime('now')),
+    LastAttemptAt  TEXT    NULL
+);");
+            Exec(con, @"CREATE UNIQUE INDEX IF NOT EXISTS UX_SyncDeferredApply_Entity
+                        ON SyncDeferredApply(EntityName, EntityGlobalID);");
+            Exec(con, "CREATE INDEX IF NOT EXISTS IX_SyncDeferredApply_Parent ON SyncDeferredApply(ParentGlobalID);");
         }
 
         // ═══════════════════════════════════════════════════════════════════

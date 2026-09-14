@@ -55,7 +55,7 @@ namespace CaseManagement.Sync
             RightToLeftLayout = true;
             BackColor = UiTheme.Background;
             Font = UiTheme.Font(UiTheme.SizeBody);
-            UiTheme.MakeMainWindow(this, 980, 760);
+            UiTheme.MakeMainWindow(this, 980, 860);
 
             var header = new Panel { Dock = DockStyle.Top, Height = 58, BackColor = UiTheme.PrimaryDark };
             header.Controls.Add(new Label
@@ -137,6 +137,8 @@ namespace CaseManagement.Sync
                 "داخلِ این پوشه، به‌ازای هر پرونده یک پوشه با نامِ کدِ اختصاصی بسازید و اسنادش (تذکره، قباله و مانند آن) را در آن بگذارید.",
                 out _txtDocs, out _lblDocsStatus, out _btnDocsUpload);
             _btnDocsUpload.Click += async delegate { await RunMediaAsync(_txtDocs.Text, MediaCategoryKind.Document, _lblDocsStatus, "اسناد"); };
+
+            y = AddDeferredApplyCard(scroller, y);
 
             _btnGuardiansUpload.Click += async delegate { await RunHtmlAsync(_txtGuardians.Text, isGuardians: true, _lblGuardiansStatus); };
             _btnMembersUpload.Click += async delegate { await RunHtmlAsync(_txtMembers.Text, isGuardians: false, _lblMembersStatus); };
@@ -262,6 +264,66 @@ namespace CaseManagement.Sync
             card.Controls.Add(status);
 
             return y + cardHeight + 14;
+        }
+
+        private int AddDeferredApplyCard(Panel host, int y)
+        {
+            var card = new Panel
+            {
+                Location = new Point(0, y),
+                Size = new Size(900, 118),
+                BackColor = UiTheme.CardBack,
+                BorderStyle = BorderStyle.FixedSingle
+            };
+            host.Controls.Add(card);
+
+            var lblTitle = new Label
+            {
+                Text = "اعمال معوق همگام‌سازی (SyncDeferredApply)",
+                Font = UiTheme.FontBold(UiTheme.SizeBody), ForeColor = UiTheme.TextDark,
+                AutoSize = false, TextAlign = ContentAlignment.MiddleRight
+            };
+            lblTitle.SetBounds(16, 10, 860, 24);
+
+            var lblStatus = new Label
+            {
+                Text = SyncDeferredApplyStore.FormatReport(),
+                Font = UiTheme.Font(9F), ForeColor = UiTheme.TextMuted,
+                AutoSize = false, TextAlign = ContentAlignment.MiddleRight
+            };
+            lblStatus.SetBounds(16, 36, 860, 22);
+
+            var btnPurgeStale = UiTheme.CreateSecondaryButton("پاک‌سازی منقضی و بن‌بست", "🧹");
+            btnPurgeStale.SetBounds(454, 68, 220, 32);
+            btnPurgeStale.Click += delegate
+            {
+                if (!UiTheme.ShowConfirm(this,
+                    "رکوردهای منقضی (TTL) و بن‌بست‌شده (سقف تلاش) پاک شوند؟",
+                    "پاک‌سازی مدیریتی"))
+                    return;
+                int removed = SyncDeferredApplyStore.PurgeDeadlocked();
+                lblStatus.Text = SyncDeferredApplyStore.FormatReport();
+                UiTheme.ShowSuccess(this, removed + " رکورد منقضی/بن‌بست پاک شد.");
+            };
+
+            var btnPurgeAll = UiTheme.CreateButton("پاک‌سازی همه", "✕", UiTheme.Danger);
+            btnPurgeAll.SetBounds(684, 68, 196, 32);
+            btnPurgeAll.Click += delegate
+            {
+                if (!UiTheme.ShowConfirm(this,
+                    "همهٔ اعمال معوق پاک شوند؟ این کار قابل بازگشت نیست.",
+                    "پاک‌سازی همه"))
+                    return;
+                int removed = SyncDeferredApplyStore.PurgeAll();
+                lblStatus.Text = SyncDeferredApplyStore.FormatReport();
+                UiTheme.ShowSuccess(this, removed + " رکورد معوق پاک شد.");
+            };
+
+            card.Controls.Add(lblTitle);
+            card.Controls.Add(lblStatus);
+            card.Controls.Add(btnPurgeStale);
+            card.Controls.Add(btnPurgeAll);
+            return y + 118 + 14;
         }
 
         private Panel BuildCard(Panel host, int y, out int height)

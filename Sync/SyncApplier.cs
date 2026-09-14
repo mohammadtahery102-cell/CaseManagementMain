@@ -37,7 +37,8 @@ namespace CaseManagement.Sync
             Deleted,
             SkippedConflict,
             SkippedUnchanged,
-            SkippedUnsupported
+            SkippedUnsupported,
+            Deferred
         }
 
         private static readonly DatabaseHelper Db = new DatabaseHelper();
@@ -58,6 +59,10 @@ namespace CaseManagement.Sync
                 // Phase 5 (TblFieldVisitPhoto سینک نمی‌شود — توضیح در
                 // OfflineSyncInitializer.SyncedTables).
                 "SponsorID", "VisitID", "CaseFundingID",
+                // مسیر فیزیکیِ دستگاه فرستنده هرگز روی گیرنده نوشته نمی‌شود.
+                // پیوند فایل بعد از دریافت و hash verification محلی ساخته می‌شود.
+                "PhotoPath", "FamilyPhotoPath", "MemberPhotoPath",
+                "GuardianPhotoPath", "DocFilePath", "FilePath",
                 // Phase 3 — منشأ ثبت همیشه از دیدِ گیرنده تعیین می‌شود، نه از
                 // Payloadِ فرستنده (پایینِ Insert override می‌شود).
                 "EntrySourceCode", "SyncOperationID"
@@ -89,7 +94,12 @@ namespace CaseManagement.Sync
                 // به‌عنوان تعارض ثبت و برای تصمیم مدیر کنار گذاشته می‌شود.
                 if (IsDuplicateUserCode(change)) return ApplyOutcome.SkippedConflict;
 
-                if (!Insert(change, primaryKey)) return ApplyOutcome.SkippedUnsupported;
+                if (!Insert(change, primaryKey))
+                {
+                    if (ResolveParent(change) < 0)
+                        return ApplyOutcome.Deferred;
+                    return ApplyOutcome.SkippedUnsupported;
+                }
 
                 RecordBaseline(change);
                 return ApplyOutcome.Inserted;
@@ -201,7 +211,30 @@ namespace CaseManagement.Sync
                 parameters.Add(new SQLiteParameter("@ver", Math.Max(1, change.RowVersion)));
             }
 
-            if (parentLocalId > 0 && columns.Contains("CasID") && !names.Contains("[CasID]"))
+            bool isVisitPhoto = string.Equals(change.EntityName, "TblFieldVisitPhoto",
+                StringComparison.OrdinalIgnoreCase);
+            if (isVisitPhoto && parentLocalId > 0 && columns.Contains("VisitID"))
+            {
+                names.Add("[VisitID]");
+                parameters.Add(new SQLiteParameter("@visitParent", parentLocalId));
+
+                object caseId = Db.ExecuteScalar(
+                    "SELECT CasID FROM TblFieldVisit WHERE VisitID=@id LIMIT 1;",
+                    new SQLiteParameter("@id", parentLocalId));
+                if (caseId != null && caseId != DBNull.Value && columns.Contains("CasID"))
+                {
+                    names.Add("[CasID]");
+                    parameters.Add(new SQLiteParameter("@caseParent", Convert.ToInt32(caseId)));
+                }
+                if (columns.Contains("FilePath") && !names.Contains("[FilePath]"))
+                {
+                    // مسیر machine-local است و بعد از دریافت بایت فایل پر
+                    // می‌شود؛ رشتهٔ خالی فقط قید NOT NULL جدول را رعایت می‌کند.
+                    names.Add("[FilePath]");
+                    parameters.Add(new SQLiteParameter("@localFilePlaceholder", ""));
+                }
+            }
+            else if (parentLocalId > 0 && columns.Contains("CasID") && !names.Contains("[CasID]"))
             {
                 names.Add("[CasID]");
                 parameters.Add(new SQLiteParameter("@parent", parentLocalId));
@@ -285,11 +318,16 @@ namespace CaseManagement.Sync
         {
             if (localId <= 0) return false;
 
-            Db.ExecuteNonQuery(
+            var deletion = new CaseManagement.Helpers.CaseFileDeletionService();
+            CaseManagement.Helpers.CaseFileDeletionService.Plan filePlan =
+                deletion.CaptureOwner(entityName, localId);
+
+            int affected = Db.ExecuteNonQuery(
                 "DELETE FROM [" + entityName + "] WHERE [" + primaryKey + "] = @id;",
                 new SQLiteParameter("@id", localId));
 
-            return true;
+            if (affected > 0) deletion.ExecuteAfterCommit(filePlan);
+            return affected > 0;
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -360,6 +398,16 @@ namespace CaseManagement.Sync
 
             try
             {
+                if (string.Equals(change.EntityName, "TblFieldVisitPhoto",
+                    StringComparison.OrdinalIgnoreCase))
+                {
+                    object visit = Db.ExecuteScalar(
+                        "SELECT VisitID FROM TblFieldVisit WHERE GlobalID=@G LIMIT 1;",
+                        new SQLiteParameter("@G", change.ParentGlobalId));
+                    if (visit == null || visit == DBNull.Value) return -1;
+                    return Convert.ToInt32(visit);
+                }
+
                 object value = Db.ExecuteScalar(
                     "SELECT CasID FROM TblCase WHERE GlobalID = @G LIMIT 1;",
                     new SQLiteParameter("@G", change.ParentGlobalId));

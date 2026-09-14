@@ -79,16 +79,6 @@ namespace CaseManagement
         private string _incomingFilterServiceStatus = "";
         private Panel _dashboardFilterBanner;
 
-        // آموزش — فیلترِ کاملِ واردشده از «مرکز فرماندهی آماری»
-        // (FrmGeoCommandCenter). سه رشتهٔ بالا فقط ولایت/ولسوالی/وضعیت را
-        // می‌پوشانند، ولی Drill-Downِ نقشه می‌تواند روی نوع پرونده، سطح
-        // آسیب‌پذیری، اولویت اقتصادی، وضعیت حامی، بازهٔ تاریخ و جنسیت/سنِ
-        // عضو هم باشد. شرطِ SQL و پارامترهایش هر دو از خودِ همان شیء می‌آیند،
-        // پس عددی که روی نقشه دیده شده دقیقاً با تعدادِ ردیف‌های این گرید
-        // یکی می‌ماند. null یعنی «هیچ فیلترِ اضافه‌ای نیست» و مسیرِ قبلی
-        // بیت‌به‌بیت دست‌نخورده اجرا می‌شود.
-        private Helpers.GeoFilter _incomingGeoFilter;
-
         public FrmCase()
         {
             InitializeComponent();
@@ -104,27 +94,6 @@ namespace CaseManagement
             _incomingFilterProvince = filterProvince ?? "";
             _incomingFilterDistrict = filterDistrict ?? "";
             _incomingFilterServiceStatus = filterServiceStatus ?? "";
-        }
-
-        // باز کردن با فیلترِ کاملِ «مرکز فرماندهی آماری».
-        // ولایت/ولسوالی/وضعیت در همان سه فیلدِ قدیمی هم نشانده می‌شوند تا
-        // نوارِ خبری و کمبویِ وضعیت مثلِ قبل کار کنند؛ بقیهٔ شرط‌ها از خودِ
-        // GeoFilter به کوئری اضافه می‌گردند.
-        public FrmCase(Helpers.GeoFilter filter) : this()
-        {
-            if (filter == null) return;
-
-            _incomingGeoFilter = filter;
-            _incomingFilterProvince = filter.Province ?? "";
-            _incomingFilterDistrict = filter.District ?? "";
-
-            if (filter.ServiceStatusId > 0)
-            {
-                Helpers.ReferenceOption option =
-                    Helpers.ReferenceDataService.FindServiceStatusById(filter.ServiceStatusId);
-                if (option != null && !string.IsNullOrWhiteSpace(option.Name))
-                    _incomingFilterServiceStatus = option.Name;
-            }
         }
 
         // میان‌بُرهای صفحه‌کلید. Enter (رفتن به فیلد بعدی) جداگانه در
@@ -208,120 +177,57 @@ namespace CaseManagement
             AddGuardianCardButton();
         }
 
-        private const int BatchWordPdfMax = 500;
+        private const int BatchExportMax = 200;
         private const int BatchSearchRejectCount = 10000;
+
+        private enum BatchMediaKind
+        {
+            All,
+            HeadPhoto,
+            FamilyPhoto,
+            Documents
+        }
 
         private Button _btnCurrentCaseMenu;
         private Button _btnBatchOpsMenu;
         private Button _btnExcelList;
-        private Label _lblCurrentCaseGroup;
-        private Label _lblBatchGroup;
-        private Label _lblListGroup;
-        private Button _btnUnifiedExport;
-        private Label _lblExportGroup;
-        private Button _btnOfficialForm;
-        private Button _btnGuardianCardSingle;
-        private Button _btnGuardianCardBatch;
         private CancellationTokenSource _exportCts;
 
-        // نوار پایین: سه گروه جدا — همین پرونده / چند پرونده / گزارش لیست.
+        // نوار پایین: فقط سه کنترل خروجی — همین پرونده / چند پرونده / گزارش اکسل.
         private void AddGuardianCardButton()
         {
             HideOrphanExportButtons();
 
             _menuOfficialForms = BuildOfficialFormsMenu();
             _menuExports = BuildCurrentCaseMenu();
-            _btnCurrentCaseMenu = MenuButton("چاپ و خروجی ▾", "🖨", _menuExports);
-            _btnCurrentCaseMenu.Size = new Size(148, 32);
+            _btnCurrentCaseMenu = MenuButton("همین پرونده ▾", "🖨", _menuExports);
+            StyleExportActionButton(_btnCurrentCaseMenu, 148);
 
-            var menuBatch = BuildBatchMenu();
-            _btnBatchOpsMenu = MenuButton("خروجی جمعی ▾", "⇑", menuBatch);
-            _btnBatchOpsMenu.Size = new Size(138, 32);
-
-            // ═══════════════════════════════════════════════════════════════
-            // «فورم رسمی» و «کارت شناسایی» خروجیِ دادهٔ پرونده نیستند — سندِ
-            // قانونی/هویتی‌اند با موتورِ رندرِ کاملاً جدا (CaseOfficialForms،
-            // GuardianCardIntegration). دیالوگِ جدیدِ «خروجی پرونده‌ها» هیچ‌کدام
-            // را نمی‌سازد، پس نباید پشتِ پنهان‌شدنِ منوهای خروجی گم شوند.
-            // دکمه‌های مستقل و کوچک، مستقیماً به همان هندلرهای موجود.
-            _btnOfficialForm = UiTheme.CreateSecondaryButton("فورم رسمی", "📄");
-            _btnOfficialForm.Size = new Size(112, 32);
-            _btnOfficialForm.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
-            _btnOfficialForm.Margin = new Padding(3, 3, 3, 3);
-            _btnOfficialForm.TabStop = false;
-            _btnOfficialForm.Click += delegate { OpenOfficialForm(null); };
-
-            _btnGuardianCardSingle = UiTheme.CreateSecondaryButton("کارت شناسایی", "🪪");
-            _btnGuardianCardSingle.Size = new Size(128, 32);
-            _btnGuardianCardSingle.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
-            _btnGuardianCardSingle.Margin = new Padding(3, 3, 3, 3);
-            _btnGuardianCardSingle.TabStop = false;
-            _btnGuardianCardSingle.Click += delegate { OpenCurrentGuardianCard(); };
-
-            _btnGuardianCardBatch = UiTheme.CreateSecondaryButton("چاپ جمعی کارت‌ها", "🪪");
-            _btnGuardianCardBatch.Size = new Size(148, 32);
-            _btnGuardianCardBatch.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
-            _btnGuardianCardBatch.Margin = new Padding(3, 3, 3, 3);
-            _btnGuardianCardBatch.TabStop = false;
-            _btnGuardianCardBatch.Click += delegate { OpenBatchGuardianCards(); };
+            _btnBatchOpsMenu = MenuButton("چند پرونده ▾", "⇑", BuildBatchMenu());
+            StyleExportActionButton(_btnBatchOpsMenu, 140);
 
             _btnExcelList = UiTheme.CreateSecondaryButton("گزارش اکسل پرونده‌ها", "▤");
-            _btnExcelList.Size = new Size(168, 32);
-            _btnExcelList.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
-            _btnExcelList.Margin = new Padding(3, 3, 3, 3);
-            _btnExcelList.TabStop = false;
+            StyleExportActionButton(_btnExcelList, 196);
             _btnExcelList.Click += btnExportExcel_Click;
-
-            Label lblCurrent = ExportGroupLabel(lblExportSection, "همین پرونده:", 96);
-            Label lblBatch = ExportGroupLabel(null, "چند پرونده:", 92);
-            Label lblList = ExportGroupLabel(null, "گزارش لیست:", 96);
-
-            // ارجاع نگه داشته می‌شود تا ApplyViewMode بتواند هر گروه را در
-            // حالتِ نامربوطش پنهان کند (نه غیرفعال، نه حذف).
-            _lblCurrentCaseGroup = lblCurrent;
-            _lblBatchGroup = lblBatch;
-            _lblListGroup = lblList;
-
-            // ═══════════════════════════════════════════════════════════════
-            // دکمهٔ واحدِ خروجی (خواستهٔ صریحِ کاربر: «هیچ نوع دکمهٔ دیگهٔ خروجی
-            // نداشته باشیم در قسمت پرونده»).
-            //
-            // آموزش — چرا دیالوگِ تازه ساخته نشد: Helpers/FrmCaseBundleExport
-            // از قبل دقیقاً همین کار را می‌کند (درختِ ولایت/ولسوالی/نوع/وضعیت +
-            // تفکیکِ عکس و سند)، ولی فقط از نوارِ کناریِ داشبورد در دسترس بود.
-            // پس به‌جای نوشتنِ نسخهٔ دوم، همان فرمِ آزموده‌شده به FrmCase وصل و
-            // با Word، تیکِ جدا برای هر نوع عکس، سقفِ ۲۰۰ و حالتِ «همین پرونده»
-            // کامل شد. نتیجه: یک مسیرِ خروجی در کلِ برنامه، نه دو تا.
-            //
-            // ⚠ دکمه‌ها/منوهای قبلی حذف *نشدند* — طبق قاعدهٔ پروژه فقط از نوار
-            // برداشته می‌شوند؛ هندلرها و میان‌برها (مثل Ctrl+P) سرِ جایشان‌اند.
-            // ═══════════════════════════════════════════════════════════════
-            _btnUnifiedExport = UiTheme.CreateButton("خروجی پرونده‌ها ▾", "⇑", UiTheme.Primary);
-            _btnUnifiedExport.Size = new Size(168, 32);
-            _btnUnifiedExport.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
-            _btnUnifiedExport.Margin = new Padding(3, 3, 3, 3);
-            _btnUnifiedExport.TabStop = false;
-            _btnUnifiedExport.Click += delegate { OpenUnifiedExport(); };
-
-            _lblExportGroup = ExportGroupLabel(null, "خروجی:", 62);
 
             Control parent = bottomActionsRow;
             if (parent != null)
             {
                 int afterHistory = parent.Controls.IndexOf(btnHistory) + 1;
-                AddBottomControl(parent, lblCurrent, afterHistory);
-                AddBottomControl(parent, _btnCurrentCaseMenu, afterHistory + 1);
-                AddBottomControl(parent, lblBatch, afterHistory + 2);
-                AddBottomControl(parent, _btnBatchOpsMenu, afterHistory + 3);
-                AddBottomControl(parent, lblList, afterHistory + 4);
-                AddBottomControl(parent, _btnExcelList, afterHistory + 5);
-                AddBottomControl(parent, _lblExportGroup, afterHistory + 6);
-                AddBottomControl(parent, _btnUnifiedExport, afterHistory + 7);
-                AddBottomControl(parent, _btnOfficialForm, afterHistory + 8);
-                AddBottomControl(parent, _btnGuardianCardSingle, afterHistory + 9);
-                AddBottomControl(parent, _btnGuardianCardBatch, afterHistory + 10);
+                AddBottomControl(parent, _btnCurrentCaseMenu, afterHistory);
+                AddBottomControl(parent, _btnBatchOpsMenu, afterHistory + 1);
+                AddBottomControl(parent, _btnExcelList, afterHistory + 2);
                 parent.Layout += delegate { AdjustBottomBarHeight(); };
             }
+        }
+
+        private static void StyleExportActionButton(Button button, int width)
+        {
+            if (button == null) return;
+            button.Size = new Size(width, 32);
+            button.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
+            button.Margin = new Padding(3, 3, 3, 3);
+            button.TabStop = false;
         }
 
         // ─── تنها مسیرِ خروجیِ پرونده ─────────────────────────────────────────
@@ -335,22 +241,23 @@ namespace CaseManagement
         {
             try
             {
-                if (_viewMode == CaseViewMode.Detail && currentCaseId > 0)
+                int caseId = currentCaseId;
+                string code = txtCode.Text.Trim();
+                if (caseId <= 0)
                 {
-                    using (var frm = new Helpers.FrmCaseBundleExport(new DAL.DatabaseHelper(), currentCaseId))
-                        frm.ShowDialog(this);
+                    List<int> selected = GetSelectedGridCaseIds();
+                    if (selected.Count == 1)
+                        caseId = selected[0];
+                }
+
+                if (caseId <= 0)
+                {
+                    Msg.Show("اول پرونده را انتخاب کن");
                     return;
                 }
 
-                List<int> selected = GetSelectedGridCaseIds();
-
-                using (var frm = new Helpers.FrmCaseBundleExport(new DAL.DatabaseHelper()))
-                {
-                    if (selected.Count > 0)
-                        frm.UsePreselectedCases(selected);
-
+                using (var frm = new Helpers.FrmCaseFileExport(new DAL.DatabaseHelper(), caseId, code))
                     frm.ShowDialog(this);
-                }
             }
             catch (Exception ex)
             {
@@ -416,6 +323,8 @@ namespace CaseManagement
 
         private void OpenBatchGuardianCards()
         {
+            if (!RequireBatchExportPermission()) return;
+
             if (!CaseManagement.Enterprise.PermissionService.Require("GuardianCard.Print"))
             {
                 Msg.Show("کاربر اجازه چاپ کارت شناسایی را ندارد.");
@@ -423,6 +332,42 @@ namespace CaseManagement
             }
             using (var frm = new GuardianCardIntegration.FrmGuardianCardBatchPrint())
                 frm.ShowDialog(this);
+        }
+
+        private bool RequireBatchExportPermission()
+        {
+            if (CaseManagement.Enterprise.PermissionService.Require("Case.BatchExport"))
+                return true;
+
+            Msg.Show("کاربر اجازه خروجی جمعی ندارد.");
+            return false;
+        }
+
+        private bool RejectIfOverBatchCap(int count)
+        {
+            if (count <= BatchExportMax) return false;
+
+            Msg.Show(
+                "تعداد پرونده‌ها (" + count +
+                ") از سقف خروجی جمعی (" + BatchExportMax +
+                ") بیشتر است. فیلتر را تنگ‌تر کنید یا از گزارش اکسل پرونده‌ها استفاده کنید.");
+            return true;
+        }
+
+        private static void LogBatchExportAudit(string exportType, int count, string path)
+        {
+            string at = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss",
+                System.Globalization.CultureInfo.InvariantCulture);
+            AuditLogger.Log(
+                "خروجی جمعی",
+                "TblCase",
+                0,
+                "",
+                "type=" + exportType +
+                "; count=" + count +
+                "; path=" + (path ?? "") +
+                "; user=" + (Helpers.SecurityContext.Username ?? "") +
+                "; at=" + at);
         }
 
         // ═══════════════════════════════════════════════════════════════════
@@ -446,30 +391,21 @@ namespace CaseManagement
             };
 
             menu.Items.Add(MenuItem("چاپ خلاصه", delegate { btnPrint_Click(this, EventArgs.Empty); }));
-            menu.Items.Add(MenuItem("پروندهٔ کامل (پیش‌نمایش / PDF / اکسل همین پرونده)…",
+            menu.Items.Add(MenuItem("پرونده کامل",
                 delegate { btnExportCaseFile_Click(this, EventArgs.Empty); }));
             menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add(MenuItem("Word همین پرونده", delegate { ExportCurrentCaseWord(); }));
-            menu.Items.Add(MenuItem("PDF همین پرونده", delegate { ExportCurrentCasePdf(); }));
+            menu.Items.Add(MenuItem("Word پرونده", delegate { ExportCurrentCaseWord(); }));
+            menu.Items.Add(MenuItem("PDF پرونده", delegate { ExportCurrentCasePdf(); }));
             menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add(MenuItem("فورم رسمی…", delegate { OpenOfficialForm(null); }));
+
+            var forms = new ToolStripMenuItem("فرم‌های رسمی");
+            forms.DropDown = _menuOfficialForms;
+            menu.Items.Add(forms);
+
             menu.Items.Add(MenuItem("کارت شناسایی", delegate { OpenCurrentGuardianCard(); }));
             menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add(MenuItem("خروجی عکس و اسناد", delegate { ExportCurrentCaseMedia(); }));
-
-            // آموزش — بازگرداندنِ قابلیتِ حذف‌شده: دکمهٔ «انتخاب محل ذخیره» در
-            // HideOrphanExportButtons از نوارِ پایین برداشته شده بود و هیچ
-            // مسیرِ دیگری آن را صدا نمی‌زد، پس btnChooseStorageFolder_Click
-            // عملاً مرده بود. بررسی نشان داد FrmCase.btnChooseStorageFolder_Click
-            // تنها فراخوانِ FileHelper.SetBaseRootFolder در کلِ برنامه است —
-            // یعنی با مرگِ آن، «تغییرِ محل ذخیره» به‌کلی از دسترس خارج شده بود
-            // (GetOrChooseBaseRootFolder فقط وقتی ریشه *خالی* است می‌پرسد، پس
-            // جایگزینِ آن نیست). اینجا به‌صورت آیتمِ منو برمی‌گردد نه دکمه، چون
-            // نوارِ پایین WrapContents دارد و افزودنِ دکمه همان باگِ شناخته‌شدهٔ
-            // «دکمهٔ آخر دیده نمی‌شود» را دوباره زنده می‌کرد.
-            menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add(MenuItem("تغییر محل ذخیره فایل‌ها…",
-                delegate { btnChooseStorageFolder_Click(this, EventArgs.Empty); }));
+            menu.Items.Add(MenuItem("خروجی عکس‌ها و اسناد همین پرونده",
+                delegate { ExportCurrentCaseMedia(); }));
 
             return menu;
         }
@@ -483,9 +419,36 @@ namespace CaseManagement
                 Font = new Font("Segoe UI", 9F)
             };
 
-            menu.Items.Add(MenuItem("خروجی جمعی Word / PDF…", delegate { btnBatchExport_Click(this, EventArgs.Empty); }));
-            menu.Items.Add(MenuItem("چاپ جمعی کارت‌ها…", delegate { OpenBatchGuardianCards(); }));
-            menu.Items.Add(MenuItem("خروجی عکس و اسناد جمعی…", delegate { ExportBatchCaseMedia(); }));
+            menu.Items.Add(MenuItem("Word جمعی", delegate { StartBatchDocumentExport(true, false); }));
+            menu.Items.Add(MenuItem("PDF جمعی", delegate { StartBatchDocumentExport(false, true); }));
+            menu.Items.Add(MenuItem("کارت جمعی", delegate { OpenBatchGuardianCards(); }));
+
+            var media = new ToolStripMenuItem("خروجی رسانه‌ها");
+            var mediaMenu = new ContextMenuStrip
+            {
+                RightToLeft = RightToLeft.Yes,
+                ShowImageMargin = false,
+                Font = new Font("Segoe UI", 9F)
+            };
+            mediaMenu.Items.Add(MenuItem("عکس سرپرست",
+                delegate { ExportBatchCaseMedia(BatchMediaKind.HeadPhoto); }));
+            mediaMenu.Items.Add(MenuItem("عکس خانوادگی",
+                delegate { ExportBatchCaseMedia(BatchMediaKind.FamilyPhoto); }));
+            mediaMenu.Items.Add(MenuItem("اسناد",
+                delegate { ExportBatchCaseMedia(BatchMediaKind.Documents); }));
+            mediaMenu.Items.Add(new ToolStripSeparator());
+            mediaMenu.Items.Add(MenuItem("همه موارد",
+                delegate { ExportBatchCaseMedia(BatchMediaKind.All); }));
+            media.DropDown = mediaMenu;
+            menu.Items.Add(media);
+
+            menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add(MenuItem("خروجی پوشه‌بندی‌شده...",
+                delegate
+                {
+                    if (!RequireBatchExportPermission()) return;
+                    OpenUnifiedExport();
+                }));
             return menu;
         }
 
@@ -507,7 +470,7 @@ namespace CaseManagement
         // هر بار که منو باز می‌شود از نو ساخته می‌شود، چون فورمِ پیشنهادی به
         // نوعِ پروندهٔ *جاری* بستگی دارد و کاربر ممکن است بینِ دو باز کردن،
         // پروندهٔ دیگری را انتخاب کرده باشد.
-        private void RebuildOfficialFormsMenu(ContextMenuStrip menu)
+        private void RebuildOfficialFormsMenu(ToolStrip menu)
         {
             menu.Items.Clear();
 
@@ -1006,12 +969,33 @@ namespace CaseManagement
                     // اشاره می‌کرد. حسابرسیِ تغییرِ عکس رایگان به‌دست می‌آید:
                     // CaseModuleService خودش تفاوتِ هر فیلد را در تایم‌لاین
                     // ثبت می‌کند، پس GuardianPhotoPath هم مثل بقیه دیده می‌شود.
-                    savedGuardianPhotoPath = StoreGuardianPhoto(txtCode.Text.Trim());
-                    values["GuardianPhotoPath"] = TextOrNull(savedGuardianPhotoPath);
+                    string previousGuardian = savedGuardianPhotoPath;
+                    bool guardianCommitted = false;
+                    try
+                    {
+                        savedGuardianPhotoPath = StoreGuardianPhoto(txtCode.Text.Trim());
+                        values["GuardianPhotoPath"] = TextOrNull(savedGuardianPhotoPath);
+                        Helpers.CaseModuleService.Save(Helpers.CaseModuleService.TableOrphan,
+                            Helpers.CaseModuleService.TitleOrphan, casId, values, mirror);
+                        guardianCommitted = true;
+                        FileHelper.CatalogCommittedFile(txtCode.Text.Trim(),
+                            FileHelper.SectionGuardianPhotos, savedGuardianPhotoPath);
+                        FileHelper.DeletePreviousFileAfterCommit(previousGuardian, savedGuardianPhotoPath);
+                    }
+                    finally
+                    {
+                        if (!guardianCommitted)
+                        {
+                            FileHelper.DiscardStagedFileAfterFailure(savedGuardianPhotoPath, previousGuardian);
+                            savedGuardianPhotoPath = previousGuardian ?? "";
+                        }
+                    }
                 }
-
-                Helpers.CaseModuleService.Save(Helpers.CaseModuleService.TableOrphan,
-                    Helpers.CaseModuleService.TitleOrphan, casId, values, mirror);
+                else
+                {
+                    Helpers.CaseModuleService.Save(Helpers.CaseModuleService.TableOrphan,
+                        Helpers.CaseModuleService.TitleOrphan, casId, values, mirror);
+                }
             }
 
             // ─── معلولیت ─────────────────────────────────────────────────────
@@ -1142,7 +1126,7 @@ namespace CaseManagement
             savedGuardianPhotoPath = "";
         }
 
-        // کپی به پوشهٔ پرونده — دقیقاً هم‌الگوی StoreRepresentativePhoto.
+        // کپی به پوشهٔ پرونده — فایل قبلی تا Commit ردیف TblOrphan حذف نمی‌شود.
         private string StoreGuardianPhoto(string caseCode)
         {
             if (string.IsNullOrEmpty(selectedGuardianPhotoSource)) return savedGuardianPhotoPath;
@@ -1153,7 +1137,8 @@ namespace CaseManagement
                 caseCode,
                 FileHelper.SectionGuardianPhotos,
                 caseCode + "-Guardian",
-                savedGuardianPhotoPath);
+                savedGuardianPhotoPath,
+                false);
 
             if (string.IsNullOrWhiteSpace(savedPath) || !File.Exists(savedPath))
                 throw new Exception("عکس سرپرست کودک ذخیره نشد: " + FileHelper.LastError);
@@ -1404,36 +1389,76 @@ namespace CaseManagement
 
             // عکس‌ها باید پیش از نوشتنِ ردیف در دیتابیس به پوشهٔ
             // پرونده کپی شوند، وگرنه PhotoPath به مسیرِ موقتِ مبدأ
-            // (مثلاً Desktop کاربر) اشاره می‌کرد.
-            SaveRepresentativePhotos();
-
-            Helpers.RepresentativeRow primary = BuildRepresentative(
-                Helpers.CaseRepresentativeService.OrderPrimary);
-            primary.PhotoPath = savedRep1PhotoPath;
-
-            // پروندهٔ قدیمی که کاربر نماینده‌ای برایش وارد نکرده:
-            // نه ردیفِ تهی ساخته می‌شود و نه ردیفِ موجود دست‌خورده
-            // می‌شود. خواستهٔ صریح: «دادهٔ موجود را خودکار نساز و
-            // تغییر نده.» حذفِ نمایندهٔ اول فقط از مسیرِ صریحِ
-            // دکمهٔ حذف انجام می‌شود، نه از خالی‌ماندنِ کادرها.
-            if (!primary.IsEmpty)
-                Helpers.CaseRepresentativeService.Save(casId, primary);
-
-            Helpers.RepresentativeRow secondary = BuildRepresentative(
-                Helpers.CaseRepresentativeService.OrderSecondary);
-            secondary.PhotoPath = savedRep2PhotoPath;
-
-            if (secondary.IsEmpty)
+            // (مثلاً Desktop کاربر) اشاره می‌کرد. replaceExisting=false
+            // تا فایل قبلی قبل از Commit ردیف نماینده نابود نشود.
+            string previousRep1 = savedRep1PhotoPath;
+            string previousRep2 = savedRep2PhotoPath;
+            bool rep1Committed = false;
+            bool rep2Committed = false;
+            try
             {
-                // کاربر نمایندهٔ دوم را خالی گذاشته: اگر قبلاً ردیفی
-                // داشته، پاک‌کردنِ کادرها باید واقعاً حذفش کند — وگرنه
-                // ردیفِ کهنه در گزارش/جستجو زنده می‌ماند.
-                Helpers.CaseRepresentativeService.Delete(
-                    casId, Helpers.CaseRepresentativeService.OrderSecondary);
+                SaveRepresentativePhotos();
+
+                Helpers.RepresentativeRow primary = BuildRepresentative(
+                    Helpers.CaseRepresentativeService.OrderPrimary);
+                primary.PhotoPath = savedRep1PhotoPath;
+
+                // پروندهٔ قدیمی که کاربر نماینده‌ای برایش وارد نکرده:
+                // نه ردیفِ تهی ساخته می‌شود و نه ردیفِ موجود دست‌خورده
+                // می‌شود. خواستهٔ صریح: «دادهٔ موجود را خودکار نساز و
+                // تغییر نده.» حذفِ نمایندهٔ اول فقط از مسیرِ صریحِ
+                // دکمهٔ حذف انجام می‌شود، نه از خالی‌ماندنِ کادرها.
+                if (!primary.IsEmpty)
+                {
+                    Helpers.CaseRepresentativeService.Save(casId, primary);
+                    rep1Committed = true;
+                    FileHelper.CatalogCommittedFile(txtCode.Text.Trim(),
+                        FileHelper.SectionRepresentativePhotos, savedRep1PhotoPath);
+                    FileHelper.DeletePreviousFileAfterCommit(previousRep1, savedRep1PhotoPath);
+                }
+                else
+                {
+                    FileHelper.DiscardStagedFileAfterFailure(savedRep1PhotoPath, previousRep1);
+                    savedRep1PhotoPath = previousRep1 ?? "";
+                    rep1Committed = true;
+                }
+
+                Helpers.RepresentativeRow secondary = BuildRepresentative(
+                    Helpers.CaseRepresentativeService.OrderSecondary);
+                secondary.PhotoPath = savedRep2PhotoPath;
+
+                if (secondary.IsEmpty)
+                {
+                    // کاربر نمایندهٔ دوم را خالی گذاشته: اگر قبلاً ردیفی
+                    // داشته، پاک‌کردنِ کادرها باید واقعاً حذفش کند — وگرنه
+                    // ردیفِ کهنه در گزارش/جستجو زنده می‌ماند.
+                    Helpers.CaseRepresentativeService.Delete(
+                        casId, Helpers.CaseRepresentativeService.OrderSecondary);
+                    FileHelper.DiscardStagedFileAfterFailure(savedRep2PhotoPath, previousRep2);
+                    savedRep2PhotoPath = previousRep2 ?? "";
+                    rep2Committed = true;
+                }
+                else
+                {
+                    Helpers.CaseRepresentativeService.Save(casId, secondary);
+                    rep2Committed = true;
+                    FileHelper.CatalogCommittedFile(txtCode.Text.Trim(),
+                        FileHelper.SectionRepresentativePhotos, savedRep2PhotoPath);
+                    FileHelper.DeletePreviousFileAfterCommit(previousRep2, savedRep2PhotoPath);
+                }
             }
-            else
+            finally
             {
-                Helpers.CaseRepresentativeService.Save(casId, secondary);
+                if (!rep1Committed)
+                {
+                    FileHelper.DiscardStagedFileAfterFailure(savedRep1PhotoPath, previousRep1);
+                    savedRep1PhotoPath = previousRep1 ?? "";
+                }
+                if (!rep2Committed)
+                {
+                    FileHelper.DiscardStagedFileAfterFailure(savedRep2PhotoPath, previousRep2);
+                    savedRep2PhotoPath = previousRep2 ?? "";
+                }
             }
         }
 
@@ -1457,7 +1482,8 @@ namespace CaseManagement
                 caseCode,
                 FileHelper.SectionRepresentativePhotos,
                 caseCode + "-Rep" + slot,
-                existing);
+                existing,
+                false);
 
             if (string.IsNullOrWhiteSpace(savedPath) || !File.Exists(savedPath))
                 throw new Exception("عکس " + Helpers.CaseRepresentativeService.LabelFor(slot) +
@@ -2830,11 +2856,15 @@ namespace CaseManagement
                     return;
 
                 string newRoot = fbd.SelectedPath;
-                string error;
-
-                if (!FileHelper.SetBaseRootFolder(newRoot, out error))
+                FileStorageMigrationService.Result migration =
+                    new FileStorageMigrationService().MigrateAll(newRoot);
+                if (!migration.Succeeded)
                 {
-                    Msg.Show(error, "خطا", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    Msg.Show(
+                        "تغییر محل ذخیره متوقف شد؛ بعضی فایل‌ها به‌صورت ایمن منتقل نشدند." +
+                        Environment.NewLine +
+                        string.Join(Environment.NewLine, migration.Errors.ToArray()),
+                        "خطا", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     return;
                 }
 
@@ -3361,7 +3391,8 @@ namespace CaseManagement
                         caseCode,
                         FileHelper.SectionHeadPhoto,
                         caseCode,
-                        savedHeadPhotoPath);
+                        savedHeadPhotoPath,
+                        false);
 
                     if (string.IsNullOrWhiteSpace(savedPath) || !File.Exists(savedPath))
                         throw new Exception("عکس سرپرست ذخیره نشد: " + FileHelper.LastError);
@@ -3388,7 +3419,8 @@ namespace CaseManagement
                         caseCode,
                         FileHelper.SectionFamilyPhoto,
                         caseCode,
-                        savedFamilyPhotoPath);
+                        savedFamilyPhotoPath,
+                        false);
 
                     if (string.IsNullOrWhiteSpace(savedPath) || !File.Exists(savedPath))
                         throw new Exception("عکس جمعی خانواده ذخیره نشد: " + FileHelper.LastError);
@@ -3401,6 +3433,25 @@ namespace CaseManagement
             {
                 txtFamilyPhotoPath.Text = savedFamilyPhotoPath;
             }
+        }
+
+        private void CommitStagedCasePhotos(string previousHead, string previousFamily)
+        {
+            string code = txtCode.Text.Trim();
+            FileHelper.CatalogCommittedFile(code, FileHelper.SectionHeadPhoto, savedHeadPhotoPath);
+            FileHelper.CatalogCommittedFile(code, FileHelper.SectionFamilyPhoto, savedFamilyPhotoPath);
+            FileHelper.DeletePreviousFileAfterCommit(previousHead, savedHeadPhotoPath);
+            FileHelper.DeletePreviousFileAfterCommit(previousFamily, savedFamilyPhotoPath);
+        }
+
+        private void RevertStagedCasePhotos(string previousHead, string previousFamily)
+        {
+            FileHelper.DiscardStagedFileAfterFailure(savedHeadPhotoPath, previousHead);
+            FileHelper.DiscardStagedFileAfterFailure(savedFamilyPhotoPath, previousFamily);
+            savedHeadPhotoPath = previousHead ?? "";
+            savedFamilyPhotoPath = previousFamily ?? "";
+            txtPhotoPath.Text = savedHeadPhotoPath;
+            txtFamilyPhotoPath.Text = savedFamilyPhotoPath;
         }
 
         // اعمالِ فیلترِ واردشده از داشبورد: وضعیتِ خدمات روی همان کمبویِ
@@ -3424,17 +3475,7 @@ namespace CaseManagement
                 }
             }
 
-            if (!hasProvinceOrDistrict && !hasStatus && _incomingGeoFilter == null) return;
-
-            // وقتی فیلتر از مرکز فرماندهی آمده، توصیفِ کاملِ خودش نشان داده
-            // می‌شود؛ وگرنه همان سه‌جزئیِ قدیمیِ داشبورد.
-            if (_incomingGeoFilter != null)
-            {
-                ShowIncomingFilterBanner("فیلترِ مرکز فرماندهی فعال است: " +
-                                         _incomingGeoFilter.Describe() +
-                                         " — فهرست و جستجو فقط همین محدوده را نشان می‌دهند.");
-                return;
-            }
+            if (!hasProvinceOrDistrict && !hasStatus) return;
 
             string text = "فیلترِ داشبورد فعال است: ";
             var parts = new System.Collections.Generic.List<string>();
@@ -3465,7 +3506,6 @@ namespace CaseManagement
                 _incomingFilterProvince = "";
                 _incomingFilterDistrict = "";
                 _incomingFilterServiceStatus = "";
-                _incomingGeoFilter = null;
                 cmbServiceStatusFilter.SelectedIndex = 0;
                 _dashboardFilterBanner.Visible = false;
                 LoadCases();
@@ -3515,8 +3555,7 @@ namespace CaseManagement
                       AND (@CID = 0 OR CenterID = @CID)
                       AND (@ServiceStatus = '' OR ServiceStatus = @ServiceStatus)
                       AND (@Prov = '' OR Province = @Prov)
-                      AND (@Dist = '' OR District LIKE '%' || @Dist || '%')"
-                   + (_incomingGeoFilter == null ? "" : _incomingGeoFilter.BuildWhere(""));
+                      AND (@Dist = '' OR District LIKE '%' || @Dist || '%')";
         }
 
         private void BindCasesParameters(SQLiteCommand cmd)
@@ -3531,10 +3570,6 @@ namespace CaseManagement
             AddStringParameter(cmd, "@ServiceStatus", GetSelectedServiceStatusFilter());
             AddStringParameter(cmd, "@Prov", _incomingFilterProvince);
             AddStringParameter(cmd, "@Dist", _incomingFilterDistrict);
-
-            // پارامترهای فیلترِ مرکز فرماندهی فقط وقتی بایند می‌شوند که
-            // شرطشان هم در متنِ کوئری آمده باشد — این دو همیشه با هم.
-            if (_incomingGeoFilter != null) _incomingGeoFilter.BindParameters(cmd);
         }
 
         // بارگذاریِ پیش‌فرضِ گرید: بدونِ جستجو، از صفحهٔ اول.
@@ -4298,6 +4333,10 @@ namespace CaseManagement
 
             txtFormNo.Text = GetNextFormNo();
 
+            string previousHeadPhoto = savedHeadPhotoPath;
+            string previousFamilyPhoto = savedFamilyPhotoPath;
+            bool photosCommitted = false;
+
             try
             {
                 if (IsFormNoExists(txtFormNo.Text.Trim(), 0))
@@ -4403,6 +4442,9 @@ namespace CaseManagement
                     }
                 }
 
+                CommitStagedCasePhotos(previousHeadPhoto, previousFamilyPhoto);
+                photosCommitted = true;
+
                 selectedHeadPhotoSource = "";
                 selectedFamilyPhotoSource = "";
 
@@ -4467,10 +4509,14 @@ namespace CaseManagement
             }
             catch (SQLiteException ex)
             {
+                if (!photosCommitted)
+                    RevertStagedCasePhotos(previousHeadPhoto, previousFamilyPhoto);
                 Msg.Show("خطا در ذخیره: " + ex.Message);
             }
             catch (Exception ex)
             {
+                if (!photosCommitted)
+                    RevertStagedCasePhotos(previousHeadPhoto, previousFamilyPhoto);
                 Msg.Show("خطا در ذخیره: " + ex.Message);
             }
         }
@@ -4505,6 +4551,10 @@ namespace CaseManagement
         {
             if (!ValidateForm())
                 return false;
+
+            string previousHeadPhoto = savedHeadPhotoPath;
+            string previousFamilyPhoto = savedFamilyPhotoPath;
+            bool photosCommitted = false;
 
             try
             {
@@ -4627,6 +4677,7 @@ namespace CaseManagement
 
                         if (affectedRows == 0)
                         {
+                            RevertStagedCasePhotos(previousHeadPhoto, previousFamilyPhoto);
                             Msg.Show("رکورد برای ویرایش پیدا نشد یا متعلق به مرکز دیگری است");
                             currentCaseId = 0;
                             LoadCases();
@@ -4635,6 +4686,9 @@ namespace CaseManagement
                         }
                     }
                 }
+
+                CommitStagedCasePhotos(previousHeadPhoto, previousFamilyPhoto);
+                photosCommitted = true;
 
                 selectedHeadPhotoSource = "";
                 selectedFamilyPhotoSource = "";
@@ -4704,6 +4758,8 @@ namespace CaseManagement
             }
             catch (SQLiteException ex)
             {
+                if (!photosCommitted)
+                    RevertStagedCasePhotos(previousHeadPhoto, previousFamilyPhoto);
                 if (ex.Message.IndexOf("UNIQUE", StringComparison.OrdinalIgnoreCase) >= 0)
                     Msg.Show("شماره فرم یا کد اختصاصی تکراری است");
                 else
@@ -4711,6 +4767,8 @@ namespace CaseManagement
             }
             catch (Exception ex)
             {
+                if (!photosCommitted)
+                    RevertStagedCasePhotos(previousHeadPhoto, previousFamilyPhoto);
                 Msg.Show("خطا در ویرایش: " + ex.Message);
             }
 
@@ -4766,9 +4824,10 @@ namespace CaseManagement
                 var pendingDelete =
                     CaseManagement.Sync.SyncOutboxService.PrepareDelete("TblCase", currentCaseId);
                 int deletedCaseId = currentCaseId;
-                List<string> filePathsToDelete = mode == DeleteMode.AppAndFiles
-                    ? CollectCaseFilePaths(currentCaseId)
-                    : new List<string>();
+                CaseFileDeletionService.Plan fileDeletionPlan =
+                    mode == DeleteMode.AppAndFiles
+                    ? new CaseFileDeletionService().Capture(currentCaseId)
+                    : null;
 
                 using (var con = db.GetConnection())
                 using (var cmd = new SQLiteCommand(
@@ -4794,8 +4853,8 @@ namespace CaseManagement
                 // TblFamily/TblDocs/TblAssistance rows are removed by ON DELETE CASCADE.
                 // CASCADE only touches the database rows; فایل‌های فیزیکی فقط وقتی
                 // پاک می‌شوند که کاربر گزینه «حذف کامل» را انتخاب کرده باشد.
-                foreach (string path in filePathsToDelete)
-                    FileHelper.DeleteFileIfExists(path);
+                if (fileDeletionPlan != null)
+                    new CaseFileDeletionService().ExecuteAfterCommit(fileDeletionPlan);
 
                 AuditLogger.Log(
                     mode == DeleteMode.AppAndFiles ? "حذف کامل" : "حذف (فقط نرم‌افزار)",
@@ -4960,50 +5019,7 @@ namespace CaseManagement
 
         private List<string> CollectCaseFilePaths(int caseId)
         {
-            List<string> paths = new List<string>();
-
-            using (var con = db.GetConnection())
-            {
-                con.Open();
-
-                using (var cmd = new SQLiteCommand("SELECT PhotoPath, FamilyPhotoPath FROM TblCase WHERE CasID = @CasID", con))
-                {
-                    AddIntParameter(cmd, "@CasID", caseId);
-
-                    using (var dr = cmd.ExecuteReader())
-                    {
-                        if (dr.Read())
-                        {
-                            AddIfNotEmpty(paths, GetDbString(dr, "PhotoPath"));
-                            AddIfNotEmpty(paths, GetDbString(dr, "FamilyPhotoPath"));
-                        }
-                    }
-                }
-
-                using (var cmd = new SQLiteCommand("SELECT MemberPhotoPath FROM TblFamily WHERE CasID = @CasID", con))
-                {
-                    AddIntParameter(cmd, "@CasID", caseId);
-
-                    using (var dr = cmd.ExecuteReader())
-                    {
-                        while (dr.Read())
-                            AddIfNotEmpty(paths, GetDbString(dr, "MemberPhotoPath"));
-                    }
-                }
-
-                using (var cmd = new SQLiteCommand("SELECT DocFilePath FROM TblDocs WHERE CasID = @CasID", con))
-                {
-                    AddIntParameter(cmd, "@CasID", caseId);
-
-                    using (var dr = cmd.ExecuteReader())
-                    {
-                        while (dr.Read())
-                            AddIfNotEmpty(paths, GetDbString(dr, "DocFilePath"));
-                    }
-                }
-            }
-
-            return paths;
+            return new CaseFileDeletionService().Capture(caseId).Files;
         }
 
         private static void AddIfNotEmpty(List<string> list, string value)
@@ -6149,33 +6165,43 @@ WHERE CasID = @CasID", con))
 
             if (btnNew != null) btnNew.Visible = true;
 
-            // ─── تکْ‌دکمهٔ خروجی ──────────────────────────────────────────────
-            // خواستهٔ صریحِ کاربر: در قسمتِ پرونده فقط یک دکمهٔ خروجی باشد. پس
-            // هر سه گروهِ خروجیِ قبلی از نوار برداشته می‌شوند و «خروجی پرونده‌ها»
-            // جایشان را می‌گیرد — در هر دو حالت، چون خودِ دیالوگ می‌داند که در
-            // Detail یعنی «همین پرونده» و در List یعنی «انتخاب‌شده‌ها/فیلتر».
-            //
-            // ⚠ حذف نشدند، فقط پنهان: منوهای «چاپ و خروجی»/«خروجی جمعی» و دکمهٔ
-            // «گزارش اکسل» با همهٔ هندلرهایشان زنده‌اند و Ctrl+P هنوز کار می‌کند.
-            if (_lblCurrentCaseGroup != null) _lblCurrentCaseGroup.Visible = false;
-            if (_btnCurrentCaseMenu  != null) _btnCurrentCaseMenu.Visible  = false;
-            if (_lblBatchGroup   != null) _lblBatchGroup.Visible   = false;
-            if (_btnBatchOpsMenu != null) _btnBatchOpsMenu.Visible = false;
-            if (_lblListGroup    != null) _lblListGroup.Visible    = false;
-            if (_btnExcelList    != null) _btnExcelList.Visible    = false;
+            // لیست: چند پرونده + گزارش اکسل پرونده‌ها
+            // جزئیات: همین پرونده
+            if (_btnCurrentCaseMenu != null) _btnCurrentCaseMenu.Visible = detail;
+            if (_btnBatchOpsMenu != null) _btnBatchOpsMenu.Visible = !detail;
+            if (_btnExcelList != null) _btnExcelList.Visible = !detail;
 
-            if (_lblExportGroup   != null) _lblExportGroup.Visible   = true;
-            if (_btnUnifiedExport != null) _btnUnifiedExport.Visible = true;
-
-            // «فورم رسمی» و «کارت شناسایی» تکی به یک پروندهٔ باز نیاز دارند
-            // (هر دو با «اول پرونده را ذخیره یا جستجو کن» گارد شده‌اند) — پس
-            // فقط در Detail معنا دارند. «چاپ جمعی کارت‌ها» هم‌خانوادهٔ «چند
-            // پرونده»/«گزارش لیست» است، پس فقط در List.
-            if (_btnOfficialForm      != null) _btnOfficialForm.Visible      = detail;
-            if (_btnGuardianCardSingle != null) _btnGuardianCardSingle.Visible = detail;
-            if (_btnGuardianCardBatch  != null) _btnGuardianCardBatch.Visible  = !detail;
-
+            OrderBottomExportControls(detail);
             AdjustBottomBarHeight();
+        }
+
+        private static void CaptionExportButton(Button button, string icon, string text, int width)
+        {
+            if (button == null) return;
+            button.Text = string.IsNullOrEmpty(icon) ? text : (icon + "   " + text);
+            button.Size = new Size(width, 32);
+        }
+
+        // ترتیب دیده‌شدن در FlowLayoutPanel = ایندکس کنترل. در RTL اولین
+        // کنترل سمت راست می‌نشیند. قابلیت حذف نمی‌شود؛ فقط جایش عوض می‌شود.
+        private void OrderBottomExportControls(bool detail)
+        {
+            Control parent = bottomActionsRow;
+            if (parent == null) return;
+
+            int insert = parent.Controls.IndexOf(btnHistory);
+            if (insert < 0) return;
+            insert += 1;
+
+            Control[] order = detail
+                ? new Control[] { _btnCurrentCaseMenu }
+                : new Control[] { _btnBatchOpsMenu, _btnExcelList };
+
+            for (int i = order.Length - 1; i >= 0; i--)
+            {
+                if (order[i] == null || order[i].Parent != parent) continue;
+                parent.Controls.SetChildIndex(order[i], insert);
+            }
         }
 
         private void UpdateDetailHeaderText()
@@ -6589,26 +6615,8 @@ WHERE CasID = @CasID", con))
                 if (string.IsNullOrWhiteSpace(caseFolder))
                     throw new Exception(FileHelper.LastError);
 
-                int copied = 0;
-                copied += CopyMediaIfExists(savedHeadPhotoPath, caseCode, FileHelper.SectionHeadPhoto);
-                copied += CopyMediaIfExists(txtPhotoPath.Text.Trim(), caseCode, FileHelper.SectionHeadPhoto);
-                copied += CopyMediaIfExists(savedFamilyPhotoPath, caseCode, FileHelper.SectionFamilyPhoto);
-                copied += CopyMediaIfExists(txtFamilyPhotoPath.Text.Trim(), caseCode, FileHelper.SectionFamilyPhoto);
-
-                using (var con = db.GetConnection())
-                using (var cmd = new SQLiteCommand(@"
-SELECT IFNULL(DocFilePath, '')
-FROM TblDocs
-WHERE CasID = @Id AND IFNULL(IsArchived, 0) = 0 AND IFNULL(DocFilePath, '') <> '';", con))
-                {
-                    cmd.Parameters.AddWithValue("@Id", currentCaseId);
-                    con.Open();
-                    using (var reader = cmd.ExecuteReader())
-                    {
-                        while (reader.Read())
-                            copied += CopyMediaIfExists(reader.GetString(0), caseCode, FileHelper.SectionDocs);
-                    }
-                }
+                RememberCurrentStorageLayout();
+                int copied = CopyCaseMediaFromDatabase(currentCaseId, caseCode, BatchMediaKind.All);
 
                 AuditLogger.Log("خروجی عکس و اسناد", "TblCase", currentCaseId, "", caseFolder);
                 UiTheme.ShowSuccess(this,
@@ -6622,13 +6630,31 @@ WHERE CasID = @Id AND IFNULL(IsArchived, 0) = 0 AND IFNULL(DocFilePath, '') <> '
             }
         }
 
-        private async void ExportBatchCaseMedia()
+        private static string MediaKindTitle(BatchMediaKind kind)
         {
-            if (!CaseManagement.Enterprise.PermissionService.Require("Case.BatchExport"))
+            switch (kind)
             {
-                Msg.Show("کاربر اجازه خروجی جمعی ندارد.");
-                return;
+                case BatchMediaKind.HeadPhoto: return "عکس سرپرست";
+                case BatchMediaKind.FamilyPhoto: return "عکس خانوادگی";
+                case BatchMediaKind.Documents: return "اسناد";
+                default: return "همه موارد";
             }
+        }
+
+        private static string MediaKindAuditType(BatchMediaKind kind)
+        {
+            switch (kind)
+            {
+                case BatchMediaKind.HeadPhoto: return "MediaHeadPhoto";
+                case BatchMediaKind.FamilyPhoto: return "MediaFamilyPhoto";
+                case BatchMediaKind.Documents: return "MediaDocuments";
+                default: return "MediaAll";
+            }
+        }
+
+        private async void ExportBatchCaseMedia(BatchMediaKind kind)
+        {
+            if (!RequireBatchExportPermission()) return;
 
             Form progress = null;
             try
@@ -6636,30 +6662,30 @@ WHERE CasID = @Id AND IFNULL(IsArchived, 0) = 0 AND IFNULL(DocFilePath, '') <> '
                 DataTable cases = GetCasesForBatchExport(0, 0, null);
                 if (cases.Rows.Count == 0)
                 {
-                    Msg.Show("پرونده‌ای برای خروجی عکس و اسناد پیدا نشد. چند ردیف انتخاب کنید یا جستجو را تنگ‌تر کنید.");
+                    Msg.Show("پرونده‌ای برای خروجی رسانه‌ها پیدا نشد. چند ردیف انتخاب کنید یا جستجو را تنگ‌تر کنید.");
                     return;
                 }
 
-                if (cases.Rows.Count > BatchWordPdfMax)
-                {
-                    Msg.Show("تعداد پرونده‌ها از سقف " + BatchWordPdfMax + " بیشتر است. فیلتر را تنگ‌تر کنید.");
+                if (RejectIfOverBatchCap(cases.Rows.Count))
                     return;
-                }
 
+                string kindTitle = MediaKindTitle(kind);
                 if (Msg.Show(
-                        cases.Rows.Count + " پرونده برای عکس و اسناد پوشه‌بندی می‌شود. ادامه می‌دهید؟",
-                        "خروجی عکس و اسناد جمعی",
+                        cases.Rows.Count + " پرونده برای «" + kindTitle + "» پوشه‌بندی می‌شود. ادامه می‌دهید؟",
+                        "خروجی رسانه‌ها",
                         MessageBoxButtons.YesNo,
                         MessageBoxIcon.Question) != DialogResult.Yes)
                     return;
 
                 _exportCts = new CancellationTokenSource();
                 CancellationToken token = _exportCts.Token;
-                progress = ShowExportProgress("خروجی عکس و اسناد جمعی", _exportCts);
+                progress = ShowExportProgress("خروجی رسانه‌ها — " + kindTitle, _exportCts);
                 SetExportMenusEnabled(false);
                 Cursor = Cursors.WaitCursor;
 
                 int copied = 0;
+                int missing = 0;
+                int failed = 0;
                 int done = 0;
                 string lastFolder = "";
                 await Task.Run(() =>
@@ -6671,19 +6697,38 @@ WHERE CasID = @Id AND IFNULL(IsArchived, 0) = 0 AND IFNULL(DocFilePath, '') <> '
                         string caseCode = row["Code"] == DBNull.Value ? "" : row["Code"].ToString();
                         if (string.IsNullOrWhiteSpace(caseCode)) continue;
 
-                        lastFolder = FileHelper.EnsureCaseStructure(caseCode);
-                        copied += CopyCaseMediaFromDatabase(caseId, caseCode);
+                        MediaExportResult media = CollectCaseMedia(caseId, caseCode, kind);
+                        copied += media.Files;
+                        missing += media.Missing;
+                        failed += media.Failed;
+                        lastFolder = FileHelper.GetCaseFolderPath(caseCode);
                         done++;
                     }
                 }, token);
 
-                AuditLogger.Log("خروجی عکس و اسناد جمعی", "TblCase", 0, "",
-                    "count=" + cases.Rows.Count + " copied=" + copied);
-                UiTheme.ShowSuccess(this,
-                    "پوشه‌بندی عکس و اسناد جمعی انجام شد." + Environment.NewLine +
-                    "پرونده: " + done + "   فایل کپی‌شده: " + copied);
-                if (!string.IsNullOrWhiteSpace(lastFolder))
-                    FileHelper.OpenFolder(Path.GetDirectoryName(lastFolder));
+                LogBatchExportAudit(MediaKindAuditType(kind), cases.Rows.Count, lastFolder);
+
+                if (copied == 0)
+                {
+                    UiTheme.ShowWarning(this,
+                        "هیچ فایل واقعی برای خروجی پیدا نشد." + Environment.NewLine +
+                        "پرونده بررسی‌شده: " + done + Environment.NewLine +
+                        "مسیر ثبت‌شده ولی فایل مفقود: " + missing +
+                        (failed > 0 ? Environment.NewLine + "فایل نامعتبر یا کپی‌نشده: " + failed : "") +
+                        Environment.NewLine + Environment.NewLine +
+                        "پوشه خالی به‌عنوان خروجی موفق ساخته نشد.");
+                }
+                else
+                {
+                    UiTheme.ShowSuccess(this,
+                        "خروجی عکس و اسناد جمعی انجام شد." + Environment.NewLine +
+                        "پرونده: " + done + "   فایل: " + copied +
+                        (missing > 0 ? Environment.NewLine + "فایل مفقود: " + missing : "") +
+                        (failed > 0 ? Environment.NewLine + "فایل کپی‌نشده: " + failed : ""));
+                }
+
+                if (copied > 0 && !string.IsNullOrWhiteSpace(lastFolder))
+                    FileHelper.OpenFolder(lastFolder);
             }
             catch (OperationCanceledException)
             {
@@ -6701,51 +6746,234 @@ WHERE CasID = @Id AND IFNULL(IsArchived, 0) = 0 AND IFNULL(DocFilePath, '') <> '
             }
         }
 
-        private int CopyCaseMediaFromDatabase(int caseId, string caseCode)
+        private int CopyCaseMediaFromDatabase(int caseId, string caseCode, BatchMediaKind kind)
         {
-            int copied = 0;
+            return CollectCaseMedia(caseId, caseCode, kind).Files;
+        }
+
+        private sealed class MediaExportResult
+        {
+            public readonly HashSet<string> Placed =
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            public readonly HashSet<string> MissingPaths =
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            public int Failed;
+
+            public int Files { get { return Placed.Count; } }
+            public int Missing { get { return MissingPaths.Count; } }
+        }
+
+        // عکس و سند را از مسیر دیتابیس، پوشهٔ فعلی پرونده، و پوشهٔ قدیمی
+        // (ریشه/کد) جمع می‌کند. پوشهٔ نوع فقط هنگام وجود فایل واقعی ساخته
+        // می‌شود؛ بنابراین دیگر خروجی موفقِ متشکل از پوشه‌های خالی نداریم.
+        private MediaExportResult CollectCaseMedia(int caseId, string caseCode, BatchMediaKind kind)
+        {
+            var result = new MediaExportResult();
+            string clean = FileHelper.CleanName(caseCode);
+            bool all = kind == BatchMediaKind.All;
+            bool head = all || kind == BatchMediaKind.HeadPhoto;
+            bool family = all || kind == BatchMediaKind.FamilyPhoto;
+            bool docs = all || kind == BatchMediaKind.Documents;
+
             using (var con = db.GetConnection())
             {
                 con.Open();
                 using (var cmd = new SQLiteCommand(@"
-SELECT IFNULL(PhotoPath, ''), IFNULL(FamilyPhotoPath, '')
-FROM TblCase WHERE CasID = @Id;", con))
+SELECT IFNULL(c.PhotoPath, ''),
+       IFNULL(c.FamilyPhotoPath, ''),
+       IFNULL(c.Province, ''),
+       IFNULL(c.District, ''),
+       IFNULL(NULLIF(TRIM(rt.Name), ''), IFNULL(c.RequestType, '')),
+       IFNULL(NULLIF(TRIM(ss.Name), ''), IFNULL(c.ServiceStatus, ''))
+FROM TblCase c
+LEFT JOIN TblRequestType rt ON rt.RequestTypeID = c.RequestTypeID
+LEFT JOIN TblServiceStatus ss ON ss.ServiceStatusID = c.ServiceStatusID
+WHERE c.CasID = @Id;", con))
                 {
                     cmd.Parameters.AddWithValue("@Id", caseId);
                     using (var reader = cmd.ExecuteReader())
                     {
                         if (reader.Read())
                         {
-                            copied += CopyMediaIfExists(reader.GetString(0), caseCode, FileHelper.SectionHeadPhoto);
-                            copied += CopyMediaIfExists(reader.GetString(1), caseCode, FileHelper.SectionFamilyPhoto);
+                            FileHelper.RememberLayout(caseCode,
+                                reader.GetString(2), reader.GetString(3),
+                                reader.GetString(4), reader.GetString(5));
+                            if (head)
+                                PlaceMediaFile(reader.GetString(0), caseCode, FileHelper.SectionHeadPhoto, result);
+                            if (family)
+                                PlaceMediaFile(reader.GetString(1), caseCode, FileHelper.SectionFamilyPhoto, result);
                         }
                     }
                 }
 
-                using (var cmd = new SQLiteCommand(@"
-SELECT IFNULL(DocFilePath, '')
-FROM TblDocs
-WHERE CasID = @Id AND IFNULL(IsArchived, 0) = 0 AND IFNULL(DocFilePath, '') <> '';", con))
+                if (docs)
+                {
+                    PlaceQueryFiles(con, caseId, caseCode, result, FileHelper.SectionDocs, @"
+SELECT IFNULL(DocFilePath, '') FROM TblDocs
+WHERE CasID = @Id AND IFNULL(IsArchived, 0) = 0 AND IFNULL(DocFilePath, '') <> '';");
+                }
+
+                if (all)
+                {
+                    PlaceQueryFiles(con, caseId, caseCode, result, FileHelper.SectionMemberPhotos, @"
+SELECT IFNULL(MemberPhotoPath, '') FROM TblFamily
+WHERE CasID = @Id AND IFNULL(MemberPhotoPath, '') <> '';");
+                    PlaceQueryFiles(con, caseId, caseCode, result, FileHelper.SectionGuardianPhotos, @"
+SELECT IFNULL(GuardianPhotoPath, '') FROM TblOrphan
+WHERE CasID = @Id AND IFNULL(GuardianPhotoPath, '') <> '';");
+                    PlaceQueryFiles(con, caseId, caseCode, result, FileHelper.SectionRepresentativePhotos, @"
+SELECT IFNULL(PhotoPath, '') FROM TblCaseRepresentative
+WHERE CasID = @Id AND IFNULL(PhotoPath, '') <> '';");
+                    PlaceQueryFiles(con, caseId, caseCode, result, FileHelper.SectionVisitPhotos, @"
+SELECT IFNULL(FilePath, '') FROM TblFieldVisitPhoto
+WHERE CasID = @Id AND IFNULL(FilePath, '') <> '';");
+                }
+            }
+
+            HarvestFolderFiles(FileHelper.GetCaseFolderPath(caseCode), caseCode, result, kind);
+
+            string root = FileHelper.GetBaseRootFolder();
+            if (!string.IsNullOrWhiteSpace(root))
+            {
+                HarvestFolderFiles(Path.Combine(root, clean), caseCode, result, kind);
+                if (!string.Equals(clean, caseCode.Trim(), StringComparison.OrdinalIgnoreCase))
+                    HarvestFolderFiles(Path.Combine(root, caseCode.Trim()), caseCode, result, kind);
+            }
+
+            return result;
+        }
+
+        private void PlaceQueryFiles(SQLiteConnection con, int caseId, string caseCode,
+            MediaExportResult result, string section, string sql)
+        {
+            try
+            {
+                using (var cmd = new SQLiteCommand(sql, con))
                 {
                     cmd.Parameters.AddWithValue("@Id", caseId);
                     using (var reader = cmd.ExecuteReader())
                     {
                         while (reader.Read())
-                            copied += CopyMediaIfExists(reader.GetString(0), caseCode, FileHelper.SectionDocs);
+                            PlaceMediaFile(reader.GetString(0), caseCode, section, result);
                     }
                 }
             }
-            return copied;
+            catch
+            {
+                // جدول در نصب قدیمی ممکن است نباشد؛ بقیهٔ خروجی باید ادامه یابد.
+            }
+        }
+
+        private void HarvestFolderFiles(string caseDir, string caseCode, MediaExportResult result, BatchMediaKind kind)
+        {
+            if (string.IsNullOrWhiteSpace(caseDir) || !Directory.Exists(caseDir)) return;
+
+            string clean = FileHelper.CleanName(caseCode);
+            bool all = kind == BatchMediaKind.All;
+
+            if (all || kind == BatchMediaKind.HeadPhoto)
+            {
+                if (all)
+                    HarvestSectionFiles(Path.Combine(caseDir, FileHelper.DiskPhotoFolder), caseCode, FileHelper.SectionHeadPhoto, result);
+                HarvestSectionFiles(Path.Combine(caseDir, clean + "-HeadPhoto"), caseCode, FileHelper.SectionHeadPhoto, result);
+            }
+
+            if (all || kind == BatchMediaKind.FamilyPhoto)
+                HarvestSectionFiles(Path.Combine(caseDir, clean + "-FamilyPhoto"), caseCode, FileHelper.SectionFamilyPhoto, result);
+
+            if (all || kind == BatchMediaKind.Documents)
+            {
+                HarvestSectionFiles(Path.Combine(caseDir, FileHelper.SectionDocs), caseCode, FileHelper.SectionDocs, result);
+                HarvestSectionFiles(Path.Combine(caseDir, clean + "-Docs"), caseCode, FileHelper.SectionDocs, result);
+            }
+
+            if (!all) return;
+
+            HarvestSectionFiles(Path.Combine(caseDir, FileHelper.SectionMemberPhotos), caseCode, FileHelper.SectionMemberPhotos, result);
+            HarvestSectionFiles(Path.Combine(caseDir, FileHelper.SectionGuardianPhotos), caseCode, FileHelper.SectionGuardianPhotos, result);
+            HarvestSectionFiles(Path.Combine(caseDir, FileHelper.SectionRepresentativePhotos), caseCode, FileHelper.SectionRepresentativePhotos, result);
+            HarvestSectionFiles(Path.Combine(caseDir, FileHelper.SectionVisitPhotos), caseCode, FileHelper.SectionVisitPhotos, result);
+        }
+
+        private void HarvestSectionFiles(string sourceFolder, string caseCode, string section,
+            MediaExportResult result)
+        {
+            if (string.IsNullOrWhiteSpace(sourceFolder) || !Directory.Exists(sourceFolder)) return;
+
+            string[] files;
+            try { files = Directory.GetFiles(sourceFolder, "*", SearchOption.AllDirectories); }
+            catch { return; }
+
+            foreach (string file in files)
+            {
+                if (Path.GetFileName(file).StartsWith(".", StringComparison.Ordinal)) continue;
+                PlaceMediaFile(file, caseCode, section, result);
+            }
+        }
+
+        private void PlaceMediaFile(string sourcePath, string caseCode, string section,
+            MediaExportResult result)
+        {
+            if (string.IsNullOrWhiteSpace(sourcePath))
+                return;
+
+            string sourceFull;
+            try { sourceFull = Path.GetFullPath(sourcePath); }
+            catch
+            {
+                result.Failed++;
+                return;
+            }
+
+            if (!File.Exists(sourceFull))
+            {
+                result.MissingPaths.Add(sourceFull);
+                return;
+            }
+
+            string destFolder = FileHelper.GetSectionFolder(caseCode, section);
+            if (string.IsNullOrWhiteSpace(destFolder))
+            {
+                result.Failed++;
+                return;
+            }
+
+            if (IsPathUnderFolder(sourceFull, destFolder))
+            {
+                result.Placed.Add(sourceFull);
+                return;
+            }
+
+            string saved = FileHelper.SaveFileToCaseFolder(
+                sourceFull, caseCode, section, FileHelper.CleanName(caseCode), "");
+            if (!string.IsNullOrWhiteSpace(saved) && File.Exists(saved))
+                result.Placed.Add(Path.GetFullPath(saved));
+            else
+                result.Failed++;
+        }
+
+        private static bool IsPathUnderFolder(string filePath, string folder)
+        {
+            if (string.IsNullOrWhiteSpace(filePath) || string.IsNullOrWhiteSpace(folder))
+                return false;
+            try
+            {
+                string prefix = Path.GetFullPath(folder)
+                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                    + Path.DirectorySeparatorChar;
+                return Path.GetFullPath(filePath).StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private int CopyMediaIfExists(string sourcePath, string caseCode, string section)
         {
-            if (string.IsNullOrWhiteSpace(sourcePath) || !File.Exists(sourcePath))
-                return 0;
-
-            string saved = FileHelper.SaveFileToCaseFolder(
-                sourcePath, caseCode, section, FileHelper.CleanName(caseCode), "");
-            return string.IsNullOrWhiteSpace(saved) ? 0 : 1;
+            var result = new MediaExportResult();
+            PlaceMediaFile(sourcePath, caseCode, section, result);
+            return result.Files;
         }
 
         private string SaveGeneratedFileToCaseCodeFolder(string sourceFilePath)
@@ -6761,12 +6989,8 @@ WHERE CasID = @Id AND IFNULL(IsArchived, 0) = 0 AND IFNULL(DocFilePath, '') <> '
             // پرونده باشد و هیچ پسوند/برچسب اضافه‌ای (مثل «_FullCase») نداشته
             // باشد. پسوندِ نوع فایل (.docx/.pdf) خودش توسط SaveFileToCaseFolder
             // از فایل مبدأ حفظ می‌شود، پس فقط همین برچسب حذف می‌شود.
-            string savedPath = FileHelper.SaveFileToCaseFolder(
-                sourceFilePath,
-                caseCode,
-                FileHelper.SectionDocs,
-                safeCode,
-                "");
+            string savedPath = new CaseFileStorageService().SaveGenerated(
+                sourceFilePath, caseCode, safeCode, false);
 
             if (string.IsNullOrWhiteSpace(savedPath) || !File.Exists(savedPath))
                 throw new Exception("فایل خروجی ذخیره نشد: " + FileHelper.LastError);
@@ -6796,11 +7020,8 @@ WHERE CasID = @Id AND IFNULL(IsArchived, 0) = 0 AND IFNULL(DocFilePath, '') <> '
             Form progress = null;
             try
             {
-                if (!CaseManagement.Enterprise.PermissionService.Require("Case.BatchExport"))
-                {
-                    Msg.Show("کاربر اجازه خروجی جمعی و گزارش اکسل را ندارد.");
+                if (!RequireBatchExportPermission())
                     return;
-                }
 
                 var filter = new Helpers.ReportFilterCriteria
                 {
@@ -6848,14 +7069,15 @@ WHERE CasID = @Id AND IFNULL(IsArchived, 0) = 0 AND IFNULL(DocFilePath, '') <> '
                 SetExportMenusEnabled(false);
                 Cursor = Cursors.WaitCursor;
 
+                int exportedCount = 0;
                 await Task.Run(() =>
                 {
                     token.ThrowIfCancellationRequested();
                     ExcelReportExporter exporter = new ExcelReportExporter();
-                    exporter.ExportFullReport(outputPath, filter.ServiceStatus, filter, token);
+                    exporter.ExportFullReport(outputPath, filter.ServiceStatus, filter);
                 }, token);
 
-                AuditLogger.Log("گزارش اکسل پرونده‌ها", "TblCase", 0, "", outputPath);
+                LogBatchExportAudit("ExcelList", exportedCount, outputPath);
                 UiTheme.ShowSuccess(this,
                     "گزارش اکسل پرونده‌ها ساخته شد:" + Environment.NewLine + outputPath);
                 FileHelper.OpenFolder(reportsFolder);
@@ -6882,16 +7104,13 @@ WHERE CasID = @Id AND IFNULL(IsArchived, 0) = 0 AND IFNULL(DocFilePath, '') <> '
         }
 
         private bool TryGetBatchExportOptions(
+            string title,
             out int startFormNo,
             out int endFormNo,
-            out bool exportWord,
-            out bool exportPdf,
             out bool askAdvancedFilter)
         {
             startFormNo = 0;
             endFormNo = 0;
-            exportWord = true;
-            exportPdf = true;
             askAdvancedFilter = false;
 
             using (Form form = new Form())
@@ -6900,18 +7119,16 @@ WHERE CasID = @Id AND IFNULL(IsArchived, 0) = 0 AND IFNULL(DocFilePath, '') <> '
             using (Label lblEnd = new Label())
             using (TextBox txtStart = new TextBox())
             using (TextBox txtEnd = new TextBox())
-            using (CheckBox chkWord = new CheckBox())
-            using (CheckBox chkPdf = new CheckBox())
             using (CheckBox chkAdvanced = new CheckBox())
             using (Button btnOk = new Button())
             using (Button btnCancel = new Button())
             {
-                form.Text = "خروجی جمعی Word و PDF";
+                form.Text = title;
                 form.StartPosition = FormStartPosition.CenterParent;
                 form.FormBorderStyle = FormBorderStyle.FixedDialog;
                 form.MaximizeBox = false;
                 form.MinimizeBox = false;
-                form.ClientSize = new Size(440, 280);
+                form.ClientSize = new Size(440, 248);
                 form.RightToLeft = RightToLeft.Yes;
                 form.RightToLeftLayout = true;
 
@@ -6934,27 +7151,17 @@ WHERE CasID = @Id AND IFNULL(IsArchived, 0) = 0 AND IFNULL(DocFilePath, '') <> '
                 txtEnd.Location = new Point(35, 97);
                 txtEnd.Size = new Size(220, 27);
 
-                chkWord.AutoSize = true;
-                chkWord.Text = "ساخت Word";
-                chkWord.Checked = true;
-                chkWord.Location = new Point(250, 142);
-
-                chkPdf.AutoSize = true;
-                chkPdf.Text = "ساخت PDF";
-                chkPdf.Checked = true;
-                chkPdf.Location = new Point(130, 142);
-
                 chkAdvanced.AutoSize = true;
                 chkAdvanced.Text = "فیلتر پیشرفته (اختیاری)";
-                chkAdvanced.Location = new Point(200, 178);
+                chkAdvanced.Location = new Point(200, 142);
 
                 btnOk.Text = "شروع خروجی";
-                btnOk.Location = new Point(218, 220);
+                btnOk.Location = new Point(218, 188);
                 btnOk.Size = new Size(115, 35);
                 btnOk.DialogResult = DialogResult.OK;
 
                 btnCancel.Text = "انصراف";
-                btnCancel.Location = new Point(82, 220);
+                btnCancel.Location = new Point(82, 188);
                 btnCancel.Size = new Size(95, 35);
                 btnCancel.DialogResult = DialogResult.Cancel;
 
@@ -6963,8 +7170,6 @@ WHERE CasID = @Id AND IFNULL(IsArchived, 0) = 0 AND IFNULL(DocFilePath, '') <> '
                 form.Controls.Add(txtStart);
                 form.Controls.Add(lblEnd);
                 form.Controls.Add(txtEnd);
-                form.Controls.Add(chkWord);
-                form.Controls.Add(chkPdf);
                 form.Controls.Add(chkAdvanced);
                 form.Controls.Add(btnOk);
                 form.Controls.Add(btnCancel);
@@ -6999,16 +7204,7 @@ WHERE CasID = @Id AND IFNULL(IsArchived, 0) = 0 AND IFNULL(DocFilePath, '') <> '
                     }
                 }
 
-                exportWord = chkWord.Checked;
-                exportPdf = chkPdf.Checked;
                 askAdvancedFilter = chkAdvanced.Checked;
-
-                if (!exportWord && !exportPdf)
-                {
-                    Msg.Show("حداقل Word یا PDF را انتخاب کنید");
-                    return false;
-                }
-
                 return true;
             }
         }
@@ -7082,7 +7278,7 @@ WHERE CasID = @Id AND IFNULL(IsArchived, 0) = 0 AND IFNULL(DocFilePath, '') <> '
 
                 cmd.Parameters.AddWithValue("@Province", filter?.Province ?? "");
                 cmd.Parameters.AddWithValue("@District", filter?.District ?? "");
-                cmd.Parameters.AddWithValue("@Village", filter?.Village ?? "");
+                cmd.Parameters.AddWithValue("@Village", "");
                 cmd.Parameters.AddWithValue("@FamilyType", filter?.FamilyType ?? "");
                 cmd.Parameters.AddWithValue("@DateFrom", filter?.RegistrationDateFrom.HasValue == true
                     ? filter.RegistrationDateFrom.Value.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) : "");
@@ -7150,21 +7346,24 @@ WHERE CasID = @Id AND IFNULL(IsArchived, 0) = 0 AND IFNULL(DocFilePath, '') <> '
             return dt;
         }
 
-        private async void btnBatchExport_Click(object sender, EventArgs e)
+        private void btnBatchExport_Click(object sender, EventArgs e)
         {
-            if (!CaseManagement.Enterprise.PermissionService.Require("Case.BatchExport"))
-            {
-                Msg.Show("کاربر اجازه خروجی جمعی ندارد.");
-                return;
-            }
+            StartBatchDocumentExport(true, true);
+        }
+
+        private async void StartBatchDocumentExport(bool exportWord, bool exportPdf)
+        {
+            if (!RequireBatchExportPermission()) return;
+            if (!exportWord && !exportPdf) return;
 
             int startFormNo;
             int endFormNo;
-            bool exportWord;
-            bool exportPdf;
             bool askAdvanced;
+            string dialogTitle = exportWord && exportPdf
+                ? "خروجی جمعی Word و PDF"
+                : (exportWord ? "Word جمعی" : "PDF جمعی");
 
-            if (!TryGetBatchExportOptions(out startFormNo, out endFormNo, out exportWord, out exportPdf, out askAdvanced))
+            if (!TryGetBatchExportOptions(dialogTitle, out startFormNo, out endFormNo, out askAdvanced))
                 return;
 
             Helpers.ReportFilterCriteria filter = null;
@@ -7240,14 +7439,8 @@ WHERE CasID = @Id AND IFNULL(IsArchived, 0) = 0 AND IFNULL(DocFilePath, '') <> '
                     return;
                 }
 
-                if (cases.Rows.Count > BatchWordPdfMax)
-                {
-                    Msg.Show(
-                        "تعداد پرونده‌ها (" + cases.Rows.Count +
-                        ") از سقف خروجی Word/PDF (" + BatchWordPdfMax +
-                        ") بیشتر است. فیلتر را تنگ‌تر کنید یا از گزارش اکسل پرونده‌ها استفاده کنید.");
+                if (RejectIfOverBatchCap(cases.Rows.Count))
                     return;
-                }
 
                 int fileCount = cases.Rows.Count * ((exportWord ? 1 : 0) + (exportPdf ? 1 : 0));
                 if (Msg.Show(
@@ -7265,7 +7458,7 @@ WHERE CasID = @Id AND IFNULL(IsArchived, 0) = 0 AND IFNULL(DocFilePath, '') <> '
 
                 _exportCts = new CancellationTokenSource();
                 CancellationToken token = _exportCts.Token;
-                progress = ShowExportProgress("خروجی جمعی Word / PDF", _exportCts);
+                progress = ShowExportProgress(dialogTitle, _exportCts);
                 SetExportMenusEnabled(false);
                 Cursor = Cursors.WaitCursor;
 
@@ -7341,7 +7534,15 @@ WHERE CasID = @Id AND IFNULL(IsArchived, 0) = 0 AND IFNULL(DocFilePath, '') <> '
                     var pending = new List<PendingBatchFile>();
                     foreach (DataRow row in cases.Rows)
                     {
-                        token.ThrowIfCancellationRequested();
+                        if (token.IsCancellationRequested)
+                        {
+                            foreach (PendingBatchFile queued in pending)
+                            {
+                                try { if (File.Exists(queued.TempDocx)) File.Delete(queued.TempDocx); }
+                                catch { }
+                            }
+                            token.ThrowIfCancellationRequested();
+                        }
                         string caseCode = "", formNo = "", tempDocx = "";
                         try
                         {
@@ -7453,10 +7654,10 @@ WHERE CasID = @Id AND IFNULL(IsArchived, 0) = 0 AND IFNULL(DocFilePath, '') <> '
                         message += Environment.NewLine + errors[i];
                 }
 
-                AuditLogger.Log("خروجی جمعی", "TblCase", 0, "",
-                    "count=" + cases.Rows.Count + " word=" + wordCount +
-                    " pdf=" + pdfCount + " errors=" + errorCount +
-                    " user=" + (Helpers.SecurityContext.Username ?? ""));
+                LogBatchExportAudit(
+                    exportWord && exportPdf ? "WordPdfBatch" : (exportWord ? "WordBatch" : "PdfBatch"),
+                    cases.Rows.Count,
+                    FileHelper.GetBaseRootFolder());
                 Msg.Show(message);
             }
             catch (OperationCanceledException)

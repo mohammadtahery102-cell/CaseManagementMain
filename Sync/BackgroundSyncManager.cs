@@ -626,6 +626,7 @@ namespace CaseManagement.Sync
                 report.AppendLine("در انتظار ارسال: " + SyncOutboxService.PendingCount().ToString("N0"));
                 report.AppendLine("ناموفق: " + SyncOutboxService.FailedCount().ToString("N0"));
                 report.AppendLine("تعارض باز: " + SyncConflictStore.OpenCount().ToString("N0"));
+                report.AppendLine(SyncDeferredApplyStore.FormatReport());
                 report.AppendLine("نشانگر دریافت: "
                     + Or(SyncOutboxService.GetState(SyncService.KeyPullCursor, ""), "۰"));
                 report.AppendLine();

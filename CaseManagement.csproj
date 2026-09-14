@@ -390,7 +390,9 @@
     <Compile Include="FrmReportBuilder.cs">
       <SubType>Form</SubType>
     </Compile>
-    <Compile Include="FrmReferenceDataSettings.cs" />
+    <Compile Include="FrmReferenceDataSettings.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="FrmSettings.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -400,6 +402,13 @@
     <Compile Include="Helpers\AfghanGeoData.cs" />
     <Compile Include="Helpers\FormShortcuts.cs" />
     <Compile Include="Helpers\AiInitializer.cs" />
+    <Compile Include="Helpers\FileCatalogService.cs" />
+    <Compile Include="Helpers\FileStoragePolicy.cs" />
+    <Compile Include="Helpers\FileStorageMigrationService.cs" />
+    <Compile Include="Helpers\CaseFileInventory.cs" />
+    <Compile Include="Helpers\CaseFileStorageService.cs" />
+    <Compile Include="Helpers\CaseFileDeletionService.cs" />
+    <Compile Include="Helpers\TempArtifactScope.cs" />
     <Compile Include="Helpers\FileHelper.cs" />
     <Compile Include="Helpers\FrmPasswordPrompt.cs">
       <SubType>Form</SubType>
@@ -435,6 +444,7 @@
     <Compile Include="Sync\SyncConflictStore.cs" />
     <Compile Include="Sync\SyncBaselineStore.cs" />
     <Compile Include="Sync\SyncApplier.cs" />
+    <Compile Include="Sync\SyncDeferredApplyStore.cs" />
     <Compile Include="Sync\SyncService.cs" />
     <Compile Include="Sync\SyncFileService.cs" />
     <Compile Include="Sync\BackgroundSyncManager.cs" />
@@ -481,7 +491,9 @@
     <Compile Include="Helpers\CaseOfficialForms.cs" />
     <Compile Include="Helpers\ReportDoc.cs" />
     <Compile Include="Helpers\PhotoRules.cs" />
-    <Compile Include="Helpers\AspectBox.cs" />
+    <Compile Include="Helpers\AspectBox.cs">
+      <SubType>Component</SubType>
+    </Compile>
     <Compile Include="Helpers\FrmFieldVisitPhotos.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -502,8 +514,12 @@
     <Compile Include="Helpers\VulnerabilityScoreService.cs" />
     <Compile Include="Helpers\CaseExportDataProvider.cs" />
     <Compile Include="Helpers\DashboardMetricsService.cs" />
-    <Compile Include="Helpers\FrmFundingAdmin.cs" />
-    <Compile Include="Helpers\FrmAssistanceRuleAdmin.cs" />
+    <Compile Include="Helpers\FrmFundingAdmin.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Helpers\FrmAssistanceRuleAdmin.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="Helpers\CaseFileExportService.cs" />
     <Compile Include="Helpers\CaseActivationValidator.cs" />
     <Compile Include="Helpers\SecurityContext.cs" />
@@ -542,7 +558,9 @@
       <SubType>Component</SubType>
     </Compile>
     <Compile Include="Helpers\DashboardLayoutMath.cs" />
-    <Compile Include="Helpers\DashboardSafeChart.cs" />
+    <Compile Include="Helpers\DashboardSafeChart.cs">
+      <SubType>Component</SubType>
+    </Compile>
     <Compile Include="Helpers\DashboardCard.cs">
       <SubType>Component</SubType>
     </Compile>

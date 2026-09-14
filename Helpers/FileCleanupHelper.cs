@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Data.SQLite;
 using System.Diagnostics;
 using System.IO;
+using System.Text;
 
 namespace CaseManagement.Helpers
 {
@@ -39,6 +40,13 @@ namespace CaseManagement.Helpers
         {
             int count = 0;
             string root = FileHelper.GetBaseRootFolder();
+            var eligible = new HashSet<string>(FindUnusedFiles(),
+                StringComparer.OrdinalIgnoreCase);
+            string quarantine = Path.Combine(root, "_Quarantine", "Cleanup",
+                DateTime.UtcNow.ToString("yyyyMMdd_HHmmss") + "_" +
+                Guid.NewGuid().ToString("N"));
+            var manifest = new StringBuilder();
+            bool quarantineMustRemain = false;
 
             foreach (string file in files)
             {
@@ -46,12 +54,53 @@ namespace CaseManagement.Helpers
                 {
                     string fullPath = SafeFullPath(file);
 
-                    if (string.IsNullOrWhiteSpace(fullPath) || !IsInsideRoot(fullPath, root))
+                    if (string.IsNullOrWhiteSpace(fullPath) ||
+                        !IsInsideRoot(fullPath, root) ||
+                        !eligible.Contains(fullPath) ||
+                        ShouldSkip(fullPath, root))
                         continue;
 
                     if (File.Exists(fullPath))
                     {
-                        File.Delete(fullPath);
+                        string hash = CaseFileInventory.ComputeHash(fullPath);
+                        if (string.IsNullOrWhiteSpace(hash)) continue;
+
+                        string relative = fullPath.Substring(
+                            Path.GetFullPath(root).TrimEnd(
+                                Path.DirectorySeparatorChar,
+                                Path.AltDirectorySeparatorChar).Length)
+                            .TrimStart(Path.DirectorySeparatorChar,
+                                Path.AltDirectorySeparatorChar);
+                        string destination = Path.Combine(quarantine, relative);
+                        Directory.CreateDirectory(Path.GetDirectoryName(destination));
+                        File.Move(fullPath, destination);
+
+                        string movedHash = CaseFileInventory.ComputeHash(destination);
+                        if (!string.Equals(hash, movedHash,
+                            StringComparison.OrdinalIgnoreCase))
+                        {
+                            bool restored = false;
+                            try
+                            {
+                                Directory.CreateDirectory(Path.GetDirectoryName(fullPath));
+                                File.Move(destination, fullPath);
+                                restored = true;
+                            }
+                            catch { }
+                            if (!restored)
+                            {
+                                quarantineMustRemain = true;
+                                manifest.Append(fullPath).Append('\t')
+                                    .Append(destination).Append('\t')
+                                    .Append(hash).Append('\t')
+                                    .Append("HashVerificationFailed").AppendLine();
+                            }
+                            continue;
+                        }
+
+                        manifest.Append(fullPath).Append('\t')
+                            .Append(destination).Append('\t')
+                            .Append(hash).AppendLine();
                         count++;
                     }
                 }
@@ -61,8 +110,24 @@ namespace CaseManagement.Helpers
                 }
             }
 
-            if (count > 0)
-                AuditLogger.Log("پاکسازی فایل", "Files", 0, "", "تعداد فایل حذف‌شده: " + count);
+            if (count > 0 || quarantineMustRemain)
+            {
+                Directory.CreateDirectory(quarantine);
+                File.WriteAllText(Path.Combine(quarantine, "manifest.tsv"),
+                    manifest.ToString(), new UTF8Encoding(false));
+                AuditLogger.Log("قرنطینه فایل", "Files", 0, "",
+                    "تعداد فایل منتقل‌شده به قرنطینه: " + count +
+                    " | " + quarantine);
+            }
+            else
+            {
+                try
+                {
+                    if (Directory.Exists(quarantine))
+                        Directory.Delete(quarantine, true);
+                }
+                catch { }
+            }
 
             return count;
         }
@@ -71,32 +136,50 @@ namespace CaseManagement.Helpers
         {
             HashSet<string> paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            using (SQLiteConnection con = db.GetConnection())
-            using (SQLiteCommand cmd = new SQLiteCommand(@"
-SELECT PhotoPath AS FilePath FROM TblCase WHERE NULLIF(PhotoPath, '') IS NOT NULL
-UNION
-SELECT FamilyPhotoPath FROM TblCase WHERE NULLIF(FamilyPhotoPath, '') IS NOT NULL
-UNION
-SELECT MemberPhotoPath FROM TblFamily WHERE NULLIF(MemberPhotoPath, '') IS NOT NULL
-UNION
-SELECT DocFilePath FROM TblDocs WHERE NULLIF(DocFilePath, '') IS NOT NULL", con))
+            try
             {
-                con.Open();
-
-                using (var dr = cmd.ExecuteReader())
+                FileCatalogService.EnsureSchema();
+                foreach (System.Data.DataRow row in new FileCatalogService().GetAllActive().Rows)
                 {
-                    while (dr.Read())
-                    {
-                        string path = dr["FilePath"] == DBNull.Value ? "" : dr["FilePath"].ToString();
-                        string fullPath = SafeFullPath(path);
+                    string full = FileCatalogService.ResolveAssetPath(row);
+                    if (!string.IsNullOrWhiteSpace(full)) paths.Add(full);
+                }
+            }
+            catch { }
 
-                        if (!string.IsNullOrWhiteSpace(fullPath))
-                            paths.Add(fullPath);
+            AddStoredPaths(paths, "TblCase", "PhotoPath");
+            AddStoredPaths(paths, "TblCase", "FamilyPhotoPath");
+            AddStoredPaths(paths, "TblFamily", "MemberPhotoPath");
+            AddStoredPaths(paths, "TblOrphan", "GuardianPhotoPath");
+            AddStoredPaths(paths, "TblCaseRepresentative", "PhotoPath");
+            AddStoredPaths(paths, "TblFieldVisitPhoto", "FilePath");
+            AddStoredPaths(paths, "TblDocs", "DocFilePath");
+
+            return paths;
+        }
+
+        private void AddStoredPaths(HashSet<string> paths, string table, string column)
+        {
+            try
+            {
+                using (SQLiteConnection con = db.GetConnection())
+                using (SQLiteCommand cmd = new SQLiteCommand(
+                    "SELECT [" + column + "] AS FilePath FROM [" + table +
+                    "] WHERE NULLIF([" + column + "],'') IS NOT NULL;", con))
+                {
+                    con.Open();
+                    using (SQLiteDataReader reader = cmd.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            string full = CaseFileInventory.ResolveStoredPath(
+                                Convert.ToString(reader["FilePath"]));
+                            if (!string.IsNullOrWhiteSpace(full)) paths.Add(full);
+                        }
                     }
                 }
             }
-
-            return paths;
+            catch { }
         }
 
         private static bool ShouldSkip(string file, string root)
@@ -106,7 +189,11 @@ SELECT DocFilePath FROM TblDocs WHERE NULLIF(DocFilePath, '') IS NOT NULL", con)
 
             return relative.StartsWith("AutoBackups", StringComparison.OrdinalIgnoreCase)
                 || relative.StartsWith("ExcelReports", StringComparison.OrdinalIgnoreCase)
-                || relative.StartsWith("CaseManagementBackup_", StringComparison.OrdinalIgnoreCase);
+                || relative.StartsWith("CaseManagementBackup_", StringComparison.OrdinalIgnoreCase)
+                || relative.StartsWith("_System", StringComparison.OrdinalIgnoreCase)
+                || relative.StartsWith("_Reports", StringComparison.OrdinalIgnoreCase)
+                || relative.StartsWith("_Backups", StringComparison.OrdinalIgnoreCase)
+                || relative.StartsWith("_Quarantine", StringComparison.OrdinalIgnoreCase);
         }
 
         private static string SafeFullPath(string path)

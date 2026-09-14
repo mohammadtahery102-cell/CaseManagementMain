@@ -137,7 +137,6 @@ namespace CaseManagement
             _sidebar.AddItem(IconFont.People, "اعضای خانواده", delegate { SelectTabByTitle("اعضای خانواده"); });
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleApplicants, IconFont.Contact, "متقاضیان", delegate { using (var frm = new FrmApplicant()) frm.ShowDialog(this); RefreshAll(); });
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleSearch, IconFont.Search, "جستجوی پیشرفته", delegate { using (var frm = new FrmAdvancedSearch()) frm.ShowDialog(this); });
-            AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleGeoCenter, IconFont.Chart, "مرکز فرماندهی آماری", delegate { OpenGeoCommandCenter(); });
             _sidebar.AddItem(IconFont.Search, "دستیار هوشمند", delegate { using (var frm = new FrmAiAssistant()) frm.ShowDialog(this); RefreshAll(); });
 
             _sidebar.AddGroup("مالی و حسابداری", startExpanded: false);
@@ -162,14 +161,6 @@ namespace CaseManagement
             // گزارش‌ساز پویا — انتخاب منبع/ستون/فیلتر (از جمله «وضعیت خدمات») و
             // ذخیره‌ی الگو. مثل بقیه، از «مدیریت ماژول‌ها» قابل خاموش کردن است.
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleReportBuilder, IconFont.Chart, "گزارش‌ساز پویا", delegate { using (var frm = new FrmReportBuilder()) frm.ShowDialog(this); });
-
-            // خروجیِ پوشه‌بندی‌شده — اکسل/PDF هر پرونده در درختِ
-            // ولایت ← ولسوالی ← نوع پرونده ← وضعیت خدمات، همراه عکس‌ها و اسنادِ
-            // دسته‌بندی‌شدهٔ همان پرونده.
-            // آموزش — چرا AddItem و نه AddModuleNav: مثل «کارمندان و فورم‌ها»،
-            // افزودنِ شناسهٔ تازه به ModuleService یعنی دست‌زدن به کلاسِ موجودِ
-            // مجوزها؛ این فرم فقط خروجیِ خواندنی می‌سازد.
-            _sidebar.AddItem(IconFont.Folder, "خروجی پوشه‌بندی‌شده", delegate { using (var frm = new Helpers.FrmCaseBundleExport(new DAL.DatabaseHelper())) frm.ShowDialog(this); });
 
             // ─── هسته سازمانی ────────────────────────────────────────────────
             _sidebar.AddGroup("هسته سازمانی", startExpanded: false);
@@ -245,7 +236,6 @@ namespace CaseManagement
             toolButtons.Controls.Add(CreateToolButton("پرونده‌ها", "▤", delegate { using (var frm = new FrmCase(_filterProvince, _filterDistrict, _filterServiceStatus)) frm.ShowDialog(this); RefreshAll(); }));
             toolButtons.Controls.Add(CreateToolButton("متقاضیان", "✎", delegate { using (var frm = new FrmApplicant()) frm.ShowDialog(this); RefreshAll(); }));
             toolButtons.Controls.Add(CreateToolButton("جستجوی پیشرفته", "⌕", delegate { using (var frm = new FrmAdvancedSearch()) frm.ShowDialog(this); }));
-            toolButtons.Controls.Add(CreateToolButton("مرکز فرماندهی آماری", "🗺", delegate { OpenGeoCommandCenter(); }));
             toolButtons.Controls.Add(CreateToolButton("دستیار هوشمند", "🤖", delegate { using (var frm = new FrmAiAssistant()) frm.ShowDialog(this); RefreshAll(); }));
             toolButtons.Controls.Add(CreateToolButton("مالی", "$", delegate { OpenFinance(); }));
             toolButtons.Controls.Add(CreateToolButton("حسابداری ایتام", "💰", delegate { using (var frm = new CaseManagement.Accounting.FrmAccounting()) frm.ShowDialog(this); }));
@@ -1434,6 +1424,33 @@ namespace CaseManagement
         {
             var items = new List<NotificationItem>();
             int cid = SecurityContext.CenterFilterId;
+
+            if (FileStorageMigrationService.IsSafeMode)
+            {
+                items.Add(new NotificationItem
+                {
+                    Icon = "⚠",
+                    Title = "حالت ایمن ذخیره‌سازی",
+                    Detail = FileStorageMigrationService.SafeModeMessage(),
+                    Color = UiTheme.Danger
+                });
+            }
+
+            try
+            {
+                Sync.SyncDeferredApplyStore.Counts deferred = Sync.SyncDeferredApplyStore.GetCounts();
+                if (deferred.Total > 0)
+                {
+                    items.Add(new NotificationItem
+                    {
+                        Icon = "⏳",
+                        Title = "اعمال معوق همگام‌سازی",
+                        Detail = Sync.SyncDeferredApplyStore.FormatReport(),
+                        Color = deferred.Exhausted + deferred.Expired > 0 ? UiTheme.Danger : UiTheme.Warning
+                    });
+                }
+            }
+            catch { }
 
             // ۱) Backup امروز گرفته نشده (قابل خاموش‌کردن از تب اعلان‌ها)
             if (SettingsHelper.GetInt(SettingsHelper.Notify_BackupMissing, 1) == 1)
@@ -3517,22 +3534,6 @@ WHERE IsActive = 1 ORDER BY CenterCode", con))
         // قبل تعریف شده و پیش‌فرضش برای هر سه نقش true است، پس امروز هیچ
         // کاربری دسترسی‌اش را از دست نمی‌دهد — ولی مدیر سیستم از این پس
         // کلیدی دارد که واقعاً هر دو در را می‌بندد.
-        // مرکز فرماندهی آماری و تحلیلی (نقشهٔ ولایتی/ولسوالی).
-        // آموزش — همان مجوزِ «Case.View» کافی است: این فرم فقط می‌خواند و
-        // چیزی برای دیدن نشان می‌دهد که کاربر از راهِ FrmCase هم می‌بیند؛
-        // مجوزِ تازه ساختن یعنی همهٔ نقش‌های موجود باید دوباره تنظیم شوند.
-        private void OpenGeoCommandCenter()
-        {
-            if (!CaseManagement.Enterprise.PermissionService.Require("Case.View"))
-            {
-                UiTheme.ShowWarning(this, "شما به آمار پرونده‌ها دسترسی ندارید.");
-                return;
-            }
-
-            using (var frm = new FrmGeoCommandCenter()) frm.ShowDialog(this);
-            RefreshAll();
-        }
-
         private void OpenFinance()
         {
             if (!CaseManagement.Enterprise.PermissionService.Require("Finance.View"))

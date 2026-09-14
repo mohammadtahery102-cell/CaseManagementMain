@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.Data.SQLite;
 using System.Drawing;
+using System.IO;
 using System.Linq;
 using System.Windows.Forms;
 
@@ -125,6 +126,7 @@ namespace CaseManagement
         private TextBox _txtManualPath;
         private CheckedListBox _clbCaseGridColumns;
         private TextBox _txtPhotoStoragePath;
+        private TextBox _txtCaseFilesRoot;
         private NumericUpDown _numStartCaseNo;
         private NumericUpDown _numStartReceiptNo;
         private Panel _pnlColorSwatch;
@@ -672,6 +674,9 @@ LIMIT " + MaxDeleteGridRows, con))
                 {
                     try
                     {
+                        CaseFileDeletionService.Plan fileDeletionPlan =
+                            complete ? new CaseFileDeletionService().Capture(t.Key) : null;
+
                         // هویتِ رکورد *پیش از* حذف برداشته می‌شود (بعد از DELETE
                         // دیگر خواندنی نیست)، ولی فقط در صورتِ حذفِ واقعی ثبت
                         // می‌گردد — این حذف ممکن است به‌خاطرِ تعلق به مرکزِ
@@ -698,9 +703,11 @@ LIMIT " + MaxDeleteGridRows, con))
                         CaseManagement.Sync.SyncOutboxService.CommitDelete(pendingDelete);
 
                         // در حالتِ «کامل»، پوشه‌ی فایل‌های پرونده هم حذف می‌شود.
-                        if (complete && !string.IsNullOrWhiteSpace(t.Value))
+                        if (complete && fileDeletionPlan != null)
                         {
-                            if (!FileHelper.DeleteCaseFolder(t.Value))
+                            CaseFileDeletionService.Result cleanup =
+                                new CaseFileDeletionService().ExecuteAfterCommit(fileDeletionPlan);
+                            if (cleanup.Queued > 0 || cleanup.Rejected > 0)
                                 folderFailed++;
                         }
 
@@ -2206,11 +2213,16 @@ ORDER BY SortOrder, Value", con))
 
             Label note = new Label
             {
-                Text = "محل اصلی ذخیره پرونده‌ها/عکس‌ها/اسناد از دکمه «⚙» در فرم پرونده تنظیم می‌شود. مسیرهای زیر جداگانه و مکمل آن هستند:",
+                Text = "محل اصلی ذخیره پرونده‌ها، عکس‌ها و اسناد را از فیلد اول تنظیم کنید. مسیرهای بعدی جداگانه و مکمل آن هستند.",
                 AutoSize = false, Size = new Size(880, 26), ForeColor = UiTheme.TextMuted, Font = UiTheme.Font(UiTheme.SizeSmall),
                 TextAlign = ContentAlignment.MiddleRight
             };
             flow.Controls.Add(note);
+
+            _txtCaseFilesRoot = new TextBox { ReadOnly = true };
+            UiTheme.StyleTextBox(_txtCaseFilesRoot);
+            flow.Controls.Add(MakeBrowseFieldPanel("محل اصلی ذخیره پرونده‌ها", _txtCaseFilesRoot,
+                BrowseCaseFilesRoot_Click));
 
             _txtBackupPath = new TextBox { ReadOnly = true };
             UiTheme.StyleTextBox(_txtBackupPath);
@@ -2252,6 +2264,28 @@ ORDER BY SortOrder, Value", con))
             btnResetManual.Click += delegate { _txtManualPath.Text = ""; };
             flow.Controls.Add(btnResetManual);
 
+            flow.Controls.Add(new Label
+            {
+                Text = "اگر مهاجرت پوشه در شروع برنامه شکست بخورد، برنامه قفل نمی‌شود (حالت ایمن). " +
+                       "تکرار مهاجرت و بازگشت اشاره‌گر فقط از اینجا انجام می‌شود. بکاپ خودکار و پاکسازی " +
+                       "فقط پس از مهاجرت موفق اجرا می‌شوند.",
+                AutoSize = false, Size = new Size(880, 40),
+                ForeColor = UiTheme.TextMuted, Font = UiTheme.Font(UiTheme.SizeSmall),
+                TextAlign = ContentAlignment.MiddleRight, Margin = new Padding(6, 10, 6, 4)
+            });
+
+            Button btnRetryMigration = UiTheme.CreateButton("تکرار مهاجرت پوشه", "↺", UiTheme.Primary);
+            btnRetryMigration.Size = new Size(210, 34);
+            btnRetryMigration.Margin = new Padding(6, 8, 6, 4);
+            btnRetryMigration.Click += BtnRetryStorageMigration_Click;
+            flow.Controls.Add(btnRetryMigration);
+
+            Button btnRollbackMigration = UiTheme.CreateSecondaryButton("بازگشت اشاره‌گر فایل‌ها", "↶");
+            btnRollbackMigration.Size = new Size(220, 34);
+            btnRollbackMigration.Margin = new Padding(6, 8, 6, 4);
+            btnRollbackMigration.Click += BtnRollbackStoragePointers_Click;
+            flow.Controls.Add(btnRollbackMigration);
+
             // ─── قالب‌های خروجی Word ─────────────────────────────────────────
             // قابلیت «چند قالب» از قبل کار می‌کند: هر فایل .docx داخل پوشه‌ی
             // Templates خودکار کشف می‌شود و اگر بیش از یکی باشد هنگام خروجی از
@@ -2278,6 +2312,51 @@ ORDER BY SortOrder, Value", con))
             tab.Controls.Add(bottomBar);
 
             LoadPathsSettings();
+        }
+
+        private void BtnRetryStorageMigration_Click(object sender, EventArgs e)
+        {
+            if (!UiTheme.ShowConfirm(this,
+                "مهاجرت پوشه پرونده‌ها دوباره اجرا شود؟ فایل‌ها کپی می‌شوند و اشاره‌گر فقط پس از تأیید هش عوض می‌شود.",
+                "تکرار مهاجرت"))
+                return;
+
+            try
+            {
+                FileStorageMigrationService.Result result = FileStorageMigrationService.RetryCurrentLayout();
+                if (result.Succeeded && FileStorageMigrationService.ShouldRunMaintenanceJobs())
+                {
+                    try { AutoBackupService.RunDailyBackupIfDue(); } catch { }
+                    UiTheme.ShowSuccess(this,
+                        "مهاجرت پوشه موفق بود. بکاپ خودکار و پاکسازی فقط روی همین نتیجهٔ موفق اجرا شدند.");
+                }
+                else
+                {
+                    UiTheme.ShowError(this, FileStorageMigrationService.SafeModeMessage());
+                }
+            }
+            catch (Exception ex)
+            {
+                UiTheme.ShowError(this, "تکرار مهاجرت ممکن نشد: " + ex.Message);
+            }
+        }
+
+        private void BtnRollbackStoragePointers_Click(object sender, EventArgs e)
+        {
+            if (!UiTheme.ShowConfirm(this,
+                "اشاره‌گر فایل‌ها به مسیر قبل از مهاجرت برگردد؟ فایل‌های کپی‌شده حذف نمی‌شوند.",
+                "بازگشت اشاره‌گر"))
+                return;
+
+            try
+            {
+                int restored = new FileStorageMigrationService().RollbackPointers();
+                UiTheme.ShowSuccess(this, restored + " اشاره‌گر به مسیر قبلی برگشت.");
+            }
+            catch (Exception ex)
+            {
+                UiTheme.ShowError(this, "بازگشت اشاره‌گر ممکن نشد: " + ex.Message);
+            }
         }
 
         // پوشه‌ی قالب‌های Word را در File Explorer باز می‌کند (اگر نبود، می‌سازد).
@@ -2382,8 +2461,54 @@ ORDER BY SortOrder, Value", con))
             SettingsHelper.Set(SettingsHelper.CaseGridColumns, csv);
         }
 
+        private void BrowseCaseFilesRoot_Click(object sender, EventArgs e)
+        {
+            using (FolderBrowserDialog fbd = new FolderBrowserDialog())
+            {
+                fbd.Description = "محل اصلی ذخیره عکس‌ها، اسناد، خروجی Word/PDF و گزارش‌های Excel را انتخاب کنید";
+                fbd.ShowNewFolderButton = true;
+
+                string current = FileHelper.GetBaseRootFolder();
+                if (!string.IsNullOrWhiteSpace(current) && System.IO.Directory.Exists(current))
+                    fbd.SelectedPath = current;
+
+                if (fbd.ShowDialog(this) != DialogResult.OK)
+                    return;
+
+                if (!TryMigrateCaseFilesRoot(fbd.SelectedPath)) return;
+
+                _txtCaseFilesRoot.Text = FileHelper.GetBaseRootFolder();
+            }
+        }
+
+        private bool TryMigrateCaseFilesRoot(string targetRoot)
+        {
+            try
+            {
+                string current = Path.GetFullPath(FileHelper.GetBaseRootFolder())
+                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                string target = Path.GetFullPath(targetRoot)
+                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                if (string.Equals(current, target, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            catch { }
+
+            FileStorageMigrationService.Result migration =
+                new FileStorageMigrationService().MigrateAll(targetRoot);
+            if (migration.Succeeded) return true;
+
+            Msg.Show(
+                "تغییر محل ذخیره متوقف شد؛ بعضی فایل‌ها به‌صورت ایمن منتقل نشدند." +
+                Environment.NewLine +
+                string.Join(Environment.NewLine, migration.Errors.ToArray()),
+                "خطا", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return false;
+        }
+
         private void LoadPathsSettings()
         {
+            _txtCaseFilesRoot.Text    = FileHelper.GetBaseRootFolder() ?? "";
             _txtBackupPath.Text       = SettingsHelper.Get(SettingsHelper.BackupPath);
             _txtPhotoStoragePath.Text = SettingsHelper.Get(SettingsHelper.PhotoStoragePath);
             _txtReportsPath.Text      = SettingsHelper.Get(SettingsHelper.ReportsPath);
@@ -2413,6 +2538,13 @@ ORDER BY SortOrder, Value", con))
 
         private void BtnSavePaths_Click(object sender, EventArgs e)
         {
+            string caseRoot = (_txtCaseFilesRoot.Text ?? "").Trim();
+            if (!string.IsNullOrWhiteSpace(caseRoot))
+            {
+                if (!TryMigrateCaseFilesRoot(caseRoot)) return;
+                _txtCaseFilesRoot.Text = FileHelper.GetBaseRootFolder();
+            }
+
             SettingsHelper.Set(SettingsHelper.BackupPath, _txtBackupPath.Text.Trim());
             SettingsHelper.Set(SettingsHelper.PhotoStoragePath, _txtPhotoStoragePath.Text.Trim());
             SettingsHelper.Set(SettingsHelper.ReportsPath, _txtReportsPath.Text.Trim());
