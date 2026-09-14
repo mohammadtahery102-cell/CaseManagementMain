@@ -1423,6 +1423,7 @@
             fieldsPanel.Dock = System.Windows.Forms.DockStyle.Fill;
             fieldsPanel.Padding = new System.Windows.Forms.Padding(4);
             fieldsPanel.Controls.Add(this.tabsCase);
+            this.fieldsWorkspacePanel = fieldsPanel;
 
             // آموزش — رفع باگ Tab نامنظم: چون گروه‌ها به این ترتیب (grpCase،
             // grpPhysical، grpHead) اضافه شدند، بدون این سه خط، Tab پیش‌فرض
@@ -1557,6 +1558,7 @@
             // هر دو کارت در یک ردیفِ دوستونه — پس ارتفاع و حاشیهٔ یکسان دارند
             // (خواستهٔ «کارت‌ها هم‌ارتفاع و با فاصلهٔ یکنواخت»).
             System.Windows.Forms.TableLayoutPanel photoBar = new System.Windows.Forms.TableLayoutPanel();
+            this.photoBarPanel = photoBar;
             photoBar.Dock = System.Windows.Forms.DockStyle.Top;
             photoBar.Height = LeftCardsRowHeight;
             photoBar.ColumnCount = 2;
@@ -1788,12 +1790,31 @@
             btnAdvancedSearch.Dock = System.Windows.Forms.DockStyle.Fill;
             btnAdvancedSearch.Click += new System.EventHandler(this.btnAdvancedSearch_Click);
 
+            this.btnOpenSelectedCase = CaseManagement.Helpers.UiTheme.CreateButton("باز کردن", "↗", CaseManagement.Helpers.UiTheme.Primary);
+            this.btnOpenSelectedCase.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.btnOpenSelectedCase.Click += new System.EventHandler(this.btnOpenSelectedCase_Click);
+
             System.Windows.Forms.TableLayoutPanel caseQuickSearchBar = new System.Windows.Forms.TableLayoutPanel();
+            this.caseQuickSearchBar = caseQuickSearchBar;
             caseQuickSearchBar.Name = "caseQuickSearchBar";
             caseQuickSearchBar.Dock = System.Windows.Forms.DockStyle.Fill;
             caseQuickSearchBar.BackColor = CaseManagement.Helpers.UiTheme.CardBack;
-            caseQuickSearchBar.Padding = new System.Windows.Forms.Padding(8, 4, 8, 4);
-            caseQuickSearchBar.ColumnCount = 7;
+            // آموزش — نوار تا امروز یک مستطیلِ سفیدِ بی‌مرز بود که با گریدِ زیرش
+            // یکی می‌شد. یک خطِ نازک در لبهٔ پایین، آن را به یک «نوارِ ابزار»ِ
+            // مستقل تبدیل می‌کند — همان کاری که هر نرم‌افزارِ مدرنی می‌کند.
+            // Paint به‌جای یک Panelِ یک‌پیکسلی: بدونِ کنترلِ اضافه و بدونِ
+            // به‌هم‌ریختنِ ایندکسِ ستون‌های TableLayoutPanel.
+            caseQuickSearchBar.Paint += delegate (object paintSender, System.Windows.Forms.PaintEventArgs paintArgs)
+            {
+                System.Windows.Forms.Control bar = (System.Windows.Forms.Control)paintSender;
+                using (System.Drawing.Pen edge = new System.Drawing.Pen(CaseManagement.Helpers.UiTheme.Border))
+                    paintArgs.Graphics.DrawLine(edge, 0, bar.Height - 1, bar.Width, bar.Height - 1);
+            };
+            caseQuickSearchBar.Padding = new System.Windows.Forms.Padding(12, 8, 12, 8);
+            // ستونِ ۴ یک جداکنندهٔ باریک است: گروهِ «فیلدهای جستجو» را از گروهِ
+            // «دکمه‌های عمل» جدا می‌کند. بدونِ آن، چهار فیلد و چهار دکمه یک
+            // ردیفِ درهمِ هشت‌تایی به‌نظر می‌رسیدند.
+            caseQuickSearchBar.ColumnCount = 9;
             caseQuickSearchBar.RowCount = 1;
             caseQuickSearchBar.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 25F));
             caseQuickSearchBar.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 25F));
@@ -1802,18 +1823,24 @@
             // آموزش — این سه عرض بعد از بازرسیِ تصویری بزرگ شدند: با ۹۶ و ۱۲۰
             // پیکسل، متنِ «پاک‌سازی» و «جستجوی پیشرفته» روی آیکونشان می‌افتاد و
             // به خطِ دوم می‌شکست (خواستهٔ «No clipped labels»).
+            // جداکنندهٔ گروهِ فیلد از گروهِ دکمه.
+            caseQuickSearchBar.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 17F));
             caseQuickSearchBar.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 110F));
             caseQuickSearchBar.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 130F));
             caseQuickSearchBar.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 168F));
+            // سومین راهِ باز کردنِ پرونده، کنارِ دابل‌کلیک و Enter (درخواستِ صریح).
+            caseQuickSearchBar.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 110F));
             caseQuickSearchBar.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
 
             caseQuickSearchBar.Controls.Add(MkQuickSearchField("کد اختصاصی",   this.txtQsCode),     0, 0);
             caseQuickSearchBar.Controls.Add(MkQuickSearchField("نام سرپرست",   this.txtQsHeadName), 1, 0);
             caseQuickSearchBar.Controls.Add(MkQuickSearchField("شماره تذکره",  this.txtQsTazkira),  2, 0);
             caseQuickSearchBar.Controls.Add(MkQuickSearchField("شماره تماس",   this.txtQsPhone),    3, 0);
-            caseQuickSearchBar.Controls.Add(MkQuickSearchButtonCell(btnQuickSearch),      4, 0);
-            caseQuickSearchBar.Controls.Add(MkQuickSearchButtonCell(btnQuickSearchClear), 5, 0);
-            caseQuickSearchBar.Controls.Add(MkQuickSearchButtonCell(btnAdvancedSearch),   6, 0);
+            caseQuickSearchBar.Controls.Add(MkQuickSearchSeparator(), 4, 0);
+            caseQuickSearchBar.Controls.Add(MkQuickSearchButtonCell(btnQuickSearch),      5, 0);
+            caseQuickSearchBar.Controls.Add(MkQuickSearchButtonCell(btnQuickSearchClear), 6, 0);
+            caseQuickSearchBar.Controls.Add(MkQuickSearchButtonCell(btnAdvancedSearch),   7, 0);
+            caseQuickSearchBar.Controls.Add(MkQuickSearchButtonCell(this.btnOpenSelectedCase), 8, 0);
 
             // ═══ ریشه چیدمان ═════════════════════════════════════════════════
             System.Windows.Forms.TableLayoutPanel rootLayout = new System.Windows.Forms.TableLayoutPanel();
@@ -1823,7 +1850,9 @@
             rootLayout.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 62F));
             rootLayout.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 38F));
             // ردیف نوار جستجوی سریع (فاز A2) — بالاترین ردیف، همیشه ثابت.
-            rootLayout.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 76F));
+            // ۷۶ → ۸۶: padding نوار از (۸،۴) به (۱۲،۸) رفت و عنوانِ فیلدها ۲
+            // پیکسل بلندتر شد؛ بدونِ این، فیلدها از پایین بریده می‌شدند.
+            rootLayout.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 86F));
             // ردیفِ نوار میانبر (toolbar) — بعد از حذفِ بصریِ دکمه‌های «اعضاء
             // خانواده»/«اسناد»، این نوار Visible=false است، پس ارتفاعش صفر شد
             // تا نوارِ خالی بالای فیلدها باقی نماند. خودِ ردیف و ایندکس‌های
@@ -1835,8 +1864,56 @@
             // هیچ دکمه‌ای در هیچ عرضی پنهان نماند.
             rootLayout.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 96F));
             this.rootLayout = rootLayout;
-            rootLayout.Controls.Add(caseQuickSearchBar, 0, 0);
-            rootLayout.SetColumnSpan(caseQuickSearchBar, 2);
+
+            // ═══ نوارِ سرِ پرونده (فقط در Detail Mode) ═══════════════════════
+            // آموزش — چرا TableLayoutPanel و نه Dock: فرم RightToLeftLayout
+            // دارد و کلِ دستگاهِ مختصات آینه می‌شود، پس DockStyle.Left/Right
+            // برعکسِ انتظار رندر می‌کند. caseQuickSearchBar از قبل با
+            // TableLayoutPanel همین مسئله را حل کرده (ستونِ ۰ سمتِ راست
+            // می‌نشیند)، پس همان الگوی آزموده‌شده تکرار می‌شود.
+            this.btnBackToList = CaseManagement.Helpers.UiTheme.CreateSecondaryButton("بازگشت به لیست", "→");
+            this.btnBackToList.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.btnBackToList.Margin = new System.Windows.Forms.Padding(4, 8, 4, 8);
+            this.btnBackToList.TabStop = false;
+            this.btnBackToList.Click += new System.EventHandler(this.btnBackToList_Click);
+
+            this.lblDetailHeaderTitle = new System.Windows.Forms.Label();
+            this.lblDetailHeaderTitle.Name = "lblDetailHeaderTitle";
+            this.lblDetailHeaderTitle.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.lblDetailHeaderTitle.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            this.lblDetailHeaderTitle.Font = CaseManagement.Helpers.UiTheme.FontBold(CaseManagement.Helpers.UiTheme.SizeBody);
+            this.lblDetailHeaderTitle.ForeColor = CaseManagement.Helpers.UiTheme.TextDark;
+            this.lblDetailHeaderTitle.Padding = new System.Windows.Forms.Padding(12, 0, 8, 0);
+
+            System.Windows.Forms.TableLayoutPanel detailHeaderGrid = new System.Windows.Forms.TableLayoutPanel();
+            detailHeaderGrid.Name = "detailHeaderGrid";
+            detailHeaderGrid.Dock = System.Windows.Forms.DockStyle.Fill;
+            detailHeaderGrid.BackColor = CaseManagement.Helpers.UiTheme.CardBack;
+            detailHeaderGrid.Padding = new System.Windows.Forms.Padding(8, 2, 8, 2);
+            detailHeaderGrid.ColumnCount = 2;
+            detailHeaderGrid.RowCount = 1;
+            detailHeaderGrid.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 168F));
+            detailHeaderGrid.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 100F));
+            detailHeaderGrid.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
+            detailHeaderGrid.Controls.Add(this.btnBackToList, 0, 0);
+            detailHeaderGrid.Controls.Add(this.lblDetailHeaderTitle, 1, 0);
+
+            this.caseDetailHeaderBar = new System.Windows.Forms.Panel();
+            this.caseDetailHeaderBar.Name = "caseDetailHeaderBar";
+            this.caseDetailHeaderBar.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.caseDetailHeaderBar.Visible = false;   // پیش‌فرضِ فرم List Mode است
+            this.caseDetailHeaderBar.Controls.Add(detailHeaderGrid);
+
+            // هر دو نوار در یک میزبان می‌نشینند تا ApplyViewMode فقط
+            // Visible را عوض کند و ردیفِ ۰ هرگز خالی/جابه‌جا نشود.
+            System.Windows.Forms.Panel modeHeaderHost = new System.Windows.Forms.Panel();
+            modeHeaderHost.Name = "modeHeaderHost";
+            modeHeaderHost.Dock = System.Windows.Forms.DockStyle.Fill;
+            modeHeaderHost.Controls.Add(this.caseDetailHeaderBar);
+            modeHeaderHost.Controls.Add(caseQuickSearchBar);
+
+            rootLayout.Controls.Add(modeHeaderHost, 0, 0);
+            rootLayout.SetColumnSpan(modeHeaderHost, 2);
             rootLayout.Controls.Add(toolbar, 0, 1);
             rootLayout.SetColumnSpan(toolbar, 2);
             rootLayout.Controls.Add(fieldsPanel, 0, 2);
@@ -2089,25 +2166,54 @@
 
         // آموزش — فاز A2 (Quick Search Bar): همان الگوی کپشنِ بالا + ورودی که
         // در FieldBox هم استفاده می‌شود، اما سبک‌تر و مخصوصِ نوار جستجو.
+        // خطِ عمودیِ کم‌رنگ بینِ گروهِ فیلدها و گروهِ دکمه‌ها. عمداً هم‌ارتفاعِ
+        // کلِ سلول نیست: کمی از بالا و پایین فاصله می‌گیرد تا مثلِ یک جداکنندهٔ
+        // ظریف دیده شود، نه یک دیوار.
+        private static System.Windows.Forms.Control MkQuickSearchSeparator()
+        {
+            System.Windows.Forms.Panel host = new System.Windows.Forms.Panel();
+            host.Dock = System.Windows.Forms.DockStyle.Fill;
+            host.Margin = new System.Windows.Forms.Padding(8, 0, 8, 0);
+            host.BackColor = System.Drawing.Color.Transparent;
+            host.Paint += delegate (object sender, System.Windows.Forms.PaintEventArgs e)
+            {
+                System.Windows.Forms.Control c = (System.Windows.Forms.Control)sender;
+                int inset = 6;
+                using (System.Drawing.Pen pen = new System.Drawing.Pen(CaseManagement.Helpers.UiTheme.Border))
+                    e.Graphics.DrawLine(pen, c.Width / 2, inset, c.Width / 2, c.Height - inset);
+            };
+            return host;
+        }
+
         private static System.Windows.Forms.Panel MkQuickSearchField(
             string captionText, System.Windows.Forms.TextBox valueBox)
         {
+            // آموزش — بازآراییِ ظاهری (خواستهٔ کاربر: «سرچ‌باکس بسیار اماتور و
+            // ساده است»). سه تغییر، بدون هیچ تغییری در منطق یا نامِ کنترل‌ها:
+            //
+            //   ۱. عنوانِ فیلد کم‌رنگ‌تر و با فاصلهٔ نفس‌کشیدن. قبلاً پررنگِ
+            //      TextDark بود و با متنِ خودِ فیلد رقابت می‌کرد؛ عنوان باید
+            //      راهنما باشد نه هم‌وزنِ داده.
+            //   ۲. ارتفاعِ عنوان ۱۶ → ۱۸ تا دنبالهٔ حروفِ فارسی («ی»، «ج») بریده
+            //      نشود — همان بریدگیِ دیدنی در تصویرِ کاربر.
+            //   ۳. حاشیهٔ افقیِ بیشتر بینِ فیلدها تا چهار فیلد به‌هم نچسبند.
             System.Windows.Forms.Label caption = new System.Windows.Forms.Label();
             caption.Text = captionText;
             caption.AutoSize = false;
             caption.Dock = System.Windows.Forms.DockStyle.Top;
-            caption.Height = 16;
+            caption.Height = 18;
             caption.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
             caption.Font = CaseManagement.Helpers.UiTheme.FontBold(CaseManagement.Helpers.UiTheme.SizeSmall - 0.5F);
-            caption.ForeColor = CaseManagement.Helpers.UiTheme.TextDark;
+            caption.ForeColor = CaseManagement.Helpers.UiTheme.TextMuted;
             caption.BackColor = System.Drawing.Color.Transparent;
+            caption.Padding = new System.Windows.Forms.Padding(2, 0, 2, 2);
 
             valueBox.Dock = System.Windows.Forms.DockStyle.Fill;
             valueBox.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
 
             System.Windows.Forms.Panel host = new System.Windows.Forms.Panel();
             host.Dock = System.Windows.Forms.DockStyle.Fill;
-            host.Margin = new System.Windows.Forms.Padding(4, 2, 4, 2);
+            host.Margin = new System.Windows.Forms.Padding(6, 2, 6, 2);
             host.Controls.Add(valueBox);
             host.Controls.Add(caption);
             return host;
@@ -2741,6 +2847,18 @@
 
         // ستونِ سمتِ چپ (عکس‌ها + فیلتر + فهرستِ پرونده‌ها)
         internal System.Windows.Forms.Panel leftWorkspacePanel;
+
+        // ─── بازطراحیِ دو‌حالته (List / Detail) ───────────────────────────────
+        // این پنل‌ها از قبل ساخته می‌شدند ولی به‌صورت متغیرِ محلی؛ ApplyViewMode
+        // باید بتواند دیده‌شدنشان را عوض کند، پس فقط ارجاعشان نگه داشته شد.
+        // هیچ کنترلی اضافه یا حذف نشده مگر caseDetailHeaderBar که تازه است.
+        internal System.Windows.Forms.Panel fieldsWorkspacePanel;
+        internal System.Windows.Forms.TableLayoutPanel caseQuickSearchBar;
+        internal System.Windows.Forms.TableLayoutPanel photoBarPanel;
+        internal System.Windows.Forms.Panel caseDetailHeaderBar;
+        internal System.Windows.Forms.Label lblDetailHeaderTitle;
+        internal System.Windows.Forms.Button btnBackToList;
+        internal System.Windows.Forms.Button btnOpenSelectedCase;
 
         // برچسبِ گروهِ دکمه‌های پرونده در نوار پایین (هم‌سبکِ lblExportSection)
         private System.Windows.Forms.Label lblCaseSection;

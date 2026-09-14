@@ -10,6 +10,7 @@ using System.Linq;
 using System.Windows.Forms;
 using System.Diagnostics;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 using DrawingImage = System.Drawing.Image;
@@ -78,6 +79,16 @@ namespace CaseManagement
         private string _incomingFilterServiceStatus = "";
         private Panel _dashboardFilterBanner;
 
+        // آموزش — فیلترِ کاملِ واردشده از «مرکز فرماندهی آماری»
+        // (FrmGeoCommandCenter). سه رشتهٔ بالا فقط ولایت/ولسوالی/وضعیت را
+        // می‌پوشانند، ولی Drill-Downِ نقشه می‌تواند روی نوع پرونده، سطح
+        // آسیب‌پذیری، اولویت اقتصادی، وضعیت حامی، بازهٔ تاریخ و جنسیت/سنِ
+        // عضو هم باشد. شرطِ SQL و پارامترهایش هر دو از خودِ همان شیء می‌آیند،
+        // پس عددی که روی نقشه دیده شده دقیقاً با تعدادِ ردیف‌های این گرید
+        // یکی می‌ماند. null یعنی «هیچ فیلترِ اضافه‌ای نیست» و مسیرِ قبلی
+        // بیت‌به‌بیت دست‌نخورده اجرا می‌شود.
+        private Helpers.GeoFilter _incomingGeoFilter;
+
         public FrmCase()
         {
             InitializeComponent();
@@ -95,6 +106,27 @@ namespace CaseManagement
             _incomingFilterServiceStatus = filterServiceStatus ?? "";
         }
 
+        // باز کردن با فیلترِ کاملِ «مرکز فرماندهی آماری».
+        // ولایت/ولسوالی/وضعیت در همان سه فیلدِ قدیمی هم نشانده می‌شوند تا
+        // نوارِ خبری و کمبویِ وضعیت مثلِ قبل کار کنند؛ بقیهٔ شرط‌ها از خودِ
+        // GeoFilter به کوئری اضافه می‌گردند.
+        public FrmCase(Helpers.GeoFilter filter) : this()
+        {
+            if (filter == null) return;
+
+            _incomingGeoFilter = filter;
+            _incomingFilterProvince = filter.Province ?? "";
+            _incomingFilterDistrict = filter.District ?? "";
+
+            if (filter.ServiceStatusId > 0)
+            {
+                Helpers.ReferenceOption option =
+                    Helpers.ReferenceDataService.FindServiceStatusById(filter.ServiceStatusId);
+                if (option != null && !string.IsNullOrWhiteSpace(option.Name))
+                    _incomingFilterServiceStatus = option.Name;
+            }
+        }
+
         // میان‌بُرهای صفحه‌کلید. Enter (رفتن به فیلد بعدی) جداگانه در
         // FrmCase_KeyDown می‌ماند و دست‌نخورده است.
         private void AttachShortcuts()
@@ -105,7 +137,8 @@ namespace CaseManagement
                 .Edit(btnEdit)
                 .Delete(btnDelete)
                 .Search(btnSearch)
-                .Print(btnPrint);
+                .Bind(Keys.Control | Keys.P, "چاپ همین پرونده",
+                    delegate { btnPrint_Click(this, EventArgs.Empty); });
         }
 
         // باز کردن مستقیم یک پرونده‌ی مشخص برای ویرایش (مثلاً از تب «کیفیت داده»
@@ -175,84 +208,221 @@ namespace CaseManagement
             AddGuardianCardButton();
         }
 
-        // آموزش — دکمه «کارت شناسایی سرپرست» به‌صورت پویا کنار دکمه‌های خروجی
-        // موجود اضافه می‌شود (نه در Designer) تا چیدمان FlowLayoutPanel دست‌نخورده
-        // بماند؛ چون آن پنل WrapContents=true دارد، افزودن یک دکمه دیگر کاملاً امن است.
+        private const int BatchWordPdfMax = 500;
+        private const int BatchSearchRejectCount = 10000;
+
+        private Button _btnCurrentCaseMenu;
+        private Button _btnBatchOpsMenu;
+        private Button _btnExcelList;
+        private Label _lblCurrentCaseGroup;
+        private Label _lblBatchGroup;
+        private Label _lblListGroup;
+        private Button _btnUnifiedExport;
+        private Label _lblExportGroup;
+        private Button _btnOfficialForm;
+        private Button _btnGuardianCardSingle;
+        private Button _btnGuardianCardBatch;
+        private CancellationTokenSource _exportCts;
+
+        // نوار پایین: سه گروه جدا — همین پرونده / چند پرونده / گزارش لیست.
         private void AddGuardianCardButton()
         {
-            Button btnGuardianCard = UiTheme.CreateSecondaryButton("کارت شناسایی", "🪪");
-            btnGuardianCard.Size = new Size(128, 32);
-            btnGuardianCard.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
-            btnGuardianCard.Margin = new Padding(3, 3, 3, 3);
-            btnGuardianCard.TabStop = false;
-            btnGuardianCard.Click += delegate
-            {
-                if (!CaseManagement.Enterprise.PermissionService.Require("GuardianCard.Print"))
-                {
-                    Msg.Show("کاربر اجازه چاپ کارت شناسایی را ندارد.");
-                    return;
-                }
+            HideOrphanExportButtons();
 
-                if (currentCaseId == 0)
-                {
-                    Msg.Show("اول پرونده را ذخیره یا جستجو کن");
-                    return;
-                }
-                using (var frm = new GuardianCardIntegration.FrmGuardianCardPreview(currentCaseId))
-                    frm.ShowDialog(this);
-            };
-
-            Button btnGuardianCardBatch = UiTheme.CreateSecondaryButton("چاپ جمعی کارت‌ها", "🪪");
-            btnGuardianCardBatch.Size = new Size(150, 32);
-            btnGuardianCardBatch.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
-            btnGuardianCardBatch.Margin = new Padding(3, 3, 3, 3);
-            btnGuardianCardBatch.TabStop = false;
-            btnGuardianCardBatch.Click += delegate
-            {
-                using (var frm = new GuardianCardIntegration.FrmGuardianCardBatchPrint())
-                    frm.ShowDialog(this);
-            };
-
-            // ─── گام ۱: دو منوی تجمیعی به‌جای دکمه‌های پراکنده ──────────────
-            // «نامهٔ انتقالی» و «وکالت موقت» دکمهٔ مستقل نیستند؛ هر دو داخلِ
-            // منوی فورم‌های رسمی‌اند (از رجیستریِ CaseOfficialForms می‌آیند).
             _menuOfficialForms = BuildOfficialFormsMenu();
-            Button btnFormsCenter = MenuButton("فرم‌ها و برگه‌های رسمی", "📄", _menuOfficialForms);
-            btnFormsCenter.Size = new Size(200, 32);
+            _menuExports = BuildCurrentCaseMenu();
+            _btnCurrentCaseMenu = MenuButton("چاپ و خروجی ▾", "🖨", _menuExports);
+            _btnCurrentCaseMenu.Size = new Size(148, 32);
 
-            _menuExports = BuildExportMenu();
-            Button btnExportsMenu = MenuButton("خروجی‌ها و چاپ", "🖨", _menuExports);
-            btnExportsMenu.Size = new Size(160, 32);
+            var menuBatch = BuildBatchMenu();
+            _btnBatchOpsMenu = MenuButton("خروجی جمعی ▾", "⇑", menuBatch);
+            _btnBatchOpsMenu.Size = new Size(138, 32);
 
-            // ⚠ لنگر مستقیماً خودِ نوارِ پایین است، نه Parentِ یک دکمهٔ دیگر.
-            // از گام ۱ به بعد btnExportExcel روی هیچ کانتینری نمی‌نشیند (منوی
-            // «خروجی‌ها و چاپ» جایش را گرفته)، پس Parent آن null بود و این
-            // چهار کنترل — دو منو و دو دکمهٔ کارت — هرگز به فرم اضافه
-            // نمی‌شدند؛ یعنی خروجی‌ها، فورم‌های رسمی و چاپ کارت از این فرم
-            // در دسترس نبودند.
+            // ═══════════════════════════════════════════════════════════════
+            // «فورم رسمی» و «کارت شناسایی» خروجیِ دادهٔ پرونده نیستند — سندِ
+            // قانونی/هویتی‌اند با موتورِ رندرِ کاملاً جدا (CaseOfficialForms،
+            // GuardianCardIntegration). دیالوگِ جدیدِ «خروجی پرونده‌ها» هیچ‌کدام
+            // را نمی‌سازد، پس نباید پشتِ پنهان‌شدنِ منوهای خروجی گم شوند.
+            // دکمه‌های مستقل و کوچک، مستقیماً به همان هندلرهای موجود.
+            _btnOfficialForm = UiTheme.CreateSecondaryButton("فورم رسمی", "📄");
+            _btnOfficialForm.Size = new Size(112, 32);
+            _btnOfficialForm.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
+            _btnOfficialForm.Margin = new Padding(3, 3, 3, 3);
+            _btnOfficialForm.TabStop = false;
+            _btnOfficialForm.Click += delegate { OpenOfficialForm(null); };
+
+            _btnGuardianCardSingle = UiTheme.CreateSecondaryButton("کارت شناسایی", "🪪");
+            _btnGuardianCardSingle.Size = new Size(128, 32);
+            _btnGuardianCardSingle.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
+            _btnGuardianCardSingle.Margin = new Padding(3, 3, 3, 3);
+            _btnGuardianCardSingle.TabStop = false;
+            _btnGuardianCardSingle.Click += delegate { OpenCurrentGuardianCard(); };
+
+            _btnGuardianCardBatch = UiTheme.CreateSecondaryButton("چاپ جمعی کارت‌ها", "🪪");
+            _btnGuardianCardBatch.Size = new Size(148, 32);
+            _btnGuardianCardBatch.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
+            _btnGuardianCardBatch.Margin = new Padding(3, 3, 3, 3);
+            _btnGuardianCardBatch.TabStop = false;
+            _btnGuardianCardBatch.Click += delegate { OpenBatchGuardianCards(); };
+
+            _btnExcelList = UiTheme.CreateSecondaryButton("گزارش اکسل پرونده‌ها", "▤");
+            _btnExcelList.Size = new Size(168, 32);
+            _btnExcelList.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
+            _btnExcelList.Margin = new Padding(3, 3, 3, 3);
+            _btnExcelList.TabStop = false;
+            _btnExcelList.Click += btnExportExcel_Click;
+
+            Label lblCurrent = ExportGroupLabel(lblExportSection, "همین پرونده:", 96);
+            Label lblBatch = ExportGroupLabel(null, "چند پرونده:", 92);
+            Label lblList = ExportGroupLabel(null, "گزارش لیست:", 96);
+
+            // ارجاع نگه داشته می‌شود تا ApplyViewMode بتواند هر گروه را در
+            // حالتِ نامربوطش پنهان کند (نه غیرفعال، نه حذف).
+            _lblCurrentCaseGroup = lblCurrent;
+            _lblBatchGroup = lblBatch;
+            _lblListGroup = lblList;
+
+            // ═══════════════════════════════════════════════════════════════
+            // دکمهٔ واحدِ خروجی (خواستهٔ صریحِ کاربر: «هیچ نوع دکمهٔ دیگهٔ خروجی
+            // نداشته باشیم در قسمت پرونده»).
+            //
+            // آموزش — چرا دیالوگِ تازه ساخته نشد: Helpers/FrmCaseBundleExport
+            // از قبل دقیقاً همین کار را می‌کند (درختِ ولایت/ولسوالی/نوع/وضعیت +
+            // تفکیکِ عکس و سند)، ولی فقط از نوارِ کناریِ داشبورد در دسترس بود.
+            // پس به‌جای نوشتنِ نسخهٔ دوم، همان فرمِ آزموده‌شده به FrmCase وصل و
+            // با Word، تیکِ جدا برای هر نوع عکس، سقفِ ۲۰۰ و حالتِ «همین پرونده»
+            // کامل شد. نتیجه: یک مسیرِ خروجی در کلِ برنامه، نه دو تا.
+            //
+            // ⚠ دکمه‌ها/منوهای قبلی حذف *نشدند* — طبق قاعدهٔ پروژه فقط از نوار
+            // برداشته می‌شوند؛ هندلرها و میان‌برها (مثل Ctrl+P) سرِ جایشان‌اند.
+            // ═══════════════════════════════════════════════════════════════
+            _btnUnifiedExport = UiTheme.CreateButton("خروجی پرونده‌ها ▾", "⇑", UiTheme.Primary);
+            _btnUnifiedExport.Size = new Size(168, 32);
+            _btnUnifiedExport.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
+            _btnUnifiedExport.Margin = new Padding(3, 3, 3, 3);
+            _btnUnifiedExport.TabStop = false;
+            _btnUnifiedExport.Click += delegate { OpenUnifiedExport(); };
+
+            _lblExportGroup = ExportGroupLabel(null, "خروجی:", 62);
+
             Control parent = bottomActionsRow;
             if (parent != null)
             {
-                // ترتیبِ نهاییِ گروهِ دوم: خروجی‌ها ← فورم‌ها ← کارت‌ها.
-                parent.Controls.Add(btnExportsMenu);
-                parent.Controls.SetChildIndex(btnExportsMenu, parent.Controls.IndexOf(btnHistory) + 1);
-                parent.Controls.Add(btnFormsCenter);
-                parent.Controls.SetChildIndex(btnFormsCenter, parent.Controls.IndexOf(btnExportsMenu) + 1);
-                parent.Controls.Add(btnGuardianCard);
-                parent.Controls.SetChildIndex(btnGuardianCard, parent.Controls.IndexOf(btnFormsCenter) + 1);
-                parent.Controls.Add(btnGuardianCardBatch);
-                parent.Controls.SetChildIndex(btnGuardianCardBatch, parent.Controls.IndexOf(btnGuardianCard) + 1);
-
-                // ⚠ رفعِ باگِ «دکمهٔ آخر کار نمی‌کند»: با این چهار دکمه، نوارِ
-                // پایین ۱۹ کنترل دارد و در عرض‌های معمول به سه خط می‌شکند.
-                // AdjustBottomBarHeight فقط در OnResize صدا زده می‌شد، یعنی
-                // ارتفاعِ ردیف با موقعیتِ *قبلیِ* کنترل‌ها حساب می‌گردید و
-                // آخرین دکمه (وکالت موقت) بیرونِ ناحیهٔ دیدهٔ ردیف می‌افتاد —
-                // دیده نمی‌شد و کلیک هم نمی‌گرفت. رویدادِ Layout بعد از
-                // چیدمانِ واقعیِ FlowLayoutPanel اجرا می‌شود، پس اندازه‌گیری
-                // درست است.
+                int afterHistory = parent.Controls.IndexOf(btnHistory) + 1;
+                AddBottomControl(parent, lblCurrent, afterHistory);
+                AddBottomControl(parent, _btnCurrentCaseMenu, afterHistory + 1);
+                AddBottomControl(parent, lblBatch, afterHistory + 2);
+                AddBottomControl(parent, _btnBatchOpsMenu, afterHistory + 3);
+                AddBottomControl(parent, lblList, afterHistory + 4);
+                AddBottomControl(parent, _btnExcelList, afterHistory + 5);
+                AddBottomControl(parent, _lblExportGroup, afterHistory + 6);
+                AddBottomControl(parent, _btnUnifiedExport, afterHistory + 7);
+                AddBottomControl(parent, _btnOfficialForm, afterHistory + 8);
+                AddBottomControl(parent, _btnGuardianCardSingle, afterHistory + 9);
+                AddBottomControl(parent, _btnGuardianCardBatch, afterHistory + 10);
                 parent.Layout += delegate { AdjustBottomBarHeight(); };
             }
+        }
+
+        // ─── تنها مسیرِ خروجیِ پرونده ─────────────────────────────────────────
+        // قاعدهٔ انتخاب (خواستهٔ کاربر، به همین ترتیب):
+        //   ۱) در حالتِ Detail  → فقط همان پروندهٔ باز
+        //   ۲) ردیف‌های انتخاب‌شدهٔ گرید → فقط همان‌ها
+        //   ۳) در غیر این صورت → نتیجهٔ فیلترِ خودِ دیالوگ
+        // مجوز همان Case.BatchExport است که خودِ دیالوگ بررسی می‌کند، پس اینجا
+        // دوباره بررسی نمی‌شود (یک نقطهٔ تصمیم، نه دو تا).
+        private void OpenUnifiedExport()
+        {
+            try
+            {
+                if (_viewMode == CaseViewMode.Detail && currentCaseId > 0)
+                {
+                    using (var frm = new Helpers.FrmCaseBundleExport(new DAL.DatabaseHelper(), currentCaseId))
+                        frm.ShowDialog(this);
+                    return;
+                }
+
+                List<int> selected = GetSelectedGridCaseIds();
+
+                using (var frm = new Helpers.FrmCaseBundleExport(new DAL.DatabaseHelper()))
+                {
+                    if (selected.Count > 0)
+                        frm.UsePreselectedCases(selected);
+
+                    frm.ShowDialog(this);
+                }
+            }
+            catch (Exception ex)
+            {
+                Msg.Show("خطا در باز کردن خروجی پرونده‌ها: " + ex.Message);
+            }
+        }
+
+        private static void AddBottomControl(Control parent, Control child, int index)
+        {
+            if (parent == null || child == null) return;
+            parent.Controls.Add(child);
+            parent.Controls.SetChildIndex(child, index);
+        }
+
+        private static Label ExportGroupLabel(Label existing, string text, int width)
+        {
+            Label lbl = existing ?? new Label();
+            lbl.Text = text;
+            lbl.AutoSize = false;
+            lbl.Size = new Size(width, 32);
+            lbl.TextAlign = ContentAlignment.MiddleRight;
+            lbl.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
+            lbl.ForeColor = UiTheme.Primary;
+            lbl.Margin = new Padding(12, 3, 2, 3);
+            return lbl;
+        }
+
+        // دکمه‌های Designer که دیگر روی نوار نیستند؛ Ctrl+P نباید به آن‌ها
+        // بسته بماند و «محل ذخیره» از منوی خروجی بیرون است.
+        private void HideOrphanExportButtons()
+        {
+            Button[] dead =
+            {
+                btnPrint, btnExportExcel, btnBatchExport, btnExportCaseFile, btnChooseStorageFolder
+            };
+            foreach (Button b in dead)
+            {
+                if (b == null) continue;
+                b.Visible = false;
+                b.TabStop = false;
+                b.Enabled = true;
+                if (b.Parent != null)
+                    b.Parent.Controls.Remove(b);
+            }
+        }
+
+        private void OpenCurrentGuardianCard()
+        {
+            if (!CaseManagement.Enterprise.PermissionService.Require("GuardianCard.Print"))
+            {
+                Msg.Show("کاربر اجازه چاپ کارت شناسایی را ندارد.");
+                return;
+            }
+
+            if (currentCaseId == 0)
+            {
+                Msg.Show("اول پرونده را ذخیره یا جستجو کن");
+                return;
+            }
+            using (var frm = new GuardianCardIntegration.FrmGuardianCardPreview(currentCaseId))
+                frm.ShowDialog(this);
+        }
+
+        private void OpenBatchGuardianCards()
+        {
+            if (!CaseManagement.Enterprise.PermissionService.Require("GuardianCard.Print"))
+            {
+                Msg.Show("کاربر اجازه چاپ کارت شناسایی را ندارد.");
+                return;
+            }
+            using (var frm = new GuardianCardIntegration.FrmGuardianCardBatchPrint())
+                frm.ShowDialog(this);
         }
 
         // ═══════════════════════════════════════════════════════════════════
@@ -266,7 +436,7 @@ namespace CaseManagement
         // چرا ContextMenuStrip: کنترلِ استانداردِ ویندوز است، RTL را بومی
         // پشتیبانی می‌کند و هیچ کنترلِ سفارشیِ تازه‌ای وارد پروژه نمی‌کند.
         // ═══════════════════════════════════════════════════════════════════
-        private ContextMenuStrip BuildExportMenu()
+        private ContextMenuStrip BuildCurrentCaseMenu()
         {
             var menu = new ContextMenuStrip
             {
@@ -275,16 +445,47 @@ namespace CaseManagement
                 Font = new Font("Segoe UI", 9F)
             };
 
-            menu.Items.Add(MenuItem("چاپ خلاصهٔ پرونده", delegate { btnPrint_Click(this, EventArgs.Empty); }));
-            menu.Items.Add(MenuItem("پروندهٔ کامل (اکسل / چاپ)…", delegate { btnExportCaseFile_Click(this, EventArgs.Empty); }));
+            menu.Items.Add(MenuItem("چاپ خلاصه", delegate { btnPrint_Click(this, EventArgs.Empty); }));
+            menu.Items.Add(MenuItem("پروندهٔ کامل (پیش‌نمایش / PDF / اکسل همین پرونده)…",
+                delegate { btnExportCaseFile_Click(this, EventArgs.Empty); }));
             menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add(MenuItem("خروجی جمعی (ورد / پی‌دی‌اف)…", delegate { btnBatchExport_Click(this, EventArgs.Empty); }));
-            menu.Items.Add(MenuItem("گزارش اکسل همهٔ پرونده‌ها…", delegate { btnExportExcel_Click(this, EventArgs.Empty); }));
+            menu.Items.Add(MenuItem("Word همین پرونده", delegate { ExportCurrentCaseWord(); }));
+            menu.Items.Add(MenuItem("PDF همین پرونده", delegate { ExportCurrentCasePdf(); }));
             menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add(MenuItem("فهرست اسناد پرونده", delegate { btnDocs_Click(this, EventArgs.Empty); }));
+            menu.Items.Add(MenuItem("فورم رسمی…", delegate { OpenOfficialForm(null); }));
+            menu.Items.Add(MenuItem("کارت شناسایی", delegate { OpenCurrentGuardianCard(); }));
             menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add(MenuItem("محل ذخیرهٔ فایل‌ها…", delegate { btnChooseStorageFolder_Click(this, EventArgs.Empty); }));
+            menu.Items.Add(MenuItem("خروجی عکس و اسناد", delegate { ExportCurrentCaseMedia(); }));
 
+            // آموزش — بازگرداندنِ قابلیتِ حذف‌شده: دکمهٔ «انتخاب محل ذخیره» در
+            // HideOrphanExportButtons از نوارِ پایین برداشته شده بود و هیچ
+            // مسیرِ دیگری آن را صدا نمی‌زد، پس btnChooseStorageFolder_Click
+            // عملاً مرده بود. بررسی نشان داد FrmCase.btnChooseStorageFolder_Click
+            // تنها فراخوانِ FileHelper.SetBaseRootFolder در کلِ برنامه است —
+            // یعنی با مرگِ آن، «تغییرِ محل ذخیره» به‌کلی از دسترس خارج شده بود
+            // (GetOrChooseBaseRootFolder فقط وقتی ریشه *خالی* است می‌پرسد، پس
+            // جایگزینِ آن نیست). اینجا به‌صورت آیتمِ منو برمی‌گردد نه دکمه، چون
+            // نوارِ پایین WrapContents دارد و افزودنِ دکمه همان باگِ شناخته‌شدهٔ
+            // «دکمهٔ آخر دیده نمی‌شود» را دوباره زنده می‌کرد.
+            menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add(MenuItem("تغییر محل ذخیره فایل‌ها…",
+                delegate { btnChooseStorageFolder_Click(this, EventArgs.Empty); }));
+
+            return menu;
+        }
+
+        private ContextMenuStrip BuildBatchMenu()
+        {
+            var menu = new ContextMenuStrip
+            {
+                RightToLeft = RightToLeft.Yes,
+                ShowImageMargin = false,
+                Font = new Font("Segoe UI", 9F)
+            };
+
+            menu.Items.Add(MenuItem("خروجی جمعی Word / PDF…", delegate { btnBatchExport_Click(this, EventArgs.Empty); }));
+            menu.Items.Add(MenuItem("چاپ جمعی کارت‌ها…", delegate { OpenBatchGuardianCards(); }));
+            menu.Items.Add(MenuItem("خروجی عکس و اسناد جمعی…", delegate { ExportBatchCaseMedia(); }));
             return menu;
         }
 
@@ -353,6 +554,12 @@ namespace CaseManagement
 
         private void OpenOfficialForm(string preselectKey)
         {
+            if (!CaseManagement.Enterprise.PermissionService.Require("Case.Print"))
+            {
+                Msg.Show("کاربر اجازه خروجی گرفتن از پرونده را ندارد.");
+                return;
+            }
+
             if (currentCaseId == 0)
             {
                 Msg.Show("اول پرونده را ذخیره یا جستجو کن");
@@ -494,6 +701,12 @@ namespace CaseManagement
                 // چون این فیلدها داخل چند لایه Panel/TableLayoutPanel تودرتو
                 // هستند و ActiveControl فرم لزوماً کنترلِ واقعیِ تودرتو را برنمی‌گرداند.
                 if (txtQsCode.Focused || txtQsHeadName.Focused || txtQsTazkira.Focused || txtQsPhone.Focused)
+                    return;
+
+                // Enter روی گرید یعنی «این پرونده را باز کن»، نه «برو به کنترلِ
+                // بعدی». چون KeyPreview روشن است، این متد زودتر از KeyDown خودِ
+                // گرید اجرا می‌شود، پس گرید هم باید همین‌جا استثنا شود.
+                if (dgvCases != null && dgvCases.Focused)
                     return;
 
                 e.SuppressKeyPress = true;
@@ -2530,10 +2743,30 @@ namespace CaseManagement
             // «جدید» و برای تغییرِ پروندهٔ موجود «ویرایش» را می‌زند.
             SetCaseEditMode(false);
 
-            // اگر فرم برای «باز کردن یک پرونده‌ی مشخص» فراخوانی شده، همان را لود کن.
+            // ─── حالتِ پیش‌فرض: لیست ──────────────────────────────────────────
+            // خواستهٔ صریح: هنگام باز شدنِ فرم هیچ پرونده‌ای باز نشود و هیچ
+            // ردیفی انتخاب نباشد. انتخابِ خودکارِ گرید را RunCasesQuery با
+            // ClearSelection پاک می‌کند؛ این‌جا فقط چیدمان روی List می‌نشیند.
+            _viewMode = CaseViewMode.List;
+            ApplyViewMode();
+
+            // گرید باید با صفحه‌کلید قابلِ پیمایش باشد تا Enter معنا پیدا کند.
+            dgvCases.TabStop = true;
+            dgvCases.CellDoubleClick -= dgvCases_CellDoubleClick;
+            dgvCases.CellDoubleClick += dgvCases_CellDoubleClick;
+            dgvCases.KeyDown -= dgvCases_KeyDown;
+            dgvCases.KeyDown += dgvCases_KeyDown;
+
+            // اگر فرم برای «باز کردن یک پرونده‌ی مشخص» فراخوانی شده (داشبورد،
+            // جستجوی پیشرفته، بایگانی، بارکد، …) مستقیم وارد حالتِ جزئیات شود
+            // — همان رفتاری که آن نُه فراخوان از قبل انتظار دارند.
             if (_pendingOpenCaseId > 0)
             {
-                try { LoadCaseById(_pendingOpenCaseId); }
+                try
+                {
+                    if (LoadCaseById(_pendingOpenCaseId))
+                        EnterDetailMode();
+                }
                 catch (Exception ex) { Debug.WriteLine("[FrmCase open pending] " + ex.Message); }
                 _pendingOpenCaseId = 0;
             }
@@ -3113,6 +3346,7 @@ namespace CaseManagement
         private void SaveSelectedPhotos()
         {
             string caseCode = txtCode.Text.Trim();
+            RememberCurrentStorageLayout();
 
             if (selectedHeadPhotoSource != "")
             {
@@ -3126,7 +3360,7 @@ namespace CaseManagement
                         selectedHeadPhotoSource,
                         caseCode,
                         FileHelper.SectionHeadPhoto,
-                        caseCode + "-Head",
+                        caseCode,
                         savedHeadPhotoPath);
 
                     if (string.IsNullOrWhiteSpace(savedPath) || !File.Exists(savedPath))
@@ -3153,7 +3387,7 @@ namespace CaseManagement
                         selectedFamilyPhotoSource,
                         caseCode,
                         FileHelper.SectionFamilyPhoto,
-                        caseCode + "-Family",
+                        caseCode,
                         savedFamilyPhotoPath);
 
                     if (string.IsNullOrWhiteSpace(savedPath) || !File.Exists(savedPath))
@@ -3190,7 +3424,17 @@ namespace CaseManagement
                 }
             }
 
-            if (!hasProvinceOrDistrict && !hasStatus) return;
+            if (!hasProvinceOrDistrict && !hasStatus && _incomingGeoFilter == null) return;
+
+            // وقتی فیلتر از مرکز فرماندهی آمده، توصیفِ کاملِ خودش نشان داده
+            // می‌شود؛ وگرنه همان سه‌جزئیِ قدیمیِ داشبورد.
+            if (_incomingGeoFilter != null)
+            {
+                ShowIncomingFilterBanner("فیلترِ مرکز فرماندهی فعال است: " +
+                                         _incomingGeoFilter.Describe() +
+                                         " — فهرست و جستجو فقط همین محدوده را نشان می‌دهند.");
+                return;
+            }
 
             string text = "فیلترِ داشبورد فعال است: ";
             var parts = new System.Collections.Generic.List<string>();
@@ -3198,7 +3442,13 @@ namespace CaseManagement
             if (_incomingFilterDistrict.Length > 0) parts.Add("ولسوالی=" + _incomingFilterDistrict);
             if (hasStatus) parts.Add("وضعیت=" + _incomingFilterServiceStatus);
             text += string.Join("، ", parts) + " — فهرست و جستجو فقط همین محدوده را نشان می‌دهند.";
+            ShowIncomingFilterBanner(text);
+        }
 
+        // نوارِ خبریِ بالای گرید. از دو مسیر صدا زده می‌شود (داشبورد و مرکز
+        // فرماندهی) پس یک‌جا نوشته شده تا رفتارِ «نمایش همه» در هر دو یکی باشد.
+        private void ShowIncomingFilterBanner(string text)
+        {
             _dashboardFilterBanner = new Panel { Dock = DockStyle.Top, Height = 34, BackColor = UiTheme.Warning };
             Label lbl = new Label
             {
@@ -3215,6 +3465,7 @@ namespace CaseManagement
                 _incomingFilterProvince = "";
                 _incomingFilterDistrict = "";
                 _incomingFilterServiceStatus = "";
+                _incomingGeoFilter = null;
                 cmbServiceStatusFilter.SelectedIndex = 0;
                 _dashboardFilterBanner.Visible = false;
                 LoadCases();
@@ -3243,7 +3494,7 @@ namespace CaseManagement
         // اول می‌آورد. CasID به‌عنوان مرتب‌سازیِ دوم می‌ماند تا ترتیب برای
         // فرم‌های بی‌شماره/تکراری قطعی و پایدار باشد (وگرنه صفحه‌بندی با
         // OFFSET می‌تواند یک ردیف را دو بار یا هرگز نشان ندهد).
-        private const int GridPageSize = 10;
+        private const int GridPageSize = 20;
 
         private int _gridPage;        // شمارهٔ صفحهٔ جاری، از صفر
         private int _gridTotalRows;   // تعداد کلِ ردیف‌های منطبق با فیلترهای فعلی
@@ -3264,7 +3515,8 @@ namespace CaseManagement
                       AND (@CID = 0 OR CenterID = @CID)
                       AND (@ServiceStatus = '' OR ServiceStatus = @ServiceStatus)
                       AND (@Prov = '' OR Province = @Prov)
-                      AND (@Dist = '' OR District LIKE '%' || @Dist || '%')";
+                      AND (@Dist = '' OR District LIKE '%' || @Dist || '%')"
+                   + (_incomingGeoFilter == null ? "" : _incomingGeoFilter.BuildWhere(""));
         }
 
         private void BindCasesParameters(SQLiteCommand cmd)
@@ -3279,6 +3531,10 @@ namespace CaseManagement
             AddStringParameter(cmd, "@ServiceStatus", GetSelectedServiceStatusFilter());
             AddStringParameter(cmd, "@Prov", _incomingFilterProvince);
             AddStringParameter(cmd, "@Dist", _incomingFilterDistrict);
+
+            // پارامترهای فیلترِ مرکز فرماندهی فقط وقتی بایند می‌شوند که
+            // شرطشان هم در متنِ کوئری آمده باشد — این دو همیشه با هم.
+            if (_incomingGeoFilter != null) _incomingGeoFilter.BindParameters(cmd);
         }
 
         // بارگذاریِ پیش‌فرضِ گرید: بدونِ جستجو، از صفحهٔ اول.
@@ -3311,6 +3567,7 @@ namespace CaseManagement
 
                     using (var cmd = new SQLiteCommand(@"
                     SELECT CasID, FormNo, Code, CaseNo, HeadFullName, Phone, ServiceStatus, CaseDate, PhotoPath,
+                           FamilyPhotoPath,
                            HeadFatherName, HeadTazkiraNo, HeadCurrentResidence, Province, District, RequestType
                     FROM TblCase " + BuildCasesWhere() + @"
                     ORDER BY CAST(FormNo AS INTEGER) DESC, CasID DESC
@@ -3334,6 +3591,29 @@ namespace CaseManagement
                 // می‌کند)، پس برای بقیه‌ی حالت‌ها هزینه‌ای ندارد.
                 LoadCaseThumbnails();
                 UpdatePagerUi();
+
+                // ─── پاک‌کردنِ انتخابِ خودکارِ گرید ─────────────────────────────
+                // آموزش — رفعِ رگرسیونِ واقعی (با آزمونِ تجربی تأیید شد):
+                // DataGridView با هر بار ست‌شدنِ DataSource، ردیفِ ۰ را خودکار
+                // «جاری» و — چون SelectionMode = FullRowSelect است — انتخاب‌شده
+                // می‌کند؛ بدونِ هیچ کلیکی از کاربر. بارِ اول این انتخاب اتفاقی
+                // پاک می‌شد، چون ConfigureCasesGrid مقدارِ MultiSelect را از
+                // false به true عوض می‌کرد و خودِ این تغییر انتخاب را ریست
+                // می‌کرد؛ ولی از بارِ دوم به بعد (هر جستجو یا تعویضِ صفحه)
+                // MultiSelect از قبل true است، آن اِسناد بی‌اثر می‌شود و
+                // انتخابِ خودکار باقی می‌ماند.
+                //
+                // نتیجه‌اش این بود که GetSelectedGridCaseIds همیشه یک شناسه
+                // برمی‌گرداند و GetCasesForBatchExport هرگز به شاخهٔ «نتیجهٔ
+                // جستجوی جاری» نمی‌رسید — یعنی فیلترِ پیشرفته و بازهٔ شمارهٔ
+                // فرم عملاً مرده می‌شدند و خروجی جمعی بی‌صدا فقط یک رکورد
+                // می‌داد.
+                //
+                // ⚠ جایگاه مهم است: باید *بعد از* ConfigureCasesGrid باشد،
+                // وگرنه همان اِسنادِ MultiSelect دوباره انتخاب را برمی‌گرداند.
+                // CurrentCell دست‌نخورده می‌ماند (روی ردیفِ ۰)، پس پیمایش با
+                // صفحه‌کلید و رفتارِ CellClick هیچ تغییری نمی‌کند.
+                dgvCases.ClearSelection();
             }
             catch (Exception ex)
             {
@@ -3436,7 +3716,6 @@ namespace CaseManagement
             }
         }
 
-        private const string PhotoThumbColumnName = "colPhotoThumb";
 
         // آموزش — رفع درخواست کاربر: لیست پرونده‌ها فقط سه ستون (کد اختصاصی/
         // نام سرپرست/عکس) را نشان می‌دهد تا بدون اسکرول افقی کامل در پنل جا
@@ -3467,21 +3746,43 @@ namespace CaseManagement
             //    بمانند و هزینه‌ی ساخت thumbnail هم پرداخت نشود.
             bool wantsPhoto = selected.Any(c => c.IsPhoto);
 
-            if (!wantsPhoto)
+            // ستون‌های تصویریِ ساخته‌شده‌ای که دیگر انتخاب نیستند حذف می‌شوند.
+            // (حالا می‌تواند بیش از یکی باشد: عکسِ سرپرست و عکسِ جمعی.)
+            for (int i = dgvCases.Columns.Count - 1; i >= 0; i--)
             {
-                if (dgvCases.Columns.Contains(PhotoThumbColumnName))
-                    dgvCases.Columns.Remove(PhotoThumbColumnName);
+                string existing = dgvCases.Columns[i].Name;
+                if (existing == null || !existing.StartsWith("colThumb_", StringComparison.Ordinal))
+                    continue;
+
+                if (!selected.Any(c => c.IsPhoto && c.ThumbColumnName == existing))
+                    dgvCases.Columns.RemoveAt(i);
             }
-            else if (!dgvCases.Columns.Contains(PhotoThumbColumnName))
+
+            foreach (CaseGridColumn photo in selected.Where(c => c.IsPhoto))
             {
+                if (dgvCases.Columns.Contains(photo.ThumbColumnName))
+                    continue;
+
                 var photoColumn = new DataGridViewImageColumn
                 {
-                    Name = PhotoThumbColumnName,
-                    HeaderText = "عکس",
-                    ImageLayout = DataGridViewImageCellLayout.Zoom,
-                    // بدون این، سلول‌های بدون عکس آیکونِ «تصویر خراب» نشان می‌دهند
-                    // — همان ظاهر غیرحرفه‌ای که قبلاً باعث حذف این ستون شده بود.
-                    DefaultCellStyle = { NullValue = null }
+                    Name = photo.ThumbColumnName,
+                    HeaderText = photo.DisplayName,
+                    // Normal (نه Zoom): خودِ LoadThumbnail تصویر را دقیقاً
+                    // هم‌اندازهٔ کادر و با نسبتِ درست می‌سازد، پس مقیاسِ دوبارهٔ
+                    // گرید فقط کیفیت را خراب می‌کند.
+                    ImageLayout = DataGridViewImageCellLayout.Normal,
+                    DefaultCellStyle =
+                    {
+                        // بدون این، سلول‌های بدون عکس آیکونِ «تصویر خراب» نشان
+                        // می‌دهند — همان ظاهر غیرحرفه‌ای که قبلاً باعث حذف این
+                        // ستون شده بود.
+                        NullValue = null,
+                        // آموزش — در رندرِ واقعی دیده شد که تصویر به لبهٔ سلول
+                        // می‌چسبد و فضای خالی همه به یک سمت می‌افتد. ستونِ Fill
+                        // معمولاً از خودِ thumbnail پهن‌تر است، پس بدون این خط
+                        // ردیف‌ها ناهم‌تراز به‌نظر می‌رسند.
+                        Alignment = DataGridViewContentAlignment.MiddleCenter
+                    }
                 };
                 dgvCases.Columns.Add(photoColumn);
             }
@@ -3493,7 +3794,7 @@ namespace CaseManagement
             int displayIndex = 1;
             foreach (CaseGridColumn column in selected)
             {
-                string name = column.IsPhoto ? PhotoThumbColumnName : column.DataColumn;
+                string name = column.IsPhoto ? column.ThumbColumnName : column.DataColumn;
 
                 if (!column.IsPhoto)
                     SetGridHeader(name, column.DisplayName);
@@ -3503,13 +3804,13 @@ namespace CaseManagement
             }
 
             dgvCases.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-            dgvCases.MultiSelect = false;
+            dgvCases.MultiSelect = true;
             dgvCases.ReadOnly = true;
             dgvCases.AllowUserToAddRows = false;
             dgvCases.AllowUserToDeleteRows = false;
             dgvCases.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
             // با عکس، ردیف بلندتر لازم است تا thumbnail بریده نشود.
-            dgvCases.RowTemplate.Height = wantsPhoto ? 46 : 32;
+            dgvCases.RowTemplate.Height = wantsPhoto ? PhotoRowHeight : 32;
 
             // آموزش — با شش ستون در ستونِ باریکِ سمت چپ، حالتِ Fill عرض را
             // مساوی پخش می‌کرد و عنوان‌ها بریده می‌شدند («کد اختصاصی» → «کد»).
@@ -3524,8 +3825,51 @@ namespace CaseManagement
             foreach (DataGridViewColumn column in dgvCases.Columns)
             {
                 if (!column.Visible) continue;
-                column.FillWeight = column is DataGridViewImageColumn ? 46f : 100f;
+
+                if (!(column is DataGridViewImageColumn))
+                {
+                    column.FillWeight = 100f;
+                    continue;
+                }
+
+                // آموزش — ستونِ تصویری عرضِ *ثابت* می‌گیرد، نه وزنِ Fill.
+                //
+                // در رندرِ واقعی دیده شد که با FillWeight، ستونِ «عکس جمعی»
+                // ۳۱۵ پیکسل عرض می‌گرفت برای تصویری ۱۱۴ پیکسلی — چون
+                // FillWeight یک *نسبت* است، نه عرض: هر ستون سهمی از کلِ عرضِ
+                // باقی‌مانده می‌گیرد. نتیجه‌اش دریایی از فضای خالی دورِ عکس بود
+                // و تنگیِ ستون‌های متنی.
+                //
+                // AutoSizeMode.None روی همین ستون، حالتِ Fillِ گرید را فقط برای
+                // او لغو می‌کند: عرض دقیقاً اندازهٔ کادر (+ حاشیه) می‌شود و کلِ
+                // فضای آزادشده به ستون‌های متنی می‌رسد.
+                CaseGridColumn spec = selected.FirstOrDefault(
+                    c => c.IsPhoto && c.ThumbColumnName == column.Name);
+
+                int boxWidth = spec == null ? PhotoBoxHeight : ThumbBoxWidth(spec);
+
+                column.AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
+                // کفِ ۷۲ تا عنوانِ ستون («عکس جمعی») بریده نشود.
+                column.Width = Math.Max(72, boxWidth + 16);
             }
+        }
+
+        // ─── ابعادِ thumbnailِ گرید ───────────────────────────────────────────
+        // آموزش — خواستهٔ کاربر: «عکس خیلی کوچک و تقریباً مربع است؛ ۳:۴ واقعی
+        // و حدود یک‌ونیم برابر بزرگ‌تر شود». کادرِ قبلی ۴۰ پیکسل بود، پس ارتفاعِ
+        // ۶۴ دقیقاً همان ۱٫۶ برابر است و با ۳:۴ عرضِ ۴۸ می‌دهد.
+        // ارتفاعِ ردیف = ارتفاعِ کادر + حاشیه، تا عکس به خطوطِ جدولِ بالا و
+        // پایین نچسبد.
+        private const int PhotoBoxHeight = 64;
+        private const int PhotoRowHeight = PhotoBoxHeight + 10;
+
+        // عرضِ کادر از روی نسبتِ همان ستون حساب می‌شود: ۳:۴ → ۴۸، ۱۶:۹ → ۱۱۴.
+        private static int ThumbBoxWidth(CaseGridColumn column)
+        {
+            if (column == null || column.AspectH <= 0 || column.AspectW <= 0)
+                return PhotoBoxHeight;
+
+            return Math.Max(1, (int)Math.Round(PhotoBoxHeight * (double)column.AspectW / column.AspectH));
         }
 
         // آخرین ترکیبِ ستونی که روی گرید اعمال شده. برای اینکه تغییرِ تنظیمات
@@ -3577,7 +3921,16 @@ namespace CaseManagement
 
         private void LoadCaseThumbnails()
         {
-            if (!dgvCases.Columns.Contains("PhotoPath") || !dgvCases.Columns.Contains(PhotoThumbColumnName))
+            // ستون‌های تصویریِ فعال (حالا می‌تواند بیش از یکی باشد) به‌همراه
+            // ابعادِ کادرِ هرکدام. فقط ستون‌هایی که هم در انتخابِ کاربرند و هم
+            // ستونِ داده‌شان در نتیجهٔ کوئری هست.
+            List<CaseGridColumn> photoColumns = CaseGridColumns.GetSelected()
+                .Where(c => c.IsPhoto
+                            && dgvCases.Columns.Contains(c.DataColumn)
+                            && dgvCases.Columns.Contains(c.ThumbColumnName))
+                .ToList();
+
+            if (photoColumns.Count == 0)
                 return;
 
             bool skipImages = dgvCases.Rows.Count > MaxInlineThumbnails;
@@ -3597,17 +3950,42 @@ namespace CaseManagement
                 if (row.IsNewRow)
                     continue;
 
-                row.Height = 46;
+                row.Height = PhotoRowHeight;
 
-                object pathValue = row.Cells["PhotoPath"].Value;
-                string path = pathValue == null || pathValue == DBNull.Value ? "" : pathValue.ToString();
-                row.Cells[PhotoThumbColumnName].Value = LoadThumbnail(path, 40);
+                foreach (CaseGridColumn photo in photoColumns)
+                {
+                    object pathValue = row.Cells[photo.DataColumn].Value;
+                    string path = pathValue == null || pathValue == DBNull.Value ? "" : pathValue.ToString();
+
+                    row.Cells[photo.ThumbColumnName].Value =
+                        LoadThumbnail(path, ThumbBoxWidth(photo), PhotoBoxHeight);
+                }
             }
         }
 
-        private DrawingImage LoadThumbnail(string path, int size)
+        // آموزش — بازنویسیِ این متد سه ایرادِ دیدنیِ گرید را با هم رفع می‌کند:
+        //
+        // ۱. تغییرِ شکلِ چهره‌ها. نسخهٔ قبلی `new Bitmap(size, size)` می‌ساخت و
+        //    `DrawImage(source, 0, 0, size, size)` می‌زد — یعنی هر عکس، با هر
+        //    نسبتی، به‌زور در یک *مربع* کشیده می‌شد. عکسِ ۳:۴ تذکره پهن و
+        //    له‌شده دیده می‌شد.
+        // ۲. کوچکیِ بیش از حد. کادر ۴۰ پیکسل بود و عملاً چیزی تشخیص داده
+        //    نمی‌شد.
+        // ۳. نسبتِ ثابت برای همه. عکسِ جمعیِ خانواده افقی است و در کادرِ
+        //    پرترهٔ سرپرست جا نمی‌شود.
+        //
+        // حالا کادر ابعادِ مستقل می‌گیرد و تصویر «contain» مقیاس می‌شود: کلِ
+        // عکس داخل کادر می‌نشیند، نسبتش دست‌نخورده می‌ماند و وسط‌چین می‌شود.
+        // عمداً «cover/crop» انتخاب نشد — بریدنِ لبه‌ها روی عکسِ پرسنلی یعنی
+        // احتمالِ بریده‌شدنِ سر یا چانه.
+        //
+        // پس‌زمینهٔ کادر شفاف می‌ماند تا رنگِ انتخابِ ردیف از پشتش دیده شود.
+        private DrawingImage LoadThumbnail(string path, int boxWidth, int boxHeight)
         {
             if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+                return null;
+
+            if (boxWidth <= 0 || boxHeight <= 0)
                 return null;
 
             try
@@ -3615,11 +3993,25 @@ namespace CaseManagement
                 using (FileStream fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
                 using (DrawingImage source = DrawingImage.FromStream(fs))
                 {
-                    Bitmap thumb = new Bitmap(size, size);
+                    if (source.Width <= 0 || source.Height <= 0)
+                        return null;
+
+                    // بزرگ‌ترین اندازه‌ای که هر دو بعدش داخل کادر جا شود.
+                    double scale = Math.Min((double)boxWidth / source.Width,
+                                            (double)boxHeight / source.Height);
+
+                    int drawW = Math.Max(1, (int)Math.Round(source.Width  * scale));
+                    int drawH = Math.Max(1, (int)Math.Round(source.Height * scale));
+                    int offsetX = (boxWidth  - drawW) / 2;
+                    int offsetY = (boxHeight - drawH) / 2;
+
+                    Bitmap thumb = new Bitmap(boxWidth, boxHeight);
                     using (Graphics g = Graphics.FromImage(thumb))
                     {
-                        g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
-                        g.DrawImage(source, 0, 0, size, size);
+                        g.InterpolationMode  = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                        g.PixelOffsetMode    = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
+                        g.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.HighQuality;
+                        g.DrawImage(source, offsetX, offsetY, drawW, drawH);
                     }
                     return thumb;
                 }
@@ -3732,6 +4124,10 @@ namespace CaseManagement
             ClearForm();
             // پروندهٔ جدید طبیعتاً باید بلافاصله قابلِ تایپ باشد.
             SetCaseEditMode(true);
+            // در حالتِ لیست، فیلدهای پرونده اصلاً دیده نمی‌شوند؛ بدونِ این خط
+            // «جدید» ظاهراً هیچ کاری نمی‌کرد — همان باگی که
+            // EnsureEditableTabVisible برای تب‌ها حل می‌کند، ولی یک سطح بالاتر.
+            EnterDetailMode();
             EnsureEditableTabVisible();
             txtCode.Focus();
         }
@@ -5020,35 +5416,16 @@ WHERE CasID = @CasID", con))
                 headerBounds.Top + (headerBounds.Height - size.Height) / 2);
         }
 
+        // آموزش — تغییرِ رفتار به خواستهٔ صریحِ کاربر: تک‌کلیک دیگر پرونده را
+        // باز نمی‌کند و فقط ردیف را انتخاب می‌کند. باز کردن تنها از سه راهِ
+        // صریح انجام می‌شود: دابل‌کلیک، Enter، دکمهٔ «باز کردن» — هر سه از
+        // OpenSelectedCase عبور می‌کنند.
+        //
+        // خودِ هندلر حذف نشد چون در Designer به رویداد CellClick بسته است و
+        // ممکن است بعداً رفتارِ «انتخاب» چیزی لازم داشته باشد؛ فعلاً عمداً
+        // خالی است تا انتخابِ پیش‌فرضِ خودِ گرید کارش را بکند.
         private void dgvCases_CellClick(object sender, DataGridViewCellEventArgs e)
         {
-            if (e.RowIndex < 0 || e.RowIndex >= dgvCases.Rows.Count)
-                return;
-
-            DataGridViewRow row = dgvCases.Rows[e.RowIndex];
-
-            if (row.IsNewRow || !dgvCases.Columns.Contains("CasID"))
-                return;
-
-            object value = row.Cells["CasID"].Value;
-
-            if (value == null || value == DBNull.Value)
-                return;
-
-            int caseId;
-
-            if (!int.TryParse(value.ToString(), out caseId))
-                return;
-
-            try
-            {
-                if (!LoadCaseById(caseId))
-                    Msg.Show("رکورد پیدا نشد");
-            }
-            catch (Exception ex)
-            {
-                Msg.Show("خطا در انتخاب رکورد: " + ex.Message);
-            }
         }
 
         // آموزش — فاز ۱: قبلاً اینجا FrmFamily را با ShowDialog به‌صورت
@@ -5248,6 +5625,8 @@ WHERE CasID = @CasID", con))
             }
 
             StopCaseLockHeartbeat();
+            if (_exportCts != null)
+                _exportCts.Cancel();
 
             base.OnFormClosing(e);
         }
@@ -5672,9 +6051,301 @@ WHERE CasID = @CasID", con))
         private const float FieldsColumnNormalPercent = 62F;
         private const float LeftColumnNormalPercent   = 38F;
 
+        // ═══════════════════════════════════════════════════════════════════
+        // بازطراحیِ دو‌حالته (List / Detail)
+        //
+        // آموزش — چرا فرمِ دوم ساخته نشد: UpdateWorkspaceWidth از قبل دقیقاً
+        // همین کار را برای تب‌های «اعضاء»/«اسناد» انجام می‌دهد (ستونِ لیست را
+        // جمع می‌کند تا فرمِ جاسازی‌شده تمام‌عرض شود). پس مکانیزم آزموده‌شده
+        // است و List Mode فقط عکسِ همان است. نتیجه: هیچ کنترلی حذف نمی‌شود،
+        // هیچ تبی جابه‌جا نمی‌شود و هیچ رویدادی بازنویسی نمی‌شود — فقط عرضِ
+        // دو ستون و دیده‌شدنِ دو پنل عوض می‌شود.
+        //
+        // ⚠ قاعدهٔ تک‌مالکی: فقط ApplyViewMode حق نوشتن روی
+        // rootLayout.ColumnStyles را دارد. UpdateWorkspaceWidth با گاردِ
+        // بالا در حالتِ لیست کنار می‌کشد.
+        // ═══════════════════════════════════════════════════════════════════
+        private enum CaseViewMode { List, Detail }
+
+        private CaseViewMode _viewMode = CaseViewMode.List;
+
+        private void ApplyViewMode()
+        {
+            if (rootLayout == null || rootLayout.ColumnStyles.Count < 2 || rootLayout.RowStyles.Count < 1)
+                return;
+
+            bool detail = _viewMode == CaseViewMode.Detail;
+
+            rootLayout.SuspendLayout();
+            try
+            {
+                // ستونِ ۰ = فیلدها/تب‌ها ، ستونِ ۱ = لیست (فرم RTL است، پس
+                // ستونِ ۰ سمتِ راست دیده می‌شود).
+                rootLayout.ColumnStyles[0].Width = detail ? 100F : 0F;
+                rootLayout.ColumnStyles[1].Width = detail ? 0F   : 100F;
+
+                if (fieldsWorkspacePanel != null)
+                    fieldsWorkspacePanel.Visible = detail;
+
+                if (leftWorkspacePanel != null)
+                    leftWorkspacePanel.Visible = !detail;
+
+                // ردیفِ بالا: در حالتِ لیست نوارِ جستجو، در حالتِ جزئیات نوارِ
+                // سرِ پرونده. هر دو در یک میزبان‌اند، پس فقط دیده‌شدن عوض می‌شود.
+                if (caseQuickSearchBar != null) caseQuickSearchBar.Visible = !detail;
+                if (caseDetailHeaderBar != null) caseDetailHeaderBar.Visible = detail;
+
+                rootLayout.RowStyles[0].Height = detail ? DetailHeaderRowHeight : ListSearchRowHeight;
+
+                // کارت‌های عکس/وضعیت بالای گرید در حالتِ لیست فضای عمودیِ
+                // گرید را می‌خورند و دادهٔ پروندهٔ «جاری» را نشان می‌دهند که در
+                // این حالت اصلاً پرونده‌ای باز نیست.
+                if (photoBarPanel != null)
+                    photoBarPanel.Visible = detail;
+
+                ApplyBottomBarForMode(detail);
+            }
+            finally
+            {
+                rootLayout.ResumeLayout(true);
+            }
+
+            UpdateDetailHeaderText();
+        }
+
+        // ارتفاعِ ردیفِ ۰ در دو حالت. نوارِ جستجو دو خط دارد (برچسب + فیلد)،
+        // نوارِ سرِ پرونده یک خط.
+        private const float ListSearchRowHeight   = 76F;
+        private const float DetailHeaderRowHeight = 48F;
+
+        // ─── تقسیمِ نوارِ پایین بین دو حالت ───────────────────────────────────
+        // آموزش — رفعِ تکرارِ بصری: نوارِ پایین چهار گروه دارد و تا پیش از این
+        // هر چهار گروه در هر دو حالت دیده می‌شدند. نتیجه این بود که در حالتِ
+        // ویرایش، دکمه‌های «چند پرونده» و «گزارش لیست» (که روی انتخابِ گرید و
+        // فیلترِ لیست کار می‌کنند) بی‌معنا بودند، و در حالتِ لیست، «ذخیره/
+        // ویرایش/حذف/تاریخچه» (که روی پروندهٔ باز کار می‌کنند) بی‌معنا.
+        //
+        // هر گروه فقط در حالتی که واقعاً در آن کار می‌کند دیده می‌شود:
+        //   لیست    → «جدید» + چند پرونده + گزارش لیست
+        //   جزئیات  → پرونده (ذخیره/ویرایش/حذف/تاریخچه) + همین پرونده
+        //
+        // ⚠ هیچ دکمه‌ای حذف یا غیرفعال نمی‌شود؛ فقط Visible عوض می‌شود، پس
+        // میان‌برهای صفحه‌کلید و هندلرها دست‌نخورده می‌مانند و هیچ قابلیتی از
+        // بین نمی‌رود — فقط در حالتی که به آن تعلق ندارد دیده نمی‌شود.
+        private void ApplyBottomBarForMode(bool detail)
+        {
+            // گروهِ «پرونده:» — فقط در جزئیات. «جدید» استثناست: تنها راهِ
+            // ساختنِ پرونده است و باید از لیست هم در دسترس باشد.
+            if (lblCaseSection != null) lblCaseSection.Visible = detail;
+            if (btnSave    != null) btnSave.Visible    = detail;
+            if (btnEdit    != null) btnEdit.Visible    = detail;
+            if (btnDelete  != null) btnDelete.Visible  = detail;
+            if (btnHistory != null) btnHistory.Visible = detail;
+
+            // «جستجو»ی نوارِ پایین بر اساسِ txtCode کار می‌کند — فیلدی که در
+            // حالتِ لیست اصلاً دیده نمی‌شود، و همان کار را نوارِ جستجوی بالای
+            // لیست بهتر انجام می‌دهد. پس در لیست پنهان است، نه حذف.
+            if (btnSearch != null) btnSearch.Visible = detail;
+
+            if (btnNew != null) btnNew.Visible = true;
+
+            // ─── تکْ‌دکمهٔ خروجی ──────────────────────────────────────────────
+            // خواستهٔ صریحِ کاربر: در قسمتِ پرونده فقط یک دکمهٔ خروجی باشد. پس
+            // هر سه گروهِ خروجیِ قبلی از نوار برداشته می‌شوند و «خروجی پرونده‌ها»
+            // جایشان را می‌گیرد — در هر دو حالت، چون خودِ دیالوگ می‌داند که در
+            // Detail یعنی «همین پرونده» و در List یعنی «انتخاب‌شده‌ها/فیلتر».
+            //
+            // ⚠ حذف نشدند، فقط پنهان: منوهای «چاپ و خروجی»/«خروجی جمعی» و دکمهٔ
+            // «گزارش اکسل» با همهٔ هندلرهایشان زنده‌اند و Ctrl+P هنوز کار می‌کند.
+            if (_lblCurrentCaseGroup != null) _lblCurrentCaseGroup.Visible = false;
+            if (_btnCurrentCaseMenu  != null) _btnCurrentCaseMenu.Visible  = false;
+            if (_lblBatchGroup   != null) _lblBatchGroup.Visible   = false;
+            if (_btnBatchOpsMenu != null) _btnBatchOpsMenu.Visible = false;
+            if (_lblListGroup    != null) _lblListGroup.Visible    = false;
+            if (_btnExcelList    != null) _btnExcelList.Visible    = false;
+
+            if (_lblExportGroup   != null) _lblExportGroup.Visible   = true;
+            if (_btnUnifiedExport != null) _btnUnifiedExport.Visible = true;
+
+            // «فورم رسمی» و «کارت شناسایی» تکی به یک پروندهٔ باز نیاز دارند
+            // (هر دو با «اول پرونده را ذخیره یا جستجو کن» گارد شده‌اند) — پس
+            // فقط در Detail معنا دارند. «چاپ جمعی کارت‌ها» هم‌خانوادهٔ «چند
+            // پرونده»/«گزارش لیست» است، پس فقط در List.
+            if (_btnOfficialForm      != null) _btnOfficialForm.Visible      = detail;
+            if (_btnGuardianCardSingle != null) _btnGuardianCardSingle.Visible = detail;
+            if (_btnGuardianCardBatch  != null) _btnGuardianCardBatch.Visible  = !detail;
+
+            AdjustBottomBarHeight();
+        }
+
+        private void UpdateDetailHeaderText()
+        {
+            if (lblDetailHeaderTitle == null) return;
+
+            if (_viewMode != CaseViewMode.Detail || currentCaseId == 0)
+            {
+                lblDetailHeaderTitle.Text = "";
+                return;
+            }
+
+            var parts = new System.Collections.Generic.List<string>();
+            string code = txtCode.Text.Trim();
+            string head = txtHeadFullName.Text.Trim();
+            string formNo = txtFormNo.Text.Trim();
+
+            if (formNo.Length > 0) parts.Add("شماره فرم " + formNo);
+            if (code.Length > 0) parts.Add("کد " + code);
+            if (head.Length > 0) parts.Add(head);
+
+            lblDetailHeaderTitle.Text = string.Join("   ·   ", parts.ToArray());
+        }
+
+        // ورود به حالتِ جزئیات. پرونده باید *قبلاً* بار شده باشد — این متد
+        // فقط چیدمان را عوض می‌کند، هیچ کوئری‌ای نمی‌زند.
+        private void EnterDetailMode()
+        {
+            if (_viewMode == CaseViewMode.Detail) return;
+
+            _viewMode = CaseViewMode.Detail;
+            ApplyViewMode();
+
+            // تبِ فرود همان «خلاصه پرونده» است — کاربر اول می‌خواهد ببیند.
+            GoToSummaryTab();
+        }
+
+        // بازگشت به لیست.
+        // ⚠ دو تضمین: (۱) تغییراتِ ذخیره‌نشده بی‌صدا دور ریخته نشوند،
+        // (۲) قفلِ رکورد آزاد شود. بدونِ این‌ها بازگشت می‌توانست هم دادهٔ
+        // کاربر را ببلعد و هم قفل را تا بسته‌شدنِ فرم نشت بدهد.
+        // هیچ کوئری‌ای اجرا نمی‌شود: گرید، جستجو، صفحه و ردیفِ انتخاب‌شده
+        // دقیقاً همان‌طور که بودند باقی می‌مانند.
+        private void ReturnToList()
+        {
+            if (_viewMode == CaseViewMode.List) return;
+
+            if (_caseEditMode)
+            {
+                DialogResult answer = Msg.Show(this,
+                    "تغییراتِ ذخیره‌نشده‌ای در این پرونده وجود دارد." + Environment.NewLine +
+                    "قبل از بازگشت به لیست ذخیره شود؟",
+                    "بازگشت به لیست",
+                    MessageBoxButtons.YesNoCancel,
+                    MessageBoxIcon.Question);
+
+                if (answer == DialogResult.Cancel) return;
+
+                if (answer == DialogResult.Yes)
+                {
+                    btnSave_Click(this, EventArgs.Empty);
+                    // اگر اعتبارسنجی نگذاشت ذخیره شود، هنوز در حالتِ ویرایشیم:
+                    // کاربر باید بماند و مشکل را رفع کند، نه اینکه داده‌اش برود.
+                    if (_caseEditMode) return;
+                }
+                else
+                {
+                    SetCaseEditMode(false);
+                }
+            }
+
+            _viewMode = CaseViewMode.List;
+            ApplyViewMode();
+
+            if (dgvCases != null && dgvCases.CanFocus)
+                dgvCases.Focus();
+        }
+
+        private void btnBackToList_Click(object sender, EventArgs e)
+        {
+            ReturnToList();
+        }
+
+        private void btnOpenSelectedCase_Click(object sender, EventArgs e)
+        {
+            OpenSelectedCase();
+        }
+
+        // تنها نقطهٔ «باز کردنِ پرونده از لیست». هر سه راهِ خواسته‌شده
+        // (دابل‌کلیک، Enter، دکمهٔ «باز کردن») به همین‌جا می‌رسند.
+        private void OpenSelectedCase()
+        {
+            int caseId = GetFocusedGridCaseId();
+
+            if (caseId <= 0)
+            {
+                Msg.Show(this, "اول یک پرونده را از لیست انتخاب کنید", "",
+                    MessageBoxButtons.OK, MessageBoxIcon.None);
+                return;
+            }
+
+            try
+            {
+                if (!LoadCaseById(caseId))
+                {
+                    Msg.Show("رکورد پیدا نشد");
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                Msg.Show("خطا در باز کردن پرونده: " + ex.Message);
+                return;
+            }
+
+            EnterDetailMode();
+        }
+
+        // شناسهٔ ردیفِ زیرِ فوکوس. از CurrentRow استفاده می‌شود نه SelectedRows،
+        // چون RunCasesQuery عمداً انتخاب را پاک می‌کند (هیچ ردیفی خودکار
+        // انتخاب نشود) ولی CurrentRow برای پیمایشِ صفحه‌کلید لازم است.
+        private int GetFocusedGridCaseId()
+        {
+            if (dgvCases == null || dgvCases.CurrentRow == null) return 0;
+            if (dgvCases.CurrentRow.IsNewRow) return 0;
+            if (!dgvCases.Columns.Contains("CasID")) return 0;
+
+            object value = dgvCases.CurrentRow.Cells["CasID"].Value;
+            if (value == null || value == DBNull.Value) return 0;
+
+            int caseId;
+            return int.TryParse(Convert.ToString(value), out caseId) ? caseId : 0;
+        }
+
+        // دابل‌کلیک شمارهٔ ردیفِ دقیق را خودش می‌دهد، پس به CurrentRow تکیه
+        // نمی‌کنیم (ممکن است کاربر هنوز هیچ ردیفی را جاری نکرده باشد).
+        private void dgvCases_CellDoubleClick(object sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex < 0 || e.RowIndex >= dgvCases.Rows.Count) return;
+
+            dgvCases.CurrentCell = dgvCases.Rows[e.RowIndex].Cells[FirstVisibleGridColumnIndex()];
+            OpenSelectedCase();
+        }
+
+        private int FirstVisibleGridColumnIndex()
+        {
+            foreach (DataGridViewColumn c in dgvCases.Columns)
+                if (c.Visible) return c.Index;
+            return 0;
+        }
+
+        private void dgvCases_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode != Keys.Enter) return;
+
+            e.Handled = true;
+            e.SuppressKeyPress = true;
+            OpenSelectedCase();
+        }
+
         private void UpdateWorkspaceWidth()
         {
             if (rootLayout == null || rootLayout.ColumnStyles.Count < 2 || tabsCase == null)
+                return;
+
+            // ⚠ مهم‌ترین گاردِ کلِ بازطراحیِ دو‌حالته: در List Mode مالکِ عرضِ
+            // ستون‌ها فقط ApplyViewMode است. بدونِ این خط، هر تعویضِ تب در
+            // حالتِ لیست (حتی تبی که کاربر نمی‌بیند) ستونِ فیلدها را دوباره
+            // به ۶۲٪ برمی‌گرداند و پنلِ ویرایش وسطِ لیست ظاهر می‌شود.
+            if (_viewMode != CaseViewMode.Detail)
                 return;
 
             bool needsFullWidth =
@@ -5775,6 +6446,308 @@ WHERE CasID = @CasID", con))
             return templatePath;
         }
 
+        private void RememberCurrentStorageLayout()
+        {
+            FileHelper.RememberLayout(
+                txtCode.Text.Trim(),
+                txtProvince.Text,
+                txtDistrict.Text,
+                txtRequestType.Text,
+                txtServiceStatus.Text);
+        }
+
+        private bool RequireOpenCaseForPrint()
+        {
+            if (!CaseManagement.Enterprise.PermissionService.Require("Case.Print"))
+            {
+                Msg.Show("کاربر اجازه خروجی گرفتن از پرونده را ندارد.");
+                return false;
+            }
+
+            if (currentCaseId == 0)
+            {
+                Msg.Show("اول پرونده را ذخیره یا از لیست انتخاب کن");
+                return false;
+            }
+
+            RememberCurrentStorageLayout();
+            return true;
+        }
+
+        private async void ExportCurrentCaseWord()
+        {
+            if (!RequireOpenCaseForPrint()) return;
+
+            try
+            {
+                string templatePath = ChooseWordTemplatePath(false);
+                if (string.IsNullOrEmpty(templatePath)) return;
+
+                string caseCode = txtCode.Text.Trim();
+                string tempDocx = Path.Combine(Path.GetTempPath(),
+                    FileHelper.CleanName(caseCode) + "_" + Guid.NewGuid().ToString("N") + ".docx");
+
+                Cursor = Cursors.WaitCursor;
+                try
+                {
+                    await Task.Run(() =>
+                    {
+                        if (templatePath == Helpers.ReportTemplateHelper.RdlcKey)
+                            Helpers.RdlcExportHelper.ExportCaseToWord(currentCaseId, tempDocx);
+                        else
+                            new Helpers.OpenXmlCaseExporter().ExportFullCaseToWord(currentCaseId, templatePath, tempDocx);
+                    });
+
+                    string saved = SaveGeneratedFileToCaseCodeFolder(tempDocx, caseCode);
+                    AuditLogger.Log("خروجی Word", "TblCase", currentCaseId, "", saved);
+                    UiTheme.ShowSuccess(this, "فایل Word ساخته شد:" + Environment.NewLine + saved);
+                    FileHelper.OpenFolder(Path.GetDirectoryName(saved));
+                }
+                finally
+                {
+                    Cursor = Cursors.Default;
+                    try { if (File.Exists(tempDocx)) File.Delete(tempDocx); } catch { }
+                }
+            }
+            catch (Exception ex)
+            {
+                Msg.Show("خطا در خروجی Word: " + ex.Message);
+            }
+        }
+
+        private async void ExportCurrentCasePdf()
+        {
+            if (!RequireOpenCaseForPrint()) return;
+
+            try
+            {
+                string templatePath = ChooseWordTemplatePath(false);
+                if (string.IsNullOrEmpty(templatePath)) return;
+
+                bool isRdlc = templatePath == Helpers.ReportTemplateHelper.RdlcKey;
+                if (!isRdlc && !PdfConversionHelper.IsAvailable())
+                {
+                    Msg.Show("برای ساخت PDF باید Microsoft Word یا LibreOffice نصب باشد.");
+                    return;
+                }
+
+                string caseCode = txtCode.Text.Trim();
+                string tempPdf = Path.Combine(Path.GetTempPath(),
+                    FileHelper.CleanName(caseCode) + "_" + Guid.NewGuid().ToString("N") + ".pdf");
+                string tempDocx = Path.Combine(Path.GetTempPath(),
+                    FileHelper.CleanName(caseCode) + "_" + Guid.NewGuid().ToString("N") + ".docx");
+
+                Cursor = Cursors.WaitCursor;
+                try
+                {
+                    await Task.Run(() =>
+                    {
+                        if (isRdlc)
+                        {
+                            Helpers.RdlcExportHelper.ExportCaseToPdf(currentCaseId, tempPdf);
+                        }
+                        else
+                        {
+                            new Helpers.OpenXmlCaseExporter().ExportFullCaseToWord(currentCaseId, templatePath, tempDocx);
+                            string converted = PdfConversionHelper.ConvertDocxToPdf(tempDocx);
+                            if (string.IsNullOrWhiteSpace(converted) || !File.Exists(converted))
+                                throw new Exception("تبدیل PDF انجام نشد.");
+                            if (!string.Equals(converted, tempPdf, StringComparison.OrdinalIgnoreCase))
+                            {
+                                File.Copy(converted, tempPdf, true);
+                                try { if (File.Exists(converted) && !string.Equals(converted, tempDocx, StringComparison.OrdinalIgnoreCase)) File.Delete(converted); } catch { }
+                            }
+                        }
+                    });
+
+                    string saved = SaveGeneratedFileToCaseCodeFolder(tempPdf, caseCode);
+                    AuditLogger.Log("خروجی PDF", "TblCase", currentCaseId, "", saved);
+                    UiTheme.ShowSuccess(this, "فایل PDF ساخته شد:" + Environment.NewLine + saved);
+                    FileHelper.OpenFolder(Path.GetDirectoryName(saved));
+                }
+                finally
+                {
+                    Cursor = Cursors.Default;
+                    try { if (File.Exists(tempPdf)) File.Delete(tempPdf); } catch { }
+                    try { if (File.Exists(tempDocx)) File.Delete(tempDocx); } catch { }
+                }
+            }
+            catch (Exception ex)
+            {
+                Msg.Show("خطا در خروجی PDF: " + ex.Message);
+            }
+        }
+
+        private void ExportCurrentCaseMedia()
+        {
+            if (!RequireOpenCaseForPrint()) return;
+
+            try
+            {
+                string caseCode = txtCode.Text.Trim();
+                string caseFolder = FileHelper.EnsureCaseStructure(caseCode);
+                if (string.IsNullOrWhiteSpace(caseFolder))
+                    throw new Exception(FileHelper.LastError);
+
+                int copied = 0;
+                copied += CopyMediaIfExists(savedHeadPhotoPath, caseCode, FileHelper.SectionHeadPhoto);
+                copied += CopyMediaIfExists(txtPhotoPath.Text.Trim(), caseCode, FileHelper.SectionHeadPhoto);
+                copied += CopyMediaIfExists(savedFamilyPhotoPath, caseCode, FileHelper.SectionFamilyPhoto);
+                copied += CopyMediaIfExists(txtFamilyPhotoPath.Text.Trim(), caseCode, FileHelper.SectionFamilyPhoto);
+
+                using (var con = db.GetConnection())
+                using (var cmd = new SQLiteCommand(@"
+SELECT IFNULL(DocFilePath, '')
+FROM TblDocs
+WHERE CasID = @Id AND IFNULL(IsArchived, 0) = 0 AND IFNULL(DocFilePath, '') <> '';", con))
+                {
+                    cmd.Parameters.AddWithValue("@Id", currentCaseId);
+                    con.Open();
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        while (reader.Read())
+                            copied += CopyMediaIfExists(reader.GetString(0), caseCode, FileHelper.SectionDocs);
+                    }
+                }
+
+                AuditLogger.Log("خروجی عکس و اسناد", "TblCase", currentCaseId, "", caseFolder);
+                UiTheme.ShowSuccess(this,
+                    "پوشه‌بندی عکس و اسناد انجام شد." + Environment.NewLine +
+                    "فایل کپی‌شده: " + copied + Environment.NewLine + caseFolder);
+                FileHelper.OpenFolder(caseFolder);
+            }
+            catch (Exception ex)
+            {
+                Msg.Show("خطا در خروجی عکس و اسناد: " + ex.Message);
+            }
+        }
+
+        private async void ExportBatchCaseMedia()
+        {
+            if (!CaseManagement.Enterprise.PermissionService.Require("Case.BatchExport"))
+            {
+                Msg.Show("کاربر اجازه خروجی جمعی ندارد.");
+                return;
+            }
+
+            Form progress = null;
+            try
+            {
+                DataTable cases = GetCasesForBatchExport(0, 0, null);
+                if (cases.Rows.Count == 0)
+                {
+                    Msg.Show("پرونده‌ای برای خروجی عکس و اسناد پیدا نشد. چند ردیف انتخاب کنید یا جستجو را تنگ‌تر کنید.");
+                    return;
+                }
+
+                if (cases.Rows.Count > BatchWordPdfMax)
+                {
+                    Msg.Show("تعداد پرونده‌ها از سقف " + BatchWordPdfMax + " بیشتر است. فیلتر را تنگ‌تر کنید.");
+                    return;
+                }
+
+                if (Msg.Show(
+                        cases.Rows.Count + " پرونده برای عکس و اسناد پوشه‌بندی می‌شود. ادامه می‌دهید؟",
+                        "خروجی عکس و اسناد جمعی",
+                        MessageBoxButtons.YesNo,
+                        MessageBoxIcon.Question) != DialogResult.Yes)
+                    return;
+
+                _exportCts = new CancellationTokenSource();
+                CancellationToken token = _exportCts.Token;
+                progress = ShowExportProgress("خروجی عکس و اسناد جمعی", _exportCts);
+                SetExportMenusEnabled(false);
+                Cursor = Cursors.WaitCursor;
+
+                int copied = 0;
+                int done = 0;
+                string lastFolder = "";
+                await Task.Run(() =>
+                {
+                    foreach (DataRow row in cases.Rows)
+                    {
+                        token.ThrowIfCancellationRequested();
+                        int caseId = Convert.ToInt32(row["CasID"]);
+                        string caseCode = row["Code"] == DBNull.Value ? "" : row["Code"].ToString();
+                        if (string.IsNullOrWhiteSpace(caseCode)) continue;
+
+                        lastFolder = FileHelper.EnsureCaseStructure(caseCode);
+                        copied += CopyCaseMediaFromDatabase(caseId, caseCode);
+                        done++;
+                    }
+                }, token);
+
+                AuditLogger.Log("خروجی عکس و اسناد جمعی", "TblCase", 0, "",
+                    "count=" + cases.Rows.Count + " copied=" + copied);
+                UiTheme.ShowSuccess(this,
+                    "پوشه‌بندی عکس و اسناد جمعی انجام شد." + Environment.NewLine +
+                    "پرونده: " + done + "   فایل کپی‌شده: " + copied);
+                if (!string.IsNullOrWhiteSpace(lastFolder))
+                    FileHelper.OpenFolder(Path.GetDirectoryName(lastFolder));
+            }
+            catch (OperationCanceledException)
+            {
+                Msg.Show("خروجی عکس و اسناد لغو شد.");
+            }
+            catch (Exception ex)
+            {
+                Msg.Show("خطا در خروجی عکس و اسناد جمعی: " + ex.Message);
+            }
+            finally
+            {
+                Cursor = Cursors.Default;
+                SetExportMenusEnabled(true);
+                CloseExportProgress(progress);
+            }
+        }
+
+        private int CopyCaseMediaFromDatabase(int caseId, string caseCode)
+        {
+            int copied = 0;
+            using (var con = db.GetConnection())
+            {
+                con.Open();
+                using (var cmd = new SQLiteCommand(@"
+SELECT IFNULL(PhotoPath, ''), IFNULL(FamilyPhotoPath, '')
+FROM TblCase WHERE CasID = @Id;", con))
+                {
+                    cmd.Parameters.AddWithValue("@Id", caseId);
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        if (reader.Read())
+                        {
+                            copied += CopyMediaIfExists(reader.GetString(0), caseCode, FileHelper.SectionHeadPhoto);
+                            copied += CopyMediaIfExists(reader.GetString(1), caseCode, FileHelper.SectionFamilyPhoto);
+                        }
+                    }
+                }
+
+                using (var cmd = new SQLiteCommand(@"
+SELECT IFNULL(DocFilePath, '')
+FROM TblDocs
+WHERE CasID = @Id AND IFNULL(IsArchived, 0) = 0 AND IFNULL(DocFilePath, '') <> '';", con))
+                {
+                    cmd.Parameters.AddWithValue("@Id", caseId);
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        while (reader.Read())
+                            copied += CopyMediaIfExists(reader.GetString(0), caseCode, FileHelper.SectionDocs);
+                    }
+                }
+            }
+            return copied;
+        }
+
+        private int CopyMediaIfExists(string sourcePath, string caseCode, string section)
+        {
+            if (string.IsNullOrWhiteSpace(sourcePath) || !File.Exists(sourcePath))
+                return 0;
+
+            string saved = FileHelper.SaveFileToCaseFolder(
+                sourcePath, caseCode, section, FileHelper.CleanName(caseCode), "");
+            return string.IsNullOrWhiteSpace(saved) ? 0 : 1;
+        }
+
         private string SaveGeneratedFileToCaseCodeFolder(string sourceFilePath)
         {
             return SaveGeneratedFileToCaseCodeFolder(sourceFilePath, txtCode.Text.Trim());
@@ -5803,115 +6776,103 @@ WHERE CasID = @CasID", con))
 
         private void btnPrint_Click(object sender, EventArgs e)
         {
-            if (!CaseManagement.Enterprise.PermissionService.Require("Case.Print"))
+            if (!RequireOpenCaseForPrint()) return;
+
+            try
             {
-                Msg.Show("کاربر اجازه چاپ پرونده را ندارد.");
-                return;
+                var titles = new List<string> { "خلاصه پرونده" };
+                ReportDoc doc = CaseFileReport.Build(db, currentCaseId, txtCode.Text.Trim(),
+                    titles, false, false, false);
+                doc.Preview(this);
             }
-
-            if (currentCaseId == 0)
+            catch (Exception ex)
             {
-                Msg.Show("اول پرونده را ذخیره یا از لیست انتخاب کن");
-                return;
+                Msg.Show("خطا در چاپ خلاصه: " + ex.Message);
             }
-
-            var fields = new List<System.Collections.Generic.KeyValuePair<string, string>>
-            {
-                new System.Collections.Generic.KeyValuePair<string, string>("کد اختصاصی", txtCode.Text.Trim()),
-                new System.Collections.Generic.KeyValuePair<string, string>("شماره فرم", txtFormNo.Text.Trim()),
-                new System.Collections.Generic.KeyValuePair<string, string>("شماره پرونده", txtCaseNo.Text.Trim()),
-                new System.Collections.Generic.KeyValuePair<string, string>("تاریخ تشکیل", CaseManagement.Helpers.PersianDateHelper.ToPersianDateString(dtpCaseDate.Value)),
-                new System.Collections.Generic.KeyValuePair<string, string>("زون", txtZone.Text.Trim()),
-                new System.Collections.Generic.KeyValuePair<string, string>("ولایت", txtProvince.Text.Trim()),
-                new System.Collections.Generic.KeyValuePair<string, string>("ولسوالی", txtDistrict.Text.Trim()),
-                new System.Collections.Generic.KeyValuePair<string, string>("نوع درخواست", txtRequestType.Text.Trim()),
-                new System.Collections.Generic.KeyValuePair<string, string>("اولویت‌بندی اقتصادی", txtPriorityLevel.Text.Trim()),
-                new System.Collections.Generic.KeyValuePair<string, string>("نام سرپرست", txtHeadFullName.Text.Trim()),
-                new System.Collections.Generic.KeyValuePair<string, string>("نام پدر سرپرست", txtHeadFatherName.Text.Trim()),
-                new System.Collections.Generic.KeyValuePair<string, string>("سیادت سرپرست", txtHeadSadat.Text.Trim()),
-                new System.Collections.Generic.KeyValuePair<string, string>("مذهب", txtReligion.Text.Trim()),
-                new System.Collections.Generic.KeyValuePair<string, string>("شماره تذکره سرپرست", txtHeadTazkiraNo.Text.Trim()),
-                new System.Collections.Generic.KeyValuePair<string, string>("سکونت اصلی", txtHeadOriginalResidence.Text.Trim()),
-                new System.Collections.Generic.KeyValuePair<string, string>("سکونت فعلی", txtHeadCurrentResidence.Text.Trim()),
-                new System.Collections.Generic.KeyValuePair<string, string>("شماره تماس", txtPhone.Text.Trim()),
-                new System.Collections.Generic.KeyValuePair<string, string>("شماره تماس اقارب", txtRelativePhone.Text.Trim()),
-                new System.Collections.Generic.KeyValuePair<string, string>("تحت پوشش دیگر مؤسسات", txtCoveredByOrg.Text.Trim()),
-                new System.Collections.Generic.KeyValuePair<string, string>("اسامی مؤسسات تحت پوشش", txtCoveredByOrgNames.Text.Trim()),
-                new System.Collections.Generic.KeyValuePair<string, string>("شغل", txtJob.Text.Trim()),
-                new System.Collections.Generic.KeyValuePair<string, string>("مهارت", txtSkill.Text.Trim()),
-                new System.Collections.Generic.KeyValuePair<string, string>("نوع معلولیت", txtDisabilityType.Text.Trim()),
-                new System.Collections.Generic.KeyValuePair<string, string>("درجه معلولیت", txtDisabilityDegree.Text.Trim()),
-                new System.Collections.Generic.KeyValuePair<string, string>("وضعیت تأهل", txtMaritalStatus.Text.Trim()),
-                new System.Collections.Generic.KeyValuePair<string, string>("تحصیلات", txtEducationLevel.Text.Trim()),
-                new System.Collections.Generic.KeyValuePair<string, string>("وضعیت خدمات", txtServiceStatus.Text.Trim()),
-                new System.Collections.Generic.KeyValuePair<string, string>("دلیل قطع موقت", txtStopReason.Text.Trim()),
-                new System.Collections.Generic.KeyValuePair<string, string>("شرح وضعیت فوری", txtUrgentSituation.Text.Trim()),
-            };
-
-            PrintHelper.PrintKeyValueDocument(this, "پرونده — " + txtCode.Text.Trim(), fields);
         }
 
         private async void btnExportExcel_Click(object sender, EventArgs e)
         {
+            Form progress = null;
             try
             {
-                // پیش از ساخت خروجی، دیالوگِ فیلترهای پیشرفته نمایش داده می‌شود.
-                // انصراف از این دیالوگ = انصراف از کل خروجی.
-                Helpers.ReportFilterCriteria filter = Helpers.FrmReportFilter.Ask(this);
-                if (filter == null) return;
+                if (!CaseManagement.Enterprise.PermissionService.Require("Case.BatchExport"))
+                {
+                    Msg.Show("کاربر اجازه خروجی جمعی و گزارش اکسل را ندارد.");
+                    return;
+                }
+
+                var filter = new Helpers.ReportFilterCriteria
+                {
+                    Province = _incomingFilterProvince ?? "",
+                    District = _incomingFilterDistrict ?? "",
+                    ServiceStatus = GetSelectedServiceStatusFilter()
+                };
 
                 string rootFolder = FileHelper.GetOrChooseBaseRootFolder();
-
                 if (string.IsNullOrWhiteSpace(rootFolder))
                 {
                     Msg.Show("محل ذخیره فایل‌ها مشخص نیست");
                     return;
                 }
 
-                string reportsFolder = Path.Combine(rootFolder, "ExcelReports");
-                Directory.CreateDirectory(reportsFolder);
-
-                string outputPath = Path.Combine(
-                    reportsFolder,
-                    "FullExcelReport_" + DateTime.Now.ToString("yyyyMMdd_HHmmss", System.Globalization.CultureInfo.InvariantCulture) + ".xlsx");
-
-                // خروجی اکسل همان فیلترِ «وضعیت خدمات» گرید را دنبال می‌کند مگر
-                // اینکه کاربر در دیالوگِ فیلترِ پیشرفته مقدارِ دیگری انتخاب کرده
-                // باشد. مقدار باید پیش از Task.Run خوانده شود (دسترسی به کنترل
-                // از نخِ پس‌زمینه مجاز نیست).
-                string exportServiceStatus = string.IsNullOrWhiteSpace(filter.ServiceStatus)
-                    ? GetSelectedServiceStatusFilter()
-                    : filter.ServiceStatus;
-
-                Cursor oldCursor = Cursor;
-                Cursor = Cursors.WaitCursor;
-                btnExportExcel.Enabled = false;
-
-                try
+                string reportsFolder;
+                if (!string.IsNullOrWhiteSpace(filter.Province))
                 {
-                    // آموزش — بخش عملکرد: ساخت گزارش کامل اکسل روی همه پرونده‌ها
-                    // با رشد داده می‌تواند چند ثانیه طول بکشد؛ Task.Run از فریز
-                    // شدن رابط کاربری در این مدت جلوگیری می‌کند.
-                    await Task.Run(() =>
+                    string classified = FileHelper.GetClassifiedFolder(
+                        filter.Province,
+                        string.IsNullOrWhiteSpace(filter.District) ? "نامشخص" : filter.District,
+                        "همه",
+                        string.IsNullOrWhiteSpace(filter.ServiceStatus) ? "همه" : filter.ServiceStatus);
+                    if (string.IsNullOrWhiteSpace(classified))
                     {
-                        ExcelReportExporter exporter = new ExcelReportExporter();
-                        exporter.ExportFullReport(outputPath, exportServiceStatus, filter);
-                    });
+                        Msg.Show("ساخت پوشهٔ طبقه‌بندی ممکن نشد: " + FileHelper.LastError);
+                        return;
+                    }
+                    reportsFolder = Path.Combine(classified, "ExcelReports");
                 }
-                finally
+                else
                 {
-                    Cursor = oldCursor;
-                    btnExportExcel.Enabled = true;
+                    reportsFolder = Path.Combine(rootFolder, "ExcelReports");
                 }
 
-                Msg.Show(
-                    "فایل اکسل کامل با موفقیت ساخته شد:" +
-                    Environment.NewLine +
-                    outputPath);
+                Directory.CreateDirectory(reportsFolder);
+                string stamp = DateTime.Now.ToString("yyyyMMdd_HHmmss", System.Globalization.CultureInfo.InvariantCulture);
+                string outputPath = Path.Combine(reportsFolder, "CaseList_" + stamp + ".xlsx");
+                if (File.Exists(outputPath))
+                    outputPath = Path.Combine(reportsFolder, FileHelper.UniqueName("CaseList_" + stamp, 1) + ".xlsx");
+
+                _exportCts = new CancellationTokenSource();
+                CancellationToken token = _exportCts.Token;
+                progress = ShowExportProgress("گزارش اکسل پرونده‌ها", _exportCts);
+                SetExportMenusEnabled(false);
+                Cursor = Cursors.WaitCursor;
+
+                await Task.Run(() =>
+                {
+                    token.ThrowIfCancellationRequested();
+                    ExcelReportExporter exporter = new ExcelReportExporter();
+                    exporter.ExportFullReport(outputPath, filter.ServiceStatus, filter, token);
+                }, token);
+
+                AuditLogger.Log("گزارش اکسل پرونده‌ها", "TblCase", 0, "", outputPath);
+                UiTheme.ShowSuccess(this,
+                    "گزارش اکسل پرونده‌ها ساخته شد:" + Environment.NewLine + outputPath);
+                FileHelper.OpenFolder(reportsFolder);
+            }
+            catch (OperationCanceledException)
+            {
+                Msg.Show("گزارش اکسل لغو شد.");
             }
             catch (Exception ex)
             {
                 Msg.Show("خطا در ساخت اکسل: " + ex.Message);
+            }
+            finally
+            {
+                Cursor = Cursors.Default;
+                SetExportMenusEnabled(true);
+                CloseExportProgress(progress);
             }
         }
 
@@ -5924,20 +6885,24 @@ WHERE CasID = @CasID", con))
             out int startFormNo,
             out int endFormNo,
             out bool exportWord,
-            out bool exportPdf)
+            out bool exportPdf,
+            out bool askAdvancedFilter)
         {
             startFormNo = 0;
             endFormNo = 0;
             exportWord = true;
             exportPdf = true;
+            askAdvancedFilter = false;
 
             using (Form form = new Form())
+            using (Label lblHint = new Label())
             using (Label lblStart = new Label())
             using (Label lblEnd = new Label())
             using (TextBox txtStart = new TextBox())
             using (TextBox txtEnd = new TextBox())
             using (CheckBox chkWord = new CheckBox())
             using (CheckBox chkPdf = new CheckBox())
+            using (CheckBox chkAdvanced = new CheckBox())
             using (Button btnOk = new Button())
             using (Button btnCancel = new Button())
             {
@@ -5946,50 +6911,61 @@ WHERE CasID = @CasID", con))
                 form.FormBorderStyle = FormBorderStyle.FixedDialog;
                 form.MaximizeBox = false;
                 form.MinimizeBox = false;
-                form.ClientSize = new Size(420, 230);
+                form.ClientSize = new Size(440, 280);
                 form.RightToLeft = RightToLeft.Yes;
                 form.RightToLeftLayout = true;
 
+                lblHint.AutoSize = false;
+                lblHint.Size = new Size(400, 36);
+                lblHint.Location = new Point(20, 12);
+                lblHint.Text = "اگر در جدول ردیفی انتخاب شده باشد (حتی یک ردیف) فقط همان‌ها صادر می‌شوند؛ وگرنه نتیجهٔ جستجوی جاری. بازهٔ شماره فرم اختیاری است.";
+
                 lblStart.AutoSize = true;
                 lblStart.Text = "شروع شماره فرم:";
-                lblStart.Location = new Point(285, 30);
+                lblStart.Location = new Point(285, 58);
 
-                txtStart.Location = new Point(35, 27);
+                txtStart.Location = new Point(35, 55);
                 txtStart.Size = new Size(220, 27);
 
                 lblEnd.AutoSize = true;
                 lblEnd.Text = "ختم شماره فرم:";
-                lblEnd.Location = new Point(285, 72);
+                lblEnd.Location = new Point(285, 100);
 
-                txtEnd.Location = new Point(35, 69);
+                txtEnd.Location = new Point(35, 97);
                 txtEnd.Size = new Size(220, 27);
 
                 chkWord.AutoSize = true;
                 chkWord.Text = "ساخت Word";
                 chkWord.Checked = true;
-                chkWord.Location = new Point(250, 115);
+                chkWord.Location = new Point(250, 142);
 
                 chkPdf.AutoSize = true;
                 chkPdf.Text = "ساخت PDF";
                 chkPdf.Checked = true;
-                chkPdf.Location = new Point(130, 115);
+                chkPdf.Location = new Point(130, 142);
+
+                chkAdvanced.AutoSize = true;
+                chkAdvanced.Text = "فیلتر پیشرفته (اختیاری)";
+                chkAdvanced.Location = new Point(200, 178);
 
                 btnOk.Text = "شروع خروجی";
-                btnOk.Location = new Point(218, 165);
+                btnOk.Location = new Point(218, 220);
                 btnOk.Size = new Size(115, 35);
                 btnOk.DialogResult = DialogResult.OK;
 
                 btnCancel.Text = "انصراف";
-                btnCancel.Location = new Point(82, 165);
+                btnCancel.Location = new Point(82, 220);
                 btnCancel.Size = new Size(95, 35);
                 btnCancel.DialogResult = DialogResult.Cancel;
 
+                form.Controls.Add(lblHint);
                 form.Controls.Add(lblStart);
                 form.Controls.Add(txtStart);
                 form.Controls.Add(lblEnd);
                 form.Controls.Add(txtEnd);
                 form.Controls.Add(chkWord);
                 form.Controls.Add(chkPdf);
+                form.Controls.Add(chkAdvanced);
                 form.Controls.Add(btnOk);
                 form.Controls.Add(btnCancel);
                 form.AcceptButton = btnOk;
@@ -5998,28 +6974,34 @@ WHERE CasID = @CasID", con))
                 if (form.ShowDialog(this) != DialogResult.OK)
                     return false;
 
-                if (!int.TryParse(txtStart.Text.Trim(), out startFormNo) ||
-                    !int.TryParse(txtEnd.Text.Trim(), out endFormNo))
+                string startText = txtStart.Text.Trim();
+                string endText = txtEnd.Text.Trim();
+                if (startText != "" || endText != "")
                 {
-                    Msg.Show("شماره فرم شروع و ختم باید عدد باشد");
-                    return false;
-                }
+                    if (!int.TryParse(startText, out startFormNo) ||
+                        !int.TryParse(endText, out endFormNo))
+                    {
+                        Msg.Show("شماره فرم شروع و ختم باید عدد باشد، یا هر دو را خالی بگذارید");
+                        return false;
+                    }
 
-                if (startFormNo <= 0 || endFormNo <= 0)
-                {
-                    Msg.Show("شماره فرم باید بزرگتر از صفر باشد");
-                    return false;
-                }
+                    if (startFormNo <= 0 || endFormNo <= 0)
+                    {
+                        Msg.Show("شماره فرم باید بزرگتر از صفر باشد");
+                        return false;
+                    }
 
-                if (startFormNo > endFormNo)
-                {
-                    int temp = startFormNo;
-                    startFormNo = endFormNo;
-                    endFormNo = temp;
+                    if (startFormNo > endFormNo)
+                    {
+                        int temp = startFormNo;
+                        startFormNo = endFormNo;
+                        endFormNo = temp;
+                    }
                 }
 
                 exportWord = chkWord.Checked;
                 exportPdf = chkPdf.Checked;
+                askAdvancedFilter = chkAdvanced.Checked;
 
                 if (!exportWord && !exportPdf)
                 {
@@ -6041,15 +7023,24 @@ WHERE CasID = @CasID", con))
 
         private DataTable GetCasesForBatchExport(int startFormNo, int endFormNo, Helpers.ReportFilterCriteria filter)
         {
+            // آموزش — رفعِ رفتارِ خطرناک: شرط قبلاً «> 1» بود، یعنی اگر کاربر
+            // دقیقاً *یک* ردیف را انتخاب می‌کرد، این شرط رد می‌شد و به‌جای همان
+            // یک پرونده، کلِ نتیجهٔ فیلترِ جاری صادر می‌شد — بی‌هیچ هشداری.
+            // با «>= 1» هر انتخابِ صریحِ کاربر (حتی یک ردیف) دقیقاً همان
+            // ردیف‌ها را صادر می‌کند؛ نبودِ انتخاب همچنان یعنی «نتیجهٔ جستجو».
+            List<int> selectedIds = GetSelectedGridCaseIds();
+            if (selectedIds.Count >= 1)
+                return GetCasesByIds(selectedIds);
+
             using (var con = db.GetConnection())
             using (var cmd = new SQLiteCommand(@"
                 SELECT CasID, FormNo, Code
                 FROM TblCase
-                WHERE CAST(FormNo AS INTEGER) BETWEEN @StartFormNo AND @EndFormNo
-                  AND (@CID = 0 OR CenterID = @CID)
-                  AND (@ServiceStatus = '' OR ServiceStatus = @ServiceStatus)
+                " + BuildCasesWhere() + @"
+                  AND (@StartFormNo = 0 OR CAST(FormNo AS INTEGER) BETWEEN @StartFormNo AND @EndFormNo)
                   AND (@Province = '' OR Province = @Province)
                   AND (@District = '' OR District = @District)
+                  AND (@Village = '' OR Site = @Village OR IFNULL(MainResidenceVillage, '') = @Village)
                   AND (@FamilyType = '' OR RequestType = @FamilyType)
                   AND (@DateFrom = '' OR CaseDate >= @DateFrom)
                   AND (@DateTo = '' OR CaseDate <= @DateTo)
@@ -6058,19 +7049,40 @@ WHERE CasID = @CasID", con))
                   AND (@MaxMembers = -1 OR (SELECT COUNT(*) FROM TblFamily f WHERE f.CasID = TblCase.CasID) <= @MaxMembers)
                 ORDER BY CAST(FormNo AS INTEGER), CasID", con))
             {
+                BindCasesParameters(cmd);
                 AddIntParameter(cmd, "@StartFormNo", startFormNo);
                 AddIntParameter(cmd, "@EndFormNo", endFormNo);
-                cmd.Parameters.AddWithValue("@CID", Helpers.SecurityContext.CenterFilterId);
                 cmd.Parameters.AddWithValue("@MinMembers", filter?.MinMemberCount ?? -1);
                 cmd.Parameters.AddWithValue("@MaxMembers", filter?.MaxMemberCount ?? -1);
-                // خروجی جمعیِ بازه‌ی شماره فرم هم از فیلترِ وضعیت خدماتِ گرید پیروی
-                // می‌کند مگر اینکه کاربر در دیالوگِ فیلترِ پیشرفته مقدارِ دیگری داده باشد.
-                AddStringParameter(cmd, "@ServiceStatus",
-                    string.IsNullOrWhiteSpace(filter?.ServiceStatus) ? GetSelectedServiceStatusFilter() : filter.ServiceStatus);
+
+                // ─── منبعِ واحدِ فیلتر (رفعِ فیلترِ دوگانهٔ پنهان) ──────────────
+                // آموزش — تا پیش از این، وقتی کاربر دیالوگِ «فیلتر پیشرفته» را
+                // باز می‌کرد، فیلترهای آن دیالوگ *علاوه بر* فیلترهای نوارِ
+                // جستجوی گرید و فیلترِ ورودیِ داشبورد (ولایت/ولسوالی/وضعیت)
+                // اعمال می‌شدند. نتیجه دو لایه فیلترِ روی‌هم بود که کاربر فقط
+                // یکی‌شان را می‌دید: انتخابِ «ولایت غور» در دیالوگ، وقتی گرید
+                // روی «کابل» فیلتر بود، بی‌صدا صفر نتیجه می‌داد.
+                //
+                // قاعدهٔ صریح: اگر دیالوگ باز شده باشد، همان دیالوگ *تنها*
+                // مرجعِ فیلترهای کاربری است و فیلترهای گرید خنثی می‌شوند؛ اگر
+                // باز نشده باشد (filter == null)، فیلترهای گرید معتبرند.
+                //
+                // ⚠ @CID عمداً خنثی *نمی‌شود* — جداسازیِ مرکز امنیت است، نه
+                // فیلترِ کاربری، و هیچ دیالوگی نباید بتواند خاموشش کند.
+                if (filter != null)
+                {
+                    cmd.Parameters["@Code"].Value = "";
+                    cmd.Parameters["@Head"].Value = "";
+                    cmd.Parameters["@Tazkira"].Value = "";
+                    cmd.Parameters["@Phone"].Value = "";
+                    cmd.Parameters["@Prov"].Value = "";
+                    cmd.Parameters["@Dist"].Value = "";
+                    cmd.Parameters["@ServiceStatus"].Value = filter.ServiceStatus ?? "";
+                }
+
                 cmd.Parameters.AddWithValue("@Province", filter?.Province ?? "");
-                // ولسوالی حالا از کمبوی آبشاری (نه تایپِ آزاد) می‌آید، پس
-                // مقایسه‌ی دقیق (=) به‌جای LIKE استفاده می‌شود.
                 cmd.Parameters.AddWithValue("@District", filter?.District ?? "");
+                cmd.Parameters.AddWithValue("@Village", filter?.Village ?? "");
                 cmd.Parameters.AddWithValue("@FamilyType", filter?.FamilyType ?? "");
                 cmd.Parameters.AddWithValue("@DateFrom", filter?.RegistrationDateFrom.HasValue == true
                     ? filter.RegistrationDateFrom.Value.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) : "");
@@ -6088,19 +7100,79 @@ WHERE CasID = @CasID", con))
             }
         }
 
+        private List<int> GetSelectedGridCaseIds()
+        {
+            var ids = new List<int>();
+            if (dgvCases == null || !dgvCases.Columns.Contains("CasID"))
+                return ids;
+
+            foreach (DataGridViewRow row in dgvCases.SelectedRows)
+            {
+                if (row == null || row.IsNewRow) continue;
+                object value = row.Cells["CasID"].Value;
+                if (value == null || value == DBNull.Value) continue;
+                int id;
+                if (int.TryParse(Convert.ToString(value), out id) && id > 0 && !ids.Contains(id))
+                    ids.Add(id);
+            }
+            return ids;
+        }
+
+        private DataTable GetCasesByIds(List<int> ids)
+        {
+            var dt = new DataTable();
+            if (ids == null || ids.Count == 0) return dt;
+
+            var placeholders = new List<string>();
+            for (int i = 0; i < ids.Count; i++)
+                placeholders.Add("@Id" + i);
+
+            // آموزش — جداسازیِ مرکز اینجا هم اعمال می‌شود، نه فقط در گرید.
+            // شناسه‌ها از ردیف‌های انتخاب‌شدهٔ گرید می‌آیند و گرید خودش با
+            // @CID فیلتر شده، پس در مسیرِ فعلیِ رابط کاربری نشتی وجود ندارد.
+            // ولی هر کوئریِ خروجی باید خودش CenterFilterId را تضمین کند تا با
+            // اولین صدازننده‌ی تازه (که شناسه را از جای دیگری بگیرد) این تضمین
+            // بی‌صدا از بین نرود — همان قاعده‌ای که LoadCaseByQuery و
+            // BuildCasesWhere از قبل رعایت می‌کنند.
+            using (var con = db.GetConnection())
+            using (var cmd = new SQLiteCommand(
+                "SELECT CasID, FormNo, Code FROM TblCase WHERE CasID IN (" +
+                string.Join(",", placeholders.ToArray()) +
+                ") AND (@CID = 0 OR CenterID = @CID) ORDER BY CAST(FormNo AS INTEGER), CasID", con))
+            {
+                for (int i = 0; i < ids.Count; i++)
+                    cmd.Parameters.AddWithValue("@Id" + i, ids[i]);
+                cmd.Parameters.AddWithValue("@CID", Helpers.SecurityContext.CenterFilterId);
+                con.Open();
+                using (var reader = cmd.ExecuteReader())
+                    dt.Load(reader);
+            }
+            return dt;
+        }
+
         private async void btnBatchExport_Click(object sender, EventArgs e)
         {
-            // پیش از هر خروجی جمعی، دیالوگِ فیلترهای پیشرفته نمایش داده می‌شود.
-            Helpers.ReportFilterCriteria filter = Helpers.FrmReportFilter.Ask(this);
-            if (filter == null) return;
+            if (!CaseManagement.Enterprise.PermissionService.Require("Case.BatchExport"))
+            {
+                Msg.Show("کاربر اجازه خروجی جمعی ندارد.");
+                return;
+            }
 
             int startFormNo;
             int endFormNo;
             bool exportWord;
             bool exportPdf;
+            bool askAdvanced;
 
-            if (!TryGetBatchExportOptions(out startFormNo, out endFormNo, out exportWord, out exportPdf))
+            if (!TryGetBatchExportOptions(out startFormNo, out endFormNo, out exportWord, out exportPdf, out askAdvanced))
                 return;
+
+            Helpers.ReportFilterCriteria filter = null;
+            if (askAdvanced)
+            {
+                filter = Helpers.FrmReportFilter.Ask(this);
+                if (filter == null) return;
+            }
 
             if (exportPdf)
             {
@@ -6144,9 +7216,7 @@ WHERE CasID = @CasID", con))
                 }
             }
 
-            string oldText = btnBatchExport.Text;
-            Cursor oldCursor = Cursor;
-
+            Form progress = null;
             int wordCount = 0;
             int pdfCount = 0;
             int errorCount = 0;
@@ -6162,32 +7232,54 @@ WHERE CasID = @CasID", con))
                     return;
                 }
 
-                // یک‌بار برای کلِ دسته پرسیده می‌شود، نه برای هر پرونده. همان
-                // دیالوگِ انتخابِ الگوی خروجیِ تک‌پرونده‌ای استفاده می‌شود تا
-                // منطقِ انتخابِ الگو بین خروجیِ تکی و جمعی یکسان بماند — به
-                // درخواستِ کاربر، الگوی قدیمیِ RDLC هم برای خروجیِ جمعی قابلِ
-                // انتخاب است (هر پرونده مستقیم رندر می‌شود، بدون فایلِ میانی).
-                string templatePath = ChooseWordTemplatePath(true);
-                if (string.IsNullOrEmpty(templatePath)) return;     // انصراف کاربر
+                if (cases.Rows.Count > BatchSearchRejectCount)
+                {
+                    Msg.Show(
+                        "نتیجهٔ جستجو (" + cases.Rows.Count +
+                        " پرونده) برای Word/PDF جمعی خیلی بزرگ است. فیلتر را تنگ‌تر کنید یا از گزارش اکسل پرونده‌ها استفاده کنید.");
+                    return;
+                }
+
+                if (cases.Rows.Count > BatchWordPdfMax)
+                {
+                    Msg.Show(
+                        "تعداد پرونده‌ها (" + cases.Rows.Count +
+                        ") از سقف خروجی Word/PDF (" + BatchWordPdfMax +
+                        ") بیشتر است. فیلتر را تنگ‌تر کنید یا از گزارش اکسل پرونده‌ها استفاده کنید.");
+                    return;
+                }
+
+                int fileCount = cases.Rows.Count * ((exportWord ? 1 : 0) + (exportPdf ? 1 : 0));
+                if (Msg.Show(
+                        fileCount + " فایل ساخته می‌شود. ادامه می‌دهید؟",
+                        "خروجی جمعی",
+                        MessageBoxButtons.YesNo,
+                        MessageBoxIcon.Question) != DialogResult.Yes)
+                    return;
+
+                string templatePath = ChooseWordTemplatePath(false);
+                if (string.IsNullOrEmpty(templatePath)) return;
 
                 bool isRdlc = templatePath == ReportTemplateHelper.RdlcKey;
                 OpenXmlCaseExporter exporter = new OpenXmlCaseExporter();
 
+                _exportCts = new CancellationTokenSource();
+                CancellationToken token = _exportCts.Token;
+                progress = ShowExportProgress("خروجی جمعی Word / PDF", _exportCts);
+                SetExportMenusEnabled(false);
                 Cursor = Cursors.WaitCursor;
-                btnBatchExport.Enabled = false;
-                btnBatchExport.Text = "در حال ساخت...";
 
                 bool exportWordLocal = exportWord;
                 bool exportPdfLocal = exportPdf;
 
                 await Task.Run(() =>
                 {
+                    token.ThrowIfCancellationRequested();
                     if (isRdlc)
                     {
-                        // الگوی قدیمی: هر پرونده مستقیماً از RDLC رندر می‌شود
-                        // (RdlcExportHelper)، بدون Word و بدون فایلِ میانیِ docx.
                         foreach (DataRow row in cases.Rows)
                         {
+                            token.ThrowIfCancellationRequested();
                             string caseCode = "", formNo = "";
                             try
                             {
@@ -6249,6 +7341,7 @@ WHERE CasID = @CasID", con))
                     var pending = new List<PendingBatchFile>();
                     foreach (DataRow row in cases.Rows)
                     {
+                        token.ThrowIfCancellationRequested();
                         string caseCode = "", formNo = "", tempDocx = "";
                         try
                         {
@@ -6331,7 +7424,7 @@ WHERE CasID = @CasID", con))
                             {
                                 try { if (File.Exists(pdfPath)) File.Delete(pdfPath); } catch { }
                             }
-                        }, null);
+                        }, delegate { return token.IsCancellationRequested; });
 
                         foreach (PendingBatchFile p in pending)
                         {
@@ -6360,7 +7453,15 @@ WHERE CasID = @CasID", con))
                         message += Environment.NewLine + errors[i];
                 }
 
+                AuditLogger.Log("خروجی جمعی", "TblCase", 0, "",
+                    "count=" + cases.Rows.Count + " word=" + wordCount +
+                    " pdf=" + pdfCount + " errors=" + errorCount +
+                    " user=" + (Helpers.SecurityContext.Username ?? ""));
                 Msg.Show(message);
+            }
+            catch (OperationCanceledException)
+            {
+                Msg.Show("خروجی جمعی لغو شد.");
             }
             catch (Exception ex)
             {
@@ -6368,9 +7469,9 @@ WHERE CasID = @CasID", con))
             }
             finally
             {
-                Cursor = oldCursor;
-                btnBatchExport.Enabled = true;
-                btnBatchExport.Text = oldText;
+                Cursor = Cursors.Default;
+                SetExportMenusEnabled(true);
+                CloseExportProgress(progress);
             }
         }
 
@@ -6380,6 +7481,78 @@ WHERE CasID = @CasID", con))
         // ناامن اضافه را می‌بندد: این دو دکمه قبلاً بدون هیچ محدودیت نقشی
         // مستقیماً BackupHelper را صدا می‌زدند، در حالی‌که مسیر تنظیمات از قبل
         // به SuperAdmin محدود شده است.
+
+        private void SetExportMenusEnabled(bool enabled)
+        {
+            if (_btnCurrentCaseMenu != null) _btnCurrentCaseMenu.Enabled = enabled;
+            if (_btnBatchOpsMenu != null) _btnBatchOpsMenu.Enabled = enabled;
+            if (_btnExcelList != null) _btnExcelList.Enabled = enabled;
+        }
+
+        private Form ShowExportProgress(string title, CancellationTokenSource cts)
+        {
+            var form = new Form();
+            form.Text = title;
+            form.StartPosition = FormStartPosition.CenterParent;
+            form.FormBorderStyle = FormBorderStyle.FixedDialog;
+            form.MaximizeBox = false;
+            form.MinimizeBox = false;
+            form.ShowInTaskbar = false;
+            form.ClientSize = new Size(380, 130);
+            form.RightToLeft = RightToLeft.Yes;
+            form.RightToLeftLayout = true;
+
+            var lbl = new Label();
+            lbl.Text = "در حال ساخت خروجی… می‌توانید انصراف بزنید.";
+            lbl.AutoSize = false;
+            lbl.SetBounds(16, 16, 348, 36);
+
+            var bar = new ProgressBar();
+            bar.Style = ProgressBarStyle.Marquee;
+            bar.MarqueeAnimationSpeed = 30;
+            bar.SetBounds(16, 56, 348, 18);
+
+            var btnCancel = new Button();
+            btnCancel.Text = "انصراف";
+            btnCancel.SetBounds(250, 86, 114, 30);
+            btnCancel.Click += delegate
+            {
+                if (cts != null) cts.Cancel();
+                btnCancel.Enabled = false;
+            };
+
+            form.FormClosing += delegate
+            {
+                try
+                {
+                    if (cts != null && !cts.IsCancellationRequested)
+                        cts.Cancel();
+                }
+                catch { }
+            };
+            form.Controls.Add(lbl);
+            form.Controls.Add(bar);
+            form.Controls.Add(btnCancel);
+            form.Show(this);
+            return form;
+        }
+
+        private void CloseExportProgress(Form progress)
+        {
+            try
+            {
+                if (_exportCts != null)
+                {
+                    _exportCts.Dispose();
+                    _exportCts = null;
+                }
+            }
+            catch { }
+
+            if (progress == null || progress.IsDisposed) return;
+            try { progress.Close(); } catch { }
+            try { progress.Dispose(); } catch { }
+        }
 
         private string ConvertDocxToPdfWithLibreOffice(string docxPath)
         {

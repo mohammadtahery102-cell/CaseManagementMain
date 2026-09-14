@@ -23,9 +23,33 @@ namespace CaseManagement.Helpers
         public string DataColumn;   // نام ستون در نتیجه‌ی کوئری LoadCases
         public bool IsPhoto;        // ستون تصویری (thumbnail) به‌جای متن
 
+        // آموزش — نسبتِ ابعادِ thumbnail. تا پیش از این، تولیدکنندهٔ thumbnail
+        // همهٔ عکس‌ها را در یک مربع می‌کشید؛ نتیجه‌اش عکسِ تغییرشکل‌یافته و
+        // کوچک بود. حالا هر ستونِ تصویری نسبتِ خودش را اعلام می‌کند:
+        //   عکسِ سرپرست → ۳:۴ (پرتره، مثل عکسِ تذکره)
+        //   عکسِ جمعی    → ۱۶:۹ (افقی، چون عکسِ خانواده عریض گرفته می‌شود)
+        // مقدارِ صفر برای ستونِ غیرتصویری بی‌معناست و استفاده نمی‌شود.
+        public int AspectW;
+        public int AspectH;
+
         public CaseGridColumn(string key, string displayName, string dataColumn, bool isPhoto)
+            : this(key, displayName, dataColumn, isPhoto, 3, 4)
+        {
+        }
+
+        public CaseGridColumn(string key, string displayName, string dataColumn, bool isPhoto,
+                              int aspectW, int aspectH)
         {
             Key = key; DisplayName = displayName; DataColumn = dataColumn; IsPhoto = isPhoto;
+            AspectW = aspectW; AspectH = aspectH;
+        }
+
+        // نامِ ستونِ تصویریِ ساخته‌شده در گرید. چون حالا می‌تواند بیش از یک
+        // ستونِ عکس هم‌زمان نمایش داده شود، نامِ ثابتِ قبلی («colPhotoThumb»)
+        // کافی نیست و هر ستون نامِ یکتای خودش را می‌گیرد.
+        public string ThumbColumnName
+        {
+            get { return "colThumb_" + Key; }
         }
     }
 
@@ -50,7 +74,11 @@ namespace CaseManagement.Helpers
             new CaseGridColumn("HeadFatherName",       "نام پدر سرپرست",    "HeadFatherName",       false),
             new CaseGridColumn("HeadTazkiraNo",        "شماره تذکره",       "HeadTazkiraNo",        false),
             new CaseGridColumn("Phone",                "شماره تماس",        "Phone",                false),
-            new CaseGridColumn("Photo",                "عکس",               "PhotoPath",            true),
+            new CaseGridColumn("Photo",                "عکس",               "PhotoPath",            true, 3, 4),
+            // عکسِ جمعیِ خانواده — تا امروز در کاتالوگ نبود، پس اصلاً قابلِ
+            // انتخاب نبود؛ ستونِ TblCase.FamilyPhotoPath از قبل وجود دارد و
+            // در فرم هم پر می‌شود. نسبتش افقی است، برخلافِ عکسِ پرترهٔ سرپرست.
+            new CaseGridColumn("FamilyPhoto",          "عکس جمعی",          "FamilyPhotoPath",      true, 16, 9),
             new CaseGridColumn("HeadCurrentResidence", "آدرس (سکونت فعلی)", "HeadCurrentResidence", false),
             new CaseGridColumn("Province",             "ولایت",             "Province",             false),
             new CaseGridColumn("District",             "ولسوالی",           "District",             false)
