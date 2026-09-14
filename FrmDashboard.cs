@@ -137,6 +137,7 @@ namespace CaseManagement
             _sidebar.AddItem(IconFont.People, "اعضای خانواده", delegate { SelectTabByTitle("اعضای خانواده"); });
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleApplicants, IconFont.Contact, "متقاضیان", delegate { using (var frm = new FrmApplicant()) frm.ShowDialog(this); RefreshAll(); });
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleSearch, IconFont.Search, "جستجوی پیشرفته", delegate { using (var frm = new FrmAdvancedSearch()) frm.ShowDialog(this); });
+            AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleGeoCenter, IconFont.Chart, "مرکز فرماندهی آماری", delegate { OpenGeoCommandCenter(); });
             _sidebar.AddItem(IconFont.Search, "دستیار هوشمند", delegate { using (var frm = new FrmAiAssistant()) frm.ShowDialog(this); RefreshAll(); });
 
             _sidebar.AddGroup("مالی و حسابداری", startExpanded: false);
@@ -162,13 +163,27 @@ namespace CaseManagement
             // ذخیره‌ی الگو. مثل بقیه، از «مدیریت ماژول‌ها» قابل خاموش کردن است.
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleReportBuilder, IconFont.Chart, "گزارش‌ساز پویا", delegate { using (var frm = new FrmReportBuilder()) frm.ShowDialog(this); });
 
+            // خروجیِ پوشه‌بندی‌شده — اکسل/PDF هر پرونده در درختِ
+            // ولایت ← ولسوالی ← نوع پرونده ← وضعیت خدمات، همراه عکس‌ها و اسنادِ
+            // دسته‌بندی‌شدهٔ همان پرونده.
+            // آموزش — چرا AddItem و نه AddModuleNav: مثل «کارمندان و فورم‌ها»،
+            // افزودنِ شناسهٔ تازه به ModuleService یعنی دست‌زدن به کلاسِ موجودِ
+            // مجوزها؛ این فرم فقط خروجیِ خواندنی می‌سازد.
+            _sidebar.AddItem(IconFont.Folder, "خروجی پوشه‌بندی‌شده", delegate { using (var frm = new Helpers.FrmCaseBundleExport(new DAL.DatabaseHelper())) frm.ShowDialog(this); });
+
             // ─── هسته سازمانی ────────────────────────────────────────────────
             _sidebar.AddGroup("هسته سازمانی", startExpanded: false);
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleWorkflow, IconFont.Sync, "گردش‌کار", delegate { using (var frm = new CaseManagement.Enterprise.FrmWorkflowAdmin()) frm.ShowDialog(this); });
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleApprovals, IconFont.Check, "تأییدها", delegate { using (var frm = new CaseManagement.Enterprise.FrmApprovals()) frm.ShowDialog(this); });
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleTasks, IconFont.Clock, "وظایف", delegate { using (var frm = new CaseManagement.Enterprise.FrmTasks()) frm.ShowDialog(this); });
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleRules, IconFont.Settings, "قواعد سازمانی", delegate { using (var frm = new CaseManagement.Enterprise.FrmRules()) frm.ShowDialog(this); });
-            AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleLocks, IconFont.Shield, "قفل رکوردها", delegate { using (var frm = new CaseManagement.Enterprise.FrmLocks()) frm.ShowDialog(this); });
+            // آموزش — «Lock.Override» به‌عنوانِ extraPermission اضافه شد: قبلاً
+            // ModuleLocks هیچ RequiredPermission نداشت (نگاه کنید
+            // ModuleService.RequiredPermission)، پس این آیتم برای هر کاربرِ
+            // واردشده‌ای — حتی «ناظر» — دیده می‌شد، در حالی که تنها کارِ آن
+            // فرم (آزادسازیِ اجباریِ قفل) طبقِ کامنتِ خودِ FrmLocks از اول
+            // فقط برای مدیر سیستم درنظر گرفته شده بود.
+            AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleLocks, IconFont.Shield, "قفل رکوردها", delegate { using (var frm = new CaseManagement.Enterprise.FrmLocks()) frm.ShowDialog(this); }, "Lock.Override");
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleVersions, IconFont.Clock, "تاریخچه نسخه‌ها", delegate { using (var frm = new CaseManagement.Enterprise.FrmVersions()) frm.ShowDialog(this); });
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleSecurity, IconFont.Shield, "ممیزی امنیتی", delegate { using (var frm = new CaseManagement.Enterprise.FrmSecurityAudit()) frm.ShowDialog(this); });
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleErrors, IconFont.Cancel, "گزارش خطاها", delegate { using (var frm = new CaseManagement.Enterprise.FrmErrorLog()) frm.ShowDialog(this); });
@@ -230,6 +245,7 @@ namespace CaseManagement
             toolButtons.Controls.Add(CreateToolButton("پرونده‌ها", "▤", delegate { using (var frm = new FrmCase(_filterProvince, _filterDistrict, _filterServiceStatus)) frm.ShowDialog(this); RefreshAll(); }));
             toolButtons.Controls.Add(CreateToolButton("متقاضیان", "✎", delegate { using (var frm = new FrmApplicant()) frm.ShowDialog(this); RefreshAll(); }));
             toolButtons.Controls.Add(CreateToolButton("جستجوی پیشرفته", "⌕", delegate { using (var frm = new FrmAdvancedSearch()) frm.ShowDialog(this); }));
+            toolButtons.Controls.Add(CreateToolButton("مرکز فرماندهی آماری", "🗺", delegate { OpenGeoCommandCenter(); }));
             toolButtons.Controls.Add(CreateToolButton("دستیار هوشمند", "🤖", delegate { using (var frm = new FrmAiAssistant()) frm.ShowDialog(this); RefreshAll(); }));
             toolButtons.Controls.Add(CreateToolButton("مالی", "$", delegate { OpenFinance(); }));
             toolButtons.Controls.Add(CreateToolButton("حسابداری ایتام", "💰", delegate { using (var frm = new CaseManagement.Accounting.FrmAccounting()) frm.ShowDialog(this); }));
@@ -354,12 +370,118 @@ namespace CaseManagement
         }
 
         // ─── سربرگ بالای داشبورد (طبق عکس نمونه) ─────────────────────────────
+        // ═════════════════════════════════════════════════════════════════════
+        // ساعتِ دیجیتال + سه تقویم (شمسی · میلادی · قمری)
+        //
+        // آموزش — چرا هر سه تاریخ «دستی» و با تقویمِ صریح ساخته می‌شوند و نه با
+        // dt.ToString(...): کالچرِ نخِ برنامه روی fa-IR با PersianCalendar است
+        // (Program.cs)، پس ToString("yyyy/MM/dd") روی نخِ UI تاریخِ *شمسی*
+        // می‌دهد و روی نخِ پس‌زمینه تاریخِ *میلادی* — همان خانوادهٔ باگی که در
+        // این پروژه رفع شد. اینجا هر تقویم عددِ خودش را مستقیم از خودِ کلاسِ
+        // تقویم می‌گیرد، پس نتیجه به کالچر و به نخ وابسته نیست.
+        //
+        // تقویمِ قمری: HijriCalendar (هجری قمریِ محاسباتی). ممکن است با رؤیتِ
+        // محلیِ هلال یک روز اختلاف داشته باشد — همان رفتارِ استانداردِ ویندوز.
+        private Label _lblClockTime;
+        private Label _lblClockDates;
+        private Timer _clockTimer;
+
+        private static readonly System.Globalization.PersianCalendar ClockPersian =
+            new System.Globalization.PersianCalendar();
+        private static readonly System.Globalization.HijriCalendar ClockHijri =
+            new System.Globalization.HijriCalendar();
+
+        private Panel BuildClockBox()
+        {
+            Panel box = new Panel
+            {
+                Dock = DockStyle.Left, Width = 300, BackColor = Color.Transparent,
+                Padding = new Padding(0, 13, 14, 11)
+            };
+
+            // ترازها در فرمِ RightToLeft آینه می‌شوند: MiddleRight بصراً «چپ»
+            // رندر می‌شود — همان تله‌ای که در کامنتِ پیامِ خوش‌آمد هم آمده.
+            _lblClockTime = new Label
+            {
+                Dock = DockStyle.Top, Height = 30, BackColor = Color.Transparent,
+                Font = new Font("Consolas", 19F, FontStyle.Bold),
+                ForeColor = UiTheme.PrimaryDark,
+                TextAlign = ContentAlignment.MiddleRight
+            };
+
+            _lblClockDates = new Label
+            {
+                Dock = DockStyle.Top, Height = 17, BackColor = Color.Transparent,
+                Font = UiTheme.Font(UiTheme.SizeSmall - 2F), ForeColor = UiTheme.TextMuted,
+                TextAlign = ContentAlignment.MiddleRight, AutoEllipsis = true
+            };
+
+            box.Controls.Add(_lblClockDates);
+            box.Controls.Add(_lblClockTime);
+
+            UpdateClock();
+
+            // ثانیه‌شمار لازم نیست چون فقط ساعت و دقیقه نمایش داده می‌شود؛
+            // ولی تیکِ ثانیه‌ای باعث می‌شود تغییرِ دقیقه بدونِ تأخیرِ محسوس
+            // دیده شود. هزینه‌اش دو Label.Text در ثانیه است.
+            _clockTimer = new Timer { Interval = 1000 };
+            _clockTimer.Tick += delegate { UpdateClock(); };
+            _clockTimer.Start();
+
+            // نشتِ تایمر در فرمی که بارها باز/بسته می‌شود، پردازه را زنده
+            // نگه می‌دارد و تیکِ روی کنترلِ Dispose شده استثنا می‌دهد.
+            Disposed += delegate
+            {
+                if (_clockTimer == null) return;
+                _clockTimer.Stop();
+                _clockTimer.Dispose();
+                _clockTimer = null;
+            };
+
+            return box;
+        }
+
+        private void UpdateClock()
+        {
+            if (_lblClockTime == null || _lblClockTime.IsDisposed) return;
+
+            DateTime now = DateTime.Now;
+
+            _lblClockTime.Text = string.Format(
+                System.Globalization.CultureInfo.InvariantCulture, "{0:D2}:{1:D2}", now.Hour, now.Minute);
+
+            _lblClockDates.Text =
+                FormatCalendar(ClockPersian, now, "ش") + "  ·  " +
+                string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                              "{0:D4}/{1:D2}/{2:D2} م", now.Year, now.Month, now.Day) + "  ·  " +
+                FormatCalendar(ClockHijri, now, "ق");
+        }
+
+        // هر تقویم خارج از بازهٔ پشتیبانی‌اش استثنا می‌دهد؛ نمایشِ ساعت هرگز
+        // نباید کلِ داشبورد را بشکند، پس شکست به یک خط‌تیره تبدیل می‌شود.
+        private static string FormatCalendar(System.Globalization.Calendar calendar, DateTime value, string suffix)
+        {
+            try
+            {
+                return string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                    "{0:D4}/{1:D2}/{2:D2} {3}",
+                    calendar.GetYear(value), calendar.GetMonth(value), calendar.GetDayOfMonth(value), suffix);
+            }
+            catch
+            {
+                return "—— " + suffix;
+            }
+        }
+
         private Panel BuildHeaderBar()
         {
             Panel header = new Panel { Dock = DockStyle.Top, Height = 78, BackColor = UiTheme.CardBack, Padding = new Padding(20, 0, 20, 0) };
 
             // ── سمت چپ: آواتار/نام کاربر + دکمه‌های ابزار ──
-            Panel left = new Panel { Dock = DockStyle.Left, Width = 300, BackColor = Color.Transparent };
+            // عرض ۳۰۰ → ۵۴۰: ویجتِ ساعت/تقویم (۲۳۶) به userBox (۱۶۰) و
+            // دکمه‌های ابزار اضافه شد. پیامِ خوش‌آمد در پنلِ Fillِ کناری است و
+            // AutoEllipsis دارد، پس در عرض‌های کم بریده می‌شود نه اینکه بشکند.
+            Panel left = new Panel { Dock = DockStyle.Left, Width = 604, BackColor = Color.Transparent };
 
             // آموزش — رفع باگ «متن‌ها روی هم می‌افتند»: در نسخه‌ی قبلی برای
             // پایین‌آوردن متن از Padding داخلِ خودِ Label استفاده شده بود
@@ -401,6 +523,9 @@ namespace CaseManagement
 
             left.Controls.Add(tools);
             left.Controls.Add(userBox);
+            // آخرین Dock=Left بیرونی‌ترین است، پس ساعت به لبهٔ چپِ سربرگ
+            // می‌چسبد — همان «بالا چپ»ِ خواسته‌شده.
+            left.Controls.Add(BuildClockBox());
 
             // ── سمت راست: پیام خوش‌آمد ──
             // فاصله‌ی عمودی از Padding پنل می‌آید (نه Padding داخل Label) و
@@ -739,36 +864,69 @@ namespace CaseManagement
             // فقط همان کلمه‌ی عنوان را تکرار می‌کرد (مثل «کل پرونده‌ها» +
             // واحدِ «پرونده»)؛ فقط جایی واحد نگه داشته شده که واقعاً اطلاعِ
             // تازه می‌دهد (نفر/افغانی).
-            _cardTotal   = MakeStatCard("کل پرونده‌ها", "", IconFont.Folder,   "#A855F7", "#FAF5FF");
-            // آموزش — کارتِ «در جریان»: با گسترشِ وضعیت خدمات به شش مقدار، دو
-            // وضعیتِ «متقاضی» و «در حال بررسی» در هیچ کارتی شمرده نمی‌شدند. چون
-            // عددِ وسطِ دونات «کل پرونده‌ها» را نشان می‌دهد، قاچ‌ها با آن جمع
-            // نمی‌شدند و کاربر این ناهمخوانی را می‌دید.
-            _cardInProgress = MakeStatCard("در جریان",  "", IconFont.Clock,    "#6366F1", "#EEF2FF");
-            _cardActive  = MakeStatCard("فعال",          "", IconFont.Check,    "#22C55E", "#F0FDF4");
-            _cardWaiting = MakeStatCard("در انتظار تایید","", IconFont.Clock,   "#F59E0B", "#FFFBEB");
-            _cardStopped = MakeStatCard("قطع شده‌ها",     "", IconFont.Cancel,   "#EF4444", "#FEF2F2");
-            // آموزش — پر کردنِ خانه‌ی خالیِ شبکه (۱۲ خانه، قبلاً فقط ۱۱ کارت):
-            // مقدارِ «قطع موقت» از قبل در همان کوئریِ خلاصه محاسبه می‌شد
-            // (stoppedTemp) ولی هیچ‌جا نمایش داده نمی‌شد — بدونِ کوئریِ اضافه.
-            _cardStoppedTemp = MakeStatCard("قطع موقت",   "", IconFont.Clock,    "#F59E0B", "#FFFBEB");
-            _cardFamily  = MakeStatCard("کل اعضای خانواده","نفر",   IconFont.People,   "#3B82F6", "#EFF6FF");
+            //
+            // آموزش — رنگ‌بندیِ ۱۳ کارت بازطراحی شد (۱۴۰۵/۰۶/۲۱، گزارشِ کاربر:
+            // «بهم ریخته، درحدِ بین‌الملل منظم کن»). قبلاً هر کارت رنگِ کاملاً
+            // بی‌ربطی داشت (بنفش/نیلی/آبی/فیروزه‌ای/سرمه‌ای برای سیزده مفهومِ
+            // نامرتبط)، پس هیچ الگویی به چشم نمی‌آمد. حالا فقط هفت رنگِ ثابت
+            // به‌کار می‌رود و هرکدام یک معنیِ واحد دارد — دقیقاً الگوی
+            // داشبوردهای معتبر (Ant Design / Material):
+            //   سبز=وضعیتِ خوب، آبی=در جریان/خنثی، کهربایی=نیازمندِ توجه،
+            //   نارنجی=توقفِ موقت، قرمز=بحرانی/مفقود، بنفش=آماریِ ساختاری،
+            //   زمردی=مالی. تکرارِ عمدیِ رنگ بینِ گروه‌ها (مثلاً کهربایی هم در
+            // «در انتظار تایید» هم در «تذکره کاغذی») نشتی نیست — هر دو یعنی
+            // «کاری روی این باید انجام شود»، پس همان رنگ درست است.
+            //
+            // ترتیبِ افزودن هم عوض شد تا کارت‌های هم‌خانواده کنارِ هم بنشینند
+            // (بدونِ دست‌زدن به خودِ TableLayoutPanel که تاریخچه‌ی کرش با
+            // Height<=0 دارد؛ فقط ترتیب و رنگ عوض شد، نه ساختارِ شبکه):
+            //   گروه ۱ — وضعیتِ پرونده (۵): فعال ← در جریان ← در انتظار ← قطعِ موقت ← قطع
+            //   گروه ۲ — حجمِ کلی (۴): کل پرونده‌ها، اعضای خانواده، اسناد، مراکز
+            //   گروه ۳ — وضعیتِ تذکره (۳): الکترونیکی ← کاغذی ← بدون تذکره
+            //   گروه ۴ — مالی (۱)
+            _cardActive      = MakeStatCard("فعال",           "",       IconFont.Check,    "#16A34A", "#F0FDF4");
+            _cardInProgress  = MakeStatCard("در جریان",       "",       IconFont.Clock,    "#2563EB", "#EFF6FF");
+            _cardWaiting     = MakeStatCard("در انتظار تایید","",       IconFont.Clock,    "#D97706", "#FFFBEB");
+            _cardStoppedTemp = MakeStatCard("قطع موقت",       "",       IconFont.Clock,    "#EA580C", "#FFF7ED");
+            _cardStopped     = MakeStatCard("قطع شده‌ها",      "",       IconFont.Cancel,   "#DC2626", "#FEF2F2");
 
-            _cardDocuments = MakeStatCard("کل اسناد",       "",   IconFont.Document, "#06B6D4", "#ECFEFF");
-            _cardCenters   = MakeStatCard("مراکز فعال",     "",  IconFont.Card,     "#8B5CF6", "#F5F3FF");
-            _cardFinance   = MakeStatCard("مجموع کمک‌های مالی","افغانی", IconFont.Money, "#10B981", "#ECFDF5");
+            _cardTotal     = MakeStatCard("کل پرونده‌ها",       "",     IconFont.Folder,   "#4F46E5", "#EEF2FF");
+            _cardFamily    = MakeStatCard("کل اعضای خانواده",  "نفر",   IconFont.People,   "#0EA5E9", "#F0F9FF");
+            _cardDocuments = MakeStatCard("کل اسناد",          "",     IconFont.Document, "#0D9488", "#F0FDFA");
+            _cardCenters   = MakeStatCard("مراکز فعال",        "",     IconFont.Card,     "#7C3AED", "#F5F3FF");
 
-            _cardIdElectronic = MakeStatCard("تذکره الکترونیکی", "", IconFont.Card, "#0EA5E9", "#F0F9FF");
-            _cardIdPaper      = MakeStatCard("تذکره کاغذی",      "", IconFont.Card, "#F97316", "#FFF7ED");
-            _cardIdNone       = MakeStatCard("بدون تذکره",        "", IconFont.Cancel, "#94A3B8", "#F8FAFC");
+            _cardIdElectronic = MakeStatCard("تذکره الکترونیکی", "", IconFont.Card,   "#10B981", "#ECFDF5");
+            _cardIdPaper      = MakeStatCard("تذکره کاغذی",      "", IconFont.Card,   "#D97706", "#FFFBEB");
+            _cardIdNone       = MakeStatCard("بدون تذکره",        "", IconFont.Cancel, "#DC2626", "#FEF2F2");
 
-            // ترتیب افزودن = ترتیب خانه‌های شبکه (چون فرم RightToLeft است،
-            // عملاً از راست چیده می‌شوند — مثل قبل).
+            _cardFinance = MakeStatCard("مجموع کمک‌های مالی", "افغانی", IconFont.Money, "#059669", "#ECFDF5");
+
+            // آموزش — رفعِ دوبارهٔ ترتیب (۱۴۰۵/۰۶/۲۱، عکسِ دومِ کاربر از
+            // نصبِ واقعیِ خودش): آن نصب DashboardSummaryRows=4 دارد (نه
+            // پیش‌فرضِ ۲ که در نمونه‌سازیِ آزمونِ من بود)، یعنی شبکه ۴ ستونی
+            // است. ترتیبِ قبلی (وضعیت×۵، حجم×۴، تذکره×۳، مالی×۱) در شبکهٔ
+            // ۴ستونی به‌شکلِ ۴+۴+۴+۱ نمی‌نشست — گروهِ ۵تاییِ وضعیت یک کارت به
+            // ردیفِ بعد می‌ریخت و کنارِ سه رنگِ کاملاً نامرتبطِ گروهِ حجم
+            // می‌نشست (دقیقاً همان ردیفِ «نامنظم»ی که در عکس دیده شد).
+            //
+            // ترتیبِ تازه طوری چیده شده که هر گروه دقیقاً یک ردیفِ کامل از
+            // شبکهٔ ۴ستونی را پر کند: حجم(۴) ← وضعیت(۴) ← [قطع+تذکره](۴) ←
+            // مالی(۱ — ردیفِ آخر تنها می‌ماند، که طبیعی و رایج است).
+            // «قطع شده‌ها» عمداً از چهارتای اولِ گروهِ وضعیت جدا و به ردیفِ
+            // تذکره منتقل شد تا آن چهارتای اول (فعال/در جریان/انتظار/موقت)
+            // یک طیفِ رنگیِ پیوسته بمانند و ردیفِ سوم هم با دو قرمز
+            // (قطع‌شده‌ها و بدون‌تذکره) در دو سرش قاب‌بندی شود.
+            //
+            // اگر تنظیمِ کاربر ۲ یا ۳ ردیف باشد (۷ یا ۵ ستون)، این ترتیب باز
+            // هم بهتر از تصادفی است ولی دیگر کاملاً روی مرزِ ردیف نمی‌نشیند —
+            // محدودیتِ ریاضیِ اجتناب‌ناپذیر است چون ۱۳ بر ۷ و ۵ بخش‌پذیر نیست؛
+            // فقط برای ۴ (رایج‌ترین مقدار، مشاهده‌شده در نصبِ کاربر) کاملاً صاف است.
             StatCard[] summaryCards =
             {
-                _cardTotal, _cardInProgress, _cardActive, _cardWaiting, _cardStopped, _cardStoppedTemp,
-                _cardFamily, _cardDocuments,
-                _cardCenters, _cardFinance, _cardIdElectronic, _cardIdPaper, _cardIdNone
+                _cardTotal, _cardFamily, _cardDocuments, _cardCenters,
+                _cardActive, _cardInProgress, _cardWaiting, _cardStoppedTemp,
+                _cardStopped, _cardIdElectronic, _cardIdPaper, _cardIdNone,
+                _cardFinance
             };
 
             foreach (StatCard card in summaryCards)
@@ -875,10 +1033,15 @@ namespace CaseManagement
 
         private StatCard MakeStatCard(string title, string unit, string glyph, string accentHex, string tintHex)
         {
+            // آموزش — خواستهٔ کاربر: «همه سایزشان یک‌سوم کوچک کن و وسط نوشته
+            // بشه چون الان خرابه». ۱۷۶×۱۱۸ → ۱۱۸×۷۹ دقیقاً دوسومِ هر دو بعد.
+            // حالتِ compact فقط کوچک نمی‌کند، چیدمان را هم وسط‌چین می‌کند —
+            // چون در این ارتفاع، چیدمانِ چهارردیفهٔ قبلی جا نمی‌شد و همان
+            // درهم‌ریختگی را می‌ساخت.
             return new StatCard(title, unit, glyph,
-                ColorTranslator.FromHtml(accentHex), ColorTranslator.FromHtml(tintHex))
+                ColorTranslator.FromHtml(accentHex), ColorTranslator.FromHtml(tintHex), true)
             {
-                Width = 176, Height = 118, Margin = new Padding(0, 0, 12, 0)
+                Width = 118, Height = 79, Margin = new Padding(0, 0, 8, 0)
             };
         }
 
@@ -2742,7 +2905,15 @@ WHERE (@CID = 0 OR CenterID = @CID)" + CaseFilterSqlNoStatus("") + @"", con))
                 // سوراخِ بزرگ‌ترِ دونات (حلقه‌ی نازک‌تر) تا عددِ مرکزی راحت جا شود.
                 ds["DoughnutRadius"] = "62";
 
-                ds.LegendText = "#VALX  (#PERCENT{P1})";
+                // ⚠ رفعِ باگِ «NaN%» — گزارشِ کاربر: وقتی مرکزِ تازه‌ساخته‌شده
+                // (مثلاً «بلخ») هنوز هیچ پرونده‌ای ندارد، مجموعِ پنج قاچ صفر
+                // می‌شود و #PERCENT{P1} یعنی صفر تقسیم بر صفر — MSChart آن را
+                // به‌صورتِ متنِ خامِ «NaN %» چاپ می‌کند. مدیرِ کل چون «همهٔ
+                // مراکز» یا مرکزِ پرکارِ خودش را می‌بیند هرگز این را نمی‌دید؛
+                // فقط کاربرِ محدود به مرکزِ تازه (صفر پرونده) با آن مواجه
+                // می‌شد. با مجموعِ صفر، درصد حذف و فقط شمارشِ خام نشان داده
+                // می‌شود.
+                ds.LegendText = (total > 0) ? "#VALX  (#PERCENT{P1})" : "#VALX";
             }
 
             LoadActivityFeed();
@@ -3346,6 +3517,22 @@ WHERE IsActive = 1 ORDER BY CenterCode", con))
         // قبل تعریف شده و پیش‌فرضش برای هر سه نقش true است، پس امروز هیچ
         // کاربری دسترسی‌اش را از دست نمی‌دهد — ولی مدیر سیستم از این پس
         // کلیدی دارد که واقعاً هر دو در را می‌بندد.
+        // مرکز فرماندهی آماری و تحلیلی (نقشهٔ ولایتی/ولسوالی).
+        // آموزش — همان مجوزِ «Case.View» کافی است: این فرم فقط می‌خواند و
+        // چیزی برای دیدن نشان می‌دهد که کاربر از راهِ FrmCase هم می‌بیند؛
+        // مجوزِ تازه ساختن یعنی همهٔ نقش‌های موجود باید دوباره تنظیم شوند.
+        private void OpenGeoCommandCenter()
+        {
+            if (!CaseManagement.Enterprise.PermissionService.Require("Case.View"))
+            {
+                UiTheme.ShowWarning(this, "شما به آمار پرونده‌ها دسترسی ندارید.");
+                return;
+            }
+
+            using (var frm = new FrmGeoCommandCenter()) frm.ShowDialog(this);
+            RefreshAll();
+        }
+
         private void OpenFinance()
         {
             if (!CaseManagement.Enterprise.PermissionService.Require("Finance.View"))

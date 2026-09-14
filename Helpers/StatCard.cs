@@ -18,19 +18,52 @@ namespace CaseManagement.Helpers
     // ─────────────────────────────────────────────────────────────────────────
     public class StatCard : Panel
     {
-        private readonly Label _lblValue;
-        private readonly Sparkline _spark;
+        private Label _lblValue;
+        private Sparkline _spark;
 
         private const int Radius = 14;
         private readonly Color _accent;
 
+        // واحد در حالت فشرده کنارِ خودِ عدد می‌آید («۱٬۲۳۴ نفر») نه در خطِ جدا.
+        private readonly string _unit;
+        private readonly bool _compact;
+
         public StatCard(string title, string unit, string iconGlyph, Color accent, Color tint)
+            : this(title, unit, iconGlyph, accent, tint, false)
         {
-            _accent = accent;
+        }
+
+        // ─── حالت فشرده ───────────────────────────────────────────────────────
+        // آموزش — چرا یک حالتِ تازه و نه تغییرِ همین چیدمان: کارتِ اصلی چهار
+        // ردیف دارد (نشان+عنوان ۴۲ · عدد ۳۸ · واحد ۱۸ · نمودارِ ریز) که با
+        // padding جمعاً ۱۲۰ پیکسل می‌شود — یعنی در ارتفاعِ ۱۱۸ عملاً هیچ جایی
+        // برای Sparkline نمی‌ماند و همان چیزی ساخته می‌شود که کاربر «خراب»
+        // توصیفش کرد.
+        //
+        // در حالتِ فشرده (~یک‌سومِ کوچک‌تر) چیدمان عمداً عوض می‌شود، نه فقط
+        // کوچک: همه‌چیز وسط‌چین می‌شود و سه ردیفِ متقارن می‌ماند —
+        //      نشانِ گرد (وسط) · عدد + واحد (وسط) · عنوان (وسط)
+        // Sparkline در این ارتفاع خوانا نیست، پس نمایش داده نمی‌شود؛ ولی متدِ
+        // SetTrend حذف نشده و همچنان بی‌خطر صدا زده می‌شود (شش فراخوانی در
+        // FrmDashboard دست‌نخورده کار می‌کنند).
+        public StatCard(string title, string unit, string iconGlyph, Color accent, Color tint, bool compact)
+        {
+            _accent  = accent;
+            _unit    = unit ?? "";
+            _compact = compact;
 
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint |
                       ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
             BackColor = UiTheme.Background;
+
+            if (compact)
+            {
+                Padding = new Padding(8, 6, 8, 6);
+                BuildCompact(title, iconGlyph, accent);
+                _tint = tint;
+                return;
+            }
+
             Padding = new Padding(14, 12, 14, 10);
 
             // ── ردیف بالا: نشان گرد (چپ) + عنوان (راست) ──
@@ -78,13 +111,76 @@ namespace CaseManagement.Helpers
 
         private readonly Color _tint;
 
+        // چیدمانِ فشرده: سه ردیفِ وسط‌چین، بدون نمودارِ ریز.
+        // ارتفاعِ ردیف‌ها عمداً جمعاً ۶۷ است تا با کارتِ ۷۹ پیکسلی و
+        // padding ِ ۶+۶ دقیقاً جا شود، بدون بریدگی.
+        private void BuildCompact(string title, string iconGlyph, Color accent)
+        {
+            // آموزش — اندازهٔ قلم‌ها بعد از بازخوردِ کاربر («متن داخل مربع‌ها
+            // بزرگ است، نصف کن») کوچک شد. نکتهٔ اصلی این است که در کارتِ
+            // یک‌سوم کوچک‌شده، قلمِ قبلی *نسبت به کادر* درشت‌تر به‌نظر می‌رسید
+            // حتی با همان اندازه — پس عدد از ۱۷ به ۱۱ رفت تا تناسبِ بصری با
+            // کارتِ کوچک برقرار شود، نه فقط عدد کوچک شود.
+            Label lblTitle = new Label
+            {
+                Text = title, Dock = DockStyle.Bottom, Height = 15, BackColor = Color.Transparent,
+                Font = UiTheme.Font(UiTheme.SizeSmall - 2F), ForeColor = UiTheme.TextMuted,
+                TextAlign = ContentAlignment.MiddleCenter,
+                // بدونِ این، عنوانِ بلند («کل اعضای خانواده») در عرضِ ~۱۰۰
+                // پیکسل با «…» بریده می‌شد؛ AutoEllipsis همان رفتار را صریح و
+                // قابل‌پیش‌بینی می‌کند به‌جای بریدنِ وسطِ حرف.
+                AutoEllipsis = true
+            };
+
+            _lblValue = new Label
+            {
+                Text = "0", Dock = DockStyle.Fill, BackColor = Color.Transparent,
+                Font = UiTheme.FontBold(11F), ForeColor = accent,
+                TextAlign = ContentAlignment.MiddleCenter
+            };
+
+            // نشانِ گرد، وسط‌چینِ افقی. Anchor=None داخلِ یک میزبانِ Dock=Top
+            // تنها راهِ مطمئنِ وسط‌چینی در WinForms است که با تغییرِ عرضِ کارت
+            // هم درست بماند.
+            Panel iconHost = new Panel { Dock = DockStyle.Top, Height = 22, BackColor = Color.Transparent };
+            IconBadge badge = new IconBadge(iconGlyph, accent)
+            {
+                Size = new Size(22, 22),
+                Anchor = AnchorStyles.None
+            };
+            iconHost.Controls.Add(badge);
+            iconHost.Resize += delegate
+            {
+                badge.Location = new Point(Math.Max(0, (iconHost.Width - badge.Width) / 2),
+                                           Math.Max(0, (iconHost.Height - badge.Height) / 2));
+            };
+
+            // ترتیبِ افزودن مهم است: Fill باید *آخر* اضافه شود تا فضای
+            // باقی‌مانده را بگیرد، نه اینکه ردیف‌های Top/Bottom را بپوشاند.
+            Controls.Add(_lblValue);
+            Controls.Add(lblTitle);
+            Controls.Add(iconHost);
+
+            _spark = new Sparkline { Visible = false, LineColor = accent };
+        }
+
         public void SetValue(int value)
         {
-            _lblValue.Text = value.ToString("N0");
+            string text = value.ToString("N0");
+
+            // در حالتِ فشرده خطِ جداگانهٔ واحد وجود ندارد، پس واحد به خودِ عدد
+            // می‌چسبد («۱٬۲۳۴ نفر») تا اطلاعات از دست نرود.
+            if (_compact && _unit.Length > 0)
+                text += " " + _unit;
+
+            _lblValue.Text = text;
         }
 
         public void SetTrend(double[] values)
         {
+            // در حالتِ فشرده نمودارِ ریز نمایش داده نمی‌شود، ولی فراخوانی باید
+            // بی‌خطر بماند — شش نقطه در FrmDashboard صدایش می‌زنند.
+            if (_spark == null) return;
             _spark.SetValues(values);
         }
 
