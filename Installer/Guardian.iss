@@ -68,10 +68,13 @@ Name: "en"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "ایجاد میان‌بر روی دسکتاپ"; GroupDescription: "میان‌برها:"; Flags: checkedonce
 
 [Files]
-; کل خروجی Release به‌صورت بازگشتی (شامل زیرپوشه‌های native x64/runtimes/Fonts).
-Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
-; آموزش — دیتابیس عمداً bundle نمی‌شود: برنامه در اولین اجرا خودش CaseDB.sqlite را
-; در |DataDirectory| می‌سازد و کاربر پیش‌فرض admin (رمز موقت) را ایجاد می‌کند.
+; کل خروجی Release به‌صورت بازگشتی (شامل native x64، فونت، قالب، راهنما).
+; عمداً این‌ها را کنار می‌گذاریم تا فایل نصب برای مشتری تمیز باشد:
+;   - دیتابیس CaseDB (نه System.Data.SQLite.dll — آن کتابخانه است و باید نصب شود)
+;   - pdb / xml مستندات کتابخانه‌ها
+;   - خروجی ClickOnce و نتایج تست
+;   - SQLite.Interop 32بیتی (نصاب فقط x64 است)
+Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion; Excludes: "*.pdb,*.xml,CaseDB.sqlite,CaseDB.sqlite.*,*.bak,TestResults,app.publish,x86"
 
 [Code]
 // ─────────────────────────────────────────────────────────────────────────
@@ -104,26 +107,6 @@ begin
       'آیا می‌خواهید بدون نصب آن ادامه دهید؟ (در این صورت ممکن است برنامه اجرا نشود)',
       mbConfirmation, MB_YESNO) = IDNO then
       Result := False;
-  end;
-end;
-
-// آموزش — رفع خطای «کار می‌کند اما نه از داخل Program Files»: دلیل شایع این
-// الگو، مسدودسازیِ خودکارِ DLLهای بومیِ بدون امضا توسط آنتی‌ویروس/Windows
-// Defender هنگام نصب در Program Files است (این نصب‌کننده امضای دیجیتال
-// ندارد). این پیام بعد از اتمام نصب راهنمایی می‌دهد تا کاربر متوجه علت
-// احتمالی شود و لازم نباشد دوباره از ابتدا حدس بزند.
-procedure CurStepChanged(CurStep: TSetupStep);
-begin
-  if CurStep = ssPostInstall then
-  begin
-    MsgBox(
-      'نصب کامل شد.' + #13#10#13#10 +
-      'اگر هنگام اجرا خطای «Unable to load DLL SQLite.Interop.dll» دیدید:' + #13#10 +
-      '۱) مطمئن شوید Visual C++ Redistributable (x64) نصب است (پیام بالا).' + #13#10 +
-      '۲) در Windows Security > Protection history بررسی کنید آیا فایلی از پوشه‌ی' + #13#10 +
-      '   نصب (مخصوصاً SQLite.Interop.dll) قرنطینه/حذف شده؛ اگر بله، پوشه‌ی نصب را' + #13#10 +
-      '   به لیست استثناهای آنتی‌ویروس اضافه کرده و دوباره نصب کنید.',
-      mbInformation, MB_OK);
   end;
 end;
 

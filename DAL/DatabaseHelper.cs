@@ -3,6 +3,7 @@ using System.Configuration;
 using System.Data;
 using System.Data.SQLite;
 using System.IO;
+using CaseManagement.Helpers;
 namespace CaseManagement.DAL
 {
     public class DatabaseHelper
@@ -19,17 +20,48 @@ namespace CaseManagement.DAL
             connectionString = settings.ConnectionString;
         }
 
+        // مسیر قابل‌نوشتن برای CaseDB.sqlite.
+        // نصب داخل Program Files اجازه ساخت فایل کنار exe را نمی‌دهد
+        // («unable to open database file»). در آن حالت داده به
+        // %LocalAppData%\CaseManagement می‌رود. اجرای Debug کنار پروژه
+        // همچنان همان CaseDB.sqlite موجود را استفاده می‌کند.
+        public static string EnsureDataDirectory()
+        {
+            string current = AppDomain.CurrentDomain.GetData("DataDirectory") as string;
+            if (IsUsableDataDirectory(current))
+                return Path.GetFullPath(current);
+
+            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+            string chosen;
+
+            if (!IsProtectedInstallFolder(baseDir) && IsUsableDataDirectory(baseDir))
+            {
+                chosen = Path.GetFullPath(baseDir);
+            }
+            else
+            {
+                chosen = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "CaseManagement");
+                Directory.CreateDirectory(chosen);
+                if (!IsDirectoryWritable(chosen))
+                    throw new IOException("پوشه داده قابل نوشتن نیست: " + chosen);
+            }
+
+            AppDomain.CurrentDomain.SetData("DataDirectory", chosen);
+            return chosen;
+        }
+
         public SQLiteConnection GetConnection()
         {
             // اگر AppDomain هنوز DataDirectory نداشته باشد، System.Data.SQLite
-            // در Open() نمی‌تواند توکنِ «|DataDirectory|» را برطرف کند؛ این
-            // تضمین می‌کند همیشه یک مقدار (لااقل پوشه‌ی خودِ برنامه) موجود باشد.
+            // در Open() نمی‌تواند توکنِ «|DataDirectory|» را برطرف کند.
             try
             {
                 if (connectionString != null && connectionString.Contains("|DataDirectory|") &&
                     AppDomain.CurrentDomain.GetData("DataDirectory") == null)
                 {
-                    AppDomain.CurrentDomain.SetData("DataDirectory", AppDomain.CurrentDomain.BaseDirectory);
+                    EnsureDataDirectory();
                 }
             }
             catch { /* اگر ناموفق بود، همچنان تلاشِ اتصال ادامه پیدا می‌کند */ }
@@ -85,8 +117,7 @@ namespace CaseManagement.DAL
             using (SQLiteConnection con = GetConnection())
             using (SQLiteCommand cmd = new SQLiteCommand(sql, con))
             {
-                if (parameters != null)
-                    cmd.Parameters.AddRange(parameters);
+                AttachParameters(cmd, parameters);
 
                 con.Open();
                 return cmd.ExecuteNonQuery();
@@ -98,8 +129,7 @@ namespace CaseManagement.DAL
             using (SQLiteConnection con = GetConnection())
             using (SQLiteCommand cmd = new SQLiteCommand(sql, con))
             {
-                if (parameters != null)
-                    cmd.Parameters.AddRange(parameters);
+                AttachParameters(cmd, parameters);
 
                 con.Open();
                 return cmd.ExecuteScalar();
@@ -111,8 +141,7 @@ namespace CaseManagement.DAL
             using (SQLiteConnection con = GetConnection())
             using (SQLiteCommand cmd = new SQLiteCommand(sql, con))
             {
-                if (parameters != null)
-                    cmd.Parameters.AddRange(parameters);
+                AttachParameters(cmd, parameters);
 
                 using (SQLiteDataAdapter da = new SQLiteDataAdapter(cmd))
                 {
@@ -189,8 +218,7 @@ namespace CaseManagement.DAL
             {
                 using (SQLiteCommand cmd = new SQLiteCommand(sql, con, tr))
                 {
-                    if (parameters != null)
-                        cmd.Parameters.AddRange(parameters);
+                    AttachParameters(cmd, parameters);
                     cmd.ExecuteNonQuery();
                 }
 
@@ -202,6 +230,74 @@ namespace CaseManagement.DAL
             });
 
             return newId;
+        }
+
+        private static void AttachParameters(SQLiteCommand cmd, SQLiteParameter[] parameters)
+        {
+            if (parameters != null)
+                cmd.Parameters.AddRange(parameters);
+            ProvinceScope.Bind(cmd);
+        }
+
+        private static bool IsUsableDataDirectory(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                return false;
+            try
+            {
+                if (!Directory.Exists(path))
+                    return false;
+                return IsDirectoryWritable(path);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static bool IsProtectedInstallFolder(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                return false;
+            try
+            {
+                string full = Path.GetFullPath(path)
+                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                    + Path.DirectorySeparatorChar;
+                return IsUnderSpecialFolder(full, Environment.SpecialFolder.ProgramFiles)
+                    || IsUnderSpecialFolder(full, Environment.SpecialFolder.ProgramFilesX86)
+                    || IsUnderSpecialFolder(full, Environment.SpecialFolder.Windows);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static bool IsUnderSpecialFolder(string fullPathWithSep, Environment.SpecialFolder folder)
+        {
+            string root = Environment.GetFolderPath(folder);
+            if (string.IsNullOrWhiteSpace(root))
+                return false;
+            root = Path.GetFullPath(root)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                + Path.DirectorySeparatorChar;
+            return fullPathWithSep.StartsWith(root, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsDirectoryWritable(string path)
+        {
+            try
+            {
+                string probe = Path.Combine(path, ".write_test_" + Guid.NewGuid().ToString("N"));
+                File.WriteAllText(probe, "ok");
+                File.Delete(probe);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
         }
     }
 }

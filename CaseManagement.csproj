@@ -420,6 +420,7 @@
     <Compile Include="Helpers\BackupEncryption.cs" />
     <Compile Include="Helpers\BackupHelper.cs" />
     <Compile Include="Helpers\CenterGuard.cs" />
+    <Compile Include="Helpers\ProvinceScope.cs" />
     <Compile Include="Helpers\HadithProvider.cs" />
     <Compile Include="Helpers\Msg.cs" />
     <Compile Include="Helpers\DatabaseInitializer.cs" />

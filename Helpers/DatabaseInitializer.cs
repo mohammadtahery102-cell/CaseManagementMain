@@ -284,12 +284,29 @@ CREATE TABLE IF NOT EXISTS TblLookup (
                 // ─── TblCenter (مدیریت مراکز) ────────────────────────────────────
                 ExecuteNonQuery(con, @"
 CREATE TABLE IF NOT EXISTS TblCenter (
-    CenterID   INTEGER PRIMARY KEY AUTOINCREMENT,
-    CenterCode TEXT NOT NULL UNIQUE,
-    CenterName TEXT NOT NULL,
-    IsActive   INTEGER NOT NULL DEFAULT 1,
-    CreatedAt  TEXT NOT NULL DEFAULT (datetime('now'))
+    CenterID    INTEGER PRIMARY KEY AUTOINCREMENT,
+    CenterCode  TEXT NOT NULL UNIQUE,
+    CenterName  TEXT NOT NULL,
+    Province    TEXT NULL,
+    Address     TEXT NULL,
+    Phone       TEXT NULL,
+    ManagerName TEXT NULL,
+    Email       TEXT NULL,
+    LogoPath    TEXT NULL,
+    Color       TEXT NULL,
+    IsActive    INTEGER NOT NULL DEFAULT 1,
+    CreatedAt   TEXT NOT NULL DEFAULT (datetime('now'))
 );");
+                // جدول قدیمی ممکن است بدون Province ساخته شده باشد
+                // (CREATE TABLE IF NOT EXISTS آن را عوض نمی‌کند). ستون‌ها
+                // باید قبل از INSERT مراکز پیش‌فرض اضافه شوند.
+                EnsureColumn(con, "TblCenter", "Province",    "TEXT NULL");
+                EnsureColumn(con, "TblCenter", "Address",     "TEXT NULL");
+                EnsureColumn(con, "TblCenter", "Phone",       "TEXT NULL");
+                EnsureColumn(con, "TblCenter", "ManagerName", "TEXT NULL");
+                EnsureColumn(con, "TblCenter", "Email",       "TEXT NULL");
+                EnsureColumn(con, "TblCenter", "LogoPath",    "TEXT NULL");
+                EnsureColumn(con, "TblCenter", "Color",       "TEXT NULL");
                 EnsureDefaultCenters(con);
 
                 // ─── TblReminder (یادآوری با زمان الارم — به درخواست کاربر) ───
@@ -521,15 +538,7 @@ DELETE FROM TblLookup WHERE Category = 'ServiceStatus' AND Value = 'در انت�
                 // در فرم‌ها؛ فقط ستون‌ها/دسته‌های Lookup جدید، افزایشی و بی‌خطر)
                 // ═══════════════════════════════════════════════════════════════
 
-                // ─── فیلدهای جدید مرکز: هر مرکز حالا می‌تواند ولایت/آدرس/تلفن/
-                //     مسئول/ایمیل/لوگو/رنگ اختصاصی داشته باشد ──────────────────
-                EnsureColumn(con, "TblCenter", "Province",    "TEXT NULL");
-                EnsureColumn(con, "TblCenter", "Address",     "TEXT NULL");
-                EnsureColumn(con, "TblCenter", "Phone",       "TEXT NULL");
-                EnsureColumn(con, "TblCenter", "ManagerName", "TEXT NULL");
-                EnsureColumn(con, "TblCenter", "Email",       "TEXT NULL");
-                EnsureColumn(con, "TblCenter", "LogoPath",    "TEXT NULL");
-                EnsureColumn(con, "TblCenter", "Color",       "TEXT NULL");
+                EnsureCenterProvinces(con);
 
                 // ─── تاریخ آخرین تغییر رمز (برای تنظیم «اجبار تغییر دوره‌ای رمز») ──
                 EnsureColumn(con, "TblUsers", "LastPasswordChangeAt", "TEXT NULL");
@@ -1183,6 +1192,19 @@ CREATE TABLE IF NOT EXISTS TblVulnerabilityScoreDetail (
             EnsureColumn(con, "TblCase", "VulnerabilityBand",      "TEXT NULL");
             ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblCase_VulnBand ON TblCase(VulnerabilityBand);");
             ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblCase_VulnScore ON TblCase(VulnerabilityScore);");
+
+            // ─── اولویت اقتصادی (مرکز فرماندهی آماری) ────────────────────────
+            // آموزش — این شاخص قبلاً در اسکیما نبود: PriorityLevel فقط
+            // اول/دوم/سوم است و UrgentSituation متنِ آزاد؛ هیچ‌کدام پنج سطحِ
+            // اقتصادیِ موردِ نیازِ گزارش‌های جغرافیایی را نمی‌دهند. پس یک ستونِ
+            // متنیِ ایندکس‌دار با همان الگویِ EnsureColumn افزوده می‌شود و
+            // مقادیرش از TblLookup می‌آید (قابلِ ویرایش توسطِ مدیر، مثلِ بقیهٔ
+            // فهرست‌ها). تا وقتی کاربر پُرش نکند مقدارش NULL است و همه‌جا
+            // «ثبت‌نشده» گزارش می‌شود — هیچ عددی جعل نمی‌گردد.
+            EnsureColumn(con, "TblCase", "EconomicPriority", "TEXT NULL");
+            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblCase_EconomicPriority ON TblCase(EconomicPriority);");
+            EnsureDefaultLookupSet(con, "EconomicPriority",
+                new[] { "خیلی شدید", "شدید", "متوسط", "کم", "باثبات" });
 
             EnsureDefaultVulnerabilityConfig(con);
         }
@@ -2654,14 +2676,67 @@ WHERE GlobalID IS NULL;", tableName));
                 foreach (var c in centers)
                 {
                     using (var cmd = new SQLiteCommand(
-                        "INSERT INTO TblCenter (CenterCode, CenterName) VALUES (@Code, @Name)", con, tr))
+                        "INSERT INTO TblCenter (CenterCode, CenterName, Province) VALUES (@Code, @Name, @Province)", con, tr))
                     {
                         cmd.Parameters.AddWithValue("@Code", c[0]);
                         cmd.Parameters.AddWithValue("@Name", c[1]);
+                        cmd.Parameters.AddWithValue("@Province", CanonicalCenterProvince(c[0], c[1]));
                         cmd.ExecuteNonQuery();
                     }
                 }
                 tr.Commit();
+            }
+        }
+
+        // ولایت دفتر از روی کد مرکز (نه نام قابل‌ویرایش). هر بار در استارت‌آپ
+        // روی ردیف‌های موجود هم نوشته می‌شود تا مقدار غلط (مثل بلخ روی 001)
+        // اصلاح شود. پرونده‌ها جابه‌جا نمی‌شوند.
+        private static string CanonicalCenterProvince(string centerCode, string centerName)
+        {
+            switch ((centerCode ?? "").Trim())
+            {
+                case "001": return "کابل";
+                case "002": return "بلخ";
+                case "003": return "هرات";
+                case "004": return "قندهار";
+                case "005": return "بلخ";
+                case "006": return "ننگرهار";
+                case "007": return "کندز";
+                case "008": return "پکتیا";
+                case "009": return "بغلان";
+                case "010": return "تخار";
+                case "011": return "کابل";
+            }
+            string name = (centerName ?? "").Trim();
+            if (name == "جلال‌آباد" || name == "جلال آباد") return "ننگرهار";
+            if (name == "مزارشریف" || name == "مزار شریف") return "بلخ";
+            if (name == "مرکز اصلی") return "کابل";
+            return name;
+        }
+
+        private static void EnsureCenterProvinces(SQLiteConnection con)
+        {
+            if (!TableExists(con, "TblCenter")) return;
+            using (var cmd = new SQLiteCommand(
+                "SELECT CenterID, CenterCode, CenterName FROM TblCenter", con))
+            using (var adapter = new System.Data.SQLite.SQLiteDataAdapter(cmd))
+            {
+                var table = new System.Data.DataTable();
+                adapter.Fill(table);
+                foreach (System.Data.DataRow row in table.Rows)
+                {
+                    string code = Convert.ToString(row["CenterCode"]);
+                    string name = Convert.ToString(row["CenterName"]);
+                    string province = CanonicalCenterProvince(code, name);
+                    if (string.IsNullOrWhiteSpace(province)) continue;
+                    using (var upd = new SQLiteCommand(
+                        "UPDATE TblCenter SET Province = @P WHERE CenterID = @Id", con))
+                    {
+                        upd.Parameters.AddWithValue("@P", province);
+                        upd.Parameters.AddWithValue("@Id", Convert.ToInt32(row["CenterID"]));
+                        upd.ExecuteNonQuery();
+                    }
+                }
             }
         }
 

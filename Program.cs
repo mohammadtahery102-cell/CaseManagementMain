@@ -31,6 +31,14 @@ namespace CaseManagement
             try { SqlServerTypes.Utilities.LoadNativeAssemblies(AppDomain.CurrentDomain.BaseDirectory); }
             catch { /* اگر خودِ RDLC استفاده نشود، نبودنش نباید کل برنامه را متوقف کند */ }
 
+            try { CaseManagement.DAL.DatabaseHelper.EnsureDataDirectory(); }
+            catch (Exception ex)
+            {
+                MessageBox.Show("خطا در آماده‌سازی پوشه داده: " + ex.Message, "پیام",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
             // راست‌چینیِ عنوان‌ها در همه‌ی فرم‌ها و پنجره‌ها. عمداً همین‌جا (پیش از
             // فرمِ ورود) نصب می‌شود تا هر پنجره‌ای — از جمله دیالوگ‌های modal —
             // پوشش داده شود. توضیح کامل در Helpers/RtlCaptions.cs.
