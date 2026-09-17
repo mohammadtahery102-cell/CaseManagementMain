@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>پنل ادمین | فروش بدون سرمایه</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar"><div class="inner">
+  <a class="logo" href="index.html"><span class="mark">🛍️</span> فروش بدون سرمایه</a>
+  <nav class="nav" id="nav-links"></nav>
+</div></header>
+
+<div class="container">
+  <div class="page-head">
+    <h1>🛠️ پنل ادمین</h1><span class="muted" id="who"></span>
+    <span class="spacer"></span>
+    <button class="btn btn-ghost btn-sm" onclick="logout()">خروج</button>
+  </div>
+
+  <div class="stats" id="stats"></div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('orders',this)">📦 سفارش‌ها</button>
+    <button class="tab" onclick="showTab('users',this)">👥 کاربران</button>
+    <button class="tab" onclick="showTab('settle',this)">💰 تسویه فروشندگان</button>
+  </div>
+
+  <div id="tab-orders">
+    <div class="toolbar">
+      <select id="f-status" onchange="loadOrders()">
+        <option value="">همه وضعیت‌ها</option>
+        <option value="pending">در انتظار</option>
+        <option value="confirmed">تأیید شده</option>
+        <option value="shipped">ارسال شده</option>
+        <option value="delivered">تحویل شده</option>
+        <option value="cancelled">لغو شده</option>
+        <option value="returned">مرجوعی</option>
+      </select>
+    </div>
+    <div class="tbl-wrap"><table class="tbl">
+      <thead><tr><th>کد</th><th>محصول</th><th>فروشنده</th><th>مشتری / تماس</th><th>مبلغ</th><th>سود فروشنده</th><th>وضعیت</th><th>تغییر</th></tr></thead>
+      <tbody id="orders"></tbody>
+    </table></div>
+  </div>
+
+  <div id="tab-users" style="display:none"><div class="tbl-wrap"><table class="tbl">
+    <thead><tr><th>نام</th><th>تماس</th><th>نقش</th><th>شهر</th><th>پلان</th><th>سفارش/درآمد</th><th>تغییر پلان</th></tr></thead>
+    <tbody id="users"></tbody>
+  </table></div></div>
+
+  <div id="tab-settle" style="display:none">
+    <div class="tbl-wrap"><table class="tbl">
+      <thead><tr><th>فروشنده</th><th>تماس</th><th>کل درآمد</th><th>پرداخت‌شده</th><th>قابل پرداخت</th><th>پرداخت</th></tr></thead>
+      <tbody id="sellers"></tbody>
+    </table></div>
+    <h3>🧾 لاگ تسویه‌ها</h3>
+    <div class="tbl-wrap"><table class="tbl">
+      <thead><tr><th>فروشنده</th><th>مبلغ</th><th>بابت</th><th>تاریخ</th></tr></thead>
+      <tbody id="settle-log"></tbody>
+    </table></div>
+  </div>
+</div>
+
+<footer>فروش بدون سرمایه 🇦🇫 — پنل مدیریت</footer>
+<script src="api.js"></script>
+<script>
+const me = guard(['admin']);
+renderTopbar(me);
+if (me) document.getElementById('who').textContent = me.name;
+const fa = n => Number(n).toLocaleString('fa-AF');
+const ROLE_FA = {seller: '🛍️ فروشنده', supplier: '📦 تأمین‌کننده', admin: '🛠️ ادمین'};
+const NEXT = {pending: ['confirmed', 'cancelled'], confirmed: ['shipped', 'cancelled'], shipped: ['delivered', 'returned']};
+
+function showTab(name, btn) {
+  document.querySelectorAll('.tabs .tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  ['orders', 'users', 'settle'].forEach(t =>
+    document.getElementById('tab-' + t).style.display = t === name ? '' : 'none');
+  if (name === 'users') loadUsers();
+  if (name === 'settle') loadSettle();
+}
+
+async function loadOverview() {
+  const r = await apiGet('/api/admin/overview');
+  if (!r.ok) return toast(r.error, true);
+  const o = r.overview, ub = o.users_by_role, ob = o.orders_by_status;
+  const cnt = s => (ob[s] ? ob[s].count : 0);
+  document.getElementById('stats').innerHTML = `
+    <div class="stat green"><div class="k">💰 حجم فروش (GMV)</div><div class="v money">${fmt(o.gmv)}</div></div>
+    <div class="stat blue"><div class="k">🏦 درآمد پلتفرم</div><div class="v money">${fmt(o.platform_revenue)}</div></div>
+    <div class="stat amber"><div class="k">💳 بدهی به فروشندگان</div><div class="v money">${fmt(o.seller_owed)}</div></div>
+    <div class="stat"><div class="k">🛍️ فروشندگان</div><div class="v">${fa(ub.seller || 0)}</div></div>
+    <div class="stat"><div class="k">📦 تأمین‌کنندگان</div><div class="v">${fa(ub.supplier || 0)}</div></div>
+    <div class="stat"><div class="k">📦 محصولات فعال</div><div class="v">${fa(o.active_products)}</div></div>
+    <div class="stat"><div class="k">⏳ در انتظار</div><div class="v">${fa(cnt('pending'))}</div></div>
+    <div class="stat"><div class="k">✅ تحویل‌شده</div><div class="v">${fa(cnt('delivered'))}</div></div>`;
+}
+
+async function loadOrders() {
+  const st = document.getElementById('f-status').value;
+  const r = await apiGet('/api/admin/orders' + (st ? '?status=' + st : ''));
+  if (!r.ok) return toast(r.error, true);
+  document.getElementById('orders').innerHTML = r.orders.length ? r.orders.map(o => `
+    <tr><td style="direction:ltr">${o.code}</td>
+    <td>${escapeHtml(o.product_name)} × ${fa(o.qty)}</td>
+    <td>${escapeHtml(o.seller_name)}</td>
+    <td>${escapeHtml(o.customer_name)}<br><small class="muted" style="direction:ltr;display:inline-block">${escapeHtml(o.customer_phone)}</small><br><small class="muted">${escapeHtml(o.city)}</small></td>
+    <td class="money">${fmt(o.total)}</td>
+    <td class="money" style="color:var(--brand-dark);font-weight:800">${fmt(o.seller_earning)}</td>
+    <td>${statusBadge(o.status)}</td>
+    <td>${(NEXT[o.status] || []).map(n =>
+      `<button class="btn btn-ghost btn-sm" onclick="setStatus(${o.id},'${n}')">← ${STATUS_FA[n]}</button>`).join(' ') || '<small class="muted">نهایی</small>'}</td></tr>`).join('')
+    : '<tr><td colspan="8" class="empty">سفارشی یافت نشد.</td></tr>';
+}
+
+async function setStatus(id, st) {
+  const r = await apiPut('/api/admin/orders/' + id, {status: st});
+  if (!r.ok) return toast(r.error, true);
+  toast('وضعیت → ' + STATUS_FA[st]);
+  loadOrders(); loadOverview();
+}
+
+async function loadUsers() {
+  const r = await apiGet('/api/admin/users');
+  if (!r.ok) return toast(r.error, true);
+  document.getElementById('users').innerHTML = r.users.map(u => `
+    <tr><td>${escapeHtml(u.name)}${u.seller_code ? `<br><small class="muted" style="direction:ltr;display:inline-block">${escapeHtml(u.seller_code)}</small>` : ''}</td>
+    <td style="direction:ltr">${escapeHtml(u.phone)}</td><td>${ROLE_FA[u.role]}</td><td>${escapeHtml(u.city)}</td>
+    <td>${PLAN_FA[u.plan]}</td>
+    <td>${u.role === 'seller' ? `${fa(u.orders_count)} سفارش<br><b class="money">${fmt(u.earned)}</b>` : '—'}</td>
+    <td>${u.role === 'seller' ? `<select class="inline" onchange="setPlan(${u.id},this.value)">
+      ${['free', 'pro', 'gold'].map(p => `<option value="${p}" ${u.plan === p ? 'selected' : ''}>${PLAN_FA[p]}</option>`).join('')}</select>` : '—'}</td></tr>`).join('');
+}
+
+async function setPlan(id, plan) {
+  const r = await apiPut('/api/admin/users/' + id + '/plan', {plan});
+  if (!r.ok) return toast(r.error, true);
+  toast('پلان → ' + PLAN_FA[plan]);
+}
+
+async function loadSettle() {
+  const r = await apiGet('/api/admin/settlements');
+  if (!r.ok) return toast(r.error, true);
+  document.getElementById('sellers').innerHTML = r.sellers.map(s => `
+    <tr><td>${escapeHtml(s.name)}</td><td style="direction:ltr">${escapeHtml(s.phone)}</td>
+    <td class="money">${fmt(s.earned)}</td><td class="money">${fmt(s.paid)}</td>
+    <td class="money" style="font-weight:800;color:${s.withdrawable > 0 ? '#b45309' : 'var(--muted)'}">${fmt(s.withdrawable)}</td>
+    <td>${s.withdrawable > 0 ? `<button class="btn btn-primary btn-sm" onclick="pay(${s.id},${s.withdrawable},'${escapeHtml(s.name)}')">پرداخت ${fmt(s.withdrawable)}</button>` : '<small class="muted">تسویه ✓</small>'}</td></tr>`).join('');
+  document.getElementById('settle-log').innerHTML = r.log.length ? r.log.map(l => `
+    <tr><td>${escapeHtml(l.seller_name)}</td><td class="money">${fmt(l.amount)}</td>
+    <td>${escapeHtml(l.label || '—')}</td><td><small>${faDate(l.paid_at)}</small></td></tr>`).join('')
+    : '<tr><td colspan="4" class="empty">لاگی ثبت نشده.</td></tr>';
+}
+
+async function pay(sid, amount, name) {
+  if (!confirm(`پرداخت ${fmt(amount)} به ${name}؟`)) return;
+  const r = await apiPost('/api/admin/settlements', {seller_id: sid, amount, label: 'تسویه ادمین'});
+  if (!r.ok) return toast(r.error, true);
+  toast(r.message); loadSettle(); loadOverview();
+}
+
+(async () => { await loadOverview(); await loadOrders(); })();
+</script>
+</body>
+</html>

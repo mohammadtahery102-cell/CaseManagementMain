@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ورود / ثبت‌نام | فروش بدون سرمایه</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar"><div class="inner">
+  <a class="logo" href="index.html"><span class="mark">🛍️</span> فروش بدون سرمایه</a>
+  <nav class="nav" id="nav-links"></nav>
+</div></header>
+
+<div class="container"><div class="auth-wrap">
+  <div class="auth-card">
+    <div class="tabs" style="justify-content:center">
+      <button class="tab active" id="tab-register" onclick="switchTab('register')">📝 ثبت‌نام</button>
+      <button class="tab" id="tab-login" onclick="switchTab('login')">🔑 ورود</button>
+    </div>
+
+    <div id="pane-register">
+      <div class="form">
+        <label class="f">نام و تخلص<input id="r-name" placeholder="مثلاً احمد محمدی"></label>
+        <label class="f">شماره تماس<input id="r-phone" inputmode="numeric" placeholder="0701234567" style="direction:ltr;text-align:right"></label>
+        <div class="form-2">
+          <label class="f">من می‌خواهم<select id="r-role">
+            <option value="seller">🛍️ فروشنده شوم (بدون سرمایه)</option>
+            <option value="supplier">📦 تأمین‌کننده باشم</option>
+          </select></label>
+          <label class="f">شهر<select id="r-city"></select></label>
+        </div>
+        <button class="btn btn-primary btn-block" onclick="doRegister()">🚀 ثبت‌نام و شروع</button>
+        <p class="center muted" style="font-size:.85rem;margin:0">ثبت‌نام رایگان است و کمتر از یک دقیقه طول می‌کشد.</p>
+      </div>
+    </div>
+
+    <div id="pane-login" style="display:none">
+      <div class="form">
+        <label class="f">شماره تماس<input id="l-phone" inputmode="numeric" placeholder="0701234567" style="direction:ltr;text-align:right"></label>
+        <button class="btn btn-primary btn-block" onclick="doLogin()">🔑 ورود</button>
+      </div>
+    </div>
+
+    <div class="demo-box">
+      <b>🧪 ورود نمایشی (برای تست):</b><br>
+      <button class="btn btn-ghost btn-sm" onclick="quick('0700000003')">فروشنده</button>
+      <button class="btn btn-ghost btn-sm" onclick="quick('0700000002')">تأمین‌کننده</button>
+      <button class="btn btn-ghost btn-sm" onclick="quick('0700000001')">ادمین</button>
+    </div>
+  </div>
+</div></div>
+
+<script src="api.js"></script>
+<script>
+renderTopbar();
+function switchTab(t) {
+  document.getElementById('tab-register').classList.toggle('active', t === 'register');
+  document.getElementById('tab-login').classList.toggle('active', t === 'login');
+  document.getElementById('pane-register').style.display = t === 'register' ? '' : 'none';
+  document.getElementById('pane-login').style.display = t === 'login' ? '' : 'none';
+}
+function goPanel(u) {
+  location.href = u.role === 'seller' ? 'seller.html' : u.role === 'supplier' ? 'supplier.html' : 'admin.html';
+}
+async function doRegister() {
+  const body = {name: document.getElementById('r-name').value.trim(),
+    phone: document.getElementById('r-phone').value.trim(),
+    role: document.getElementById('r-role').value, city: document.getElementById('r-city').value};
+  const r = await apiPost('/api/auth/register', body);
+  if (!r.ok) return toast(r.error, true);
+  store.set(r.token, r.user);
+  toast('خوش آمدی! 🎉');
+  goPanel(r.user);
+}
+async function doLogin() {
+  const r = await apiPost('/api/auth/login', {phone: document.getElementById('l-phone').value.trim()});
+  if (!r.ok) return toast(r.error, true);
+  store.set(r.token, r.user);
+  toast('خوش برگشتی! 👋');
+  goPanel(r.user);
+}
+async function quick(phone) {
+  const r = await apiPost('/api/auth/login', {phone});
+  if (!r.ok) return toast(r.error, true);
+  store.set(r.token, r.user);
+  goPanel(r.user);
+}
+(async () => {
+  const m = await apiGet('/api/meta');
+  const cities = (m.ok && m.cities) || ['مزارشریف'];
+  document.getElementById('r-city').innerHTML = cities.map(c => `<option>${c}</option>`).join('');
+  const q = new URLSearchParams(location.search);
+  if (q.get('role') === 'supplier') document.getElementById('r-role').value = 'supplier';
+  if (q.get('tab') === 'login') switchTab('login');
+})();
+</script>
+</body>
+</html>

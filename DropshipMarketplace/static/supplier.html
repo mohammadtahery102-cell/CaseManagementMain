@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>پنل تأمین‌کننده | فروش بدون سرمایه</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar"><div class="inner">
+  <a class="logo" href="index.html"><span class="mark">🛍️</span> فروش بدون سرمایه</a>
+  <nav class="nav" id="nav-links"></nav>
+</div></header>
+
+<div class="container">
+  <div class="page-head">
+    <h1>📦 پنل تأمین‌کننده</h1><span class="muted" id="who"></span>
+    <span class="spacer"></span>
+    <button class="btn btn-ghost btn-sm" onclick="logout()">خروج</button>
+  </div>
+
+  <div class="stats" id="stats"></div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('prods',this)">📦 محصولات من</button>
+    <button class="tab" onclick="showTab('add',this)">➕ ثبت محصول جدید</button>
+    <button class="tab" onclick="showTab('orders',this)">🧾 سفارش‌های دریافتی</button>
+  </div>
+
+  <div id="tab-prods"><div class="tbl-wrap"><table class="tbl">
+    <thead><tr><th>محصول</th><th>دسته</th><th>قیمت عمده</th><th>موجودی</th><th>وضعیت</th><th>عملیات</th></tr></thead>
+    <tbody id="prods"></tbody>
+  </table></div></div>
+
+  <div id="tab-add" style="display:none"><div class="card" style="max-width:640px">
+    <h3 style="margin-top:0">➕ ثبت محصول جدید</h3>
+    <div class="form">
+      <label class="f">نام محصول<input id="p-name" placeholder="مثلاً هنذفری بلوتوثی"></label>
+      <div class="form-2">
+        <label class="f">دسته<input id="p-cat" placeholder="مثلاً موبایل و لوازم جانبی" list="cats"><datalist id="cats"></datalist></label>
+        <label class="f">آیکون (ایموجی)<input id="p-emoji" placeholder="📦" maxlength="4"></label>
+      </div>
+      <label class="f">توضیحات<textarea id="p-desc" rows="2" placeholder="مشخصات کوتاه محصول..."></textarea></label>
+      <div class="form-2">
+        <label class="f">قیمت عمده (؋)<input id="p-price" type="number" min="1" placeholder="1000"></label>
+        <label class="f">موجودی (عدد)<input id="p-stock" type="number" min="0" placeholder="50"></label>
+      </div>
+      <button class="btn btn-primary" onclick="addProduct()">✅ ثبت محصول</button>
+    </div>
+  </div></div>
+
+  <div id="tab-orders" style="display:none"><div class="tbl-wrap"><table class="tbl">
+    <thead><tr><th>کد</th><th>محصول</th><th>تعداد</th><th>سهم شما</th><th>فروشنده</th><th>مشتری</th><th>وضعیت</th></tr></thead>
+    <tbody id="orders"></tbody>
+  </table></div></div>
+</div>
+
+<div class="modal-bg" id="modal"><div class="modal">
+  <h3 style="margin-top:0">✏️ ویرایش محصول</h3>
+  <div class="form">
+    <label class="f">نام<input id="e-name"></label>
+    <div class="form-2">
+      <label class="f">قیمت عمده (؋)<input id="e-price" type="number" min="1"></label>
+      <label class="f">موجودی<input id="e-stock" type="number" min="0"></label>
+    </div>
+    <label class="f">وضعیت<select id="e-status"><option value="active">فعال ✅</option><option value="inactive">غیرفعال ⛔</option></select></label>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary" id="e-ok" style="flex:1">ذخیره</button>
+      <button class="btn btn-ghost" onclick="closeModal()">انصراف</button>
+    </div>
+  </div>
+</div></div>
+
+<footer>فروش بدون سرمایه 🇦🇫 — صدها فروشنده برای تو می‌فروشند 📣</footer>
+<script src="api.js"></script>
+<script>
+const me = guard(['supplier']);
+renderTopbar(me);
+if (me) document.getElementById('who').textContent = me.name;
+const fa = n => Number(n).toLocaleString('fa-AF');
+let cache = [];
+
+function showTab(name, btn) {
+  document.querySelectorAll('.tabs .tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  ['prods', 'add', 'orders'].forEach(t =>
+    document.getElementById('tab-' + t).style.display = t === name ? '' : 'none');
+  if (name === 'orders') loadOrders();
+}
+function closeModal() { document.getElementById('modal').classList.remove('open'); }
+
+async function loadAll() {
+  const o = await apiGet('/api/supplier/overview');
+  if (o.ok) document.getElementById('stats').innerHTML = `
+    <div class="stat blue"><div class="k">📦 محصولات فعال</div><div class="v">${fa(o.overview.products)}</div></div>
+    <div class="stat"><div class="k">🧾 کل سفارش‌ها</div><div class="v">${fa(o.overview.orders)}</div></div>
+    <div class="stat green"><div class="k">💰 فروش ناخالص</div><div class="v money">${fmt(o.overview.revenue)}</div></div>
+    <div class="stat amber"><div class="k">⚠️ موجودی رو به اتمام</div><div class="v">${fa(o.overview.low_stock)}</div></div>`;
+  const r = await apiGet('/api/supplier/products');
+  if (!r.ok) return toast(r.error, true);
+  cache = r.products;
+  document.getElementById('prods').innerHTML = r.products.length ? r.products.map(p => `
+    <tr><td>${escapeHtml(p.image_emoji)} ${escapeHtml(p.name)}</td><td>${escapeHtml(p.category)}</td>
+    <td class="money">${fmt(p.wholesale_price)}</td>
+    <td>${p.stock < 5 ? `<b style="color:#b45309">${fa(p.stock)} ⚠️</b>` : fa(p.stock)}</td>
+    <td>${p.status === 'active' ? '<span class="status st-delivered">فعال</span>' : '<span class="status st-cancelled">غیرفعال</span>'}</td>
+    <td style="white-space:nowrap">
+      <button class="btn btn-ghost btn-sm" onclick="editP(${p.id})">✏️</button>
+      <button class="btn btn-ghost btn-sm" onclick="quickStock(${p.id},${p.stock})">📥 موجودی</button>
+      ${p.status === 'active' ? `<button class="btn btn-danger btn-sm" onclick="delP(${p.id})">⛔</button>` : ''}
+    </td></tr>`).join('')
+    : '<tr><td colspan="6" class="empty">محصولی ثبت نکردی — از تب «➕ ثبت محصول» شروع کن.</td></tr>';
+}
+
+async function addProduct() {
+  const body = {name: document.getElementById('p-name').value.trim(),
+    category: document.getElementById('p-cat').value.trim() || 'عمومی',
+    description: document.getElementById('p-desc').value.trim(),
+    wholesale_price: +document.getElementById('p-price').value,
+    stock: +document.getElementById('p-stock').value || 0,
+    image_emoji: document.getElementById('p-emoji').value.trim() || '📦'};
+  const r = await apiPost('/api/supplier/products', body);
+  if (!r.ok) return toast(r.error, true);
+  toast('محصول ثبت شد ✅');
+  ['p-name', 'p-desc', 'p-price', 'p-stock', 'p-emoji'].forEach(id => document.getElementById(id).value = '');
+  loadAll();
+}
+
+function editP(id) {
+  const p = cache.find(x => x.id === id);
+  if (!p) return;
+  document.getElementById('e-name').value = p.name;
+  document.getElementById('e-price').value = p.wholesale_price;
+  document.getElementById('e-stock').value = p.stock;
+  document.getElementById('e-status').value = p.status;
+  document.getElementById('e-ok').onclick = async () => {
+    const r = await apiPut('/api/supplier/products/' + id, {
+      name: document.getElementById('e-name').value.trim(),
+      wholesale_price: +document.getElementById('e-price').value,
+      stock: +document.getElementById('e-stock').value,
+      status: document.getElementById('e-status').value});
+    if (!r.ok) return toast(r.error, true);
+    toast('ذخیره شد ✅'); closeModal(); loadAll();
+  };
+  document.getElementById('modal').classList.add('open');
+}
+
+async function quickStock(id, current) {
+  const v = prompt('موجودی جدید:', current);
+  if (v === null) return;
+  const r = await apiPut('/api/supplier/products/' + id, {stock: +v});
+  if (!r.ok) return toast(r.error, true);
+  toast('موجودی به‌روز شد ✅'); loadAll();
+}
+
+async function delP(id) {
+  if (!confirm('این محصول غیرفعال شود؟ (از فروشگاه‌ها پنهان می‌شود)')) return;
+  const r = await apiDel('/api/supplier/products/' + id);
+  if (!r.ok) return toast(r.error, true);
+  toast('غیرفعال شد'); loadAll();
+}
+
+async function loadOrders() {
+  const r = await apiGet('/api/supplier/orders');
+  if (!r.ok) return toast(r.error, true);
+  document.getElementById('orders').innerHTML = r.orders.length ? r.orders.map(o => `
+    <tr><td style="direction:ltr">${o.code}</td><td>${escapeHtml(o.product_name)}</td><td>${fa(o.qty)}</td>
+    <td class="money">${fmt(o.supplier_share)}</td><td>${escapeHtml(o.seller_name)}</td>
+    <td>${escapeHtml(o.customer_name)}<br><small class="muted">${escapeHtml(o.city)}</small></td>
+    <td>${statusBadge(o.status)}</td></tr>`).join('')
+    : '<tr><td colspan="7" class="empty">هنوز سفارشی ثبت نشده.</td></tr>';
+}
+
+(async () => {
+  const c = await apiGet('/api/categories');
+  if (c.ok) document.getElementById('cats').innerHTML = c.categories.map(x => `<option value="${escapeHtml(x)}">`).join('');
+  loadAll();
+})();
+</script>
+</body>
+</html>

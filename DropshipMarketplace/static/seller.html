@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>پنل فروشنده | فروش بدون سرمایه</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar"><div class="inner">
+  <a class="logo" href="index.html"><span class="mark">🛍️</span> فروش بدون سرمایه</a>
+  <nav class="nav" id="nav-links"></nav>
+</div></header>
+
+<div class="container">
+  <div class="page-head">
+    <h1>👋 پنل فروشنده</h1>
+    <span class="muted" id="who"></span>
+    <span class="spacer"></span>
+    <span id="plan-badge"></span>
+    <button class="btn btn-ghost btn-sm" onclick="logout()">خروج</button>
+  </div>
+
+  <div class="stats" id="stats"></div>
+
+  <div class="share-box" id="share-box" style="margin-bottom:14px">
+    <b>🔗 لینک فروشگاه تو — همین را پخش کن و بفروش:</b>
+    <code id="shop-url">...</code>
+    <div class="share-row">
+      <button class="btn btn-primary btn-sm" onclick="copyText(document.getElementById('shop-url').textContent,'لینک فروشگاه کپی شد ✓')">📋 کپی لینک</button>
+      <a class="btn btn-ghost btn-sm" id="sh-wa" target="_blank">📱 واتساپ</a>
+      <a class="btn btn-ghost btn-sm" id="sh-tg" target="_blank">✈️ تلگرام</a>
+      <a class="btn btn-ghost btn-sm" id="sh-shop" target="_blank">🛍️ دیدن فروشگاهم</a>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('mine',this)">🛒 محصولات من</button>
+    <button class="tab" onclick="showTab('catalog',this)">➕ افزودن محصول</button>
+    <button class="tab" onclick="showTab('orders',this)">📦 سفارش‌ها</button>
+    <button class="tab" onclick="showTab('money',this)">💰 تسویه و درآمد</button>
+  </div>
+
+  <div id="tab-mine"><div class="products" id="my-products"></div></div>
+
+  <div id="tab-catalog" style="display:none">
+    <div class="toolbar">
+      <input id="q" placeholder="🔍 جستجوی محصول..." oninput="loadCatalog()">
+      <select id="cat" onchange="loadCatalog()"><option value="">همه دسته‌ها</option></select>
+    </div>
+    <div class="products" id="catalog"></div>
+  </div>
+
+  <div id="tab-orders" style="display:none"><div class="tbl-wrap"><table class="tbl">
+    <thead><tr><th>کد</th><th>محصول</th><th>تعداد</th><th>مبلغ</th><th>سود تو</th><th>مشتری</th><th>وضعیت</th><th>تاریخ</th></tr></thead>
+    <tbody id="orders"></tbody>
+  </table></div></div>
+
+  <div id="tab-money" style="display:none">
+    <div class="stats" id="money-stats"></div>
+    <h3>🧾 تاریخچه تسویه‌ها</h3>
+    <div class="tbl-wrap"><table class="tbl">
+      <thead><tr><th>مبلغ</th><th>بابت</th><th>وضعیت</th><th>تاریخ</th></tr></thead>
+      <tbody id="settles"></tbody>
+    </table></div>
+  </div>
+</div>
+
+<div class="modal-bg" id="modal"><div class="modal">
+  <h3 style="margin-top:0" id="m-title">تعیین سود</h3>
+  <div id="m-body"></div>
+  <div style="display:flex;gap:8px;margin-top:14px">
+    <button class="btn btn-primary" id="m-ok" style="flex:1">تأیید</button>
+    <button class="btn btn-ghost" onclick="closeModal()">انصراف</button>
+  </div>
+</div></div>
+
+<footer>فروش بدون سرمایه 🇦🇫 — هر فروش = سود تو 💰</footer>
+<script src="api.js"></script>
+<script>
+const me = guard(['seller']);
+renderTopbar(me);
+if (me) document.getElementById('who').textContent = me.name;
+const fa = n => Number(n).toLocaleString('fa-AF');
+
+function showTab(name, btn) {
+  document.querySelectorAll('.tabs .tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  ['mine', 'catalog', 'orders', 'money'].forEach(t =>
+    document.getElementById('tab-' + t).style.display = t === name ? '' : 'none');
+  if (name === 'catalog') loadCatalog();
+  if (name === 'orders') loadOrders();
+  if (name === 'money') loadMoney();
+}
+
+async function loadDash() {
+  const r = await apiGet('/api/seller/dashboard');
+  if (!r.ok) return toast(r.error, true);
+  const d = r.dashboard;
+  document.getElementById('plan-badge').innerHTML =
+    `<span class="status ${d.plan === 'free' ? 'st-pending' : 'st-delivered'}">پلان: ${PLAN_FA[d.plan]}</span>`;
+  document.getElementById('stats').innerHTML = `
+    <div class="stat green"><div class="k">💰 درآمد تحویل‌شده</div><div class="v money">${fmt(d.earned)}</div></div>
+    <div class="stat amber"><div class="k">⏳ در انتظار تحویل</div><div class="v money">${fmt(d.pending_earnings)}</div></div>
+    <div class="stat blue"><div class="k">💳 قابل برداشت</div><div class="v money">${fmt(d.withdrawable)}</div></div>
+    <div class="stat"><div class="k">📦 سفارش‌ها</div><div class="v">${fa(d.orders_count)}</div></div>
+    <div class="stat"><div class="k">🛒 محصولات فروشگاهم</div><div class="v">${fa(d.products_count)}${d.plan_limit >= 0 ? ' / ' + fa(d.plan_limit) : ''}</div></div>`;
+  const s = await apiGet('/api/seller/share');
+  if (s.ok) {
+    document.getElementById('shop-url').textContent = s.shop_url;
+    document.getElementById('sh-wa').href = s.whatsapp;
+    document.getElementById('sh-tg').href = s.telegram;
+    document.getElementById('sh-shop').href = s.shop_url;
+  }
+}
+
+async function loadMine() {
+  const r = await apiGet('/api/seller/items');
+  const box = document.getElementById('my-products');
+  if (!r.ok) return toast(r.error, true);
+  if (!r.items.length) {
+    box.innerHTML = `<div class="card empty">هنوز محصولی انتخاب نکردی — از تب «➕ افزودن محصول» شروع کن 🚀</div>`;
+    return;
+  }
+  box.innerHTML = r.items.map(it => `
+    <div class="product"><div class="img">${escapeHtml(it.image_emoji)}</div>
+      <div class="body"><h3>${escapeHtml(it.name)}</h3>
+        <div class="cat">${escapeHtml(it.category)}</div>
+        <div class="price">فروش: ${fmt(it.sale_price)} <small>(عمده ${fmt(it.wholesale_price)} + سود ${fmt(it.margin)})</small></div>
+        <div class="stock">موجودی: ${fa(it.stock)}${it.status !== 'active' ? ' — <b style="color:#b91c1c">غیرفعال</b>' : ''}</div>
+        <div class="foot">
+          <button class="btn btn-ghost btn-sm" onclick="editMargin(${it.id},${it.margin},'${escapeHtml(it.name)}')">✏️ سود</button>
+          <button class="btn btn-danger btn-sm" onclick="delItem(${it.id})">حذف</button>
+        </div>
+      </div></div>`).join('');
+}
+
+let catalogCache = [];
+async function loadCatalog() {
+  const q = document.getElementById('q').value.trim();
+  const cat = document.getElementById('cat').value;
+  const r = await apiGet('/api/products?q=' + encodeURIComponent(q) + '&category=' + encodeURIComponent(cat));
+  if (!r.ok) return toast(r.error, true);
+  catalogCache = r.products;
+  const box = document.getElementById('catalog');
+  if (!r.products.length) { box.innerHTML = '<p class="empty">محصولی یافت نشد.</p>'; return; }
+  box.innerHTML = r.products.map(p => `
+    <div class="product"><div class="img">${escapeHtml(p.image_emoji)}</div>
+      <div class="body"><h3>${escapeHtml(p.name)}</h3>
+        <div class="cat">${escapeHtml(p.category)} | ${escapeHtml(p.supplier_name || '')}</div>
+        <div class="price">عمده: ${fmt(p.wholesale_price)}</div>
+        <div class="stock">موجودی: ${fa(p.stock)}</div>
+        <div class="foot"><button class="btn btn-primary btn-sm btn-block" onclick="pickProduct(${p.id})">➕ انتخاب و تعیین سود</button></div>
+      </div></div>`).join('');
+}
+
+async function pickProduct(pid) {
+  const s = await apiGet('/api/seller/suggest/' + pid);
+  if (!s.ok) return toast(s.error, true);
+  openSuggestModal(pid, s, async (margin) => {
+    const r = await apiPost('/api/seller/items', {product_id: pid, margin});
+    if (!r.ok) return toast(r.error, true);
+    toast(r.message + ` — قیمت فروش: ${fmt(r.sale_price)}`);
+    closeModal(); loadMine(); loadDash();
+  });
+}
+
+function openSuggestModal(pid, s, onOk) {
+  document.getElementById('m-title').textContent = '💰 سودت را تعیین کن (عمده: ' + fmt(s.wholesale) + ')';
+  document.getElementById('m-body').innerHTML = `
+    ${s.tiers.map((t, i) => `
+      <label style="display:flex;gap:8px;align-items:center;border:1.5px solid var(--line);border-radius:12px;padding:10px;margin:6px 0;cursor:pointer">
+        <input type="radio" name="tier" value="${t.margin}" style="width:auto" ${i === 1 ? 'checked' : ''}>
+        <span><b>${t.label}</b> — سود ${fmt(t.margin)} → فروش ${fmt(t.sale_price)}<br><small class="muted">${t.desc}</small></span>
+      </label>`).join('')}
+    <label class="f">یا سود دلخواه (؋)<input id="m-custom" type="number" min="0" placeholder="مثلاً 300"></label>`;
+  document.getElementById('m-ok').onclick = () => {
+    const custom = document.getElementById('m-custom').value;
+    let margin;
+    if (custom !== '' && +custom >= 0) margin = +custom;
+    else margin = +document.querySelector('input[name=tier]:checked').value;
+    onOk(margin);
+  };
+  document.getElementById('modal').classList.add('open');
+}
+
+async function editMargin(itemId, current, name) {
+  document.getElementById('m-title').textContent = '✏️ ویرایش سود — ' + name;
+  document.getElementById('m-body').innerHTML =
+    `<label class="f">سود جدید (؋)<input id="m-custom" type="number" min="0" value="${current}"></label>`;
+  document.getElementById('m-ok').onclick = async () => {
+    const r = await apiPut('/api/seller/items/' + itemId, {margin: +document.getElementById('m-custom').value});
+    if (!r.ok) return toast(r.error, true);
+    toast('سود به‌روز شد — قیمت فروش: ' + fmt(r.sale_price));
+    closeModal(); loadMine();
+  };
+  document.getElementById('modal').classList.add('open');
+}
+
+async function delItem(id) {
+  if (!confirm('این محصول از فروشگاهت حذف شود؟')) return;
+  const r = await apiDel('/api/seller/items/' + id);
+  if (!r.ok) return toast(r.error, true);
+  toast('حذف شد'); loadMine(); loadDash();
+}
+
+function closeModal() { document.getElementById('modal').classList.remove('open'); }
+
+async function loadOrders() {
+  const r = await apiGet('/api/seller/orders');
+  if (!r.ok) return toast(r.error, true);
+  document.getElementById('orders').innerHTML = r.orders.length ? r.orders.map(o => `
+    <tr><td style="direction:ltr">${o.code}</td><td>${o.image_emoji} ${escapeHtml(o.product_name)}</td>
+    <td>${fa(o.qty)}</td><td class="money">${fmt(o.total)}</td><td class="money" style="color:var(--brand-dark);font-weight:800">${fmt(o.seller_earning)}</td>
+    <td>${escapeHtml(o.customer_name)}<br><small class="muted" style="direction:ltr;display:inline-block">${escapeHtml(o.customer_phone)}</small></td>
+    <td>${statusBadge(o.status)}</td><td><small>${faDate(o.created_at)}</small></td></tr>`).join('')
+    : '<tr><td colspan="8" class="empty">هنوز سفارشی نداری — لینک فروشگاهت را پخش کن 📣</td></tr>';
+}
+
+async function loadMoney() {
+  const r = await apiGet('/api/seller/settlements');
+  if (!r.ok) return toast(r.error, true);
+  document.getElementById('money-stats').innerHTML = `
+    <div class="stat green"><div class="k">کل درآمد</div><div class="v money">${fmt(r.earned)}</div></div>
+    <div class="stat blue"><div class="k">قابل برداشت</div><div class="v money">${fmt(r.withdrawable)}</div></div>
+    <div class="stat"><div class="k">تسویه‌شده</div><div class="v money">${fmt(r.paid)}</div></div>`;
+  document.getElementById('settles').innerHTML = r.settlements.length ? r.settlements.map(s => `
+    <tr><td class="money">${fmt(s.amount)}</td><td>${escapeHtml(s.label || '—')}</td>
+    <td>${s.status === 'paid' ? '<span class="status st-delivered">پرداخت شده</span>' : '<span class="status st-pending">در انتظار</span>'}</td>
+    <td><small>${faDate(s.paid_at || s.created_at)}</small></td></tr>`).join('')
+    : '<tr><td colspan="4" class="empty">هنوز تسویه‌ای ثبت نشده.</td></tr>';
+}
+
+(async () => {
+  const c = await apiGet('/api/categories');
+  if (c.ok) document.getElementById('cat').innerHTML =
+    '<option value="">همه دسته‌ها</option>' + c.categories.map(x => `<option>${escapeHtml(x)}</option>`).join('');
+  await loadDash(); await loadMine();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>فروشگاه | فروش بدون سرمایه</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar"><div class="inner">
+  <a class="logo" href="index.html"><span class="mark">🛍️</span> فروش بدون سرمایه</a>
+  <nav class="nav" id="nav-links"></nav>
+</div></header>
+
+<div id="shop-view">
+  <div class="shop-head"><div class="container">
+    <div style="font-size:3rem">🛍️</div>
+    <h1 id="shop-name" style="margin:4px 0">...</h1>
+    <p style="margin:0;opacity:.9">✅ پرداخت هنگام تحویل | 🚚 ارسال در مزارشریف | ↩️ ضمانت مرجوعی</p>
+  </div></div>
+  <div class="section"><div class="container">
+    <div class="products" id="items"></div>
+  </div></div>
+</div>
+
+<div class="container track" id="track-view" style="display:none">
+  <div class="card center" id="track-card"><p class="muted">در حال جستجو...</p></div>
+  <p class="center"><a href="index.html">← بازگشت به صفحه اصلی</a></p>
+</div>
+
+<div class="modal-bg" id="modal"><div class="modal">
+  <h3 style="margin-top:0" id="o-title">🧾 ثبت سفارش</h3>
+  <div id="o-info" class="muted" style="margin-bottom:10px"></div>
+  <div class="form">
+    <label class="f">نام و تخلص<input id="o-name" placeholder="نام شما"></label>
+    <label class="f">شماره تماس<input id="o-phone" inputmode="numeric" placeholder="0701234567" style="direction:ltr;text-align:right"></label>
+    <div class="form-2">
+      <label class="f">تعداد<input id="o-qty" type="number" min="1" value="1"></label>
+      <label class="f">شهر<select id="o-city"></select></label>
+    </div>
+    <label class="f">آدرس دقیق<input id="o-addr" placeholder="مثلاً کارته صلح، کوچه ۳، خانه ۱۲"></label>
+    <div class="result" id="o-total" style="background:#ecfdf5;border-radius:12px;padding:10px;text-align:center;font-weight:800;color:var(--brand-dark)"></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary" onclick="submitOrder()" style="flex:1">✅ ثبت سفارش (پرداخت هنگام تحویل)</button>
+      <button class="btn btn-ghost" onclick="closeModal()">انصراف</button>
+    </div>
+  </div>
+</div></div>
+
+<div class="modal-bg" id="done"><div class="modal center">
+  <div style="font-size:3.5rem">🎉</div>
+  <h3>سفارشت ثبت شد!</h3>
+  <p>کد پیگیری تو:</p>
+  <p style="font-size:1.6rem;font-weight:800;direction:ltr" id="done-code"></p>
+  <p class="muted">همکاران ما به‌زودی برای تأیید با تو تماس می‌گیرند.<br>💵 پرداخت هنگام تحویل درب منزل</p>
+  <button class="btn btn-primary btn-block" onclick="document.getElementById('done').classList.remove('open')">باشه 👍</button>
+</div></div>
+
+<footer>فروش بدون سرمایه 🇦🇫 — خرید امن با پرداخت هنگام تحویل</footer>
+<script src="api.js"></script>
+<script>
+renderTopbar();
+const fa = n => Number(n).toLocaleString('fa-AF');
+const qs = new URLSearchParams(location.search);
+let SCODE = qs.get('s') || '', DELIVERY = 100, current = null;
+
+if (qs.get('track')) {
+  document.getElementById('shop-view').style.display = 'none';
+  document.getElementById('track-view').style.display = '';
+  track(qs.get('track'));
+} else if (SCODE) {
+  loadShop();
+} else {
+  document.getElementById('shop-view').innerHTML =
+    '<div class="container"><div class="card empty" style="margin:40px 0">فروشگاهی انتخاب نشده. <a href="index.html">بازگشت ←</a></div></div>';
+}
+
+async function loadShop() {
+  const r = await apiGet('/api/shop/' + encodeURIComponent(SCODE));
+  if (!r.ok) {
+    document.getElementById('shop-view').innerHTML =
+      `<div class="container"><div class="card empty" style="margin:40px 0">${escapeHtml(r.error)} <a href="index.html">بازگشت ←</a></div></div>`;
+    return;
+  }
+  DELIVERY = r.delivery_fee;
+  document.getElementById('shop-name').textContent = 'فروشگاه ' + r.seller.name;
+  document.title = 'فروشگاه ' + r.seller.name + ' | فروش بدون سرمایه';
+  const box = document.getElementById('items');
+  if (!r.items.length) { box.innerHTML = '<p class="empty">این فروشگاه فعلاً محصولی ندارد.</p>'; return; }
+  box.innerHTML = r.items.map(p => `
+    <div class="product"><div class="img">${escapeHtml(p.image_emoji)}</div>
+      <div class="body"><h3>${escapeHtml(p.name)}</h3>
+        <div class="cat">${escapeHtml(p.category)}</div>
+        ${p.description ? `<div class="cat">${escapeHtml(p.description)}</div>` : ''}
+        <div class="price" style="font-size:1.2rem">${fmt(p.sale_price)}</div>
+        <div class="stock">${p.stock < 5 ? `فقط ${fa(p.stock)} عدد مانده ⚡` : 'موجود ✅'}</div>
+        <div class="foot"><button class="btn btn-primary btn-sm btn-block"
+          onclick='openOrder(${JSON.stringify({id: p.product_id, name: p.name, price: p.sale_price, stock: p.stock})})'>🛒 سفارش</button></div>
+      </div></div>`).join('');
+}
+
+function openOrder(p) {
+  current = p;
+  document.getElementById('o-title').textContent = '🧾 سفارش: ' + p.name;
+  document.getElementById('o-qty').max = Math.min(p.stock, 50);
+  updTotal();
+  document.getElementById('modal').classList.add('open');
+}
+function updTotal() {
+  if (!current) return;
+  const q = Math.max(1, +document.getElementById('o-qty').value || 1);
+  document.getElementById('o-info').innerHTML =
+    `قیمت واحد: <b class="money">${fmt(current.price)}</b> + ارسال: <b class="money">${fmt(DELIVERY)}</b>`;
+  document.getElementById('o-total').textContent =
+    '💵 جمع قابل پرداخت هنگام تحویل: ' + fmt(current.price * q + DELIVERY);
+}
+document.getElementById('o-qty').addEventListener('input', updTotal);
+function closeModal() { document.getElementById('modal').classList.remove('open'); }
+
+async function submitOrder() {
+  const body = {seller_code: SCODE, product_id: current.id, qty: +document.getElementById('o-qty').value || 1,
+    customer_name: document.getElementById('o-name').value.trim(),
+    customer_phone: document.getElementById('o-phone').value.trim(),
+    address: document.getElementById('o-addr').value.trim(),
+    city: document.getElementById('o-city').value};
+  const r = await apiPost('/api/orders', body);
+  if (!r.ok) return toast(r.error, true);
+  closeModal();
+  document.getElementById('done-code').textContent = r.code;
+  document.getElementById('done').classList.add('open');
+  loadShop();
+}
+
+async function track(code) {
+  const r = await apiGet('/api/orders/track/' + encodeURIComponent(code.trim()));
+  const card = document.getElementById('track-card');
+  if (!r.ok) { card.innerHTML = `<div style="font-size:3rem">😕</div><p>${escapeHtml(r.error)}</p>`; return; }
+  const o = r.order;
+  card.innerHTML = `<div style="font-size:3rem">${escapeHtml(o.image_emoji)}</div>
+    <h3 style="margin:4px 0">${escapeHtml(o.product_name)} × ${fa(o.qty)}</h3>
+    <p class="muted">کد: <b style="direction:ltr;display:inline-block">${escapeHtml(o.code)}</b> | فروشنده: ${escapeHtml(o.seller_name)}</p>
+    <p>${statusBadge(o.status)}</p>
+    <p style="font-weight:800">💵 جمع: <span class="money">${fmt(o.total)}</span> <small class="muted">(شامل ارسال ${fmt(o.delivery_fee)})</small></p>
+    <p class="muted"><small>ثبت: ${faDate(o.created_at)}</small></p>`;
+}
+
+(async () => {
+  const m = await apiGet('/api/meta');
+  const cities = (m.ok && m.cities) || ['مزارشریف'];
+  document.getElementById('o-city').innerHTML = cities.map(c => `<option>${c}</option>`).join('');
+})();
+</script>
+</body>
+</html>
