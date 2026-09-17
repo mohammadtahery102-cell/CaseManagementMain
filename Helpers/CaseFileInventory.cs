@@ -301,7 +301,7 @@ WHERE c.CasID = @Id LIMIT 1;", new SQLiteParameter("@Id", caseId));
             try { relative = fullPath.Substring(caseFolder.TrimEnd('\\', '/').Length).TrimStart('\\', '/'); }
             catch { return FileKinds.Other; }
             string first = relative.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)[0];
-            return FileKinds.FromFolder(first);
+            return FileKinds.Infer(first, Path.GetFileName(fullPath));
         }
 
         private static bool IsAtomicTemp(string path)
@@ -360,17 +360,64 @@ WHERE c.CasID = @Id LIMIT 1;", new SQLiteParameter("@Id", caseId));
 
         public static string FromFolder(string folder)
         {
-            if (string.Equals(folder, FileHelper.DiskGuardianPhotosFolder, StringComparison.OrdinalIgnoreCase)) return OrphanGuardian;
-            if (string.Equals(folder, FileHelper.DiskFamilyPhotosFolder, StringComparison.OrdinalIgnoreCase)) return Family;
+            if (string.IsNullOrWhiteSpace(folder)) return Other;
+
+            if (string.Equals(folder, FileHelper.DiskHeadPhotosFolder, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(folder, FileHelper.SectionHeadPhoto, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(folder, FileHelper.LegacyDiskPhotoFolder, StringComparison.OrdinalIgnoreCase)
+                || folder.EndsWith("-HeadPhoto", StringComparison.OrdinalIgnoreCase))
+                return HeadGuardian;
+
+            if (string.Equals(folder, FileHelper.DiskGuardianPhotosFolder, StringComparison.OrdinalIgnoreCase))
+                return OrphanGuardian;
+
+            if (string.Equals(folder, FileHelper.DiskFamilyPhotosFolder, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(folder, FileHelper.SectionFamilyPhoto, StringComparison.OrdinalIgnoreCase)
+                || folder.EndsWith("-FamilyPhoto", StringComparison.OrdinalIgnoreCase))
+                return Family;
+
             if (string.Equals(folder, FileHelper.SectionMemberPhotos, StringComparison.OrdinalIgnoreCase)) return Member;
             if (string.Equals(folder, FileHelper.SectionRepresentativePhotos, StringComparison.OrdinalIgnoreCase)) return Representative;
             if (string.Equals(folder, FileHelper.SectionVisitPhotos, StringComparison.OrdinalIgnoreCase)) return Visit;
             if (string.Equals(folder, FileHelper.DiskDocumentsFolder, StringComparison.OrdinalIgnoreCase)) return Document;
             if (string.Equals(folder, FileHelper.SectionCaseFiles, StringComparison.OrdinalIgnoreCase)) return CaseFile;
             if (string.Equals(folder, FileHelper.SectionExports, StringComparison.OrdinalIgnoreCase)) return Export;
-            if (string.Equals(folder, FileHelper.LegacyDiskPhotoFolder, StringComparison.OrdinalIgnoreCase)) return HeadGuardian;
             if (string.Equals(folder, FileHelper.LegacyDocsFolder, StringComparison.OrdinalIgnoreCase)) return Document;
             return Other;
+        }
+
+        // نام فایل بر پوشهٔ مبهم برتری دارد: فایل HeadGuardian که هنوز در
+        // GuardianPhotos مانده نباید OrphanGuardian تشخیص داده شود.
+        public static string FromFileName(string fileName)
+        {
+            if (string.IsNullOrWhiteSpace(fileName)) return "";
+
+            string name;
+            try { name = Path.GetFileNameWithoutExtension(fileName); }
+            catch { return ""; }
+            if (string.IsNullOrWhiteSpace(name)) return "";
+
+            if (name.IndexOf(HeadGuardian, StringComparison.OrdinalIgnoreCase) >= 0)
+                return HeadGuardian;
+            if (name.IndexOf(OrphanGuardian, StringComparison.OrdinalIgnoreCase) >= 0)
+                return OrphanGuardian;
+            if (name.IndexOf("_" + Family + "_", StringComparison.OrdinalIgnoreCase) >= 0)
+                return Family;
+            if (name.EndsWith("-Head", StringComparison.OrdinalIgnoreCase))
+                return HeadGuardian;
+            if (name.EndsWith("-Family", StringComparison.OrdinalIgnoreCase))
+                return Family;
+            if (name.EndsWith("-Guardian", StringComparison.OrdinalIgnoreCase))
+                return OrphanGuardian;
+            return "";
+        }
+
+        public static string Infer(string folder, string fileName)
+        {
+            string fromName = FromFileName(fileName);
+            if (!string.IsNullOrWhiteSpace(fromName))
+                return fromName;
+            return FromFolder(folder);
         }
     }
 }

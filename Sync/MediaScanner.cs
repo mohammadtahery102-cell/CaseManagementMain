@@ -402,30 +402,6 @@ namespace CaseManagement.Sync
 
                 Classify(item, plan, byCode, PhotoExtensions, seen);
 
-                // عکسِ جمعی ستونِ خودش را دارد؛ Classify مقدارِ عکسِ سرپرست را
-                // گذاشته، پس اینجا با مقدارِ درست جایگزین می‌شود.
-                if (item.CasId > 0)
-                {
-                    CaseRef found;
-                    if (byCode.TryGetValue(SyncCodeNormalizer.Normalize(item.CaseCode), out found))
-                    {
-                        item.ExistingPath = found.FamilyPhotoPath;
-                        if (!string.IsNullOrWhiteSpace(found.FamilyPhotoPath))
-                        {
-                            item.Action = MediaAction.Replace;
-                            item.Selected = false;
-                            item.Message = "این پرونده از قبل عکس جمعی دارد؛ فقط با تأیید شما جایگزین می‌شود.";
-                        }
-                        else if (item.Action == MediaAction.Replace)
-                        {
-                            // Classify به‌خاطرِ عکسِ سرپرست «جایگزینی» گفته بود
-                            item.Action = MediaAction.Add;
-                            item.Selected = true;
-                            item.Message = null;
-                        }
-                    }
-                }
-
                 if (item.IsApplicable) InspectImage(item);
 
                 plan.Photos.Add(item);
@@ -724,6 +700,21 @@ namespace CaseManagement.Sync
 
             item.CasId = found.CasId;
 
+            if (item.Kind == MediaKind.FamilyPhoto)
+            {
+                item.ExistingPath = found.FamilyPhotoPath;
+                if (!string.IsNullOrWhiteSpace(found.FamilyPhotoPath))
+                {
+                    item.Action = MediaAction.Replace;
+                    item.Selected = false;
+                    item.Message = "این پرونده از قبل عکس جمعی دارد؛ فقط با تأیید شما جایگزین می‌شود.";
+                    return;
+                }
+
+                item.Action = MediaAction.Add;
+                return;
+            }
+
             if (item.Kind == MediaKind.Photo && !string.IsNullOrWhiteSpace(found.PhotoPath))
             {
                 item.ExistingPath = found.PhotoPath;
@@ -740,7 +731,7 @@ namespace CaseManagement.Sync
         // ─── بررسیِ تصویر: ابعاد، اندازه، چرخش ───────────────────────────────
         private void InspectImage(MediaItem item)
         {
-            if (item.Kind != MediaKind.Photo) return;
+            if (item.Kind != MediaKind.Photo && item.Kind != MediaKind.FamilyPhoto) return;
 
             if (item.SizeBytes > RecommendedMaxPhotoBytes)
             {

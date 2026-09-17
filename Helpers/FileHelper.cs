@@ -11,8 +11,9 @@ namespace CaseManagement.Helpers
 {
     public static class FileHelper
     {
-        // روی دیسک: پوشهٔ عکس تکی «Photo» است؛ ثابتِ کد همان HeadPhoto می‌ماند
-        // تا فراخوان‌های موجود نشکنند.
+        // روی دیسک: عکس تکی سرپرست خانوار در HeadPhotos است؛ ثابتِ کد همان
+        // HeadPhoto می‌ماند تا فراخوان‌های موجود نشکنند. پوشهٔ قدیمی Photo
+        // فقط برای مهاجرت خوانده می‌شود.
         public const string SectionHeadPhoto = "HeadPhoto";
         public const string SectionFamilyPhoto = "FamilyPhoto";
         public const string SectionMemberPhotos = "MemberPhotos";
@@ -33,6 +34,7 @@ namespace CaseManagement.Helpers
         public const string SectionExports = "Exports";
         public const string SectionTemp = "Temp";
 
+        public const string DiskHeadPhotosFolder = "HeadPhotos";
         public const string DiskGuardianPhotosFolder = "GuardianPhotos";
         public const string DiskFamilyPhotosFolder = "FamilyPhotos";
         public const string DiskDocumentsFolder = "Documents";
@@ -848,8 +850,9 @@ namespace CaseManagement.Helpers
         // قدیمی فقط برای سازگاری API در این نقطه ترجمه می‌شوند.
         public static string DiskFolderForSection(string sectionName)
         {
-            if (string.Equals(sectionName, SectionHeadPhoto, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(sectionName, SectionGuardianPhotos, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(sectionName, SectionHeadPhoto, StringComparison.OrdinalIgnoreCase))
+                return DiskHeadPhotosFolder;
+            if (string.Equals(sectionName, SectionGuardianPhotos, StringComparison.OrdinalIgnoreCase))
                 return DiskGuardianPhotosFolder;
             if (string.Equals(sectionName, SectionFamilyPhoto, StringComparison.OrdinalIgnoreCase))
                 return DiskFamilyPhotosFolder;

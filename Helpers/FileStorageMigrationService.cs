@@ -36,6 +36,10 @@ namespace CaseManagement.Helpers
             public bool Succeeded { get { return Failed == 0; } }
         }
 
+        // 3 = HeadPhotos جدا از GuardianPhotos. نسخهٔ ۲ هر دو را در
+        // GuardianPhotos می‌گذاشت و تشخیص نوع را خراب می‌کرد.
+        public const string CurrentLayoutVersion = "3";
+
         public static bool IsSafeMode { get; private set; }
         public static Result LastStartupResult { get; private set; }
 
@@ -148,7 +152,7 @@ namespace CaseManagement.Helpers
                 }
                 else
                 {
-                    try { SettingsHelper.Set("StorageLayoutVersion", "2"); } catch { }
+                    try { SettingsHelper.Set("StorageLayoutVersion", CurrentLayoutVersion); } catch { }
                 }
             }
             return result;
@@ -190,7 +194,7 @@ namespace CaseManagement.Helpers
             if (string.Equals(version, "Rollback", StringComparison.OrdinalIgnoreCase))
                 return new Result { TargetRoot = current };
 
-            if (string.Equals(version, "2", StringComparison.Ordinal) && !volatileRoot)
+            if (string.Equals(version, CurrentLayoutVersion, StringComparison.Ordinal) && !volatileRoot)
                 return new Result { TargetRoot = current };
 
             string target = volatileRoot
@@ -344,7 +348,7 @@ ORDER BY JournalID DESC;");
                     catch { }
                     inventory.Files.Add(new CaseFileInventory.FileEntry
                     {
-                        Kind = FileKinds.FromFolder(first),
+                        Kind = FileKinds.Infer(first, Path.GetFileName(full)),
                         StoredPath = full,
                         FullPath = full,
                         Exists = true,

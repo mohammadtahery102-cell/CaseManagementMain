@@ -6771,9 +6771,9 @@ WHERE CasID = @CasID", con))
             public int Missing { get { return MissingPaths.Count; } }
         }
 
-        // عکس و سند را از مسیر دیتابیس، پوشهٔ فعلی پرونده، و پوشهٔ قدیمی
-        // (ریشه/کد) جمع می‌کند. پوشهٔ نوع فقط هنگام وجود فایل واقعی ساخته
-        // می‌شود؛ بنابراین دیگر خروجی موفقِ متشکل از پوشه‌های خالی نداریم.
+        // عکس سرپرست/جمعی فقط از PhotoPath و FamilyPhotoPath. اسکن پوشهٔ
+        // قدیمی مالِ مهاجرت است، نه خروجی — وگرنه نوع عکس از نام پوشه
+        // اشتباه تشخیص داده می‌شد.
         private MediaExportResult CollectCaseMedia(int caseId, string caseCode, BatchMediaKind kind)
         {
             var result = new MediaExportResult();
@@ -6838,14 +6838,17 @@ WHERE CasID = @Id AND IFNULL(FilePath, '') <> '';");
                 }
             }
 
-            HarvestFolderFiles(FileHelper.GetCaseFolderPath(caseCode), caseCode, result, kind);
-
-            string root = FileHelper.GetBaseRootFolder();
-            if (!string.IsNullOrWhiteSpace(root))
+            if (all || docs)
             {
-                HarvestFolderFiles(Path.Combine(root, clean), caseCode, result, kind);
-                if (!string.Equals(clean, caseCode.Trim(), StringComparison.OrdinalIgnoreCase))
-                    HarvestFolderFiles(Path.Combine(root, caseCode.Trim()), caseCode, result, kind);
+                HarvestFolderFiles(FileHelper.GetCaseFolderPath(caseCode), caseCode, result, kind);
+
+                string root = FileHelper.GetBaseRootFolder();
+                if (!string.IsNullOrWhiteSpace(root))
+                {
+                    HarvestFolderFiles(Path.Combine(root, clean), caseCode, result, kind);
+                    if (!string.Equals(clean, caseCode.Trim(), StringComparison.OrdinalIgnoreCase))
+                        HarvestFolderFiles(Path.Combine(root, caseCode.Trim()), caseCode, result, kind);
+                }
             }
 
             return result;
@@ -6879,16 +6882,6 @@ WHERE CasID = @Id AND IFNULL(FilePath, '') <> '';");
             string clean = FileHelper.CleanName(caseCode);
             bool all = kind == BatchMediaKind.All;
 
-            if (all || kind == BatchMediaKind.HeadPhoto)
-            {
-                if (all)
-                    HarvestSectionFiles(Path.Combine(caseDir, FileHelper.DiskPhotoFolder), caseCode, FileHelper.SectionHeadPhoto, result);
-                HarvestSectionFiles(Path.Combine(caseDir, clean + "-HeadPhoto"), caseCode, FileHelper.SectionHeadPhoto, result);
-            }
-
-            if (all || kind == BatchMediaKind.FamilyPhoto)
-                HarvestSectionFiles(Path.Combine(caseDir, clean + "-FamilyPhoto"), caseCode, FileHelper.SectionFamilyPhoto, result);
-
             if (all || kind == BatchMediaKind.Documents)
             {
                 HarvestSectionFiles(Path.Combine(caseDir, FileHelper.SectionDocs), caseCode, FileHelper.SectionDocs, result);
@@ -6915,6 +6908,12 @@ WHERE CasID = @Id AND IFNULL(FilePath, '') <> '';");
             foreach (string file in files)
             {
                 if (Path.GetFileName(file).StartsWith(".", StringComparison.Ordinal)) continue;
+                string expectedKind = FileKindPolicy.FromSection(section);
+                string inferredKind = FileKinds.Infer(Path.GetFileName(sourceFolder), Path.GetFileName(file));
+                if (!string.IsNullOrWhiteSpace(expectedKind)
+                    && !string.Equals(inferredKind, expectedKind, StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(inferredKind, FileKinds.Other, StringComparison.OrdinalIgnoreCase))
+                    continue;
                 PlaceMediaFile(file, caseCode, section, result);
             }
         }
