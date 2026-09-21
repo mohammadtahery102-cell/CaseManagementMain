@@ -14,6 +14,14 @@ namespace CaseManagement.Helpers
         public static string CurrentCenterCode { get; private set; }
         public static string CurrentCenterName { get; private set; }
 
+        // رفعِ شکستِ کامپایل — Helpers/ProvinceScope.cs (کامیتِ 20c4a7e) به این
+        // عضو وابسته است ولی تعریفش هیچ‌وقت کامیت نشده بود. فعلاً هیچ کوئریِ
+        // کامیت‌شده‌ای از ProvinceScope.Sql استفاده نمی‌کند (فقط
+        // DatabaseHelper.AttachParameters پارامترهای @PFMode/@PF را بدونِ
+        // اثر می‌بندد)، پس مقدارِ ثابتِ خالی هیچ رفتارِ دسترسیِ موجودی را
+        // تغییر نمی‌دهد — صرفاً وابستگیِ کامپایل را برمی‌گرداند.
+        public static string ProvinceFilter { get { return string.Empty; } }
+
         // true فقط برای SuperAdmin که گزینه "همه مراکز" را انتخاب کرده
         public static bool IsAllCenters { get; private set; }
 
