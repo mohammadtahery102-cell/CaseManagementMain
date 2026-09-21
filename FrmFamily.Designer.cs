@@ -70,7 +70,7 @@ namespace CaseManagement
             this.btnBrowseMemberPhoto   = new System.Windows.Forms.Button();
             this.btnClearMemberPhoto    = new System.Windows.Forms.Button();
             this.dtpBirthDate           = new CaseManagement.Helpers.PersianDatePicker();
-            this.tabsMain               = new RtlTabControl();
+            this.tabsMain               = new CaseManagement.Helpers.RtlTabControl();
             this.lblHeadInfo            = new System.Windows.Forms.Label();
             this.label1  = new System.Windows.Forms.Label();
             this.label2  = new System.Windows.Forms.Label();
@@ -556,29 +556,9 @@ namespace CaseManagement
         // ─── Helpers ─────────────────────────────────────────────────────────
 
         // ─── رفعِ باگِ «چپ‌چین بودن تب‌ها» ───────────────────────────────────
-        // آموزش — TabControl.RightToLeftLayout یک باگِ شناخته‌شده در WinForms
-        // دارد: مقدار را می‌پذیرد ولی exstyle بومیِ WS_EX_LAYOUTRTL را واقعاً
-        // به هندلِ پنجره اعمال نمی‌کند؛ در نتیجه نوارِ سربرگ‌ها همچنان از چپ
-        // شروع می‌شود، نه راست. همین باگ باعث می‌شد ResponsiveLayout.IsMirrored
-        // (که برای «آینه‌ی دوباره‌ی فرم» حساب می‌کند) اشتباهاً فکر کند این تب
-        // واقعاً آینه شده، و برچسبِ فیلدهای داخلِ هر تب (مثل «نوع معلولیت») را
-        // با تراز غلط (چپ به‌جای راست) بچیند. راه‌حل، دقیقاً همان الگویی است
-        // که برای باگِ مشابهِ اسکرول‌بار در FrmCase.Designer.cs استفاده شد:
-        // اعمالِ دستیِ exstyle در CreateParams.
-        private class RtlTabControl : System.Windows.Forms.TabControl
-        {
-            protected override System.Windows.Forms.CreateParams CreateParams
-            {
-                get
-                {
-                    const int WS_EX_LAYOUTRTL = 0x00400000;
-                    System.Windows.Forms.CreateParams cp = base.CreateParams;
-                    if (RightToLeftLayout)
-                        cp.ExStyle |= WS_EX_LAYOUTRTL;
-                    return cp;
-                }
-            }
-        }
+        // آموزش (فاز ۱ طرحِ طراحی) — این کلاس قبلاً این‌جا (و به‌طور جداگانه در
+        // FrmCase.Designer.cs) تعریف می‌شد. حالا در Helpers/RtlTabControl.cs
+        // مشترک است؛ رفتار عیناً همان است.
 
         // ─── شبکه‌ی فیلدها به سبک طرح مرجع ────────────────────────────────────
         // چند ستونِ هم‌عرض؛ هر سلول یک FieldBox (برچسبِ بالا + ورودیِ گردگوشه).

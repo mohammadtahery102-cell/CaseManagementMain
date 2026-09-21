@@ -539,6 +539,9 @@
     <Compile Include="Helpers\SettingsHelper.cs" />
     <Compile Include="Helpers\SqlHelpers.cs" />
     <Compile Include="Helpers\UiTheme.cs" />
+    <Compile Include="Helpers\ThemeManager.cs" />
+    <Compile Include="Helpers\BaseForm.cs" />
+    <Compile Include="Helpers\RtlTabControl.cs" />
     <Compile Include="Helpers\ToggleSwitch.cs">
       <SubType>Component</SubType>
     </Compile>

@@ -22,10 +22,14 @@ namespace CaseManagement.Helpers
     // ─────────────────────────────────────────────────────────────────────────
     public class SidebarNav : Panel
     {
-        public static readonly Color BackDark   = ColorTranslator.FromHtml("#16213E");
-        public static readonly Color BackDarker = ColorTranslator.FromHtml("#101A31");
-        public static readonly Color ItemText   = ColorTranslator.FromHtml("#B9C2D8");
-        public static readonly Color GroupText  = ColorTranslator.FromHtml("#6C7A99");
+        // آموزش (فاز ۱ طرحِ طراحی) — این رنگ‌ها قبلاً این‌جا هاردکد بودند و
+        // مستقل از UiTheme می‌ماندند. حالا از ThemeManager می‌آیند (که خودش
+        // همان hex قبلی را پیش‌فرض دارد) تا یک منبعِ واحد داشته باشند؛ ظاهر
+        // فعلی بدون تغییر می‌ماند.
+        public static Color BackDark   => ThemeManager.ShellSurface;
+        public static Color BackDarker => ThemeManager.ShellSurfaceDark;
+        public static Color ItemText   => ThemeManager.ShellItemText;
+        public static Color GroupText  => ThemeManager.ShellGroupText;
 
         private readonly Panel _itemsHost;
         private readonly List<NavItem> _items = new List<NavItem>();

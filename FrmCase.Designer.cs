@@ -1380,7 +1380,7 @@
             ((System.ComponentModel.ISupportInitialize)(this.picRep1Photo)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.picRep2Photo)).EndInit();
 
-            this.tabsCase = new RtlTabControl();
+            this.tabsCase = new CaseManagement.Helpers.RtlTabControl();
             this.tabsCase.Name              = "tabsCase";
             this.tabsCase.Dock              = System.Windows.Forms.DockStyle.Fill;
             this.tabsCase.Font              = CaseManagement.Helpers.UiTheme.FontBold(CaseManagement.Helpers.UiTheme.SizeSmall);
@@ -2232,24 +2232,9 @@
         }
 
         // ─── رفعِ باگِ «چپ‌چین بودن تب‌ها» ───────────────────────────────────
-        // آموزش — همان کلاسی که در FrmFamily.Designer.cs استفاده شد: WinForms
-        // مقدار TabControl.RightToLeftLayout را می‌پذیرد ولی exstyle بومیِ
-        // WS_EX_LAYOUTRTL را به هندلِ پنجره اعمال نمی‌کند، پس نوار سربرگ‌ها از
-        // چپ شروع می‌شود و ResponsiveLayout.IsMirrored هم اشتباه محاسبه می‌کند.
-        private class RtlTabControl : System.Windows.Forms.TabControl
-        {
-            protected override System.Windows.Forms.CreateParams CreateParams
-            {
-                get
-                {
-                    const int WS_EX_LAYOUTRTL = 0x00400000;
-                    System.Windows.Forms.CreateParams cp = base.CreateParams;
-                    if (RightToLeftLayout)
-                        cp.ExStyle |= WS_EX_LAYOUTRTL;
-                    return cp;
-                }
-            }
-        }
+        // آموزش (فاز ۱ طرحِ طراحی) — این کلاس قبلاً این‌جا (و به‌طور جداگانه در
+        // FrmFamily.Designer.cs) تعریف می‌شد. حالا در Helpers/RtlTabControl.cs
+        // مشترک است؛ رفتار عیناً همان است.
 
         // ─── چرا تب‌ها رنگ‌بندیِ گروهی ندارند ────────────────────────────────
         // آموزش (تصمیمِ ۱۴۰۵/۰۶/۱۶) — یک‌بار با TabDrawMode.OwnerDrawFixed
@@ -2817,7 +2802,7 @@
         private System.Windows.Forms.GroupBox grpHead;
         private System.Windows.Forms.GroupBox grpPhysical;
         private System.Windows.Forms.GroupBox grpCase;
-        private RtlTabControl tabsCase;
+        private CaseManagement.Helpers.RtlTabControl tabsCase;
         private System.Windows.Forms.Panel tabMembersHost;
         private System.Windows.Forms.Label lblMembersPlaceholder;
 
