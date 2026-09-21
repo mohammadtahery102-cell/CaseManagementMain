@@ -20,33 +20,37 @@ namespace CaseManagement.DAL
             connectionString = settings.ConnectionString;
         }
 
-        // مسیر قابل‌نوشتن برای CaseDB.sqlite.
-        // نصب داخل Program Files اجازه ساخت فایل کنار exe را نمی‌دهد
-        // («unable to open database file»). در آن حالت داده به
-        // %LocalAppData%\CaseManagement می‌رود. اجرای Debug کنار پروژه
-        // همچنان همان CaseDB.sqlite موجود را استفاده می‌کند.
+        // مسیر قابل‌نوشتن برای CaseDB.sqlite — **همیشه یک محل، برای همهٔ اجراها**:
+        //     %LocalAppData%\CaseManagement\CaseDB.sqlite
+        //
+        // ⚠ رفعِ باگِ «داده‌ها پرید / در وب نمی‌آید»: نسخهٔ قبلی اگر پوشهٔ کنارِ
+        // exe قابل‌نوشتن بود همان را ترجیح می‌داد، و فقط در نصبِ Program Files
+        // به LocalAppData می‌رفت. نتیجه این بود که **هر exe دیتابیسِ خودش را
+        // می‌ساخت**: bin\x64\Debug یکی (۲۰۱MB، دادهٔ واقعی)، bin\Debug یکی
+        // (۳.۷MB)، bin\Release یکی (۲.۷MB) و LocalAppData یکی (۱.۳MB با فقط
+        // کاربرِ admin). کاربر در یکی کاربر می‌ساخت و در دیگری دنبالش می‌گشت؛
+        // بدتر، نسخهٔ LocalAppData ستونِ GlobalID را نداشت و همگام‌سازیِ
+        // کاربران از اساس در آن نسخه می‌شکست.
+        //
+        // حالا محل ثابت است و با پوشهٔ عکس‌ها (FileHelper → همان
+        // %LocalAppData%\CaseManagement\Storage) هم‌جا می‌شود، پس دیتابیس و
+        // رسانه همیشه با هم می‌مانند.
+        //
+        // بررسیِ نخست (DataDirectory از قبل تنظیم‌شده) دست‌نخورده ماند چون
+        // آزمون‌ها با آن دیتابیسِ موقتِ خودشان را می‌نشانند.
         public static string EnsureDataDirectory()
         {
             string current = AppDomain.CurrentDomain.GetData("DataDirectory") as string;
             if (IsUsableDataDirectory(current))
                 return Path.GetFullPath(current);
 
-            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            string chosen;
+            string chosen = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "CaseManagement");
 
-            if (!IsProtectedInstallFolder(baseDir) && IsUsableDataDirectory(baseDir))
-            {
-                chosen = Path.GetFullPath(baseDir);
-            }
-            else
-            {
-                chosen = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "CaseManagement");
-                Directory.CreateDirectory(chosen);
-                if (!IsDirectoryWritable(chosen))
-                    throw new IOException("پوشه داده قابل نوشتن نیست: " + chosen);
-            }
+            Directory.CreateDirectory(chosen);
+            if (!IsDirectoryWritable(chosen))
+                throw new IOException("پوشه داده قابل نوشتن نیست: " + chosen);
 
             AppDomain.CurrentDomain.SetData("DataDirectory", chosen);
             return chosen;
