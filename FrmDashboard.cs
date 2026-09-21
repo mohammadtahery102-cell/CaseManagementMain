@@ -206,49 +206,20 @@ namespace CaseManagement
 
             _sidebar.SetActive(navDashboard);
 
+            // آموزش (فاز ۲ طرحِ طراحی) — نوارِ ابزارِ افقیِ قدیمی (toolButtons،
+            // ۱۴ دکمه) این‌جا حذف شد: طبق کامنتِ خودِ همین بخش («همان دکمه‌های
+            // نوار ابزار قبلی... هیچ قابلیتی حذف نشده») مقصدهایش صددرصد در
+            // نوار کناری (بالا) هم هست، و خودِ پانلِ toolbar از قبل
+            // Visible=false بود — یعنی این دکمه‌ها هیچ‌وقت دیده نمی‌شدند.
+            // حذف، کدِ مرده/تکراری را برمی‌دارد بدون هیچ تغییرِ ظاهری یا
+            // رفتاری (چون قبلاً هم نامرئی بود). پانلِ toolbar/userPanel نگه
+            // داشته شد چون میزبانِ سوییچِ مرکزِ SuperAdmin (_cmbCenterSwitch)
+            // است — آن منطق دست‌نخورده ماند (خارج از دامنه‌ی این فاز).
             Panel toolbar = new Panel();
             toolbar.Dock = DockStyle.Top;
             toolbar.Height = 56;
             toolbar.BackColor = UiTheme.PrimaryDark;
             toolbar.Visible = false; // جایگزین شده با نوار کناری؛ برای سازگاری نگه داشته شده
-
-            FlowLayoutPanel toolButtons = new FlowLayoutPanel();
-            toolButtons.Dock = DockStyle.Fill;
-            // آموزش — رفع باگ «آینه دوبل»: فرم از قبل RightToLeft=Yes دارد که
-            // به این پنل ارث می‌رسد. اگر همزمان FlowDirection هم RightToLeft
-            // گذاشته شود، دو آینه با هم خنثی می‌شوند و نتیجه دوباره چپ‌به‌راست
-            // می‌شود (دقیقاً همان چیزی که در اسکرین‌شات دیده شد — دکمه‌ها به
-            // لبه راست نمی‌رسیدند). LeftToRight همراه با RightToLeft ارثی
-            // فرم، دقیقاً یک‌بار آینه می‌شود و ترتیب/چیدمان درست از راست
-            // شروع می‌شود.
-            // آموزش — جریانِ دکمه‌ها با «RightToLeft=Yes» ارثیِ فرم (که هنوز روشن
-            // است) آینه می‌شود؛ پس LeftToRight درست است تا دکمه‌ها از راست شروع
-            // شوند. (این ربطی به RightToLeftLayout هندسی ندارد که خاموش شد.)
-            toolButtons.FlowDirection = FlowDirection.LeftToRight;
-            toolButtons.WrapContents = false;
-            toolButtons.Padding = new Padding(8, 6, 8, 6);
-            toolButtons.AutoSize = false;
-
-            // آموزش — بازآرایی نوار ابزار به درخواست کاربر:
-            // «دریافت اکسل» حذف شد (دیگر استفاده نمی‌شود)، «تازه‌سازی» کنار
-            // لوگو منتقل شد، «درباره برنامه» حذف شد (با کلیک روی لوگو باز
-            // می‌شود)، و «کاربران» به انتهای نوار منتقل شد.
-            toolButtons.Controls.Add(CreateToolButton("پرونده‌ها", "▤", delegate { using (var frm = new FrmCase(_filterProvince, _filterDistrict, _filterServiceStatus)) frm.ShowDialog(this); RefreshAll(); }));
-            toolButtons.Controls.Add(CreateToolButton("متقاضیان", "✎", delegate { using (var frm = new FrmApplicant()) frm.ShowDialog(this); RefreshAll(); }));
-            toolButtons.Controls.Add(CreateToolButton("جستجوی پیشرفته", "⌕", delegate { using (var frm = new FrmAdvancedSearch()) frm.ShowDialog(this); }));
-            toolButtons.Controls.Add(CreateToolButton("دستیار هوشمند", "🤖", delegate { using (var frm = new FrmAiAssistant()) frm.ShowDialog(this); RefreshAll(); }));
-            toolButtons.Controls.Add(CreateToolButton("مالی", "$", delegate { OpenFinance(); }));
-            toolButtons.Controls.Add(CreateToolButton("حسابداری ایتام", "💰", delegate { using (var frm = new CaseManagement.Accounting.FrmAccounting()) frm.ShowDialog(this); }));
-            toolButtons.Controls.Add(CreateToolButton("کارمندان", "👥", delegate { using (var frm = new FrmEmployees()) frm.ShowDialog(this); }));
-            toolButtons.Controls.Add(CreateToolButton("همگام‌سازی", "🔄", delegate { using (var frm = new CaseManagement.Sync.FrmSyncSimple()) frm.ShowDialog(this); RefreshAll(); }));
-            toolButtons.Controls.Add(CreateToolButton("تنظیمات", "⚙", OpenSettings));
-            // Feature 1 — کنارِ «تنظیمات» می‌نشیند چون هم‌خانواده‌اش است، ولی
-            // دکمهٔ جدا دارد تا کاربر بداند قواعدِ ایمنی‌اش فرق می‌کند.
-            toolButtons.Controls.Add(CreateToolButton("نوع پرونده و وضعیت", "🗂", OpenReferenceDataSettings));
-            toolButtons.Controls.Add(CreateToolButton("جزوه آموزشی", "📘", OpenTrainingManual));
-            toolButtons.Controls.Add(CreateToolButton("ارتباط با ما", "☎", OpenContactUs));
-            toolButtons.Controls.Add(CreateToolButton("کاربران", "☺", OpenUsers));
-            toolButtons.Controls.Add(CreateToolButton("خروج از حساب", "⎋", delegate { LogoutCurrentUser(); }));
 
             // ─── پانل اطلاعات کاربر + مرکز (سمت چپِ نوار) ─────────────────
             Panel userPanel = new Panel();
@@ -295,12 +266,7 @@ namespace CaseManagement
                 userPanel.Controls.Add(lblUser);
             }
 
-            // آموزش — ترتیب مهم است: پنل کاربر (Dock=Left) باید «اول» اضافه شود تا
-            // فضایش را از چپ بگیرد و سپس toolButtons (Dock=Fill) بقیه را پر کند؛
-            // در غیر این صورت Fill کل نوار را می‌گیرد و پنل کاربر روی دکمه‌ها می‌افتد
-            // (باگ «منو زیر combo رفت»).
             toolbar.Controls.Add(userPanel);
-            toolbar.Controls.Add(toolButtons);
 
             // ═══ سربرگ بالا: خوش‌آمد (راست) + کاربر و ابزارها (چپ) ═══════════
             Panel header = BuildHeaderBar();
@@ -3555,23 +3521,6 @@ WHERE IsActive = 1 ORDER BY CenterCode", con))
             }
 
             using (var frm = new CaseManagement.Accounting.FrmAccounting()) frm.ShowDialog(this);
-        }
-
-        private Button CreateToolButton(string text, string icon, EventHandler handler)
-        {
-            Button button = UiTheme.CreateButton(text, icon, UiTheme.PrimaryDark);
-            button.FlatAppearance.MouseOverBackColor = UiTheme.Primary;
-            button.FlatAppearance.MouseDownBackColor = UiTheme.PrimaryLight;
-            // فشرده‌تر از دکمه‌های معمول برنامه (فونت/پدینگ کوچک‌تر) تا همه در
-            // یک ردیف نوار ابزار جا شوند و مدرن/منظم دیده شوند.
-            button.Font = UiTheme.FontBold(8.75f);
-            button.AutoSize = true;
-            button.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            button.MinimumSize = new Size(0, 34);
-            button.Padding = new Padding(7, 4, 7, 4);
-            button.Margin = new Padding(3, 6, 3, 6);
-            button.Click += handler;
-            return button;
         }
 
         private DataGridView CreateGrid()
