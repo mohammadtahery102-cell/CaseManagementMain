@@ -126,7 +126,10 @@ ORDER BY DeferredID;",
                             int attempts = Convert.ToInt32(row["AttemptCount"]) + 1;
                             Touch(deferredId, attempts, "والد هنوز نرسیده");
                             if (attempts >= MaxAttemptCount)
+                            {
+                                RecordExhaustedConflict(change, "والد هنوز نرسیده");
                                 PurgeById(deferredId);
+                            }
                             continue;
                         }
 
@@ -144,7 +147,10 @@ ORDER BY DeferredID;",
                         int attempts = Convert.ToInt32(row["AttemptCount"]) + 1;
                         Touch(deferredId, attempts, ex.Message);
                         if (attempts >= MaxAttemptCount)
+                        {
+                            RecordExhaustedConflict(change, ex.Message);
                             PurgeById(deferredId);
+                        }
                     }
                 }
             } while (progress && safety > 0);
@@ -265,6 +271,18 @@ FROM SyncDeferredApply;",
         {
             Db.ExecuteNonQuery("DELETE FROM SyncDeferredApply WHERE DeferredID=@id;",
                 new SQLiteParameter("@id", deferredId));
+        }
+
+        // C2 — پیش از حذفِ نهاییِ ردیفِ به‌سقف‌رسیده، تغییرِ خامش را به‌عنوانِ
+        // تعارض ثبت می‌کند تا «گم شدنِ بی‌صدا» نداشته باشیم؛ مدیر می‌تواند
+        // از فهرستِ تعارض‌ها Payload را ببیند و دستی اعمال/رد کند. شکستِ
+        // خودِ ثبت نباید جلوی حذفِ صف را بگیرد (Record خودش try/catch دارد).
+        private static void RecordExhaustedConflict(SyncChange change, string lastError)
+        {
+            if (change == null) return;
+            SyncConflictStore.Record(change.EntityName, change.GlobalId,
+                OfflineSyncInitializer.ConflictApplyExhausted, 0,
+                0, change.RowVersion, null, change.Payload);
         }
 
         private static void Touch(long deferredId, int attempts, string error)

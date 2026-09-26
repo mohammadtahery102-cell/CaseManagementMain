@@ -96,6 +96,7 @@ namespace CaseManagement.Sync
                 // به‌عنوان تعارض ثبت و برای تصمیم مدیر کنار گذاشته می‌شود.
                 if (IsDuplicateUserCode(change)) return ApplyOutcome.SkippedConflict;
                 if (IsDuplicateUsername(change)) return ApplyOutcome.SkippedConflict;
+                if (IsDuplicateFormNo(change)) return ApplyOutcome.SkippedConflict;
 
                 if (!Insert(change, primaryKey))
                 {
@@ -414,6 +415,44 @@ namespace CaseManagement.Sync
             catch { return false; }
         }
 
+        // ─────────────────────────────────────────────────────────────────────
+        // C3 — عیناً IsDuplicateUserCode ولی برای FormNo. توجه: FormNoِ خالی
+        // هرگز به این‌جا نمی‌رسد چون ConvertIncomingValue آن را به NULL تبدیل
+        // می‌کند (چند NULL در ستونِ UNIQUE مجازند)؛ این تابع فقط FormNoِ واقعاً
+        // *غیرخالیِ* تکراری را می‌گیرد — مثلاً دو شعبه که خارج از
+        // CaseNumbering (وارداتِ دستی/اکسل) به‌اشتباه یک شماره ساخته‌اند.
+        private static bool IsDuplicateFormNo(SyncChange change)
+        {
+            if (!string.Equals(change.EntityName, "TblCase", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            Dictionary<string, string> incoming = Deserialize(change.Payload);
+
+            string formNo;
+            if (!incoming.TryGetValue("FormNo", out formNo) || string.IsNullOrWhiteSpace(formNo))
+                return false;
+
+            try
+            {
+                DataTable existing = Db.Query(
+                    "SELECT * FROM TblCase WHERE FormNo = @F AND IFNULL(GlobalID,'') <> @G LIMIT 1;",
+                    new SQLiteParameter("@F", formNo),
+                    new SQLiteParameter("@G", change.GlobalId ?? ""));
+
+                if (existing.Rows.Count == 0) return false;
+
+                DataRow local = existing.Rows[0];
+
+                SyncConflictStore.Record(change.EntityName, change.GlobalId,
+                    OfflineSyncInitializer.ConflictDuplicateFormNo, 0,
+                    GetInt(local, "RowVersion", 1), change.RowVersion,
+                    Serialize(local), change.Payload);
+
+                return true;
+            }
+            catch { return false; }
+        }
+
         // Phase 8 — PasswordHash/PasswordSalتِ TblUsers با Base64 در payload
         // سفر می‌کنند (توضیح در SyncOutboxService.Serialize)؛ اینجا باید به
         // byte[] اصلی برگردند، وگرنه در ستونِ BLOB به‌صورتِ متنِ خام (نه
@@ -432,6 +471,20 @@ namespace CaseManagement.Sync
             {
                 try { return Convert.FromBase64String(rawValue ?? ""); }
                 catch { return DBNull.Value; }
+            }
+
+            // C3 — FormNo و Code هر دو UNIQUE و NULL-پذیرند. SQLite چند NULL
+            // را متمایز می‌شمارد ولی چند رشتهٔ خالیِ '' را یکی می‌داند؛ پس
+            // پرونده‌ای که پورتال بدون این دو فیلد می‌سازد (مقدار خالی، نه
+            // غایب از payload) اگر عیناً درج شود، دومین پروندهٔ مشابه با خطای
+            // یکتایی برخورد می‌کند. NULL دقیقاً معنایِ «هنوز مقداردهی نشده»
+            // را می‌رساند و این برخورد را از ریشه حذف می‌کند.
+            if (string.Equals(entityName, "TblCase", StringComparison.OrdinalIgnoreCase) &&
+                (string.Equals(columnName, "FormNo", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(columnName, "Code", StringComparison.OrdinalIgnoreCase)) &&
+                string.IsNullOrWhiteSpace(rawValue))
+            {
+                return DBNull.Value;
             }
 
             return (object)rawValue ?? DBNull.Value;

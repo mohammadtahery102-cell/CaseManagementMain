@@ -338,7 +338,14 @@ namespace CaseManagement.Sync
                     }
                     catch (Exception ex)
                     {
-                        // یک تغییرِ خراب نباید کل دریافت را متوقف کند.
+                        // C2 — یک تغییرِ خراب نباید کل دریافت را متوقف کند،
+                        // ولی نباید گم هم بشود: قفلِ پایگاه‌داده، خطای یکتاییِ
+                        // غیرمنتظره یا هر خطای موقتِ دیگر همگی به همان صفِ
+                        // معوقِ SyncDeferredApplyStore می‌روند که مورد
+                        // «والدِ نرسیده» را هم مدیریت می‌کند — نه صفِ دومی.
+                        // نشانگر (cursor) از این تغییر عبور می‌کند، پس اگر
+                        // اینجا صف نشود دیگر هرگز از سرور دوباره نمی‌آید.
+                        SyncDeferredApplyStore.Enqueue(change);
                         result.DownloadSkipped++;
                         Log(ex, "Apply/" + change.EntityName);
                     }

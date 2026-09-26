@@ -177,6 +177,14 @@ CREATE TABLE IF NOT EXISTS SyncState (
         // Phase 8 — دو شعبه مستقلاً یک نامِ کاربری ساخته‌اند؛ عیناً
         // ConflictDuplicateCode ولی برایِ TblUsers.
         public const string ConflictDuplicateUsername = "نام کاربری تکراری";
+        // C3 — عیناً ConflictDuplicateCode ولی برایِ FormNo (شمارهٔ فرمِ
+        // واقعاً غیرخالیِ تکراری؛ مقدارِ خالی هرگز به اینجا نمی‌رسد چون
+        // SyncApplier.ConvertIncomingValue آن را به NULL تبدیل می‌کند).
+        public const string ConflictDuplicateFormNo = "شماره فرم تکراری";
+        // C2 — رکوردی که پس از سقفِ تلاش یا TTL از SyncDeferredApply حذف
+        // می‌شود، پیش از حذف اینجا ثبت می‌گردد تا «گم شدنِ بی‌صدا» نداشته
+        // باشیم؛ مدیر می‌تواند Payload را از این ردیف بازیابی کند.
+        public const string ConflictApplyExhausted = "اعمال ناموفق پس از تلاش‌های مکرر";
 
         // ─── وضعیت‌های فایل (فاز ۷) ─────────────────────────────────────────
         public const string FilePending    = "در انتظار";
