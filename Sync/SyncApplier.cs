@@ -37,7 +37,12 @@ namespace CaseManagement.Sync
             Deleted,
             SkippedConflict,
             SkippedUnchanged,
-            SkippedUnsupported
+            SkippedUnsupported,
+
+            // دو حالتِ «فعلاً نه، بعداً دوباره»: SyncService این‌ها را در
+            // SyncInbox نگه می‌دارد تا با جلو رفتنِ نشانگر گم نشوند.
+            SkippedParentMissing,   // والدِ رکوردِ فرزند هنوز در این پایگاه‌داده نیست
+            SkippedDuplicateKey     // کدِ یکتا با پروندهٔ محلیِ دیگری برخورد دارد (تعارض ثبت شد)
         }
 
         private static readonly DatabaseHelper Db = new DatabaseHelper();
@@ -78,7 +83,10 @@ namespace CaseManagement.Sync
                 // با دو هویت سراسری‌اند — نه دو نسخه از یک رکورد. درج آن
                 // با خطای یکتایی شکست می‌خورد و بازنویسی‌اش فاجعه است، پس
                 // به‌عنوان تعارض ثبت و برای تصمیم مدیر کنار گذاشته می‌شود.
-                if (IsDuplicateUserCode(change)) return ApplyOutcome.SkippedConflict;
+                if (IsDuplicateUserCode(change)) return ApplyOutcome.SkippedDuplicateKey;
+
+                // والد هنوز نرسیده ⇒ باید بعداً دوباره امتحان شود، نه «پشتیبانی‌نشده».
+                if (ResolveParent(change) < 0) return ApplyOutcome.SkippedParentMissing;
 
                 if (!Insert(change, primaryKey)) return ApplyOutcome.SkippedUnsupported;
 

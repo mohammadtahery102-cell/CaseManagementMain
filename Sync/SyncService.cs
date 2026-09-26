@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Data.SQLite;
 using System.Diagnostics;
 using System.Threading;
 using CaseManagement.Helpers;
@@ -282,6 +283,7 @@ namespace CaseManagement.Sync
                 if (pull.Changes == null || pull.Changes.Count == 0)
                 {
                     SaveCursor(pull.NextCursor, cursor);
+                    RetryParked(result, cancel);
                     return;
                 }
 
@@ -312,16 +314,32 @@ namespace CaseManagement.Sync
                                 result.Conflicts++;
                                 break;
 
+                            // ⚠ نشانگر از این تغییر رد می‌شود، پس باید محلی نگه
+                            // داشته شود؛ وگرنه برای همیشه گم می‌شد.
+                            case SyncApplier.ApplyOutcome.SkippedDuplicateKey:
+                                result.Conflicts++;
+                                Park(change, outcome.ToString());
+                                break;
+
+                            case SyncApplier.ApplyOutcome.SkippedParentMissing:
+                                result.DownloadSkipped++;
+                                Park(change, outcome.ToString());
+                                break;
+
                             default:
                                 result.DownloadSkipped++;
                                 break;
                         }
+
+                        if (IsSettled(outcome)) ForgetParked(change);
                     }
                     catch (Exception ex)
                     {
-                        // یک تغییرِ خراب نباید کل دریافت را متوقف کند.
+                        // یک تغییرِ خراب نباید کل دریافت را متوقف کند — ولی
+                        // نباید گم هم بشود (مثلاً «database is locked» موقتی است).
                         result.DownloadSkipped++;
                         Log(ex, "Apply/" + change.EntityName);
+                        Park(change, ex.Message);
                     }
                 }
 
@@ -334,7 +352,13 @@ namespace CaseManagement.Sync
                 string previousCursor = cursor;
                 cursor = SaveCursor(pull.NextCursor, cursor);
 
-                if (!pull.HasMore) return;
+                if (!pull.HasMore)
+                {
+                    // پایانِ عادیِ دریافت: حالا که همهٔ صفحه‌ها رسیده‌اند، والدهایی
+                    // که در صفحه‌های بعدی بودند موجودند ⇒ تغییراتِ معوق دوباره.
+                    RetryParked(result, cancel);
+                    return;
+                }
 
                 // ⚠ محافظ در برابر «حلقهٔ بی‌پایانِ دریافت».
                 //
@@ -417,6 +441,185 @@ namespace CaseManagement.Sync
 
             SyncOutboxService.SetState(KeyPullCursor, nextCursor);
             return nextCursor;
+        }
+
+        // ═════════════════════════════════════════════════════════════════════
+        // تغییراتِ دریافتیِ معوق (SyncInbox)
+        //
+        // آموزش — چرا نشانگر را متوقف نمی‌کنیم: اگر دریافت روی اولین تغییرِ
+        // اعمال‌نشده می‌ایستاد، یک پروندهٔ مشکل‌دار (مثلاً کد تکراری که مدیر
+        // هنوز رسیدگی نکرده) کلِ دریافت را برای همیشه قفل می‌کرد. پس نشانگر
+        // مثل قبل جلو می‌رود و فقط همان تغییر اینجا نگه داشته می‌شود.
+        // ═════════════════════════════════════════════════════════════════════
+        private const int ParkedRetryBatch = 500;
+        private const string ResolutionImportedLater = "ورود پس از رفع تکرار";
+
+        private static bool IsRetryable(SyncApplier.ApplyOutcome outcome)
+        {
+            return outcome == SyncApplier.ApplyOutcome.SkippedParentMissing ||
+                   outcome == SyncApplier.ApplyOutcome.SkippedDuplicateKey;
+        }
+
+        // نتیجه‌ای که تکلیفِ رکورد را روشن کرده ⇒ نسخهٔ معوقِ قدیمی‌ترش بی‌اعتبار است.
+        private static bool IsSettled(SyncApplier.ApplyOutcome outcome)
+        {
+            return outcome == SyncApplier.ApplyOutcome.Inserted ||
+                   outcome == SyncApplier.ApplyOutcome.Updated ||
+                   outcome == SyncApplier.ApplyOutcome.Deleted ||
+                   outcome == SyncApplier.ApplyOutcome.SkippedUnchanged ||
+                   outcome == SyncApplier.ApplyOutcome.SkippedConflict;
+        }
+
+        // نگه‌داشتنِ تغییر برای تلاشِ بعدی. برای هر رکورد فقط تازه‌ترین نسخه می‌ماند.
+        private static void Park(SyncChange change, string reason)
+        {
+            if (change == null || string.IsNullOrWhiteSpace(change.EntityName) ||
+                string.IsNullOrWhiteSpace(change.GlobalId))
+                return;
+
+            try
+            {
+                new DAL.DatabaseHelper().ExecuteNonQuery(@"
+INSERT INTO SyncInbox
+    (EntityName, EntityGlobalID, ParentGlobalID, OperationType, RowVersion, Payload,
+     CenterID, Username, MachineName, OccurredAt, LastError)
+VALUES
+    (@E, @G, @P, @O, @V, @Payload, @C, @U, @M, @At, @Err)
+ON CONFLICT(EntityName, EntityGlobalID) DO UPDATE SET
+    ParentGlobalID = excluded.ParentGlobalID,
+    OperationType  = excluded.OperationType,
+    RowVersion     = excluded.RowVersion,
+    Payload        = excluded.Payload,
+    CenterID       = excluded.CenterID,
+    Username       = excluded.Username,
+    MachineName    = excluded.MachineName,
+    OccurredAt     = excluded.OccurredAt,
+    LastError      = excluded.LastError
+WHERE excluded.RowVersion >= SyncInbox.RowVersion;",
+                    new SQLiteParameter("@E",       change.EntityName),
+                    new SQLiteParameter("@G",       change.GlobalId),
+                    new SQLiteParameter("@P",       (object)change.ParentGlobalId ?? DBNull.Value),
+                    new SQLiteParameter("@O",       (object)change.OperationType ?? DBNull.Value),
+                    new SQLiteParameter("@V",       change.RowVersion),
+                    new SQLiteParameter("@Payload", (object)change.Payload ?? DBNull.Value),
+                    new SQLiteParameter("@C",       change.CenterId > 0 ? (object)change.CenterId : DBNull.Value),
+                    new SQLiteParameter("@U",       (object)change.Username ?? DBNull.Value),
+                    new SQLiteParameter("@M",       (object)change.MachineName ?? DBNull.Value),
+                    new SQLiteParameter("@At",      (object)change.OccurredAt ?? DBNull.Value),
+                    new SQLiteParameter("@Err",     (object)reason ?? DBNull.Value));
+            }
+            catch (Exception ex) { Log(ex, "Park/" + change.EntityName); }
+        }
+
+        private static void ForgetParked(SyncChange change)
+        {
+            if (change == null || string.IsNullOrWhiteSpace(change.GlobalId)) return;
+
+            try
+            {
+                new DAL.DatabaseHelper().ExecuteNonQuery(
+                    "DELETE FROM SyncInbox WHERE EntityName = @E AND EntityGlobalID = @G " +
+                    "AND (@V <= 0 OR RowVersion <= @V);",
+                    new SQLiteParameter("@E", change.EntityName ?? ""),
+                    new SQLiteParameter("@G", change.GlobalId),
+                    new SQLiteParameter("@V", change.RowVersion));
+            }
+            catch (Exception ex) { Log(ex, "ForgetParked"); }
+        }
+
+        // تلاشِ دوباره روی تغییراتِ معوق. پرونده‌ها اول، تا فرزندانشان والد پیدا کنند.
+        private static void RetryParked(SyncRunResult result, CancellationToken cancel)
+        {
+            var db = new DAL.DatabaseHelper();
+            DataTable rows;
+
+            try
+            {
+                rows = db.Query(
+                    "SELECT * FROM SyncInbox " +
+                    "ORDER BY CASE WHEN EntityName = 'TblCase' THEN 0 ELSE 1 END, InboxID LIMIT @L;",
+                    new SQLiteParameter("@L", ParkedRetryBatch));
+            }
+            catch (Exception ex) { Log(ex, "RetryParked"); return; }
+
+            foreach (DataRow row in rows.Rows)
+            {
+                if (cancel.IsCancellationRequested) return;
+
+                long inboxId = GetLong(row, "InboxID");
+                var change = new SyncChange
+                {
+                    EntityName     = GetString(row, "EntityName"),
+                    GlobalId       = GetString(row, "EntityGlobalID"),
+                    ParentGlobalId = GetString(row, "ParentGlobalID"),
+                    OperationType  = GetString(row, "OperationType"),
+                    RowVersion     = GetInt(row, "RowVersion"),
+                    Payload        = GetString(row, "Payload"),
+                    CenterId       = GetInt(row, "CenterID"),
+                    Username       = GetString(row, "Username"),
+                    MachineName    = GetString(row, "MachineName"),
+                    OccurredAt     = GetString(row, "OccurredAt")
+                };
+
+                string error;
+                try
+                {
+                    SyncApplier.ApplyOutcome outcome = SyncApplier.Apply(change);
+
+                    if (IsRetryable(outcome))
+                    {
+                        error = outcome.ToString();
+                    }
+                    else
+                    {
+                        db.ExecuteNonQuery("DELETE FROM SyncInbox WHERE InboxID = @Id;",
+                                           new SQLiteParameter("@Id", inboxId));
+
+                        if (outcome == SyncApplier.ApplyOutcome.Inserted ||
+                            outcome == SyncApplier.ApplyOutcome.Updated ||
+                            outcome == SyncApplier.ApplyOutcome.Deleted)
+                            result.Downloaded++;
+                        else if (outcome == SyncApplier.ApplyOutcome.SkippedConflict)
+                            result.Conflicts++;
+
+                        if (outcome == SyncApplier.ApplyOutcome.Inserted)
+                            CloseDuplicateKeyConflict(db, change);
+
+                        continue;
+                    }
+                }
+                catch (Exception ex) { error = ex.Message; }
+
+                try
+                {
+                    db.ExecuteNonQuery(
+                        "UPDATE SyncInbox SET Attempts = Attempts + 1, LastAttemptAt = datetime('now'), " +
+                        "LastError = @Err WHERE InboxID = @Id;",
+                        new SQLiteParameter("@Err", (object)error ?? DBNull.Value),
+                        new SQLiteParameter("@Id", inboxId));
+                }
+                catch (Exception ex) { Log(ex, "RetryParked/Attempt"); }
+            }
+        }
+
+        // تعارضِ «کد تکراری» پس از این‌که مدیر کدِ محلی را عوض کرد و رکوردِ سرور
+        // با موفقیت وارد شد، دیگر موضوعی ندارد؛ بازماندنش فقط فهرست را شلوغ می‌کرد.
+        private static void CloseDuplicateKeyConflict(DAL.DatabaseHelper db, SyncChange change)
+        {
+            try
+            {
+                object id = db.ExecuteScalar(
+                    "SELECT ConflictID FROM SyncConflict WHERE EntityName = @E AND EntityGlobalID = @G " +
+                    "AND Status = @S AND ConflictType = @T LIMIT 1;",
+                    new SQLiteParameter("@E", change.EntityName ?? ""),
+                    new SQLiteParameter("@G", change.GlobalId ?? ""),
+                    new SQLiteParameter("@S", OfflineSyncInitializer.ConflictOpen),
+                    new SQLiteParameter("@T", OfflineSyncInitializer.ConflictDuplicateCode));
+
+                if (id != null && id != DBNull.Value)
+                    SyncConflictStore.MarkResolved(Convert.ToInt64(id), ResolutionImportedLater);
+            }
+            catch (Exception ex) { Log(ex, "CloseDuplicateKeyConflict"); }
         }
 
         // ═════════════════════════════════════════════════════════════════════

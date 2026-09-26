@@ -64,6 +64,7 @@ namespace CaseManagement.Sync
                 EnsureOutbox(con);
                 EnsureSyncState(con);
                 EnsureConflicts(con);
+                EnsureInbox(con);
                 EnsureBaseline(con);
                 EnsureFiles(con);
                 EnsureFileDownloads(con);
@@ -199,6 +200,41 @@ CREATE TABLE IF NOT EXISTS SyncConflict (
 
             Exec(con, "CREATE INDEX IF NOT EXISTS IX_SyncConflict_Status ON SyncConflict(Status, ConflictID);");
             Exec(con, "CREATE INDEX IF NOT EXISTS IX_SyncConflict_Entity ON SyncConflict(EntityName, EntityGlobalID);");
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // صفِ «دریافتیِ اعمال‌نشده» — تغییراتی که نشانگرِ دریافت از آن‌ها گذشته
+        // ولی هنوز اعمال نشده‌اند.
+        //
+        // آموزش — باگی که این جدول رفع می‌کند: نشانگرِ دریافت پس از هر صفحه
+        // جلو می‌رود. تغییری که در آن صفحه اعمال نشد (والد هنوز نرسیده، کدِ
+        // تکراری، یا خطای موقتی مثل «database is locked») دیگر هرگز از سرور
+        // دوباره نمی‌آمد و برای همیشه گم می‌شد. حالا همان تغییر اینجا نگه
+        // داشته و در اجرای بعدی دوباره امتحان می‌شود. برای هر رکورد فقط
+        // تازه‌ترین نسخه نگه داشته می‌شود.
+        // ═══════════════════════════════════════════════════════════════════
+        private static void EnsureInbox(SQLiteConnection con)
+        {
+            Exec(con, @"
+CREATE TABLE IF NOT EXISTS SyncInbox (
+    InboxID        INTEGER PRIMARY KEY AUTOINCREMENT,
+    EntityName     TEXT    NOT NULL,
+    EntityGlobalID TEXT    NOT NULL,
+    ParentGlobalID TEXT    NULL,
+    OperationType  TEXT    NULL,
+    RowVersion     INTEGER NOT NULL DEFAULT 1,
+    Payload        TEXT    NULL,
+    CenterID       INTEGER NULL,
+    Username       TEXT    NULL,
+    MachineName    TEXT    NULL,
+    OccurredAt     TEXT    NULL,
+    Attempts       INTEGER NOT NULL DEFAULT 0,
+    FirstSeenAt    TEXT    NOT NULL DEFAULT (datetime('now')),
+    LastAttemptAt  TEXT    NULL,
+    LastError      TEXT    NULL
+);");
+
+            Exec(con, "CREATE UNIQUE INDEX IF NOT EXISTS UX_SyncInbox_Entity ON SyncInbox(EntityName, EntityGlobalID);");
         }
 
         // ═══════════════════════════════════════════════════════════════════
