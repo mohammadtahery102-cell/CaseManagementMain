@@ -422,8 +422,22 @@ namespace CaseManagement
             };
 
             menu.Items.Add(MenuItem("چاپ خلاصه", delegate { btnPrint_Click(this, EventArgs.Empty); }));
-            menu.Items.Add(MenuItem("پرونده کامل",
+            // «پرونده کامل» زیرمنو شد: دو مسیرِ الگو (همان ExportCurrentCaseWord/Pdf
+            // با انتخابِ الگو) + دیالوگِ قبلی (پیش‌نمایش/اکسل/انتخاب بخش‌ها) بدون تغییر.
+            var fullCase = new ToolStripMenuItem("پرونده کامل");
+            var fullCaseMenu = new ContextMenuStrip
+            {
+                RightToLeft = RightToLeft.Yes,
+                ShowImageMargin = false,
+                Font = new Font("Segoe UI", 9F)
+            };
+            fullCaseMenu.Items.Add(MenuItem("Word (الگو)", delegate { ExportCurrentCaseWord(); }));
+            fullCaseMenu.Items.Add(MenuItem("PDF (الگو)", delegate { ExportCurrentCasePdf(); }));
+            fullCaseMenu.Items.Add(new ToolStripSeparator());
+            fullCaseMenu.Items.Add(MenuItem("پیش‌نمایش / اکسل / انتخاب بخش‌ها…",
                 delegate { btnExportCaseFile_Click(this, EventArgs.Empty); }));
+            fullCase.DropDown = fullCaseMenu;
+            menu.Items.Add(fullCase);
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(MenuItem("Word پرونده", delegate { ExportCurrentCaseWord(); }));
             menu.Items.Add(MenuItem("PDF پرونده", delegate { ExportCurrentCasePdf(); }));
