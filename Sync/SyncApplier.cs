@@ -59,6 +59,15 @@ namespace CaseManagement.Sync
                 "CasID", "FamID", "DocID", "AssistanceID"   // شناسه‌های محلی
             };
 
+        // ستون‌های UNIQUEِ پرونده. هر دو را کاربر/شعبه می‌سازد، پس دو شعبهٔ
+        // آفلاین می‌توانند مستقلاً یک مقدار بسازند (CaseNumbering شماره را فقط
+        // بین *مراکز* جدا می‌کند، نه بین دو دستگاهِ یک مرکز).
+        //
+        // ⚠ قالبِ «کلید=مقدار» NULL را به "" تبدیل می‌کند. در SQLite چند NULL
+        // در ستونِ UNIQUE مجاز است ولی دو "" با هم برخورد دارند؛ پس برای همین
+        // ستون‌ها مقدارِ خالی دوباره NULL نوشته می‌شود.
+        private static readonly string[] UniqueCaseColumns = { "Code", "FormNo" };
+
         public static ApplyOutcome Apply(SyncChange change)
         {
             if (change == null || string.IsNullOrWhiteSpace(change.GlobalId))
@@ -185,7 +194,7 @@ namespace CaseManagement.Sync
 
                 string parameterName = "@p" + index++;
                 names.Add("[" + pair.Key + "]");
-                parameters.Add(new SQLiteParameter(parameterName, (object)pair.Value ?? DBNull.Value));
+                parameters.Add(new SQLiteParameter(parameterName, ValueFor(change.EntityName, pair.Key, pair.Value)));
             }
 
             if (names.Count == 0) return false;
@@ -234,7 +243,7 @@ namespace CaseManagement.Sync
 
                 string parameterName = "@p" + index++;
                 assignments.Add("[" + pair.Key + "] = " + parameterName);
-                parameters.Add(new SQLiteParameter(parameterName, (object)pair.Value ?? DBNull.Value));
+                parameters.Add(new SQLiteParameter(parameterName, ValueFor(change.EntityName, pair.Key, pair.Value)));
             }
 
             if (assignments.Count == 0) return false;
@@ -288,29 +297,50 @@ namespace CaseManagement.Sync
 
             Dictionary<string, string> incoming = Deserialize(change.Payload);
 
-            string code;
-            if (!incoming.TryGetValue("Code", out code) || string.IsNullOrWhiteSpace(code))
-                return false;
-
-            try
+            // «کد اختصاصی» و «شمارهٔ فرم» هر دو UNIQUE هستند؛ برخوردِ هرکدام
+            // یعنی دو پروندهٔ متفاوت، و درجش با خطای یکتایی شکست می‌خورد.
+            // همان نوعِ تعارض ثبت می‌شود تا هرگز ادغام/بازنویسی نشود.
+            foreach (string column in UniqueCaseColumns)
             {
-                DataTable existing = Db.Query(
-                    "SELECT * FROM TblCase WHERE Code = @C AND IFNULL(GlobalID,'') <> @G LIMIT 1;",
-                    new SQLiteParameter("@C", code),
-                    new SQLiteParameter("@G", change.GlobalId ?? ""));
+                string value;
+                if (!incoming.TryGetValue(column, out value) || string.IsNullOrWhiteSpace(value))
+                    continue;
 
-                if (existing.Rows.Count == 0) return false;
+                try
+                {
+                    DataTable existing = Db.Query(
+                        "SELECT * FROM TblCase WHERE [" + column + "] = @C AND IFNULL(GlobalID,'') <> @G LIMIT 1;",
+                        new SQLiteParameter("@C", value),
+                        new SQLiteParameter("@G", change.GlobalId ?? ""));
 
-                DataRow local = existing.Rows[0];
+                    if (existing.Rows.Count == 0) continue;
 
-                SyncConflictStore.Record(change.EntityName, change.GlobalId,
-                    OfflineSyncInitializer.ConflictDuplicateCode, 0,
-                    GetInt(local, "RowVersion", 1), change.RowVersion,
-                    Serialize(local), change.Payload);
+                    DataRow local = existing.Rows[0];
 
-                return true;
+                    SyncConflictStore.Record(change.EntityName, change.GlobalId,
+                        OfflineSyncInitializer.ConflictDuplicateCode, 0,
+                        GetInt(local, "RowVersion", 1), change.RowVersion,
+                        Serialize(local), change.Payload);
+
+                    return true;
+                }
+                catch { }
             }
-            catch { return false; }
+
+            return false;
+        }
+
+        // مقدارِ پارامتر برای نوشتن. فقط ستون‌های UNIQUEِ پرونده: "" ⇒ NULL.
+        private static object ValueFor(string entityName, string column, string value)
+        {
+            if (value == null) return DBNull.Value;
+
+            if (value.Length == 0 &&
+                string.Equals(entityName, "TblCase", StringComparison.OrdinalIgnoreCase) &&
+                Array.IndexOf(UniqueCaseColumns, column) >= 0)
+                return DBNull.Value;
+
+            return value;
         }
 
         // ─────────────────────────────────────────────────────────────────────
