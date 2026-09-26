@@ -557,7 +557,10 @@ namespace CaseManagement.Helpers
             if (source.CenterColumn != null)
             {
                 sql.Append(" AND (@CID = 0 OR ").Append(source.CenterColumn).Append(" = @CID)");
+                sql.Append(ProvinceScope.Sql(CenterAlias(source.CenterColumn)));
                 parameters.Add(new SQLiteParameter("@CID", SecurityContext.CenterFilterId));
+                foreach (var p in ProvinceScope.Parameters())
+                    parameters.Add(p);
             }
 
             int paramIndex = 0;
@@ -616,6 +619,7 @@ namespace CaseManagement.Helpers
             using (SQLiteCommand cmd = new SQLiteCommand(sql.ToString(), con))
             {
                 cmd.Parameters.AddRange(parameters.ToArray());
+                ProvinceScope.Bind(cmd);
                 con.Open();
 
                 using (var reader = cmd.ExecuteReader())
@@ -625,6 +629,14 @@ namespace CaseManagement.Helpers
                     return table;
                 }
             }
+        }
+
+        private static string CenterAlias(string centerColumn)
+        {
+            if (string.IsNullOrWhiteSpace(centerColumn)) return "";
+            int dot = centerColumn.LastIndexOf('.');
+            if (dot <= 0) return "";
+            return centerColumn.Substring(0, dot);
         }
     }
 }

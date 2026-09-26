@@ -70,6 +70,7 @@ namespace CaseManagement
 
         // ─── بازطراحی ظاهری داشبورد (طبق عکس نمونه کاربر) ────────────────────
         private TabControl _tabs;
+        private PillTabStrip _dashPills;
         // Phase 5.5-C — سنجه‌های مدیریتی (تبِ جدا، بدونِ دست‌زدن به ۱۳ کارتِ موجود).
         private StatCard _cardMissingDocs, _cardVisits, _cardFundedCases, _cardSponsors,
                          _cardFundingSources, _cardAssistanceCount;
@@ -137,6 +138,7 @@ namespace CaseManagement
             _sidebar.AddItem(IconFont.People, "اعضای خانواده", delegate { SelectTabByTitle("اعضای خانواده"); });
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleApplicants, IconFont.Contact, "متقاضیان", delegate { using (var frm = new FrmApplicant()) frm.ShowDialog(this); RefreshAll(); });
             AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleSearch, IconFont.Search, "جستجوی پیشرفته", delegate { using (var frm = new FrmAdvancedSearch()) frm.ShowDialog(this); });
+            AddModuleNav(CaseManagement.Enterprise.ModuleService.ModuleGeoCenter, IconFont.Chart, "مرکز فرماندهی آماری", delegate { OpenGeoCommandCenter(); });
             _sidebar.AddItem(IconFont.Search, "دستیار هوشمند", delegate { using (var frm = new FrmAiAssistant()) frm.ShowDialog(this); RefreshAll(); });
 
             _sidebar.AddGroup("مالی و حسابداری", startExpanded: false);
@@ -274,26 +276,22 @@ namespace CaseManagement
             // ─── نوار حدیث روز — پهن، تمام‌عرض، وسط‌چین (زیر سربرگ) ──────────
             Panel hadithBar = BuildHadithBar();
 
-            _tabs = new TabControl();
+            // آموزش — نوار تب بومیِ ویندوز همیشه از چپ تراز می‌شود (حتی با
+            // RightToLeftLayout). RightToLeftLayout روی TabControl محتوای صفحه
+            // را هم آینه می‌کرد، پس کارت‌ها/نمودار از چپ شروع می‌شدند. نوارِ
+            // دیده شده حالا PillTabStrip است (از راست، مثل تنظیمات) و خودِ
+            // صفحات بدون آینه‌ی اضافه RTL می‌مانند. هیچ تبی حذف نشده.
+            _dashPills = new PillTabStrip();
+
+            _tabs = new HeadlessTabControl();
             _tabs.Dock = DockStyle.Fill;
             _tabs.Font = UiTheme.FontBold(10F);
-            // آموزش — RightToLeftLayout ارث‌بری نمی‌شود: روی فرم true است اما
-            // TabControl خودش پیش‌فرض false دارد، پس نوار تب‌ها از چپ شروع
-            // می‌شد. با تنظیم مستقیم این دو خاصیت، تب index=0 (داشبورد) به سمت
-            // راست منتقل می‌شود و ترتیب تب‌ها راست‌به‌چپ می‌شود.
             _tabs.RightToLeft = RightToLeft.Yes;
-            _tabs.RightToLeftLayout = true;
+            _tabs.RightToLeftLayout = false;
 
-            // آموزش — رفعِ باگِ واقعیِ «نوار تب‌ها از چپ شروع می‌شود» (با آزمونِ
-            // GetTabRect روی نخِ STA تأیید شد): برخلافِ تصورِ قبلی، تنظیمِ
-            // RightToLeftLayout=true ترتیبِ فیزیکیِ نوارِ تب‌های TabControل را
-            // عوض نمی‌کند — این محدودیتِ شناخته‌شده‌ی کنترلِ بومیِ ویندوز است و
-            // فقط جهتِ متن/برخی اسکرول‌بارها را آینه می‌کند. تنها راهِ واقعاً
-            // کارسازِ رساندنِ تبِ اول به سمتِ راست، معکوس‌کردنِ خودِ ترتیبِ
-            // افزودن است.
             List<TabPage> orderedTabPages = new List<TabPage>
             {
-                BuildSummaryTab(),            // داشبورد کل پرونده‌ها (باید راست‌ترین/پیش‌فرض باشد)
+                BuildSummaryTab(),            // داشبورد کل پرونده‌ها (راست‌ترین / پیش‌فرض)
                 BuildFamilyMembersStatsTab(), // اعضای خانواده
                 BuildNotificationsTab(),      // اعلان‌ها
                 BuildTrendTab(),              // روند زمانی
@@ -304,16 +302,27 @@ namespace CaseManagement
                 BuildManagementTab(),         // Phase 5.5-C — سنجه‌های مدیریتی
                 BuildAuditTab()               // گزارش رویدادها
             };
-            for (int i = orderedTabPages.Count - 1; i >= 0; i--)
-                _tabs.TabPages.Add(orderedTabPages[i]);
+            foreach (TabPage page in orderedTabPages)
+            {
+                page.RightToLeft = RightToLeft.Yes;
+                _tabs.TabPages.Add(page);
+                _dashPills.AddTab(page.Text);
+            }
 
-            _tabs.SelectedTab = orderedTabPages[0]; // همان «داشبورد کل پرونده‌ها»، صرف‌نظر از موقعیتِ فیزیکی
+            _dashPills.SelectedIndexChanged += delegate
+            {
+                if (_tabs.SelectedIndex != _dashPills.SelectedIndex)
+                    _tabs.SelectedIndex = _dashPills.SelectedIndex;
+            };
+            _dashPills.SelectedIndex = 0;
+            _tabs.SelectedIndex = 0;
 
             // آموزش — ترتیب افزودن مهم است: نوار کناری (Dock=Right) اول اضافه
             // می‌شود تا عرضش را از سمت راست بگیرد، سپس نوارهای Top، و در آخر
             // محتوای Fill بقیه‌ی فضا را پر می‌کند.
             Panel contentHost = new Panel { Dock = DockStyle.Fill, BackColor = UiTheme.Background };
             contentHost.Controls.Add(_tabs);
+            contentHost.Controls.Add(_dashPills);
             contentHost.Controls.Add(BuildFilterBar());
             contentHost.Controls.Add(hadithBar);
             contentHost.Controls.Add(header);
@@ -556,6 +565,8 @@ namespace CaseManagement
                 if (page.Text == title)
                 {
                     _tabs.SelectedTab = page;
+                    if (_dashPills != null)
+                        _dashPills.SelectedIndex = _tabs.SelectedIndex;
                     return;
                 }
             }
@@ -597,7 +608,7 @@ namespace CaseManagement
         // ─── نوار فیلتر ولایت/ولسوالی (زیر بنر، بالای تب‌ها) ─────────────────
         private Panel BuildFilterBar()
         {
-            Panel bar = new Panel { Dock = DockStyle.Top, Height = 46, BackColor = UiTheme.CardBack };
+            Panel bar = new Panel { Dock = DockStyle.Top, Height = 48, BackColor = UiTheme.CardBack };
 
             // آموزش — رفع باگ «نوار فیلتر از چپ شروع می‌شد»: فرم از قبل
             // RightToLeft=Yes دارد که به این پنل ارث می‌رسد. اگر همزمان
@@ -609,7 +620,7 @@ namespace CaseManagement
             // جستجوی پیشرفته هم استفاده شده است.)
             FlowLayoutPanel flow = new FlowLayoutPanel
             {
-                Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, Padding = new Padding(12, 7, 12, 6)
+                Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, Padding = new Padding(14, 8, 14, 6)
             };
 
             Label lbl = new Label
@@ -679,6 +690,7 @@ namespace CaseManagement
             flow.Controls.Add(btnClear);
 
             bar.Controls.Add(flow);
+            bar.Controls.Add(new Panel { Dock = DockStyle.Bottom, Height = 1, BackColor = UiTheme.Border });
             return bar;
         }
 
@@ -759,7 +771,8 @@ namespace CaseManagement
             // (فقط از صفحه «بایگانی» دیده می‌شوند).
             return " AND " + a + "IsArchived = 0" +
                    " AND (@Prov = '' OR " + a + "Province = @Prov)" +
-                   " AND (@Dist = '' OR " + a + "District LIKE '%' || @Dist || '%')";
+                   " AND (@Dist = '' OR " + a + "District LIKE '%' || @Dist || '%')" +
+                   Helpers.ProvinceScope.Sql(string.IsNullOrEmpty(alias) ? "" : alias);
         }
 
         // افزودن پارامترهای فیلتر به یک Command (یک‌بار در هر Command کافی است،
@@ -771,6 +784,7 @@ namespace CaseManagement
             // @Svc فقط در CaseFilterSql (نه CaseFilterSqlNoStatus) استفاده می‌شود؛
             // پارامترِ اضافه در کوئری‌های بدون آن بی‌اثر است.
             cmd.Parameters.AddWithValue("@Svc", _filterServiceStatus ?? "");
+            Helpers.ProvinceScope.Bind(cmd);
         }
 
         private TabPage BuildSummaryTab()
@@ -783,7 +797,7 @@ namespace CaseManagement
             // Dock=Fill منفی محاسبه می‌شد و کنترل Chart (برخلاف پنل‌ها) بلافاصله
             // استثنا پرتاب می‌کرد. این اندازه‌ی موقت از آن جلوگیری می‌کند.
             page.Size = new Size(1200, 700);
-            page.Padding = new Padding(14, 12, 14, 12);
+            page.Padding = new Padding(16, 14, 16, 14);
 
             // ═══ ردیف ۱: کارت‌های آماری ══════════════════════════════════════
             // آموزش — به درخواست کاربر این ردیف اسکرول افقی ندارد. با
@@ -795,15 +809,14 @@ namespace CaseManagement
             // آموزش — تعداد ردیفِ این شبکه از تنظیمات سیستم (مؤسسه ▸ ظاهر و
             // نمایش) قابل تغییر است. پیش‌فرض همان ۲ ردیفِ قبلی (بدون تغییر
             // برای نصب‌های موجود)؛ کارت‌ها هم کمی کوچک‌تر از قبل شدند.
-            int SummaryRows = DashboardLayoutMath.ClampSummaryRows(
-                SettingsHelper.GetInt(SettingsHelper.DashboardSummaryRows, DashboardLayoutMath.MinSummaryRows));
-            _summaryRows = SummaryRows;
-            // باید با تعدادِ عناصرِ آرایه‌ی summaryCards پایین‌تر یکی بماند،
-            // وگرنه یا کارتِ آخر جا نمی‌شود یا خانه‌ی خالی می‌ماند.
+            int SummaryRows = SettingsHelper.GetInt(SettingsHelper.DashboardSummaryRows, 2);
+            SummaryRows = DashboardLayoutMath.ClampSummaryRows(SummaryRows);
             int SummaryCols = (int)Math.Ceiling(SummaryCardCount / (double)SummaryRows);
+            _summaryRows = SummaryRows;
 
             summaryPanel = new TableLayoutPanel();
             summaryPanel.Dock = DockStyle.Top;
+            summaryPanel.RightToLeft = RightToLeft.Yes;
             int initialAvailable = Math.Max(1, page.ClientSize.Height - page.Padding.Top - page.Padding.Bottom);
             summaryPanel.Height = DashboardLayoutMath.SummaryPanelHeight(SummaryRows, initialAvailable);
             summaryPanel.BackColor = UiTheme.Background;
@@ -816,78 +829,30 @@ namespace CaseManagement
             for (int i = 0; i < SummaryRows; i++)
                 summaryPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F / SummaryRows));
 
-            // آموزش — رفعِ دوباره‌کاری: واحدِ زیرِ عدد وقتی خالی گذاشته شود که
-            // فقط همان کلمه‌ی عنوان را تکرار می‌کرد (مثل «کل پرونده‌ها» +
-            // واحدِ «پرونده»)؛ فقط جایی واحد نگه داشته شده که واقعاً اطلاعِ
-            // تازه می‌دهد (نفر/افغانی).
-            //
-            // آموزش — رنگ‌بندیِ ۱۳ کارت بازطراحی شد (۱۴۰۵/۰۶/۲۱، گزارشِ کاربر:
-            // «بهم ریخته، درحدِ بین‌الملل منظم کن»). قبلاً هر کارت رنگِ کاملاً
-            // بی‌ربطی داشت (بنفش/نیلی/آبی/فیروزه‌ای/سرمه‌ای برای سیزده مفهومِ
-            // نامرتبط)، پس هیچ الگویی به چشم نمی‌آمد. حالا فقط هفت رنگِ ثابت
-            // به‌کار می‌رود و هرکدام یک معنیِ واحد دارد — دقیقاً الگوی
-            // داشبوردهای معتبر (Ant Design / Material):
-            //   سبز=وضعیتِ خوب، آبی=در جریان/خنثی، کهربایی=نیازمندِ توجه،
-            //   نارنجی=توقفِ موقت، قرمز=بحرانی/مفقود، بنفش=آماریِ ساختاری،
-            //   زمردی=مالی. تکرارِ عمدیِ رنگ بینِ گروه‌ها (مثلاً کهربایی هم در
-            // «در انتظار تایید» هم در «تذکره کاغذی») نشتی نیست — هر دو یعنی
-            // «کاری روی این باید انجام شود»، پس همان رنگ درست است.
-            //
-            // ترتیبِ افزودن هم عوض شد تا کارت‌های هم‌خانواده کنارِ هم بنشینند
-            // (بدونِ دست‌زدن به خودِ TableLayoutPanel که تاریخچه‌ی کرش با
-            // Height<=0 دارد؛ فقط ترتیب و رنگ عوض شد، نه ساختارِ شبکه):
-            //   گروه ۱ — وضعیتِ پرونده (۵): فعال ← در جریان ← در انتظار ← قطعِ موقت ← قطع
-            //   گروه ۲ — حجمِ کلی (۴): کل پرونده‌ها، اعضای خانواده، اسناد، مراکز
-            //   گروه ۳ — وضعیتِ تذکره (۳): الکترونیکی ← کاغذی ← بدون تذکره
-            //   گروه ۴ — مالی (۱)
-            _cardActive      = MakeStatCard("فعال",           "",       IconFont.Check,    "#16A34A", "#F0FDF4");
-            _cardInProgress  = MakeStatCard("در جریان",       "",       IconFont.Clock,    "#2563EB", "#EFF6FF");
-            _cardWaiting     = MakeStatCard("در انتظار تایید","",       IconFont.Clock,    "#D97706", "#FFFBEB");
-            _cardStoppedTemp = MakeStatCard("قطع موقت",       "",       IconFont.Clock,    "#EA580C", "#FFF7ED");
-            _cardStopped     = MakeStatCard("قطع شده‌ها",      "",       IconFont.Cancel,   "#DC2626", "#FEF2F2");
+            // واحد فقط جایی نشان داده می‌شود که اطلاع تازه بدهد (نفر / افغانی).
+            _cardTotal   = MakeStatCard("کل پرونده‌ها", "", IconFont.Folder,   "#A855F7", "#FAF5FF");
+            _cardInProgress = MakeStatCard("در جریان",  "", IconFont.Clock,    "#6366F1", "#EEF2FF");
+            _cardActive  = MakeStatCard("فعال",          "", IconFont.Check,    "#22C55E", "#F0FDF4");
+            _cardWaiting = MakeStatCard("در انتظار تایید","", IconFont.Clock,   "#F59E0B", "#FFFBEB");
+            _cardStopped = MakeStatCard("قطع شده‌ها",     "", IconFont.Cancel,   "#EF4444", "#FEF2F2");
+            _cardStoppedTemp = MakeStatCard("قطع موقت",   "", IconFont.Clock,    "#F59E0B", "#FFFBEB");
+            _cardFamily  = MakeStatCard("کل اعضای خانواده","نفر",   IconFont.People,   "#3B82F6", "#EFF6FF");
+            _cardDocuments = MakeStatCard("کل اسناد",       "",   IconFont.Document, "#06B6D4", "#ECFEFF");
+            _cardCenters   = MakeStatCard("مراکز فعال",     "",  IconFont.Card,     "#8B5CF6", "#F5F3FF");
+            _cardFinance   = MakeStatCard("مجموع کمک‌های مالی","افغانی", IconFont.Money, "#10B981", "#ECFDF5");
+            _cardIdElectronic = MakeStatCard("تذکره الکترونیکی", "", IconFont.Card, "#0EA5E9", "#F0F9FF");
+            _cardIdPaper      = MakeStatCard("تذکره کاغذی",      "", IconFont.Card, "#F97316", "#FFF7ED");
+            _cardIdNone       = MakeStatCard("بدون تذکره",        "", IconFont.Cancel, "#94A3B8", "#F8FAFC");
 
-            _cardTotal     = MakeStatCard("کل پرونده‌ها",       "",     IconFont.Folder,   "#4F46E5", "#EEF2FF");
-            _cardFamily    = MakeStatCard("کل اعضای خانواده",  "نفر",   IconFont.People,   "#0EA5E9", "#F0F9FF");
-            _cardDocuments = MakeStatCard("کل اسناد",          "",     IconFont.Document, "#0D9488", "#F0FDFA");
-            _cardCenters   = MakeStatCard("مراکز فعال",        "",     IconFont.Card,     "#7C3AED", "#F5F3FF");
-
-            _cardIdElectronic = MakeStatCard("تذکره الکترونیکی", "", IconFont.Card,   "#10B981", "#ECFDF5");
-            _cardIdPaper      = MakeStatCard("تذکره کاغذی",      "", IconFont.Card,   "#D97706", "#FFFBEB");
-            _cardIdNone       = MakeStatCard("بدون تذکره",        "", IconFont.Cancel, "#DC2626", "#FEF2F2");
-
-            _cardFinance = MakeStatCard("مجموع کمک‌های مالی", "افغانی", IconFont.Money, "#059669", "#ECFDF5");
-
-            // آموزش — رفعِ دوبارهٔ ترتیب (۱۴۰۵/۰۶/۲۱، عکسِ دومِ کاربر از
-            // نصبِ واقعیِ خودش): آن نصب DashboardSummaryRows=4 دارد (نه
-            // پیش‌فرضِ ۲ که در نمونه‌سازیِ آزمونِ من بود)، یعنی شبکه ۴ ستونی
-            // است. ترتیبِ قبلی (وضعیت×۵، حجم×۴، تذکره×۳، مالی×۱) در شبکهٔ
-            // ۴ستونی به‌شکلِ ۴+۴+۴+۱ نمی‌نشست — گروهِ ۵تاییِ وضعیت یک کارت به
-            // ردیفِ بعد می‌ریخت و کنارِ سه رنگِ کاملاً نامرتبطِ گروهِ حجم
-            // می‌نشست (دقیقاً همان ردیفِ «نامنظم»ی که در عکس دیده شد).
-            //
-            // ترتیبِ تازه طوری چیده شده که هر گروه دقیقاً یک ردیفِ کامل از
-            // شبکهٔ ۴ستونی را پر کند: حجم(۴) ← وضعیت(۴) ← [قطع+تذکره](۴) ←
-            // مالی(۱ — ردیفِ آخر تنها می‌ماند، که طبیعی و رایج است).
-            // «قطع شده‌ها» عمداً از چهارتای اولِ گروهِ وضعیت جدا و به ردیفِ
-            // تذکره منتقل شد تا آن چهارتای اول (فعال/در جریان/انتظار/موقت)
-            // یک طیفِ رنگیِ پیوسته بمانند و ردیفِ سوم هم با دو قرمز
-            // (قطع‌شده‌ها و بدون‌تذکره) در دو سرش قاب‌بندی شود.
-            //
-            // اگر تنظیمِ کاربر ۲ یا ۳ ردیف باشد (۷ یا ۵ ستون)، این ترتیب باز
-            // هم بهتر از تصادفی است ولی دیگر کاملاً روی مرزِ ردیف نمی‌نشیند —
-            // محدودیتِ ریاضیِ اجتناب‌ناپذیر است چون ۱۳ بر ۷ و ۵ بخش‌پذیر نیست؛
-            // فقط برای ۴ (رایج‌ترین مقدار، مشاهده‌شده در نصبِ کاربر) کاملاً صاف است.
             StatCard[] summaryCards =
             {
-                _cardTotal, _cardFamily, _cardDocuments, _cardCenters,
-                _cardActive, _cardInProgress, _cardWaiting, _cardStoppedTemp,
-                _cardStopped, _cardIdElectronic, _cardIdPaper, _cardIdNone,
-                _cardFinance
+                _cardTotal, _cardInProgress, _cardActive, _cardWaiting, _cardStopped, _cardStoppedTemp,
+                _cardFamily, _cardDocuments,
+                _cardCenters, _cardFinance, _cardIdElectronic, _cardIdPaper, _cardIdNone
             };
 
             foreach (StatCard card in summaryCards)
             {
-                // Dock=Fill به‌جای عرض/ارتفاع ثابت، تا کارت خانه‌ی خودش را پر کند.
                 card.Dock = DockStyle.Fill;
                 card.Margin = new Padding(0, 0, 10, 10);
                 summaryPanel.Controls.Add(card);
@@ -913,14 +878,15 @@ namespace CaseManagement
             TableLayoutPanel row2Grid = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1,
-                BackColor = UiTheme.Background, Size = new Size(1200, 420)
+                BackColor = UiTheme.Background, Size = new Size(1200, 420),
+                RightToLeft = RightToLeft.Yes, Padding = new Padding(0, 4, 0, 0)
             };
             row2Grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
             row2Grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25F));
             row2Grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25F));
             row2Grid.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
 
-            Panel donutWrap = new Panel { Dock = DockStyle.Fill, BackColor = UiTheme.Background, Padding = new Padding(0, 0, 12, 0) };
+            Panel donutWrap = new Panel { Dock = DockStyle.Fill, BackColor = UiTheme.Background, Padding = new Padding(5) };
             DashboardCard cardDonut = new DashboardCard("نمودار وضعیت پرونده‌ها") { Dock = DockStyle.Fill };
             statusChart = CreateChart("", SeriesChartType.Doughnut);
             statusChart.Titles.Clear();
@@ -939,7 +905,7 @@ namespace CaseManagement
             cardDonut.Content.Controls.Add(statusChart);
             donutWrap.Controls.Add(cardDonut);
 
-            Panel activityWrap = new Panel { Dock = DockStyle.Fill, BackColor = UiTheme.Background, Padding = new Padding(0, 0, 12, 0) };
+            Panel activityWrap = new Panel { Dock = DockStyle.Fill, BackColor = UiTheme.Background, Padding = new Padding(5) };
             DashboardCard cardActivity = new DashboardCard("آخرین فعالیت‌ها") { Dock = DockStyle.Fill };
             // AutoScroll روشن است تا اگر ارتفاع کارت برای همه‌ی ردیف‌ها کم بود،
             // ردیف‌ها بریده/گم نشوند (در تست تصویری دیده شد که سه ردیفِ آخر
@@ -950,7 +916,7 @@ namespace CaseManagement
 
             // «گزارش سریع» — به‌جای ردیفِ جداگانه‌ی تمام‌عرضِ قبلی، حالا ستونِ
             // چپِ همینجا (همان چهار میان‌بر قبلی، بدون تغییر در کارکردشان).
-            Panel quickWrap = new Panel { Dock = DockStyle.Fill, BackColor = UiTheme.Background };
+            Panel quickWrap = new Panel { Dock = DockStyle.Fill, BackColor = UiTheme.Background, Padding = new Padding(5) };
             DashboardCard cardQuick = new DashboardCard("گزارش سریع") { Dock = DockStyle.Fill };
             Panel quickHost = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent, AutoScroll = true };
             quickHost.Controls.Add(new QuickReportRow(IconFont.People, ColorTranslator.FromHtml("#8B5CF6"),
@@ -982,6 +948,13 @@ namespace CaseManagement
         {
             if (summaryPanel == null || page == null) return;
             int available = page.ClientSize.Height - page.Padding.Top - page.Padding.Bottom;
+            // آموزش — رفعِ باگِ «داشبورد بعدِ Minimize/Restore بهم می‌ریزد»:
+            // ویندوز حینِ این گذار یک اندازه‌ی موقتِ خیلی کوچک می‌فرستد؛ اگر
+            // همان لحظه اعمال شود، summaryPanel روی آن ارتفاعِ کاذب می‌ماند
+            // (کارت‌ها را به ~۲۴px می‌رساند) چون هیچ Layoutِ بعدی آن را اصلاح
+            // نمی‌کند. نادیده‌گرفتنِ اندازه‌های کاذب، آخرین ارتفاعِ درست را
+            // دست‌نخورده نگه می‌دارد.
+            if (available < DashboardLayoutMath.MinSaneAvailableHeight) return;
             int height = DashboardLayoutMath.SummaryPanelHeight(_summaryRows, available);
             if (summaryPanel.Height != height)
                 summaryPanel.Height = height;
@@ -989,15 +962,10 @@ namespace CaseManagement
 
         private StatCard MakeStatCard(string title, string unit, string glyph, string accentHex, string tintHex)
         {
-            // آموزش — خواستهٔ کاربر: «همه سایزشان یک‌سوم کوچک کن و وسط نوشته
-            // بشه چون الان خرابه». ۱۷۶×۱۱۸ → ۱۱۸×۷۹ دقیقاً دوسومِ هر دو بعد.
-            // حالتِ compact فقط کوچک نمی‌کند، چیدمان را هم وسط‌چین می‌کند —
-            // چون در این ارتفاع، چیدمانِ چهارردیفهٔ قبلی جا نمی‌شد و همان
-            // درهم‌ریختگی را می‌ساخت.
             return new StatCard(title, unit, glyph,
-                ColorTranslator.FromHtml(accentHex), ColorTranslator.FromHtml(tintHex), true)
+                ColorTranslator.FromHtml(accentHex), ColorTranslator.FromHtml(tintHex))
             {
-                Width = 118, Height = 79, Margin = new Padding(0, 0, 8, 0)
+                Width = 176, Height = 118, Margin = new Padding(0, 0, 12, 0)
             };
         }
 
@@ -1080,48 +1048,57 @@ namespace CaseManagement
         {
             // Phase 5.5-D — کارت‌های ریسک و کیفیت. سه کارتِ باند قابلِ کلیک‌اند
             // و جستجوی پیشرفته را با همان فیلتر باز می‌کنند (drill-down).
-            _cardHighRisk    = MakeStatCard("پرونده پرخطر",   "", IconFont.Shield,  "#C0392B", "#FBEAE9");
-            _cardMediumRisk  = MakeStatCard("پرونده متوسط",   "", IconFont.Shield,  "#B8860B", "#FCF3DD");
-            _cardLowRisk     = MakeStatCard("پرونده کم‌خطر",  "", IconFont.Shield,  "#1E8449", "#E9F7EF");
-            _cardAvgScore    = MakeStatCard("میانگین امتیاز", "", IconFont.Clock,   "#1F618D", "#EAF2F8");
-            _cardUnverifiedDocs = MakeStatCard("سند تأییدنشده", "", IconFont.Cancel, "#7D3C98", "#F4ECF7");
-            _cardNeedVisit   = MakeStatCard("نیازمند بازدید", "", IconFont.Check,   "#117864", "#E8F6F3");
-            _cardNeedFunding = MakeStatCard("بدون تأمین مالی", "", IconFont.Settings, "#873600", "#FDF2E9");
+            _cardHighRisk    = MakeStatCard("پرونده پرخطر",   "", IconFont.Shield,     "#C0392B", "#FBEAE9");
+            _cardMediumRisk  = MakeStatCard("پرونده متوسط",   "", IconFont.Shield,     "#B8860B", "#FCF3DD");
+            _cardLowRisk     = MakeStatCard("پرونده کم‌خطر",  "", IconFont.Shield,     "#1E8449", "#E9F7EF");
+            _cardAvgScore    = MakeStatCard("میانگین امتیاز", "", IconFont.Chart,      "#1F618D", "#EAF2F8");
+            _cardUnverifiedDocs = MakeStatCard("سند تأییدنشده", "", IconFont.Document, "#7D3C98", "#F4ECF7");
+            _cardNeedVisit   = MakeStatCard("نیازمند بازدید", "", IconFont.Home,       "#117864", "#E8F6F3");
+            _cardNeedFunding = MakeStatCard("بدون تأمین مالی", "", IconFont.Money,     "#873600", "#FDF2E9");
 
             AttachCardClick(_cardHighRisk,   delegate { OpenRiskDrillDown("پرخطر"); });
             AttachCardClick(_cardMediumRisk, delegate { OpenRiskDrillDown("متوسط"); });
             AttachCardClick(_cardLowRisk,    delegate { OpenRiskDrillDown("کم‌خطر"); });
 
-            _cardMissingDocs     = MakeStatCard("پرونده با سند ناقص", "", IconFont.Cancel,   "#C0392B", "#FBEAE9");
-            // پرونده‌های ناقص = وضعیتِ تکمیلِ «ناقص» در جستجوی پیشرفته.
+            _cardMissingDocs     = MakeStatCard("پرونده با سند ناقص", "", IconFont.Cancel, "#C0392B", "#FBEAE9");
             AttachCardClick(_cardMissingDocs, delegate { OpenCompletionDrillDown("ناقص"); });
-            _cardVisits          = MakeStatCard("بازدید میدانی",      "", IconFont.Check,    "#1E8449", "#E9F7EF");
-            _cardFundedCases     = MakeStatCard("پرونده دارای تأمین مالی", "", IconFont.Settings, "#1F618D", "#EAF2F8");
-            _cardFundingSources  = MakeStatCard("منابع مالی فعال",    "", IconFont.Settings, "#7D3C98", "#F4ECF7");
-            _cardSponsors        = MakeStatCard("خیّرین فعال",        "", IconFont.Shield,   "#B8860B", "#FCF3DD");
-            _cardAssistanceCount = MakeStatCard("تعداد مساعدت",       "", IconFont.Clock,    "#117864", "#E8F6F3");
+            _cardVisits          = MakeStatCard("بازدید میدانی",      "", IconFont.Home,    "#1E8449", "#E9F7EF");
+            _cardFundedCases     = MakeStatCard("پرونده دارای تأمین مالی", "", IconFont.Money, "#1F618D", "#EAF2F8");
+            _cardFundingSources  = MakeStatCard("منابع مالی فعال",    "", IconFont.Calculator, "#7D3C98", "#F4ECF7");
+            _cardSponsors        = MakeStatCard("خیّرین فعال",        "", IconFont.Heart,   "#B8860B", "#FCF3DD");
+            _cardAssistanceCount = MakeStatCard("تعداد مساعدت",       "", IconFont.Money,   "#117864", "#E8F6F3");
 
-            var cardFlow = new FlowLayoutPanel
+            const int MgmtCols = 7;
+            const int MgmtRows = 2;
+
+            var cardGrid = new TableLayoutPanel
             {
                 Dock = DockStyle.Top,
-                Height = 140,
-                FlowDirection = FlowDirection.LeftToRight,
+                Height = DashboardLayoutMath.DesiredSummaryHeight(MgmtRows),
+                ColumnCount = MgmtCols,
+                RowCount = MgmtRows,
                 RightToLeft = RightToLeft.Yes,
-                WrapContents = true,
-                Padding = new Padding(10, 10, 10, 0),
-                BackColor = Color.Transparent
+                Padding = new Padding(0, 0, 0, 10),
+                BackColor = UiTheme.Background
             };
+            for (int i = 0; i < MgmtCols; i++)
+                cardGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F / MgmtCols));
+            for (int i = 0; i < MgmtRows; i++)
+                cardGrid.RowStyles.Add(new RowStyle(SizeType.Percent, 100F / MgmtRows));
 
             StatCard[] cards =
             {
-                // Phase 5.5-D — ردیفِ ریسک اول می‌آید (مهم‌ترین برای تصمیم‌گیری)،
-                // سپس کیفیتِ داده، سپس سنجه‌های تأمین مالی که از قبل بودند.
                 _cardHighRisk, _cardMediumRisk, _cardLowRisk, _cardAvgScore,
                 _cardMissingDocs, _cardUnverifiedDocs, _cardNeedVisit, _cardNeedFunding,
                 _cardVisits, _cardFundedCases,
                 _cardFundingSources, _cardSponsors, _cardAssistanceCount
             };
-            foreach (StatCard card in cards) cardFlow.Controls.Add(card);
+            foreach (StatCard card in cards)
+            {
+                card.Dock = DockStyle.Fill;
+                card.Margin = new Padding(5);
+                cardGrid.Controls.Add(card);
+            }
 
             _gridRequestTypeDist   = MakeDistributionGrid();
             _gridServiceStatusDist = MakeDistributionGrid();
@@ -1134,8 +1111,9 @@ namespace CaseManagement
                 ColumnCount = 2,
                 RowCount = 2,
                 RightToLeft = RightToLeft.Yes,
-                Padding = new Padding(10),
-                BackColor = Color.Transparent
+                Padding = new Padding(4),
+                BackColor = UiTheme.Background,
+                MinimumSize = new Size(0, 360)
             };
             distributions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
             distributions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
@@ -1147,11 +1125,12 @@ namespace CaseManagement
             distributions.Controls.Add(WrapGrid("توزیع وضعیت تکمیل", _gridCompletionDist), 0, 1);
             distributions.Controls.Add(WrapGrid("توزیع سطح آسیب‌پذیری", _gridVulnerabilityDist), 1, 1);
 
-            var host = new Panel { Dock = DockStyle.Fill, BackColor = UiTheme.Background };
+            var host = new Panel { Dock = DockStyle.Fill, BackColor = UiTheme.Background, AutoScroll = true };
             host.Controls.Add(distributions);
-            host.Controls.Add(cardFlow);
+            host.Controls.Add(cardGrid);
 
-            var page = new TabPage("مدیریت و کیفیت") { BackColor = UiTheme.Background };
+            var page = new TabPage("مدیریت و کیفیت") { BackColor = UiTheme.Background, Size = new Size(1200, 700) };
+            page.Padding = new Padding(16, 14, 16, 14);
             page.Controls.Add(host);
             return page;
         }
@@ -1205,18 +1184,22 @@ namespace CaseManagement
 
         private static Panel WrapGrid(string title, DataGridView grid)
         {
-            var panel = new Panel { Dock = DockStyle.Fill, BackColor = UiTheme.CardBack, Margin = new Padding(5) };
-            panel.Controls.Add(grid);
-            panel.Controls.Add(new Label
+            Label empty = new Label
             {
-                Dock = DockStyle.Top,
-                Height = 28,
-                Text = "  " + title,
-                Font = UiTheme.FontBold(UiTheme.SizeSmall),
-                ForeColor = UiTheme.TextDark,
-                TextAlign = ContentAlignment.MiddleRight
-            });
-            return panel;
+                Dock = DockStyle.Fill,
+                Text = "پرونده‌ای برای نمایش نیست",
+                Font = UiTheme.Font(UiTheme.SizeSmall),
+                ForeColor = UiTheme.TextMuted,
+                TextAlign = ContentAlignment.MiddleCenter,
+                BackColor = Color.Transparent,
+                Visible = false
+            };
+            grid.Tag = empty;
+
+            DashboardCard card = new DashboardCard(title) { Dock = DockStyle.Fill, Margin = new Padding(5) };
+            card.Content.Controls.Add(grid);
+            card.Content.Controls.Add(empty);
+            return card;
         }
 
         private static DataGridView MakeDistributionGrid()
@@ -1227,14 +1210,45 @@ namespace CaseManagement
                 ReadOnly = true,
                 AllowUserToAddRows = false,
                 AllowUserToDeleteRows = false,
-                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None,
+                AllowUserToResizeRows = false,
+                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
                 SelectionMode = DataGridViewSelectionMode.FullRowSelect,
                 MultiSelect = false,
                 RightToLeft = RightToLeft.Yes,
-                RowTemplate = { Height = 26 }
+                BorderStyle = BorderStyle.None,
+                BackgroundColor = UiTheme.CardBack,
+                GridColor = UiTheme.Border,
+                RowHeadersVisible = false,
+                EnableHeadersVisualStyles = false,
+                RowTemplate = { Height = 28 }
             };
-            UiTheme.StyleGrid(grid);
+            grid.ColumnHeadersDefaultCellStyle.BackColor = UiTheme.Primary;
+            grid.ColumnHeadersDefaultCellStyle.ForeColor = Color.White;
+            grid.ColumnHeadersDefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
+            grid.ColumnHeadersDefaultCellStyle.Font = UiTheme.FontBold(UiTheme.SizeSmall);
+            grid.DefaultCellStyle.Font = UiTheme.Font(UiTheme.SizeSmall);
+            grid.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
+            grid.AlternatingRowsDefaultCellStyle.BackColor = ColorTranslator.FromHtml("#F7F9FB");
             return grid;
+        }
+
+        private static void BindDistribution(DataGridView grid, DataTable table)
+        {
+            if (grid == null) return;
+            Label empty = grid.Tag as Label;
+            bool hasRows = table != null && table.Rows.Count > 0;
+            grid.DataSource = hasRows ? table : null;
+            grid.Visible = hasRows;
+            if (empty != null) empty.Visible = !hasRows;
+            if (!hasRows || grid.Columns.Count == 0) return;
+
+            grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+            grid.Columns[0].FillWeight = 70;
+            if (grid.Columns.Count > 1)
+            {
+                grid.Columns[1].FillWeight = 30;
+                grid.Columns[1].DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
+            }
         }
 
         // همهٔ داده از DashboardMetricsService می‌آید — طبقِ خواستهٔ صریح،
@@ -1266,10 +1280,10 @@ namespace CaseManagement
                 _cardSponsors.SetValue(metrics.ActiveSponsors);
                 _cardAssistanceCount.SetValue(metrics.AssistanceCount);
 
-                _gridRequestTypeDist.DataSource   = DashboardMetricsService.GetRequestTypeDistribution(cid);
-                _gridServiceStatusDist.DataSource = DashboardMetricsService.GetServiceStatusDistribution(cid);
-                _gridCompletionDist.DataSource    = DashboardMetricsService.GetCompletionDistribution(cid);
-                _gridVulnerabilityDist.DataSource = DashboardMetricsService.GetVulnerabilityBandDistribution(cid);
+                BindDistribution(_gridRequestTypeDist,   DashboardMetricsService.GetRequestTypeDistribution(cid));
+                BindDistribution(_gridServiceStatusDist, DashboardMetricsService.GetServiceStatusDistribution(cid));
+                BindDistribution(_gridCompletionDist,    DashboardMetricsService.GetCompletionDistribution(cid));
+                BindDistribution(_gridVulnerabilityDist, DashboardMetricsService.GetVulnerabilityBandDistribution(cid));
             }
             catch (Exception ex)
             {
@@ -1468,7 +1482,7 @@ namespace CaseManagement
                     int incompleteCases = Convert.ToInt32(NotificationScalar(con, @"
 SELECT COUNT(1) FROM TblCase
 WHERE (NULLIF(Code,'') IS NULL OR NULLIF(HeadFullName,'') IS NULL OR NULLIF(Phone,'') IS NULL)
-  AND (@CID = 0 OR CenterID = @CID)", cid));
+  AND (@CID = 0 OR CenterID = @CID)" + Helpers.ProvinceScope.Sql(""), cid));
                     if (incompleteCases > 0)
                         items.Add(new NotificationItem { Icon = "✕", Title = "پرونده ناقص است", Detail = incompleteCases + " پرونده دارای اطلاعات ناقص", Color = UiTheme.Warning });
                 }
@@ -1478,7 +1492,7 @@ WHERE (NULLIF(Code,'') IS NULL OR NULLIF(HeadFullName,'') IS NULL OR NULLIF(Phon
                     int noPhoto = Convert.ToInt32(NotificationScalar(con, @"
 SELECT COUNT(1) FROM TblCase
 WHERE NULLIF(PhotoPath,'') IS NULL AND NULLIF(FamilyPhotoPath,'') IS NULL
-  AND (@CID = 0 OR CenterID = @CID)", cid));
+  AND (@CID = 0 OR CenterID = @CID)" + Helpers.ProvinceScope.Sql(""), cid));
                     if (noPhoto > 0)
                         items.Add(new NotificationItem { Icon = "📷", Title = "عکس ندارد", Detail = noPhoto + " پرونده بدون عکس", Color = UiTheme.Warning });
                 }
@@ -1488,7 +1502,7 @@ WHERE NULLIF(PhotoPath,'') IS NULL AND NULLIF(FamilyPhotoPath,'') IS NULL
                     int noDocs = Convert.ToInt32(NotificationScalar(con, @"
 SELECT COUNT(1) FROM TblCase c
 WHERE NOT EXISTS (SELECT 1 FROM TblDocs d WHERE d.CasID = c.CasID)
-  AND (@CID = 0 OR c.CenterID = @CID)", cid));
+  AND (@CID = 0 OR c.CenterID = @CID)" + Helpers.ProvinceScope.Sql("c"), cid));
                     if (noDocs > 0)
                         items.Add(new NotificationItem { Icon = "📄", Title = "سند ندارد", Detail = noDocs + " پرونده بدون سند", Color = UiTheme.Warning });
 
@@ -1496,7 +1510,7 @@ WHERE NOT EXISTS (SELECT 1 FROM TblDocs d WHERE d.CasID = c.CasID)
 SELECT COUNT(1) FROM TblDocs d
 JOIN TblCase c ON c.CasID = d.CasID
 WHERE (NULLIF(d.DocType,'') IS NULL OR NULLIF(d.DocFilePath,'') IS NULL)
-  AND (@CID = 0 OR c.CenterID = @CID)", cid));
+  AND (@CID = 0 OR c.CenterID = @CID)" + Helpers.ProvinceScope.Sql("c"), cid));
                     if (incompleteDocs > 0)
                         items.Add(new NotificationItem { Icon = "📄", Title = "اسناد ناقص هستند", Detail = incompleteDocs + " سند دارای اطلاعات ناقص", Color = UiTheme.Warning });
                 }
@@ -1506,7 +1520,7 @@ WHERE (NULLIF(d.DocType,'') IS NULL OR NULLIF(d.DocFilePath,'') IS NULL)
                     int noFamily = Convert.ToInt32(NotificationScalar(con, @"
 SELECT COUNT(1) FROM TblCase c
 WHERE NOT EXISTS (SELECT 1 FROM TblFamily f WHERE f.CasID = c.CasID)
-  AND (@CID = 0 OR c.CenterID = @CID)", cid));
+  AND (@CID = 0 OR c.CenterID = @CID)" + Helpers.ProvinceScope.Sql("c"), cid));
                     if (noFamily > 0)
                         items.Add(new NotificationItem { Icon = "👪", Title = "اعضای خانواده ناقص هستند", Detail = noFamily + " پرونده بدون عضو خانواده ثبت‌شده", Color = UiTheme.Warning });
                 }
@@ -1519,7 +1533,7 @@ WHERE NOT EXISTS (SELECT 1 FROM TblFamily f WHERE f.CasID = c.CasID)
 SELECT COUNT(1) FROM TblCase c
 WHERE c.ServiceStatus = 'فعال'
   AND NOT EXISTS (SELECT 1 FROM TblAssistance a WHERE a.CasID = c.CasID)
-  AND (@CID = 0 OR c.CenterID = @CID)", cid));
+  AND (@CID = 0 OR c.CenterID = @CID)" + Helpers.ProvinceScope.Sql("c"), cid));
                     if (noAssistance > 0)
                         items.Add(new NotificationItem { Icon = "$", Title = "اطلاعات مالی ناقص است", Detail = noAssistance + " پرونده فعال بدون هیچ کمک ثبت‌شده", Color = UiTheme.Warning });
                 }
@@ -1536,6 +1550,7 @@ WHERE c.ServiceStatus = 'فعال'
             using (var cmd = new SQLiteCommand(sql, con))
             {
                 cmd.Parameters.AddWithValue("@CID", cid);
+                Helpers.ProvinceScope.Bind(cmd);
                 return cmd.ExecuteScalar();
             }
         }
@@ -2554,7 +2569,7 @@ SELECT ReminderID,
        RemindAt AS [موعد],
        CASE IsDone WHEN 1 THEN 'انجام‌شده' ELSE 'در انتظار' END AS [وضعیت]
 FROM TblReminder
-WHERE (@CID = 0 OR CenterID = @CID)
+WHERE (@CID = 0 OR CenterID = @CID)" + Helpers.ProvinceScope.Sql("") + @"
 ORDER BY IsDone, RemindAt", cid);
             dgvCustomReminders.DataSource = table;
             if (dgvCustomReminders.Columns.Contains("ReminderID"))
@@ -2584,10 +2599,11 @@ SELECT ReminderID, Title, Note, RemindAt
 FROM TblReminder
 WHERE IsDone = 0 AND IsNotified = 0
   AND RemindAt <= strftime('%Y-%m-%d %H:%M', 'now', 'localtime')
-  AND (@CID = 0 OR CenterID = @CID)
+  AND (@CID = 0 OR CenterID = @CID)" + Helpers.ProvinceScope.Sql("") + @"
 ORDER BY RemindAt", con))
                 {
                     cmd.Parameters.AddWithValue("@CID", cid);
+                    Helpers.ProvinceScope.Bind(cmd);
                     using (var da = new SQLiteDataAdapter(cmd))
                         da.Fill(due);
                 }
@@ -2799,7 +2815,7 @@ SELECT
     (SELECT COUNT(1) FROM TblDocs d
       JOIN TblCase c ON c.CasID = d.CasID
       WHERE (@CID=0 OR c.CenterID=@CID)" + CaseFilterSqlNoStatus("c") + @")                          AS DocCount,
-    (SELECT COUNT(1) FROM TblCenter WHERE IsActive = 1 AND (@CID = 0 OR CenterID = @CID)) AS CenterCount,
+    (SELECT COUNT(1) FROM TblCenter WHERE IsActive = 1 AND (@CID = 0 OR CenterID = @CID)" + Helpers.ProvinceScope.Sql("") + @") AS CenterCount,
     (SELECT COALESCE(SUM(a.Amount), 0) FROM TblAssistance a
       JOIN TblCase c ON c.CasID = a.CasID
       WHERE (@CID=0 OR c.CenterID=@CID)" + CaseFilterSqlNoStatus("c") + @")                          AS FinanceTotal,
@@ -2983,7 +2999,7 @@ SELECT * FROM (
                 DataTable t = GetTableCid(@"
 SELECT CreatedAt, Username, Operation, EntityName, EntityID
 FROM TblAuditLog
-WHERE (@CID = 0 OR CenterID = @CID)
+WHERE (@CID = 0 OR CenterID = @CID)" + Helpers.ProvinceScope.Sql("") + @"
 ORDER BY LogID DESC LIMIT 5", cid);
 
                 if (t.Rows.Count == 0)
@@ -3189,7 +3205,7 @@ ORDER BY CasID DESC", cid);
             dgvAudit.DataSource = GetTableCid(@"
 SELECT LogID, CreatedAt, Username, Operation, EntityName, EntityID, OldValue, NewValue
 FROM TblAuditLog
-WHERE (@CID = 0 OR CenterID = @CID)
+WHERE (@CID = 0 OR CenterID = @CID)" + Helpers.ProvinceScope.Sql("") + @"
 ORDER BY LogID DESC", cid);
         }
 
@@ -3360,6 +3376,7 @@ ORDER BY LogID DESC", cid);
             using (SQLiteCommand cmd = new SQLiteCommand(query, con))
             {
                 cmd.Parameters.AddWithValue("@CID", centerId);
+                Helpers.ProvinceScope.Bind(cmd);
                 using (SQLiteDataAdapter da = new SQLiteDataAdapter(cmd))
                 {
                     DataTable table = new DataTable();
@@ -3500,6 +3517,22 @@ WHERE IsActive = 1 ORDER BY CenterCode", con))
         // قبل تعریف شده و پیش‌فرضش برای هر سه نقش true است، پس امروز هیچ
         // کاربری دسترسی‌اش را از دست نمی‌دهد — ولی مدیر سیستم از این پس
         // کلیدی دارد که واقعاً هر دو در را می‌بندد.
+        // مرکز فرماندهی آماری و تحلیلی (نقشهٔ ولایتی/ولسوالی).
+        // آموزش — همان مجوزِ «Case.View» کافی است: این فرم فقط می‌خواند و
+        // چیزی برای دیدن نشان می‌دهد که کاربر از راهِ FrmCase هم می‌بیند؛
+        // مجوزِ تازه ساختن یعنی همهٔ نقش‌های موجود باید دوباره تنظیم شوند.
+        private void OpenGeoCommandCenter()
+        {
+            if (!CaseManagement.Enterprise.PermissionService.Require("Case.View"))
+            {
+                UiTheme.ShowWarning(this, "شما به آمار پرونده‌ها دسترسی ندارید.");
+                return;
+            }
+
+            using (var frm = new FrmGeoCommandCenter()) frm.ShowDialog(this);
+            RefreshAll();
+        }
+
         private void OpenFinance()
         {
             if (!CaseManagement.Enterprise.PermissionService.Require("Finance.View"))

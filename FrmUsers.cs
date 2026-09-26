@@ -291,9 +291,11 @@ namespace CaseManagement
                 using (SQLiteConnection con = _db.GetConnection())
                 using (SQLiteCommand cmd = new SQLiteCommand(@"
 INSERT INTO TblUsers
-    (Username, PasswordHash, PasswordSalt, PasswordIterations, Role, IsActive, MustChangePassword, Phone, WhatsApp, CenterID, LastCenterID, LastPasswordChangeAt)
+    (Username, PasswordHash, PasswordSalt, PasswordIterations, Role, IsActive, MustChangePassword, Phone, WhatsApp, CenterID, LastCenterID, LastPasswordChangeAt, GlobalID)
 VALUES
-    (@Username, @PasswordHash, @PasswordSalt, @PasswordIterations, @Role, 1, 1, @Phone, @WhatsApp, @CenterID, @CenterID, datetime('now'))", con))
+    (@Username, @PasswordHash, @PasswordSalt, @PasswordIterations, @Role, 1, 1, @Phone, @WhatsApp, @CenterID, @CenterID, datetime('now'),
+     lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-' ||
+     lower(hex(randomblob(2))) || '-' || lower(hex(randomblob(2))) || '-' || lower(hex(randomblob(6))))", con))
                 {
                     // آموزش — MustChangePassword=1:
                     // رمزی که ادمین می‌گذارد موقت است.
@@ -311,6 +313,21 @@ VALUES
                     con.Open();
                     cmd.ExecuteNonQuery();
                 }
+
+                // Phase 8 — هویتِ مشترک: کاربرِ تازه باید همان رمز روی
+                // پورتال/API هم کار کند. SuperAdmin هرگز سینک نمی‌شود
+                // (SyncOutboxService.IsUnsyncableUser خودش رد می‌کند).
+                // ⚠ شناسه از رویِ Username (یکتا) دوباره خوانده می‌شود، نه
+                // last_insert_rowid() — آن تابع به‌ازایِ *اتصال* است و con
+                // بالا پیش از این نقطه بسته شده، پس روی اتصالِ تازه همیشه ۰
+                // برمی‌گرداند.
+                object newUserIdObj = _db.ExecuteScalar(
+                    "SELECT UserID FROM TblUsers WHERE Username = @u",
+                    new SQLiteParameter("@u", _txtUsername.Text.Trim()));
+                if (newUserIdObj != null && newUserIdObj != DBNull.Value)
+                    CaseManagement.Sync.SyncOutboxService.Capture("TblUsers",
+                        Convert.ToInt32(newUserIdObj),
+                        CaseManagement.Sync.OfflineSyncInitializer.OperationCreate);
 
                 AuditLogger.Log(
                     "ثبت کاربر", "TblUsers", 0, "",
@@ -388,6 +405,10 @@ WHERE  UserID = @UserID AND (@CID = 0 OR CenterID = @CID)", con))
                 }
             }
 
+            // Phase 8 — تغییرِ فعال/غیرفعال باید روی پورتال/API هم اثر کند.
+            CaseManagement.Sync.SyncOutboxService.Capture(
+                "TblUsers", userId, CaseManagement.Sync.OfflineSyncInitializer.OperationUpdate);
+
             AuditLogger.Log("تغییر وضعیت کاربر", "TblUsers", userId, "", "");
             LoadUsers();
         }
@@ -427,6 +448,15 @@ WHERE  UserID = @UserID AND (@CID = 0 OR CenterID = @CID)", con))
                 return;
 
             if (!EnsureTargetNotSuperAdmin(userId)) return;
+
+            // Phase 8 — هویتِ رکورد فقط *پیش از* DELETE خواندنی است، ولی حذف
+            // ممکن است انجام نشود (مرکزِ دیگر). دو-گامی، عیناً الگویِ
+            // CaseModuleService.Delete: PrepareDelete پیش، CommitDelete فقط
+            // پس از موفقیتِ واقعی. سرور حذفِ دسکتاپ را غیرفعال‌سازی می‌بیند،
+            // نه حذفِ فیزیکیِ ردیف (کلیدهایِ خارجیِ devices/refresh_tokens/
+            // audit_log به users وابسته‌اند).
+            CaseManagement.Sync.SyncOutboxService.PendingDelete pendingSync =
+                CaseManagement.Sync.SyncOutboxService.PrepareDelete("TblUsers", userId);
 
             using (SQLiteConnection con = _db.GetConnection())
             {
@@ -469,6 +499,9 @@ WHERE  UserID = @UserID AND (@CID = 0 OR CenterID = @CID)", con))
                     tr.Commit();
                 }
             }
+
+            // Phase 8 — فقط پس از موفقیتِ واقعیِ DELETE.
+            CaseManagement.Sync.SyncOutboxService.CommitDelete(pendingSync);
 
             AuditLogger.Log("حذف کاربر", "TblUsers", userId, username, "");
             UiTheme.ShowSuccess(this, "کاربر حذف شد.");

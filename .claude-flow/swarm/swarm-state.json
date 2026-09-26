@@ -1,0 +1,25 @@
+{
+  "swarms": {
+    "swarm-1789631491095-ybxsnn": {
+      "swarmId": "swarm-1789631491095-ybxsnn",
+      "topology": "hierarchical",
+      "maxAgents": 8,
+      "status": "running",
+      "agents": [
+        "agent-1789631562343-o0m7jw"
+      ],
+      "tasks": [],
+      "config": {
+        "topology": "hierarchical",
+        "maxAgents": 8,
+        "strategy": "specialized",
+        "communicationProtocol": "message-bus",
+        "autoScaling": true,
+        "consensusMechanism": "majority"
+      },
+      "createdAt": "2026-09-17T07:51:31.095Z",
+      "updatedAt": "2026-09-17T07:51:31.095Z"
+    }
+  },
+  "version": "3.0.0"
+}

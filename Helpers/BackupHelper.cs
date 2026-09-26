@@ -5,6 +5,7 @@ using System.Data;
 using System.Data.SQLite;
 using System.IO;
 using System.IO.Compression;
+using CaseManagement.Sync;
 
 namespace CaseManagement.Helpers
 {
@@ -317,6 +318,18 @@ namespace CaseManagement.Helpers
                 using (var probe = new SQLiteCommand("SELECT COUNT(1) FROM TblCase", con))
                     isFreshInstall = Convert.ToInt32(probe.ExecuteScalar()) == 0;
 
+                // آموزش — رفعِ شکافِ همگام‌سازی (Option B، بازبینیِ معماریِ
+                // همگام‌سازی): هر ردیفی که این بازیابی واقعاً *تازه* درج می‌کند
+                // (نه merge/skip) اینجا فهرست می‌شود تا بعد از commit (پایینِ
+                // همین متد) یک‌به‌یک SyncOutboxService.Capture برایش صدا زده
+                // شود. اگر اینجا و مستقیماً وسطِ تراکنش صدا زده می‌شد،
+                // SyncOutboxService (که اتصالِ SQLite جداگانهٔ خودش را باز
+                // می‌کند) روی قفلِ نوشتنِ همین تراکنش گیر می‌کرد؛ پس فقط بعد از
+                // Commit جمع‌آوری و اجرا می‌شود. هر دو مسیر (merge و classic) و
+                // MergeUsers از همین یک فهرست استفاده می‌کنند تا هیچ ردیفِ
+                // تازه‌ای از قلم نیفتد.
+                var capturedForSync = new List<KeyValuePair<string, int>>();
+
                 using (var tr = con.BeginTransaction())
                 {
                     try
@@ -330,7 +343,7 @@ namespace CaseManagement.Helpers
                         // نمی‌خورد (رمز عبور کاربر جاری یا تنظیمات محلی خراب نمی‌شود)،
                         // فقط موارد جدید/گمشده (مثلاً در بازیابی روی نصب تازه) اضافه می‌شوند.
                         if (dataSet.Tables.Contains("TblUsers"))
-                            MergeUsers(con, tr, dataSet.Tables["TblUsers"]);
+                            MergeUsers(con, tr, dataSet.Tables["TblUsers"], capturedForSync);
                         if (dataSet.Tables.Contains("TblLookup"))
                             MergeLookup(con, tr, dataSet.Tables["TblLookup"]);
 
@@ -379,26 +392,27 @@ namespace CaseManagement.Helpers
                                 int newId = InsertCaseRow(con, tr, caseTable, row);
                                 casIdMap[origId] = newId;
                                 newlyInsertedOrigIds.Add(origId);
+                                capturedForSync.Add(new KeyValuePair<string, int>("TblCase", newId));
                                 result.CasesInserted++;
                             }
 
                             // جداول فرزند: فقط ردیف‌هایی که CasID آن‌ها در casIdMap جدید هستند
                             var famIdMap = new Dictionary<int, int>();
-                            MergeChildTable(con, tr, dataSet.Tables["TblFamily"],    "FamID",        casIdMap, famIdMap);
-                            MergeChildTable(con, tr, dataSet.Tables["TblDocs"],      "DocID",        casIdMap);
+                            MergeChildTable(con, tr, dataSet.Tables["TblFamily"],    "FamID",        casIdMap, famIdMap, capturedForSync);
+                            MergeChildTable(con, tr, dataSet.Tables["TblDocs"],      "DocID",        casIdMap, null, capturedForSync);
                             if (dataSet.Tables.Contains("TblAssistance"))
-                                MergeChildTable(con, tr, dataSet.Tables["TblAssistance"], "AssistanceID", casIdMap);
+                                MergeChildTable(con, tr, dataSet.Tables["TblAssistance"], "AssistanceID", casIdMap, null, capturedForSync);
 
                             // Phase 4 — ماژول‌های تخصصی. شکلشان دقیقاً همان
                             // TblDocs است (CasID + PK + GlobalID)، پس همان
                             // MergeChildTable عمومی کار می‌کند؛ شرطِ Contains
                             // برای بکاپ‌های قدیمی‌تر است که این جداول را ندارند.
                             if (dataSet.Tables.Contains("TblOrphan"))
-                                MergeChildTable(con, tr, dataSet.Tables["TblOrphan"],     "OrphanID",     casIdMap);
+                                MergeChildTable(con, tr, dataSet.Tables["TblOrphan"],     "OrphanID",     casIdMap, null, capturedForSync);
                             if (dataSet.Tables.Contains("TblDisability"))
-                                MergeChildTable(con, tr, dataSet.Tables["TblDisability"], "DisabilityID", casIdMap);
+                                MergeChildTable(con, tr, dataSet.Tables["TblDisability"], "DisabilityID", casIdMap, null, capturedForSync);
                             if (dataSet.Tables.Contains("TblMigrant"))
-                                MergeChildTable(con, tr, dataSet.Tables["TblMigrant"],    "MigrantID",    casIdMap);
+                                MergeChildTable(con, tr, dataSet.Tables["TblMigrant"],    "MigrantID",    casIdMap, null, capturedForSync);
 
                             // Phase 5 — بازدید میدانی و تأمین مالی.
                             // عکسِ بازدید «نوه» است: اول باید VisitIDهای تازه
@@ -406,19 +420,19 @@ namespace CaseManagement.Helpers
                             // وگرنه عکس به بازدیدِ اشتباه می‌چسبید.
                             var visitIdMap = new Dictionary<int, int>();
                             if (dataSet.Tables.Contains("TblFieldVisit"))
-                                MergeChildTable(con, tr, dataSet.Tables["TblFieldVisit"], "VisitID", casIdMap, visitIdMap);
+                                MergeChildTable(con, tr, dataSet.Tables["TblFieldVisit"], "VisitID", casIdMap, visitIdMap, capturedForSync);
                             if (dataSet.Tables.Contains("TblFieldVisitPhoto"))
                                 MergeFamilyHistory(con, tr, dataSet.Tables["TblFieldVisitPhoto"],
-                                    "TblFieldVisitPhoto", "VisitID", visitIdMap);
+                                    "TblFieldVisitPhoto", "VisitID", visitIdMap, capturedForSync);
                             if (dataSet.Tables.Contains("TblCaseFunding"))
-                                MergeChildTable(con, tr, dataSet.Tables["TblCaseFunding"], "CaseFundingID", casIdMap);
+                                MergeChildTable(con, tr, dataSet.Tables["TblCaseFunding"], "CaseFundingID", casIdMap, null, capturedForSync);
 
                             // Phase 7 — نماینده: شکلش دقیقاً همان TblDocs است
                             // (CasID + PK + GlobalID)، پس همان MergeChildTable
                             // عمومی کار می‌کند؛ شرطِ Contains برای بکاپ‌های
                             // قدیمی‌تر است که این جدول را ندارند.
                             if (dataSet.Tables.Contains("TblCaseRepresentative"))
-                                MergeChildTable(con, tr, dataSet.Tables["TblCaseRepresentative"], "RepresentativeID", casIdMap);
+                                MergeChildTable(con, tr, dataSet.Tables["TblCaseRepresentative"], "RepresentativeID", casIdMap, null, capturedForSync);
 
                             // Phase 5.5-B — امتیاز و ریزِ آن. ریز «نوه» است،
                             // پس مثلِ عکسِ بازدید اول باید ScoreIDهای تازه
@@ -562,6 +576,16 @@ namespace CaseManagement.Helpers
                         throw;
                     }
                 }
+
+                // آموزش — چرا اینجا و نه وسطِ تراکنشِ بالا: Capture یک اتصالِ
+                // SQLite جداگانه باز می‌کند (DatabaseHelper خودِ SyncOutboxService)؛
+                // اگر وسطِ تراکنش صدا زده می‌شد، همان لحظه با قفلِ نوشتنِ تراکنشِ
+                // بازیابی برخورد می‌کرد. حالا که Commit موفق شده، هر ردیف
+                // مستقل capture می‌شود؛ Capture خودش هر خطا را می‌بلعد (بدونِ
+                // پرتاب) و رکوردِ ازقلم‌افتاده را می‌توان بعداً با ابزارِ
+                // Backfill (FrmSyncBackfill) به‌صورتِ ایمن و idempotent جبران کرد.
+                foreach (var item in capturedForSync)
+                    SyncOutboxService.Capture(item.Key, item.Value, OfflineSyncInitializer.OperationCreate);
             }
 
             string backupFilesFolder = Path.Combine(backupFolder, FilesFolderName);
@@ -703,12 +727,14 @@ VALUES
         // آموزش: روی نصب تازه (دیتابیس خالی) همه کاربران بازیابی می‌شوند؛ روی
         // دیتابیسی که از قبل کاربر دارد، حساب‌های موجود دست‌نخورده می‌مانند
         // (رمز عبور/جلسه کاربر جاری خراب نمی‌شود).
-        private static void MergeUsers(SQLiteConnection con, SQLiteTransaction tr, DataTable table)
+        private static void MergeUsers(SQLiteConnection con, SQLiteTransaction tr, DataTable table,
+                                       List<KeyValuePair<string, int>> capture = null)
         {
             foreach (DataRow row in table.Rows)
             {
                 var cols = new List<string>();
                 var pnames = new List<string>();
+                int rowsAffected;
                 using (var cmd = new SQLiteCommand())
                 {
                     cmd.Connection = con;
@@ -727,7 +753,23 @@ VALUES
                     cmd.CommandText =
                         "INSERT OR IGNORE INTO TblUsers (" + string.Join(",", cols.ToArray()) + ")" +
                         " VALUES (" + string.Join(",", pnames.ToArray()) + ")";
-                    cmd.ExecuteNonQuery();
+                    rowsAffected = cmd.ExecuteNonQuery();
+                }
+
+                // آموزش — رفعِ شکافِ همگام‌سازی: این تنها مسیری در کلِ برنامه است
+                // که کاربرِ تازه می‌سازد بدونِ صدا زدنِ SyncOutboxService.Capture.
+                // بدونِ این، کاربرِ بازیابی‌شده از دفترِ دیگر هرگز به سرور
+                // نمی‌رسید. INSERT OR IGNORE فقط وقتی رکورد واقعاً نو باشد
+                // rowsAffected=1 برمی‌گرداند، پس حساب‌های موجود (نادیده‌گرفته‌شده)
+                // دوباره capture نمی‌شوند.
+                if (rowsAffected > 0 && capture != null)
+                {
+                    using (var idCmd = new SQLiteCommand("SELECT last_insert_rowid();", con, tr))
+                    {
+                        object v = idCmd.ExecuteScalar();
+                        if (v != null && v != DBNull.Value)
+                            capture.Add(new KeyValuePair<string, int>("TblUsers", Convert.ToInt32(v)));
+                    }
                 }
             }
         }
@@ -1425,10 +1467,16 @@ VALUES
         // ستونی به این جدول‌ها اضافه شود، اینجا دوباره همان باگِ «افتِ ستون» که
         // در MergeCaseStatusHistory بود تکرار نمی‌شود.
         private static void MergeFamilyHistory(SQLiteConnection con, SQLiteTransaction tr,
-            DataTable table, string targetTable, string fkColumn, Dictionary<int, int> famIdMap)
+            DataTable table, string targetTable, string fkColumn, Dictionary<int, int> famIdMap,
+            List<KeyValuePair<string, int>> capture = null)
         {
             if (table == null || table.Rows.Count == 0) return;
             if (!table.Columns.Contains(fkColumn)) return;
+
+            // آموزش — این متد برای دو نوع جدول به‌کار می‌رود: تاریخچهٔ سطحِ عضو
+            // (GlobalID ندارد، موجودیتِ همگام‌سازی‌شونده نیست) و TblFieldVisitPhoto
+            // (GlobalID دارد و در SyncedTables هست). فقط حالتِ دوم capture می‌شود.
+            bool hasGlobalId = table.Columns.Contains("GlobalID");
 
             foreach (DataRow row in table.Rows)
             {
@@ -1477,6 +1525,16 @@ VALUES
                         " (" + string.Join(",", cols.ToArray()) + ")" +
                         " VALUES (" + string.Join(",", pnames.ToArray()) + ")";
                     cmd.ExecuteNonQuery();
+                }
+
+                if (hasGlobalId && capture != null)
+                {
+                    using (var idCmd = new SQLiteCommand("SELECT last_insert_rowid();", con, tr))
+                    {
+                        object v = idCmd.ExecuteScalar();
+                        if (v != null && v != DBNull.Value)
+                            capture.Add(new KeyValuePair<string, int>(targetTable, Convert.ToInt32(v)));
+                    }
                 }
             }
         }
@@ -1609,7 +1667,8 @@ VALUES (@CasID, @Action, @ActionAt, @ActionBy)", con, tr))
         private static void MergeChildTable(SQLiteConnection con, SQLiteTransaction tr,
                                             DataTable table, string pkCol,
                                             Dictionary<int, int> casIdMap,
-                                            Dictionary<int, int> outIdMap = null)
+                                            Dictionary<int, int> outIdMap = null,
+                                            List<KeyValuePair<string, int>> capture = null)
         {
             if (table == null || table.Rows.Count == 0) return;
 
@@ -1658,13 +1717,25 @@ VALUES (@CasID, @Action, @ActionAt, @ActionBy)", con, tr))
 
                 // شناسهٔ تازه‌ساخته‌شده روی همان اتصال/تراکنش خوانده می‌شود
                 // (هم‌الگوی DatabaseHelper.ExecuteInsertReturningId).
-                if (outIdMap != null && hasPk)
+                //
+                // آموزش — رفعِ شکافِ همگام‌سازی: hasGlobalId یعنی همین موجودیت
+                // در OfflineSyncInitializer.SyncedTables هم هست (هر دو از یک
+                // پیش‌نیاز می‌آیند)، پس هر ردیفِ واقعاً تازه‌درج‌شده باید بعداً
+                // Capture شود، وگرنه دقیقاً همان مسیری که این باگ را ساخت
+                // (بازیابیِ بکاپ بدونِ ثبتِ صف ارسال) دوباره تکرار می‌شود.
+                if (outIdMap != null && hasPk || (hasGlobalId && capture != null))
                 {
                     using (var idCmd = new SQLiteCommand("SELECT last_insert_rowid();", con, tr))
                     {
                         object v = idCmd.ExecuteScalar();
                         if (v != null && v != DBNull.Value)
-                            outIdMap[Convert.ToInt32(row[pkCol])] = Convert.ToInt32(v);
+                        {
+                            int newId = Convert.ToInt32(v);
+                            if (outIdMap != null && hasPk)
+                                outIdMap[Convert.ToInt32(row[pkCol])] = newId;
+                            if (hasGlobalId && capture != null)
+                                capture.Add(new KeyValuePair<string, int>(table.TableName, newId));
+                        }
                     }
                 }
             }

@@ -11,16 +11,9 @@ namespace CaseManagement.Helpers
     // این کلاس تضمین می‌کند ردیف نمودار هرگز از MinChartsRowHeight کمتر نشود.
     public static class DashboardLayoutMath
     {
-        // آموزش — ۱۲۲ → ۸۲ (خواستهٔ کاربر: «یک‌سوم کوچک کن»).
-        //
-        // ⚠ این عدد، نه Width/Height خودِ StatCard، ارتفاعِ واقعیِ کارت‌ها را
-        // تعیین می‌کند: کارت‌ها Dock=Fill در یک TableLayoutPanel با ردیف‌های
-        // درصدی‌اند، پس اندازهٔ خودشان نادیده گرفته می‌شود. در رندرِ آزمایشی
-        // دیده شد که با تغییرِ تنها Width/Height، کارت‌ها اصلاً کوچک نشدند.
-        //
-        // کوچک‌شدنِ این ردیف به‌طور خودکار ارتفاعِ بیشتری به ردیفِ نمودارها
-        // می‌دهد (SummaryPanelHeight از همین ثابت حساب می‌شود).
-        public const int SummaryRowHeight = 82;
+        // ارتفاع هر ردیف کارت آماری. کارت‌ها Dock=Fill هستند؛ این عدد ارتفاع
+        // واقعی را تعیین می‌کند. SummaryPanelHeight ردیف نمودار را صفر نمی‌کند.
+        public const int SummaryRowHeight = 128;
         public const int SummaryBottomPad = 10;
         public const int MinChartsRowHeight = 160;
         public const int MinChartPx = 32;
@@ -28,6 +21,14 @@ namespace CaseManagement.Helpers
         public const int CardContentPadBottom = 12;
         public const int MinSummaryRows = 2;
         public const int MaxSummaryRows = 4;
+
+        // حداقلِ منطقیِ فضای واقعیِ صفحه. حین Minimize/Restore پنجره، ویندوز
+        // یک پیامِ WM_SIZE گذرا با اندازه‌ی خیلی کوچک می‌فرستد؛ اگر Layout همان
+        // لحظه محاسبه شود، این ارتفاعِ کاذب روی summaryPanel «قفل» می‌ماند و بعد
+        // از بازگشتِ پنجره به اندازه‌ی واقعی هم اصلاح نمی‌شود (کارت‌ها ~۲۴px
+        // می‌شوند). چون MinimumSize فرم هرگز کمتر از ۷۳۰ نیست، هر عددِ واقعی
+        // همیشه بیشتر از این آستانه است.
+        public const int MinSaneAvailableHeight = 300;
 
         public static int ClampSummaryRows(int rows)
         {

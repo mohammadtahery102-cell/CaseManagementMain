@@ -27,6 +27,8 @@ namespace CaseManagement.DevCenter
         private FlowLayoutPanel _overviewCards;
         private ProgressBar     _healthBar;
         private Label           _healthLabel;
+        private Label           _lblDbPath;
+        private string          _dbPathValue = "";
 
         // دکتر دیتابیس / نگهداری / لاگ / عیب‌یابی / کاوشگر
         private DataGridView _gridDoctor;
@@ -415,7 +417,35 @@ namespace CaseManagement.DevCenter
                 FlowDirection = FlowDirection.LeftToRight, WrapContents = true
             };
 
+            // آموزش — چند نسخهٔ CaseDB.sqlite روی دستگاه‌های کاربران پیدا می‌شود
+            // (پوشهٔ ساخت، OneDrive، %LocalAppData%، ...) و این‌که برنامه *همین
+            // الان* کدام‌یک را باز کرده، بارها منشأ سردرگمی و رفت‌وبرگشتِ
+            // پشتیبانی بوده. این نوار، مسیرِ واقعی را همیشه روی صفحه نشان
+            // می‌دهد — کاربر دیگر لازم نیست حدس بزند یا از پشتیبانی بپرسد.
+            Panel dbPathPanel = new Panel
+            {
+                Dock = DockStyle.Top, Height = 40, BackColor = UiTheme.CardBack,
+                Padding = new Padding(16, 0, 16, 0)
+            };
+            _lblDbPath = new Label
+            {
+                Dock = DockStyle.Fill, Text = "مسیر فایل دیتابیس: " + DevCenterService.NotAvailable,
+                AutoEllipsis = true, Font = UiTheme.Font(UiTheme.SizeSmall),
+                ForeColor = UiTheme.TextMuted, TextAlign = ContentAlignment.MiddleLeft
+            };
+            Button btnCopyDbPath = UiTheme.CreateSecondaryButton("کپی مسیر", "⧉");
+            btnCopyDbPath.Dock = DockStyle.Right;
+            btnCopyDbPath.Width = 110;
+            btnCopyDbPath.Click += delegate
+            {
+                try { Clipboard.SetText(_dbPathValue ?? ""); UiTheme.ShowSuccess(this, "مسیر فایل دیتابیس کپی شد."); }
+                catch { }
+            };
+            dbPathPanel.Controls.Add(_lblDbPath);
+            dbPathPanel.Controls.Add(btnCopyDbPath);
+
             page.Controls.Add(_overviewCards);
+            page.Controls.Add(dbPathPanel);
             page.Controls.Add(healthPanel);
             page.Controls.Add(MakeToolbar(
                 MakeButton("تازه‌سازی", async delegate { await LoadOverview(); }),
@@ -448,6 +478,9 @@ namespace CaseManagement.DevCenter
                                      : o.HealthScore >= 70 ? UiTheme.Warning : UiTheme.Danger;
                 _healthLabel.Text = "امتیاز سلامت سیستم: " + o.HealthScore + " / 100 — " + o.Performance
                     + (o.HealthNotes.Count == 0 ? "" : "   (" + string.Join(" • ", o.HealthNotes) + ")");
+
+                _dbPathValue = o.DbFilePath ?? "";
+                _lblDbPath.Text = "مسیر فایل دیتابیس: " + (string.IsNullOrWhiteSpace(_dbPathValue) ? DevCenterService.NotAvailable : _dbPathValue);
 
                 ClearCards();
                 AddCard("نسخهٔ نرم‌افزار", o.AppVersion);

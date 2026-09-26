@@ -543,6 +543,13 @@ DELETE FROM TblLookup WHERE Category = 'ServiceStatus' AND Value = 'در انت�
                 // ─── تاریخ آخرین تغییر رمز (برای تنظیم «اجبار تغییر دوره‌ای رمز») ──
                 EnsureColumn(con, "TblUsers", "LastPasswordChangeAt", "TEXT NULL");
 
+                // ─── هویتِ سراسری برایِ سینکِ کاربر (Phase 8 — هویتِ مشترک) ──────
+                // پیش‌نیازِ سینکِ TblUsers بینِ شعبه‌ها و سرور، دقیقاً همان الگویِ
+                // شش جدولِ موجود. SuperAdmin هم GlobalID می‌گیرد ولی عمداً هرگز
+                // سینک نمی‌شود (SyncOutboxService.Capture خودش رد می‌کند) — سرور
+                // SuperAdminِ مستقلِ خودش را دارد (BootstrapAdmin).
+                EnsureChildGlobalId(con, "TblUsers", "UserID");
+
                 // ─── رفع ناسازگاری موجود بین مقادیر هاردکد فرم‌ها و دیتابیس:
                 //     چند دسته Lookup از قبل در دیتابیس با مقادیر قدیمی/متفاوت از
                 //     چیزی که الان واقعاً در FrmCase/FrmFamily نمایش داده می‌شود

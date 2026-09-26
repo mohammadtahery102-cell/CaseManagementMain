@@ -59,6 +59,12 @@ namespace CaseManagement.Sync
                 DataRow row = ReadRow(entityName, primaryKey, localId);
                 if (row == null) return;
 
+                // Phase 8 — SuperAdmin هرگز سینک نمی‌شود: سرور SuperAdminِ
+                // مستقلِ خودش را دارد (BootstrapAdmin) و users.center_id در
+                // سرور NOT NULL است، در حالی که SuperAdmin روی دسکتاپ عمداً
+                // CenterID ندارد (بندِ ۴ گزارشِ معماری).
+                if (IsUnsyncableUser(entityName, row)) return;
+
                 // «آخرین تغییر» همیشه ثبت می‌شود، ولی شمارندهٔ نسخه فقط در
                 // ویرایش جلو می‌رود: رکوردِ تازه‌ساخته‌شده باید نسخهٔ ۱ باشد،
                 // نه ۲. اگر اینجا هم افزایش می‌دادیم، هر رکورد از همان ابتدا
@@ -90,6 +96,8 @@ namespace CaseManagement.Sync
                 if (primaryKey == null) return;
 
                 DataRow row = ReadRow(entityName, primaryKey, localId);
+
+                if (row != null && IsUnsyncableUser(entityName, row)) return;
 
                 // رکورد از قبل رفته است ⇒ سرویس دیر صدا زده شده. یک ردیفِ حذفِ
                 // بدون هویت بی‌فایده است و صف را آلوده می‌کند، پس ثبت نمی‌شود
@@ -186,6 +194,7 @@ namespace CaseManagement.Sync
 
             DataRow row = ReadRow(entityName, primaryKey, localId);
             if (row == null) return;
+            if (IsUnsyncableUser(entityName, row)) return;
 
             pending.Rows.Add(new object[]
             {
@@ -483,7 +492,17 @@ VALUES
             {
                 if (SkippedColumns.Contains(column.ColumnName)) continue;
 
-                string value = row[column] == DBNull.Value ? "" : Convert.ToString(row[column]);
+                object raw = row[column];
+                string value;
+                if (raw == DBNull.Value) value = "";
+                // Phase 8 — TblUsers.PasswordHash/PasswordSalt هستند: تنها
+                // ستون‌هایِ BLOB در کلِ اسکیما. Convert.ToString روی byte[]
+                // فقط "System.Byte[]" می‌دهد، نه محتوا؛ Base64 دادهٔ واقعی را
+                // به‌صورتِ متنیِ بدونِ \r/\n حمل می‌کند، پس نیازی به Replace
+                // زیر هم ندارد.
+                else if (raw is byte[] bytes) value = Convert.ToBase64String(bytes);
+                else value = Convert.ToString(raw);
+
                 value = value.Replace("\r", " ").Replace("\n", " ");
                 sb.Append(column.ColumnName).Append('=').Append(value).AppendLine();
             }
@@ -503,6 +522,17 @@ VALUES
         {
             try { return Db.Query(sql, parameters); }
             catch { return null; }
+        }
+
+        // Phase 8 — SuperAdmin هیچ‌گاه از راهِ TblUsers سینک نمی‌شود؛ توضیح در
+        // فراخوان‌ها. غیرِ TblUsers همیشه false برمی‌گرداند.
+        private static bool IsUnsyncableUser(string entityName, DataRow row)
+        {
+            if (!string.Equals(entityName, "TblUsers", StringComparison.OrdinalIgnoreCase)) return false;
+            if (!row.Table.Columns.Contains("Role")) return false;
+
+            string role = GetString(row, "Role");
+            return string.Equals(role, "SuperAdmin", StringComparison.OrdinalIgnoreCase);
         }
 
         private static string PrimaryKeyOf(string entityName)

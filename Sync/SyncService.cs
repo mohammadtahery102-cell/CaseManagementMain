@@ -430,9 +430,49 @@ namespace CaseManagement.Sync
             catch { return 0; }
         }
 
+        // پروندهٔ دریافتی باید همان بازمحاسبه‌هایی را بگیرد که ذخیرهٔ محلی در
+        // FrmCase.btnSave_Click می‌گیرد. پیش از این فقط امتیاز آسیب‌پذیری
+        // بازمحاسبه می‌شد، پس پرونده‌ای که از سرور می‌آمد (و نه از این
+        // دسکتاپ) با CompletionPercent تهی و FamilyGroupID تهی می‌نشست —
+        // یعنی از گزارش‌های تکمیل بیرون می‌ماند و برخلافِ قاعدهٔ فاز ۶ ریشهٔ
+        // خانوارِ خودش هم نبود.
+        //
+        // ⚠ ترتیب مهم است و همان ترتیبِ مسیرِ ذخیرهٔ محلی است:
+        // ریشهٔ خانوار → کامل‌بودن → امتیاز آسیب‌پذیری. وضعیتِ کامل‌بودن خودش
+        // یکی از حقایقِ امتیازدهی است (CaseFacts.CompletionStatus)، پس اگر
+        // پس از امتیاز حساب می‌شد، امتیاز یک دور عقب می‌ماند.
+        //
+        // ⚠ هر مرحله catch جدا دارد: شکستِ یکی نباید دو مرحلهٔ دیگر را از
+        // دست بدهد، و هیچ‌کدام نباید نتیجهٔ همگام‌سازی را باطل کند.
         private static void RecalculateScoresAfterSync(HashSet<int> affectedCases)
         {
             if (affectedCases == null || affectedCases.Count == 0) return;
+
+            // EnsureRoot فقط وقتی می‌نویسد که FamilyGroupID تهی باشد، پس
+            // پروندهٔ پیوندخورده به خانوارِ دیگر هرگز از خانواده‌اش جدا نمی‌شود.
+            foreach (int casId in affectedCases)
+            {
+                try
+                {
+                    CaseManagement.Helpers.FamilyGroupService.EnsureRoot(casId);
+                }
+                catch (Exception ex)
+                {
+                    Log(ex, "Download/FamilyGroupRoot");
+                }
+            }
+
+            foreach (int casId in affectedCases)
+            {
+                try
+                {
+                    CaseManagement.Helpers.CaseCompletionService.RecalculateAndStore(casId);
+                }
+                catch (Exception ex)
+                {
+                    Log(ex, "Download/CompletionRecalc");
+                }
+            }
 
             try
             {

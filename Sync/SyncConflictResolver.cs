@@ -256,9 +256,15 @@ namespace CaseManagement.Sync
             {
                 if (!columns.Contains(pair.Key)) continue;   // مدارا با اسکیمای متفاوت
 
+                // ⚠ ممیزیِ ۲۰۲۶-۰۹-۲۰: بدونِ این، مقدارِ رشته‌ایِ Base64 (شکلِ
+                // انتقالِ PasswordHash/PasswordSalt روی سیم) عیناً در ستونِ
+                // BLOB نوشته می‌شد — نه بایت‌هایِ واقعیِ رمزگشایی‌شده — و رمزِ
+                // کاربر را بی‌صدا خراب می‌کرد. همان تبدیلِ SyncApplier برایِ
+                // اعمالِ Pull، اینجا هم برایِ اعمالِ حلِ تعارض لازم است.
                 string parameterName = "@p" + index++;
                 assignments.Add("[" + pair.Key + "] = " + parameterName);
-                parameters.Add(new SQLiteParameter(parameterName, (object)pair.Value ?? DBNull.Value));
+                parameters.Add(new SQLiteParameter(parameterName,
+                    SyncApplier.ConvertIncomingValue(analysis.EntityName, pair.Key, pair.Value)));
                 appliedFields++;
             }
 

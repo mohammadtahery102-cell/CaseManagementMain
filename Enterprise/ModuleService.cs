@@ -38,6 +38,7 @@ namespace CaseManagement.Enterprise
         public const string ModuleArchive     = "Archive";
         public const string ModuleAuditReport = "AuditReport";
         public const string ModuleReportBuilder = "ReportBuilder";
+        public const string ModuleGeoCenter    = "GeoCommandCenter";
 
         public const string ModuleWorkflow    = "Workflow";
         public const string ModuleApprovals   = "Approvals";

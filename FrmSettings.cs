@@ -3220,6 +3220,19 @@ WHERE UserID = @ID", con))
             btnVerify.Click += BtnVerifyBackup_Click;
             actionFlow.Controls.Add(btnVerify);
 
+            // آموزش — رفعِ شکافِ همگام‌سازیِ تاریخی: پیش از این تغییر،
+            // ImportBackup هیچ‌وقت SyncOutboxService.Capture را صدا نمی‌زد؛
+            // این دکمه برای رکوردهایی است که از همان مسیر، پیش از رفعِ آن
+            // باگ، وارد این نصب شده‌اند و هنوز هیچ ردیفی در صفِ ارسال ندارند.
+            // یک‌بار اجرا می‌شود و کاملاً idempotent است (بندِ توضیحیِ خودِ
+            // SyncBackfillService).
+            Button btnSyncBackfill = UiTheme.CreateSecondaryButton("بازپرِ صفِ همگام‌سازی", "⇪");
+            btnSyncBackfill.Size = new Size(180, 38);
+            UiTheme.SetTip(btnSyncBackfill,
+                "رکوردهایی را که تا امروز از راهِ Restore وارد شده‌اند ولی هرگز واردِ صفِ همگام‌سازی نشده‌اند، پیدا و اضافه می‌کند.");
+            btnSyncBackfill.Click += BtnSyncBackfill_Click;
+            actionFlow.Controls.Add(btnSyncBackfill);
+
             _txtBackupOutput = new TextBox
             {
                 Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical,
@@ -3410,6 +3423,71 @@ WHERE UserID = @ID", con))
                 {
                     AppendBackupOutput("خطا در Restore: " + ex.Message);
                 }
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        // بازپرِ صفِ همگام‌سازی — رفعِ شکافِ تاریخی.
+        //
+        // آموزش — چرا اینجا و چرا SuperAdmin: این عملیات هزاران ردیف را
+        // یک‌جا واردِ صفِ ارسال می‌کند؛ اگر بعداً ServerUrl تنظیم و ورود انجام
+        // شود، همهٔ این ردیف‌ها به سرور می‌روند. تصمیمِ «این داده باید سینک
+        // شود» باید آگاهانه و توسطِ مدیر کل گرفته شود، نه خودکار — همان سطحِ
+        // مجوزی که Backup.Restore (یک عملیاتِ کل‌سیستمیِ مشابه) دارد.
+        // ─────────────────────────────────────────────────────────────────────
+        private async void BtnSyncBackfill_Click(object sender, EventArgs e)
+        {
+            if (!CaseManagement.Enterprise.PermissionService.Require("Backup.Restore"))
+            {
+                UiTheme.ShowWarning(this, "بازپرِ صفِ همگام‌سازی فقط برای مدیر کل (SuperAdmin) مجاز است.");
+                return;
+            }
+
+            List<CaseManagement.Sync.SyncBackfillService.EntityBacklog> preview;
+            try
+            {
+                preview = CaseManagement.Sync.SyncBackfillService.Preview();
+            }
+            catch (Exception ex)
+            {
+                AppendBackupOutput("خطا در بررسیِ شکافِ همگام‌سازی: " + ex.Message);
+                return;
+            }
+
+            if (preview.Count == 0)
+            {
+                UiTheme.ShowSuccess(this, "هیچ رکوردِ عقب‌افتاده‌ای پیدا نشد — صفِ همگام‌سازی به‌روز است.");
+                return;
+            }
+
+            var lines = new System.Text.StringBuilder();
+            lines.AppendLine("رکوردهای زیر هرگز واردِ صفِ همگام‌سازی نشده‌اند و اضافه خواهند شد:");
+            foreach (var item in preview)
+                lines.AppendLine("• " + item.EntityName + ": " + item.MissingCount + " رکورد");
+            lines.AppendLine();
+            lines.AppendLine("این کار فقط رکوردها را به صفِ ارسال اضافه می‌کند؛ ارسالِ واقعی هنگامِ اجرای بعدیِ همگام‌سازی انجام می‌شود. ادامه می‌دهید؟");
+
+            if (!UiTheme.ShowConfirm(this, lines.ToString(), "بازپرِ صفِ همگام‌سازی"))
+                return;
+
+            Cursor = Cursors.WaitCursor;
+            try
+            {
+                List<CaseManagement.Sync.SyncBackfillService.EntityResult> results =
+                    await System.Threading.Tasks.Task.Run(() => CaseManagement.Sync.SyncBackfillService.Run());
+
+                foreach (var r in results)
+                    AppendBackupOutput("بازپرِ همگام‌سازی — " + r.EntityName + ": " + r.Captured + " رکورد به صف اضافه شد.");
+
+                UiTheme.ShowSuccess(this, "بازپرِ صفِ همگام‌سازی انجام شد.");
+            }
+            catch (Exception ex)
+            {
+                AppendBackupOutput("خطا در بازپرِ صفِ همگام‌سازی: " + ex.Message);
+            }
+            finally
+            {
+                Cursor = Cursors.Default;
             }
         }
 

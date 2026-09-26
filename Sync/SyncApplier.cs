@@ -59,6 +59,8 @@ namespace CaseManagement.Sync
                 // Phase 5 (TblFieldVisitPhoto سینک نمی‌شود — توضیح در
                 // OfflineSyncInitializer.SyncedTables).
                 "SponsorID", "VisitID", "CaseFundingID",
+                // Phase 8 — شناسهٔ محلیِ TblUsers.
+                "UserID",
                 // مسیر فیزیکیِ دستگاه فرستنده هرگز روی گیرنده نوشته نمی‌شود.
                 // پیوند فایل بعد از دریافت و hash verification محلی ساخته می‌شود.
                 "PhotoPath", "FamilyPhotoPath", "MemberPhotoPath",
@@ -93,6 +95,7 @@ namespace CaseManagement.Sync
                 // با خطای یکتایی شکست می‌خورد و بازنویسی‌اش فاجعه است، پس
                 // به‌عنوان تعارض ثبت و برای تصمیم مدیر کنار گذاشته می‌شود.
                 if (IsDuplicateUserCode(change)) return ApplyOutcome.SkippedConflict;
+                if (IsDuplicateUsername(change)) return ApplyOutcome.SkippedConflict;
 
                 if (!Insert(change, primaryKey))
                 {
@@ -177,6 +180,8 @@ namespace CaseManagement.Sync
             Dictionary<string, string> values = Deserialize(change.Payload);
             if (values.Count == 0) return false;
 
+            ResolveReferenceIds(change.EntityName, values);
+
             HashSet<string> columns = GetColumns(change.EntityName);
             if (columns.Count == 0) return false;
 
@@ -196,7 +201,8 @@ namespace CaseManagement.Sync
 
                 string parameterName = "@p" + index++;
                 names.Add("[" + pair.Key + "]");
-                parameters.Add(new SQLiteParameter(parameterName, (object)pair.Value ?? DBNull.Value));
+                parameters.Add(new SQLiteParameter(parameterName,
+                    ConvertIncomingValue(change.EntityName, pair.Key, pair.Value)));
             }
 
             if (names.Count == 0) return false;
@@ -271,6 +277,8 @@ namespace CaseManagement.Sync
             Dictionary<string, string> values = Deserialize(change.Payload);
             if (values.Count == 0) return false;
 
+            ResolveReferenceIds(change.EntityName, values);
+
             HashSet<string> columns = GetColumns(change.EntityName);
 
             var assignments = new List<string>();
@@ -284,7 +292,8 @@ namespace CaseManagement.Sync
 
                 string parameterName = "@p" + index++;
                 assignments.Add("[" + pair.Key + "] = " + parameterName);
-                parameters.Add(new SQLiteParameter(parameterName, (object)pair.Value ?? DBNull.Value));
+                parameters.Add(new SQLiteParameter(parameterName,
+                    ConvertIncomingValue(change.EntityName, pair.Key, pair.Value)));
             }
 
             if (assignments.Count == 0) return false;
@@ -369,6 +378,66 @@ namespace CaseManagement.Sync
         }
 
         // ─────────────────────────────────────────────────────────────────────
+        // نامِ کاربریِ تکراری بینِ دو شعبه — عیناً IsDuplicateUserCode، ولی
+        // برایِ TblUsers. دو شعبه که مستقلاً یک Username ساخته‌اند دو هویتِ
+        // متفاوت‌اند، نه دو نسخه از یک رکورد؛ بازنویسیِ یکی با دیگری فاجعه
+        // است، پس به‌عنوانِ تعارض کنار گذاشته می‌شود تا مدیر تصمیم بگیرد.
+        private static bool IsDuplicateUsername(SyncChange change)
+        {
+            if (!string.Equals(change.EntityName, "TblUsers", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            Dictionary<string, string> incoming = Deserialize(change.Payload);
+
+            string username;
+            if (!incoming.TryGetValue("Username", out username) || string.IsNullOrWhiteSpace(username))
+                return false;
+
+            try
+            {
+                DataTable existing = Db.Query(
+                    "SELECT * FROM TblUsers WHERE Username = @U COLLATE NOCASE AND IFNULL(GlobalID,'') <> @G LIMIT 1;",
+                    new SQLiteParameter("@U", username),
+                    new SQLiteParameter("@G", change.GlobalId ?? ""));
+
+                if (existing.Rows.Count == 0) return false;
+
+                DataRow local = existing.Rows[0];
+
+                SyncConflictStore.Record(change.EntityName, change.GlobalId,
+                    OfflineSyncInitializer.ConflictDuplicateUsername, 0,
+                    GetInt(local, "RowVersion", 1), change.RowVersion,
+                    Serialize(local), change.Payload);
+
+                return true;
+            }
+            catch { return false; }
+        }
+
+        // Phase 8 — PasswordHash/PasswordSalتِ TblUsers با Base64 در payload
+        // سفر می‌کنند (توضیح در SyncOutboxService.Serialize)؛ اینجا باید به
+        // byte[] اصلی برگردند، وگرنه در ستونِ BLOB به‌صورتِ متنِ خام (نه
+        // بایتِ واقعی) می‌نشینند و PasswordHelper.Verify هرگز موفق نمی‌شود.
+        private static readonly HashSet<string> BinaryColumns =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "PasswordHash", "PasswordSalt" };
+
+        // internal، نه private: SyncConflictResolver.Apply هم برای همین دو
+        // ستونِ BLOBِ TblUsers به همین دقیقاً تبدیل نیاز دارد (رفعِ ممیزیِ
+        // ۲۰۲۶-۰۹-۲۰ — بدونِ آن، پذیرشِ نسخهٔ سرور/ادغامِ دستی برایِ رمزِ
+        // عبور، متنِ Base64 را عیناً در ستونِ BLOB می‌نوشت).
+        internal static object ConvertIncomingValue(string entityName, string columnName, string rawValue)
+        {
+            if (string.Equals(entityName, "TblUsers", StringComparison.OrdinalIgnoreCase) &&
+                BinaryColumns.Contains(columnName))
+            {
+                try { return Convert.FromBase64String(rawValue ?? ""); }
+                catch { return DBNull.Value; }
+            }
+
+            return (object)rawValue ?? DBNull.Value;
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
         // آیا این رکورد تغییرِ محلیِ ارسال‌نشده دارد؟
         private static bool HasPendingLocalChange(string entityName, string globalId)
         {
@@ -441,6 +510,109 @@ namespace CaseManagement.Sync
             }
             catch { }
             return columns;
+        }
+
+        // ─── شناسه‌های مرجعِ TblCase ─────────────────────────────────────────
+        // مسئله: RequestTypeID و ServiceStatusID هر دو `NOT NULL DEFAULT 1`
+        // هستند. نویسنده‌ای که فقط ستونِ *متنیِ* RequestType/ServiceStatus را
+        // می‌فرستد (پورتال وب دقیقاً همین کار را می‌کند) پرونده‌ای می‌سازد که
+        // متنش «معلول» است ولی شناسه‌اش ۱ یعنی «ایتام» — و
+        // UpdateRequestTypeSectionVisibility و CaseCompletionService هر دو
+        // *شناسه* را می‌خوانند، پس پرونده بخش‌های اشتباه می‌گیرد و با ماتریس
+        // فیلدهای الزامیِ اشتباه امتیاز می‌گیرد.
+        //
+        // آموزش — چرا متن بر شناسه مقدم است و نه برعکس: شناسهٔ مرجع
+        // AUTOINCREMENT و *محلیِ هر پایگاه‌داده* است؛ برابریِ آن بین شعبه‌ها
+        // فقط نتیجهٔ ترتیبِ یکسانِ seed است، نه یک تضمین. نام اما دادهٔ مشترک
+        // است. پس وقتی نام در این پایگاه‌داده پیدا شود، شناسهٔ *محلیِ* همان نام
+        // درست‌ترین مقدار است — چه فرستنده شناسه فرستاده باشد چه نه.
+        //
+        // ⚠ نامِ ناشناخته هیچ چیزی را تغییر نمی‌دهد: اگر شعبه‌ای نامِ مرجع را
+        // عوض کرده باشد و این پایگاه‌داده هنوز نامِ قدیم را داشته باشد، شناسهٔ
+        // فرستنده دست‌نخورده باقی می‌ماند (رفتارِ پیش از این تغییر).
+        private static void ResolveReferenceIds(string entityName, Dictionary<string, string> values)
+        {
+            if (!string.Equals(entityName, "TblCase", StringComparison.OrdinalIgnoreCase)) return;
+            if (values == null || values.Count == 0) return;
+
+            try
+            {
+                ResolveOneReferenceId(values, "RequestType", "RequestTypeID", true);
+                ResolveOneReferenceId(values, "ServiceStatus", "ServiceStatusID", false);
+            }
+            catch
+            {
+                // ترجمهٔ شناسه هرگز نباید اعمالِ یک تغییرِ دریافتی را بشکند؛
+                // بدونِ آن رفتار دقیقاً همان چیزی است که پیش از این بود.
+            }
+        }
+
+        private static void ResolveOneReferenceId(Dictionary<string, string> values,
+                                                  string textKey, string idKey, bool isRequestType)
+        {
+            string text;
+            if (!values.TryGetValue(textKey, out text)) return;
+            if (string.IsNullOrWhiteSpace(text)) return;
+
+            int id = isRequestType ? FindRequestTypeId(text) : FindServiceStatusId(text);
+            if (id > 0) values[idKey] = id.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        private static int FindRequestTypeId(string name)
+        {
+            Helpers.ReferenceOption exact = Helpers.ReferenceDataService.FindRequestTypeByName(name);
+            if (exact != null) return exact.ID;
+
+            string target = NormalizeReferenceName(name);
+            foreach (Helpers.ReferenceOption option in Helpers.ReferenceDataService.GetRequestTypes())
+                if (string.Equals(NormalizeReferenceName(option.Name), target, StringComparison.Ordinal))
+                    return option.ID;
+
+            return 0;
+        }
+
+        private static int FindServiceStatusId(string name)
+        {
+            Helpers.ReferenceOption exact = Helpers.ReferenceDataService.FindServiceStatusByName(name);
+            if (exact != null) return exact.ID;
+
+            string target = NormalizeReferenceName(name);
+            foreach (Helpers.ReferenceOption option in Helpers.ReferenceDataService.GetServiceStatuses())
+                if (string.Equals(NormalizeReferenceName(option.Name), target, StringComparison.Ordinal))
+                    return option.ID;
+
+            return 0;
+        }
+
+        // گونه‌های عربیِ «ی»/«ک»، نیم‌فاصله و فاصله‌های تکراری در نامِ فارسی
+        // رایج‌اند و نباید یک نامِ مرجع را «ناشناخته» کنند. عمداً یک کپیِ محلیِ
+        // کوچک است و نه تغییرِ دسترسیِ NormalizeName در CaseRepresentativeService:
+        // آن متد قاعدهٔ تکراری‌بودنِ نمایندگان را می‌سازد و عمومی کردنش، رفتارِ
+        // آن سرویس را وارد دامنهٔ این کلاس می‌کرد.
+        private static string NormalizeReferenceName(string value)
+        {
+            string text = (value ?? "").Trim();
+            if (text.Length == 0) return "";
+
+            text = text.Replace('ي', 'ی').Replace('ك', 'ک');
+
+            var sb = new System.Text.StringBuilder(text.Length);
+            bool lastWasSpace = false;
+            foreach (char c in text)
+            {
+                bool isSpace = char.IsWhiteSpace(c) || c == '‌';
+                if (isSpace)
+                {
+                    if (!lastWasSpace && sb.Length > 0) sb.Append(' ');
+                    lastWasSpace = true;
+                }
+                else
+                {
+                    sb.Append(c);
+                    lastWasSpace = false;
+                }
+            }
+            return sb.ToString().Trim();
         }
 
         // ─── قالبِ «کلید=مقدار» — همان قالبِ SyncOutbox و VersionService ─────

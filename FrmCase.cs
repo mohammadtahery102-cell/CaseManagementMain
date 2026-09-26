@@ -79,6 +79,16 @@ namespace CaseManagement
         private string _incomingFilterServiceStatus = "";
         private Panel _dashboardFilterBanner;
 
+        // آموزش — فیلترِ کاملِ واردشده از «مرکز فرماندهی آماری»
+        // (FrmGeoCommandCenter). سه رشتهٔ بالا فقط ولایت/ولسوالی/وضعیت را
+        // می‌پوشانند، ولی Drill-Downِ نقشه می‌تواند روی نوع پرونده، سطح
+        // آسیب‌پذیری، اولویت اقتصادی، وضعیت حامی، بازهٔ تاریخ و جنسیت/سنِ
+        // عضو هم باشد. شرطِ SQL و پارامترهایش هر دو از خودِ همان شیء می‌آیند،
+        // پس عددی که روی نقشه دیده شده دقیقاً با تعدادِ ردیف‌های این گرید
+        // یکی می‌ماند. null یعنی «هیچ فیلترِ اضافه‌ای نیست» و مسیرِ قبلی
+        // بیت‌به‌بیت دست‌نخورده اجرا می‌شود.
+        private Helpers.GeoFilter _incomingGeoFilter;
+
         public FrmCase()
         {
             InitializeComponent();
@@ -94,6 +104,27 @@ namespace CaseManagement
             _incomingFilterProvince = filterProvince ?? "";
             _incomingFilterDistrict = filterDistrict ?? "";
             _incomingFilterServiceStatus = filterServiceStatus ?? "";
+        }
+
+        // باز کردن با فیلترِ کاملِ «مرکز فرماندهی آماری».
+        // ولایت/ولسوالی/وضعیت در همان سه فیلدِ قدیمی هم نشانده می‌شوند تا
+        // نوارِ خبری و کمبویِ وضعیت مثلِ قبل کار کنند؛ بقیهٔ شرط‌ها از خودِ
+        // GeoFilter به کوئری اضافه می‌گردند.
+        public FrmCase(Helpers.GeoFilter filter) : this()
+        {
+            if (filter == null) return;
+
+            _incomingGeoFilter = filter;
+            _incomingFilterProvince = filter.Province ?? "";
+            _incomingFilterDistrict = filter.District ?? "";
+
+            if (filter.ServiceStatusId > 0)
+            {
+                Helpers.ReferenceOption option =
+                    Helpers.ReferenceDataService.FindServiceStatusById(filter.ServiceStatusId);
+                if (option != null && !string.IsNullOrWhiteSpace(option.Name))
+                    _incomingFilterServiceStatus = option.Name;
+            }
         }
 
         // میان‌بُرهای صفحه‌کلید. Enter (رفتن به فیلد بعدی) جداگانه در
@@ -3475,7 +3506,17 @@ namespace CaseManagement
                 }
             }
 
-            if (!hasProvinceOrDistrict && !hasStatus) return;
+            if (!hasProvinceOrDistrict && !hasStatus && _incomingGeoFilter == null) return;
+
+            // وقتی فیلتر از مرکز فرماندهی آمده، توصیفِ کاملِ خودش نشان داده
+            // می‌شود؛ وگرنه همان سه‌جزئیِ قدیمیِ داشبورد.
+            if (_incomingGeoFilter != null)
+            {
+                ShowIncomingFilterBanner("فیلترِ مرکز فرماندهی فعال است: " +
+                                         _incomingGeoFilter.Describe() +
+                                         " — فهرست و جستجو فقط همین محدوده را نشان می‌دهند.");
+                return;
+            }
 
             string text = "فیلترِ داشبورد فعال است: ";
             var parts = new System.Collections.Generic.List<string>();
@@ -3506,6 +3547,7 @@ namespace CaseManagement
                 _incomingFilterProvince = "";
                 _incomingFilterDistrict = "";
                 _incomingFilterServiceStatus = "";
+                _incomingGeoFilter = null;
                 cmbServiceStatusFilter.SelectedIndex = 0;
                 _dashboardFilterBanner.Visible = false;
                 LoadCases();
@@ -3555,7 +3597,9 @@ namespace CaseManagement
                       AND (@CID = 0 OR CenterID = @CID)
                       AND (@ServiceStatus = '' OR ServiceStatus = @ServiceStatus)
                       AND (@Prov = '' OR Province = @Prov)
-                      AND (@Dist = '' OR District LIKE '%' || @Dist || '%')";
+                      AND (@Dist = '' OR District LIKE '%' || @Dist || '%')"
+                   + Helpers.ProvinceScope.Sql("")
+                   + (_incomingGeoFilter == null ? "" : _incomingGeoFilter.BuildWhere(""));
         }
 
         private void BindCasesParameters(SQLiteCommand cmd)
@@ -3565,11 +3609,16 @@ namespace CaseManagement
             AddStringParameter(cmd, "@Tazkira", _qsTazkira);
             AddStringParameter(cmd, "@Phone", _qsPhone);
             cmd.Parameters.AddWithValue("@CID", Helpers.SecurityContext.CenterFilterId);
+            Helpers.ProvinceScope.Bind(cmd);
             // فیلترِ وضعیت خدمات از داشبورد می‌آید؛ کنترلش از چیدمان حذف شد اما
             // خودش (و این مسیر) دست‌نخورده باقی مانده است.
             AddStringParameter(cmd, "@ServiceStatus", GetSelectedServiceStatusFilter());
             AddStringParameter(cmd, "@Prov", _incomingFilterProvince);
             AddStringParameter(cmd, "@Dist", _incomingFilterDistrict);
+
+            // پارامترهای فیلترِ مرکز فرماندهی فقط وقتی بایند می‌شوند که
+            // شرطشان هم در متنِ کوئری آمده باشد — این دو همیشه با هم.
+            if (_incomingGeoFilter != null) _incomingGeoFilter.BindParameters(cmd);
         }
 
         // بارگذاریِ پیش‌فرضِ گرید: بدونِ جستجو، از صفحهٔ اول.
@@ -4671,7 +4720,7 @@ namespace CaseManagement
                         SuspensionDate = CASE WHEN ServiceStatus = @ServiceStatus THEN SuspensionDate ELSE @SuspensionDate END,
                         SuspendedByUserId = CASE WHEN ServiceStatus = @ServiceStatus THEN SuspendedByUserId ELSE @SuspendedByUserId END,
                         SuspendedByUsername = CASE WHEN ServiceStatus = @ServiceStatus THEN SuspendedByUsername ELSE @SuspendedByUsername END
-                    WHERE CasID = @CasID AND (@CID = 0 OR CenterID = @CID)";
+                    WHERE CasID = @CasID AND (@CID = 0 OR CenterID = @CID)" + Helpers.ProvinceScope.Sql("");
 
                     using (SQLiteCommand cmd = new SQLiteCommand(query, con))
                     {
@@ -4679,6 +4728,7 @@ namespace CaseManagement
                         AddSuspensionStampParameters(cmd);
                         AddIntParameter(cmd, "@CasID", currentCaseId);
                         cmd.Parameters.AddWithValue("@CID", SecurityContext.CenterFilterId);
+                        Helpers.ProvinceScope.Bind(cmd);
 
                         con.Open();
                         int affectedRows = cmd.ExecuteNonQuery();
@@ -4839,10 +4889,11 @@ namespace CaseManagement
 
                 using (var con = db.GetConnection())
                 using (var cmd = new SQLiteCommand(
-                    "DELETE FROM TblCase WHERE CasID = @CasID AND (@CID = 0 OR CenterID = @CID)", con))
+                    "DELETE FROM TblCase WHERE CasID = @CasID AND (@CID = 0 OR CenterID = @CID)" + Helpers.ProvinceScope.Sql(""), con))
                 {
                     AddIntParameter(cmd, "@CasID", currentCaseId);
                     cmd.Parameters.AddWithValue("@CID", SecurityContext.CenterFilterId);
+                    Helpers.ProvinceScope.Bind(cmd);
 
                     con.Open();
                     int affectedRows = cmd.ExecuteNonQuery();
@@ -5339,6 +5390,7 @@ WHERE CasID = @CasID", con))
                     addParameters(cmd);
 
                 cmd.Parameters.AddWithValue("@CID", SecurityContext.CenterFilterId);
+                Helpers.ProvinceScope.Bind(cmd);
 
                 con.Open();
 
@@ -5371,14 +5423,14 @@ WHERE CasID = @CasID", con))
         private bool LoadCaseById(int caseId)
         {
             return LoadCaseByQuery(
-                "SELECT * FROM TblCase WHERE CasID = @CasID AND (@CID = 0 OR CenterID = @CID) LIMIT 1",
+                "SELECT * FROM TblCase WHERE CasID = @CasID AND (@CID = 0 OR CenterID = @CID)" + Helpers.ProvinceScope.Sql("") + " LIMIT 1",
                 cmd => AddIntParameter(cmd, "@CasID", caseId));
         }
 
         private bool LoadCaseByCode(string code)
         {
             return LoadCaseByQuery(
-                "SELECT * FROM TblCase WHERE Code = @Value AND (@CID = 0 OR CenterID = @CID) LIMIT 1",
+                "SELECT * FROM TblCase WHERE Code = @Value AND (@CID = 0 OR CenterID = @CID)" + Helpers.ProvinceScope.Sql("") + " LIMIT 1",
                 cmd => AddStringParameter(cmd, "@Value", code));
         }
 
@@ -5979,12 +6031,13 @@ WHERE CasID = @CasID", con))
 
             using (SQLiteConnection con = db.GetConnection())
             using (SQLiteCommand cmd = new SQLiteCommand(
-                "SELECT CasID FROM TblCase WHERE (@CID = 0 OR CenterID = @CID) AND " + comparison +
+                "SELECT CasID FROM TblCase WHERE (@CID = 0 OR CenterID = @CID)" + Helpers.ProvinceScope.Sql("") + " AND " + comparison +
                 " ORDER BY CAST(FormNo AS INTEGER) " + order + ", CasID " + order + " LIMIT 1", con))
             {
                 AddIntParameter(cmd, "@FormNo", currentFormNo);
                 AddIntParameter(cmd, "@CasID", currentCaseId);
                 cmd.Parameters.AddWithValue("@CID", SecurityContext.CenterFilterId);
+                Helpers.ProvinceScope.Bind(cmd);
                 con.Open();
 
                 object result = cmd.ExecuteScalar();
@@ -7341,11 +7394,12 @@ WHERE CasID = @Id AND IFNULL(FilePath, '') <> '';");
             using (var cmd = new SQLiteCommand(
                 "SELECT CasID, FormNo, Code FROM TblCase WHERE CasID IN (" +
                 string.Join(",", placeholders.ToArray()) +
-                ") AND (@CID = 0 OR CenterID = @CID) ORDER BY CAST(FormNo AS INTEGER), CasID", con))
+                ") AND (@CID = 0 OR CenterID = @CID)" + Helpers.ProvinceScope.Sql("") + " ORDER BY CAST(FormNo AS INTEGER), CasID", con))
             {
                 for (int i = 0; i < ids.Count; i++)
                     cmd.Parameters.AddWithValue("@Id" + i, ids[i]);
                 cmd.Parameters.AddWithValue("@CID", Helpers.SecurityContext.CenterFilterId);
+                Helpers.ProvinceScope.Bind(cmd);
                 con.Open();
                 using (var reader = cmd.ExecuteReader())
                     dt.Load(reader);

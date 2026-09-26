@@ -2,6 +2,7 @@ using System;
 using System.Data;
 using System.Data.SQLite;
 using CaseManagement.DAL;
+using CaseManagement.Helpers;
 
 namespace CaseManagement.Enterprise
 {
@@ -46,6 +47,7 @@ namespace CaseManagement.Enterprise
                 using (SQLiteCommand cmd = new SQLiteCommand(sql, con))
                 {
                     cmd.Parameters.AddRange(BuildParams(nameValuePairs));
+                    ProvinceScope.Bind(cmd);
                     cmd.ExecuteNonQuery();
                 }
 

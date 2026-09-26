@@ -14,13 +14,19 @@ namespace CaseManagement.Helpers
         public static string CurrentCenterCode { get; private set; }
         public static string CurrentCenterName { get; private set; }
 
-        // رفعِ شکستِ کامپایل — Helpers/ProvinceScope.cs (کامیتِ 20c4a7e) به این
-        // عضو وابسته است ولی تعریفش هیچ‌وقت کامیت نشده بود. فعلاً هیچ کوئریِ
-        // کامیت‌شده‌ای از ProvinceScope.Sql استفاده نمی‌کند (فقط
-        // DatabaseHelper.AttachParameters پارامترهای @PFMode/@PF را بدونِ
-        // اثر می‌بندد)، پس مقدارِ ثابتِ خالی هیچ رفتارِ دسترسیِ موجودی را
-        // تغییر نمی‌دهد — صرفاً وابستگیِ کامپایل را برمی‌گرداند.
-        public static string ProvinceFilter { get { return string.Empty; } }
+        // ولایت دفتر کاربر (TblCenter.Province). SuperAdmin این مقدار را
+        // برای فیلتر لیست به کار نمی‌برد؛ خالی برای غیر SuperAdmin یعنی
+        // fail-closed.
+        private static string _officeProvince = "";
+
+        public static string ProvinceFilter
+        {
+            get
+            {
+                if (IsSuperAdmin()) return "";
+                return _officeProvince ?? "";
+            }
+        }
 
         // true فقط برای SuperAdmin که گزینه "همه مراکز" را انتخاب کرده
         public static bool IsAllCenters { get; private set; }
@@ -37,10 +43,17 @@ namespace CaseManagement.Helpers
         }
 
         // مقدار برای پارامتر فیلتر کوئری‌ها:
-        // 0 = بدون فیلتر (SuperAdmin-همه مراکز)، >0 = فیلتر روی همان مرکز
+        // SuperAdmin: 0 = همه مراکز، >0 = همان مرکز انتخاب‌شده.
+        // Admin/Operator/Viewer: همیشه 0؛ جداسازی با ProvinceScope است تا
+        // همهٔ مراکز هم‌ولایت دیده شوند، نه فقط یک CenterID.
         public static int CenterFilterId
         {
-            get { return IsAllCenters ? 0 : CurrentCenterId; }
+            get
+            {
+                if (IsAllCenters) return 0;
+                if (IsSuperAdmin()) return CurrentCenterId;
+                return 0;
+            }
         }
 
         public static bool IsLoggedIn { get { return UserId > 0; } }
@@ -63,6 +76,9 @@ namespace CaseManagement.Helpers
             CurrentCenterId   = IsAllCenters ? 0 : centerId;
             CurrentCenterCode = centerCode ?? "";
             CurrentCenterName = centerName ?? "";
+            _officeProvince   = (!IsSuperAdmin() && CurrentCenterId > 0)
+                ? ProvinceScope.LoadOfficeProvince(CurrentCenterId)
+                : "";
 
             // ذخیره آخرین مرکز انتخاب‌شده در TblUsers
             if (UserId > 0 && !IsAllCenters)
@@ -77,6 +93,7 @@ namespace CaseManagement.Helpers
             CurrentCenterId   = 0;
             CurrentCenterCode = "";
             CurrentCenterName = "";
+            _officeProvince   = "";
             IsAllCenters      = false;
             RaiseIdentityChanged();
         }
@@ -122,8 +139,18 @@ namespace CaseManagement.Helpers
             // DBNull را به 0 تبدیل می‌کند. نتیجه: در فاصلهٔ بینِ SignIn و
             // SelectCenter، رکوردهای بی‌مرکز باز بودند.
             //
-            // حالا «مرکز انتخاب نشده» یعنی هیچ دسترسی — نه دسترسیِ کامل.
-            return IsAllCenters || (CurrentCenterId > 0 && centerId == CurrentCenterId);
+            // SuperAdmin: همه مراکز، یا دقیقاً مرکز انتخاب‌شده.
+            if (IsSuperAdmin())
+                return IsAllCenters || (CurrentCenterId > 0 && centerId == CurrentCenterId);
+
+            // Admin/Operator/Viewer: عضویت ولایتی دفتر، نه برابری CenterID.
+            // ولایت خالی یا مرکز نامعتبر = deny (فاصلهٔ SignIn تا SelectCenter هم).
+            if (centerId <= 0) return false;
+            string mine = ProvinceFilter;
+            if (string.IsNullOrWhiteSpace(mine)) return false;
+            string theirs = ProvinceScope.LoadOfficeProvince(centerId);
+            return !string.IsNullOrWhiteSpace(theirs) &&
+                   string.Equals(mine, theirs, StringComparison.Ordinal);
         }
 
         // ─── ذخیره آخرین مرکز در TblUsers ───────────────────────────────────

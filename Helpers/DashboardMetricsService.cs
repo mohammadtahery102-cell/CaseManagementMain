@@ -54,7 +54,7 @@ SELECT IFNULL(rt.Name, IFNULL(NULLIF(c.RequestType, ''), 'نامشخص')) AS [ن
        COUNT(*) AS [تعداد]
 FROM TblCase c
 LEFT JOIN TblRequestType rt ON rt.RequestTypeID = c.RequestTypeID
-WHERE IFNULL(c.IsArchived, 0) = 0 AND (@CID = 0 OR c.CenterID = @CID)
+WHERE IFNULL(c.IsArchived, 0) = 0 AND (@CID = 0 OR c.CenterID = @CID)" + ProvinceScope.Sql("c") + @"
 GROUP BY IFNULL(rt.Name, IFNULL(NULLIF(c.RequestType, ''), 'نامشخص'))
 ORDER BY COUNT(*) DESC;", centerId);
         }
@@ -67,7 +67,7 @@ SELECT IFNULL(ss.Name, IFNULL(NULLIF(c.ServiceStatus, ''), 'نامشخص')) AS [
        COUNT(*) AS [تعداد]
 FROM TblCase c
 LEFT JOIN TblServiceStatus ss ON ss.ServiceStatusID = c.ServiceStatusID
-WHERE IFNULL(c.IsArchived, 0) = 0 AND (@CID = 0 OR c.CenterID = @CID)
+WHERE IFNULL(c.IsArchived, 0) = 0 AND (@CID = 0 OR c.CenterID = @CID)" + ProvinceScope.Sql("c") + @"
 GROUP BY IFNULL(ss.Name, IFNULL(NULLIF(c.ServiceStatus, ''), 'نامشخص'))
 ORDER BY COUNT(*) DESC;", centerId);
         }
@@ -84,8 +84,12 @@ SELECT CASE IFNULL(c.CompletionStatusCode, '')
             ELSE 'محاسبه نشده' END AS [وضعیت تکمیل],
        COUNT(*) AS [تعداد]
 FROM TblCase c
-WHERE IFNULL(c.IsArchived, 0) = 0 AND (@CID = 0 OR c.CenterID = @CID)
-GROUP BY 1
+WHERE IFNULL(c.IsArchived, 0) = 0 AND (@CID = 0 OR c.CenterID = @CID)" + ProvinceScope.Sql("c") + @"
+GROUP BY CASE IFNULL(c.CompletionStatusCode, '')
+            WHEN 'COMPLETE'    THEN 'کامل'
+            WHEN 'IN_PROGRESS' THEN 'در حال تکمیل'
+            WHEN 'INCOMPLETE'  THEN 'ناقص'
+            ELSE 'محاسبه نشده' END
 ORDER BY COUNT(*) DESC;", centerId);
         }
 
@@ -100,8 +104,12 @@ SELECT CASE IFNULL(c.VulnerabilityBand, '')
             ELSE 'محاسبه نشده' END AS [سطح آسیب‌پذیری],
        COUNT(*) AS [تعداد]
 FROM TblCase c
-WHERE IFNULL(c.IsArchived, 0) = 0 AND (@CID = 0 OR c.CenterID = @CID)
-GROUP BY 1
+WHERE IFNULL(c.IsArchived, 0) = 0 AND (@CID = 0 OR c.CenterID = @CID)" + ProvinceScope.Sql("c") + @"
+GROUP BY CASE IFNULL(c.VulnerabilityBand, '')
+            WHEN 'HIGH'   THEN 'پرخطر'
+            WHEN 'MEDIUM' THEN 'متوسط'
+            WHEN 'LOW'    THEN 'کم‌خطر'
+            ELSE 'محاسبه نشده' END
 ORDER BY COUNT(*) DESC;", centerId);
         }
 
@@ -115,7 +123,7 @@ FROM TblCaseFunding cf
 JOIN TblFundingSource fs ON fs.FundingSourceID = cf.FundingSourceID
 JOIN TblCase c ON c.CasID = cf.CasID
 WHERE cf.IsActive = 1 AND IFNULL(c.IsArchived, 0) = 0
-  AND (@CID = 0 OR c.CenterID = @CID)
+  AND (@CID = 0 OR c.CenterID = @CID)" + ProvinceScope.Sql("c") + @"
 GROUP BY fs.Name
 ORDER BY COUNT(DISTINCT cf.CasID) DESC;", centerId);
         }
@@ -130,7 +138,7 @@ FROM TblCaseFunding cf
 JOIN TblSponsor s ON s.SponsorID = cf.SponsorID
 JOIN TblCase c ON c.CasID = cf.CasID
 WHERE cf.IsActive = 1 AND IFNULL(c.IsArchived, 0) = 0
-  AND (@CID = 0 OR c.CenterID = @CID)
+  AND (@CID = 0 OR c.CenterID = @CID)" + ProvinceScope.Sql("c") + @"
 GROUP BY s.Name
 ORDER BY COUNT(DISTINCT cf.CasID) DESC;", centerId);
         }
@@ -147,7 +155,7 @@ SELECT
   -- به‌صورتِ یک کوئریِ گروهی حساب می‌شود، نه حلقهٔ per-case (نکتهٔ کاراییِ
   -- گزارشِ تأثیرِ داشبورد).
   (SELECT COUNT(*) FROM TblCase c
-    WHERE IFNULL(c.IsArchived, 0) = 0 AND (@CID = 0 OR c.CenterID = @CID)
+    WHERE IFNULL(c.IsArchived, 0) = 0 AND (@CID = 0 OR c.CenterID = @CID)" + ProvinceScope.Sql("c") + @"
       AND EXISTS (
           SELECT 1
           FROM TblRequiredDocument rd
@@ -161,59 +169,60 @@ SELECT
 
   (SELECT COUNT(*) FROM TblFieldVisit v
      JOIN TblCase c ON c.CasID = v.CasID
-    WHERE IFNULL(c.IsArchived, 0) = 0 AND (@CID = 0 OR c.CenterID = @CID)) AS VisitCount,
+    WHERE IFNULL(c.IsArchived, 0) = 0 AND (@CID = 0 OR c.CenterID = @CID)" + ProvinceScope.Sql("c") + @") AS VisitCount,
 
   (SELECT COUNT(DISTINCT cf.CasID) FROM TblCaseFunding cf
      JOIN TblCase c ON c.CasID = cf.CasID
     WHERE cf.IsActive = 1 AND IFNULL(c.IsArchived, 0) = 0
-      AND (@CID = 0 OR c.CenterID = @CID)) AS FundedCases,
+      AND (@CID = 0 OR c.CenterID = @CID)" + ProvinceScope.Sql("c") + @") AS FundedCases,
 
   (SELECT COUNT(*) FROM TblSponsor WHERE IsActive = 1)             AS ActiveSponsors,
   (SELECT COUNT(*) FROM TblFundingSource WHERE IsActive = 1)       AS ActiveSources,
 
   (SELECT COUNT(*) FROM TblAssistance a
      JOIN TblCase c ON c.CasID = a.CasID
-    WHERE IFNULL(c.IsArchived, 0) = 0 AND (@CID = 0 OR c.CenterID = @CID)) AS AssistCount,
+    WHERE IFNULL(c.IsArchived, 0) = 0 AND (@CID = 0 OR c.CenterID = @CID)" + ProvinceScope.Sql("c") + @") AS AssistCount,
 
   (SELECT COALESCE(SUM(a.Amount), 0) FROM TblAssistance a
      JOIN TblCase c ON c.CasID = a.CasID
-    WHERE IFNULL(c.IsArchived, 0) = 0 AND (@CID = 0 OR c.CenterID = @CID)) AS AssistTotal,
+    WHERE IFNULL(c.IsArchived, 0) = 0 AND (@CID = 0 OR c.CenterID = @CID)" + ProvinceScope.Sql("c") + @") AS AssistTotal,
 
   -- Phase 5.5-D — ریسک و کیفیت. سه شمارشِ باند روی ایندکسِ
   -- IX_TblCase_VulnBand می‌نشینند و میانگین هم از همان ستونِ کش‌شده
   -- می‌آید — هیچ فراخوانیِ VulnerabilityScoreService در مسیرِ داشبورد نیست.
   (SELECT COUNT(*) FROM TblCase c WHERE IFNULL(c.IsArchived,0) = 0
-     AND (@CID = 0 OR c.CenterID = @CID) AND c.VulnerabilityBand = 'HIGH')   AS HighRisk,
+     AND (@CID = 0 OR c.CenterID = @CID)" + ProvinceScope.Sql("c") + @" AND c.VulnerabilityBand = 'HIGH')   AS HighRisk,
   (SELECT COUNT(*) FROM TblCase c WHERE IFNULL(c.IsArchived,0) = 0
-     AND (@CID = 0 OR c.CenterID = @CID) AND c.VulnerabilityBand = 'MEDIUM') AS MediumRisk,
+     AND (@CID = 0 OR c.CenterID = @CID)" + ProvinceScope.Sql("c") + @" AND c.VulnerabilityBand = 'MEDIUM') AS MediumRisk,
   (SELECT COUNT(*) FROM TblCase c WHERE IFNULL(c.IsArchived,0) = 0
-     AND (@CID = 0 OR c.CenterID = @CID) AND c.VulnerabilityBand = 'LOW')    AS LowRisk,
+     AND (@CID = 0 OR c.CenterID = @CID)" + ProvinceScope.Sql("c") + @" AND c.VulnerabilityBand = 'LOW')    AS LowRisk,
   (SELECT COALESCE(AVG(c.VulnerabilityScore), 0) FROM TblCase c
-    WHERE IFNULL(c.IsArchived,0) = 0 AND (@CID = 0 OR c.CenterID = @CID)
+    WHERE IFNULL(c.IsArchived,0) = 0 AND (@CID = 0 OR c.CenterID = @CID)" + ProvinceScope.Sql("c") + @"
       AND c.VulnerabilityScore IS NOT NULL) AS AvgScore,
 
   (SELECT COUNT(*) FROM TblDocs d
      JOIN TblCase c ON c.CasID = d.CasID
     WHERE IFNULL(d.IsArchived,0) = 0 AND IFNULL(d.IsVerified,0) = 0
-      AND IFNULL(c.IsArchived,0) = 0 AND (@CID = 0 OR c.CenterID = @CID)) AS UnverifiedDocs,
+      AND IFNULL(c.IsArchived,0) = 0 AND (@CID = 0 OR c.CenterID = @CID)" + ProvinceScope.Sql("c") + @") AS UnverifiedDocs,
 
   -- «نیازمندِ بازدید» فقط برای نوع‌هایی معنا دارد که پرچمِ
   -- RequiresFieldVisit را روشن کرده‌اند (پیش‌فرض خاموش است، پس تا وقتی
   -- مدیر روشنش نکند این عدد صفر می‌ماند — همان قرارداد فاز ۵).
   (SELECT COUNT(*) FROM TblCase c
      JOIN TblRequestType rt ON rt.RequestTypeID = c.RequestTypeID
-    WHERE IFNULL(c.IsArchived,0) = 0 AND (@CID = 0 OR c.CenterID = @CID)
+    WHERE IFNULL(c.IsArchived,0) = 0 AND (@CID = 0 OR c.CenterID = @CID)" + ProvinceScope.Sql("c") + @"
       AND IFNULL(rt.RequiresFieldVisit,0) = 1
       AND NOT EXISTS (SELECT 1 FROM TblFieldVisit v WHERE v.CasID = c.CasID)) AS NeedVisit,
 
   (SELECT COUNT(*) FROM TblCase c
      JOIN TblRequestType rt ON rt.RequestTypeID = c.RequestTypeID
-    WHERE IFNULL(c.IsArchived,0) = 0 AND (@CID = 0 OR c.CenterID = @CID)
+    WHERE IFNULL(c.IsArchived,0) = 0 AND (@CID = 0 OR c.CenterID = @CID)" + ProvinceScope.Sql("c") + @"
       AND IFNULL(rt.RequiresFunding,0) = 1
       AND NOT EXISTS (SELECT 1 FROM TblCaseFunding cf
                        WHERE cf.CasID = c.CasID AND cf.IsActive = 1)) AS NeedFunding;", con))
             {
                 cmd.Parameters.AddWithValue("@CID", centerId);
+                ProvinceScope.Bind(cmd);
                 con.Open();
                 using (var dr = cmd.ExecuteReader())
                 {
@@ -254,6 +263,7 @@ SELECT
             using (var cmd = new SQLiteCommand(sql, con))
             {
                 cmd.Parameters.AddWithValue("@CID", centerId);
+                ProvinceScope.Bind(cmd);
                 con.Open();
                 using (var adapter = new SQLiteDataAdapter(cmd))
                 {

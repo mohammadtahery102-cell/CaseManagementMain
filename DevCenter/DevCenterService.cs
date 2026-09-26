@@ -223,6 +223,7 @@ namespace CaseManagement.DevCenter
             public string DbVersion     = "";
             public string DbStatus      = "";
             public string DbSize        = "";
+            public string DbFilePath    = "";
             public long   TotalRecords;
             public int    TotalUsers;
             public int    OnlineUsers;
@@ -244,6 +245,11 @@ namespace CaseManagement.DevCenter
             o.AppVersion   = Guard(GetAppVersion,   "نامشخص");
             o.DbVersion    = Guard(GetDbVersion,    NotAvailable);
             o.DbSize       = Guard(delegate { return FormatBytes(GetDbFileSize()); }, NotAvailable);
+            // آموزش — چند نسخهٔ CaseDB.sqlite روی این دستگاه پیدا می‌شود (پوشهٔ
+            // ساخت، OneDrive، %LocalAppData%، ...) و این‌که برنامه *همین الان*
+            // کدام‌یک را واقعاً باز کرده بارها منشأ سردرگمی بوده. مسیر همیشه از
+            // رشتهٔ اتصالِ واقعیِ برنامه خوانده می‌شود (GetDbFilePath)، نه حدس.
+            o.DbFilePath   = Guard(GetDbFilePath, NotAvailable);
             o.Uptime       = Guard(FormatUptime,    NotAvailable);
             o.MemoryUsage  = Guard(delegate { return FormatBytes(GetWorkingSet()); }, NotAvailable);
             o.StorageUsage = Guard(GetStorageUsage, NotAvailable);

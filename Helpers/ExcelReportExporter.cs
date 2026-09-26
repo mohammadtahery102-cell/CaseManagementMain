@@ -117,6 +117,7 @@ namespace CaseManagement.Helpers
             {
                 cmd.CommandTimeout = 120;
                 cmd.Parameters.AddWithValue("@CID", cid);
+                ProvinceScope.Bind(cmd);
                 cmd.Parameters.AddWithValue("@Svc", serviceStatus ?? "");
                 cmd.Parameters.AddWithValue("@Province", filter?.Province ?? "");
                 // آموزش — رفعِ اشکالِ گزارش‌شده: ولسوالی حالا از یک کمبوی
@@ -300,7 +301,7 @@ namespace CaseManagement.Helpers
                     (SELECT COUNT(1) FROM TblDocs d WHERE d.CasID = c.CasID) AS [تعداد اسناد]
                 FROM TblCase c
                 LEFT JOIN TblDisability dis ON dis.CasID = c.CasID
-                WHERE (@CID = 0 OR c.CenterID = @CID)
+                WHERE (@CID = 0 OR c.CenterID = @CID)" + ProvinceScope.Sql("c") + @"
                   AND (@Svc = '' OR c.ServiceStatus = @Svc)" + AdvancedFilterSql + @"
                 ORDER BY c.CasID DESC";
         }
@@ -354,7 +355,7 @@ namespace CaseManagement.Helpers
                     CASE WHEN NULLIF(f.MemberPhotoPath, '') IS NULL THEN 'ندارد' ELSE 'دارد' END AS [عکس عضو]
                 FROM TblCase c
                 " + joinType + @" TblFamily f ON f.CasID = c.CasID
-                WHERE (@CID = 0 OR c.CenterID = @CID)
+                WHERE (@CID = 0 OR c.CenterID = @CID)" + ProvinceScope.Sql("c") + @"
                   AND (@Svc = '' OR c.ServiceStatus = @Svc)" + AdvancedFilterSql + @"
                 ORDER BY c.CasID DESC, f.FamID";
         }
@@ -377,7 +378,7 @@ namespace CaseManagement.Helpers
                     d.DocFilePath AS [مسیر فایل سند]
                 FROM TblCase c
                 INNER JOIN TblDocs d ON d.CasID = c.CasID
-                WHERE (@CID = 0 OR c.CenterID = @CID)
+                WHERE (@CID = 0 OR c.CenterID = @CID)" + ProvinceScope.Sql("c") + @"
                   AND (@Svc = '' OR c.ServiceStatus = @Svc)" + AdvancedFilterSql + @"
                 ORDER BY c.CasID DESC, d.DocID";
         }

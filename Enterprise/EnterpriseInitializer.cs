@@ -868,6 +868,7 @@ CREATE TABLE IF NOT EXISTS EntUserModule (
             AddModule(con, ModuleService.ModuleArchive,    "بایگانی",           0,  78);
             AddModule(con, ModuleService.ModuleAuditReport,"گزارش رویدادها",    0,  80);
             AddModule(con, ModuleService.ModuleReportBuilder, "گزارش‌ساز پویا", 0,  85);
+            AddModule(con, ModuleService.ModuleGeoCenter, "مرکز فرماندهی آماری", 0,  87);
 
             AddModule(con, ModuleService.ModuleWorkflow,   "گردش‌کار",          0,  90);
             AddModule(con, ModuleService.ModuleApprovals,  "تأییدها",           0, 100);

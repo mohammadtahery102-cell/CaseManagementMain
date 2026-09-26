@@ -1,0 +1,20 @@
+{
+  "agents": {
+    "agent-1789631562343-o0m7jw": {
+      "agentId": "agent-1789631562343-o0m7jw",
+      "agentType": "architect",
+      "status": "idle",
+      "health": 1,
+      "taskCount": 0,
+      "config": {
+        "provider": "anthropic",
+        "timeout": 300,
+        "autoTools": true
+      },
+      "createdAt": "2026-09-17T07:52:42.343Z",
+      "model": "opus",
+      "modelRoutedBy": "default"
+    }
+  },
+  "version": "3.0.0"
+}

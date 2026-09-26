@@ -35,7 +35,7 @@ namespace CaseManagement.Helpers
         {
             Dock = DockStyle.Top;
             BackColor = UiTheme.CardBack;
-            Padding = new Padding(10, 8, 10, 8);
+            Padding = new Padding(12, 8, 16, 8);
             RightToLeft = RightToLeft.Yes;
 
             // آموزش — رفع باگ «تب‌ها از بالا بریده می‌شدند و بعضی‌ها دیده نمی‌شدند»:
@@ -104,15 +104,38 @@ namespace CaseManagement.Helpers
 
         // ارتفاع نوار = تعداد ردیف‌هایی که تب‌ها واقعاً اشغال کرده‌اند. با تغییر
         // عرض پنجره/تعداد تب‌ها خودکار تنظیم می‌شود، پس هیچ تبی پنهان نمی‌ماند.
+        // آموزش — رفعِ باگِ «داشبورد بعدِ Minimize/Restore بهم می‌ریزد»:
+        // نسخه‌ی قبلی تعداد ردیف را از b.Bottom (موقعیتِ واقعیِ دکمه‌ها بعد از
+        // چیدمانِ FlowLayoutPanel) می‌خواند. حینِ گذارِ Minimize/Restore، رویدادِ
+        // Layout گاهی با عرضِ درست ولی موقعیت‌های دکمه‌یِ کهنه (مربوط به عرضِ
+        // کوچکِ لحظه‌ی Minimize که باعثِ چندردیفی‌شدن شده بود) شلیک می‌شود —
+        // یعنی «عرض» و «موقعیتِ دکمه‌ها» با هم هم‌زمان نیستند. نتیجه: یک
+        // ارتفاعِ خیلی بزرگ روی Height «قفل» می‌ماند و چون Dock=Top است، فضای
+        // واقعیِ تب‌ها را می‌بلعد.
+        //
+        // محاسبه‌ی تحلیلی (از رویِ عرضِ فعلی + عرضِ ثابتِ خودِ دکمه‌ها، نه
+        // موقعیتِ لحظه‌ایِ آن‌ها) این وابستگی به موقعیتِ کهنه را کاملاً حذف
+        // می‌کند — نتیجه فقط به عرضِ *همین لحظه* بستگی دارد.
         private void AdjustHeight()
         {
             if (_buttons.Count == 0) return;
+            int flowWidth = _flow.ClientSize.Width;
+            if (flowWidth <= 0) return;
 
-            int maxBottom = 0;
+            int rows = 1;
+            int x = 0;
             foreach (Button b in _buttons)
-                if (b.Bottom > maxBottom) maxBottom = b.Bottom;
+            {
+                int w = b.Width + b.Margin.Horizontal;
+                if (x > 0 && x + w > flowWidth)
+                {
+                    rows++;
+                    x = 0;
+                }
+                x += w;
+            }
 
-            int desired = maxBottom + PillMarginV + Padding.Vertical + 1;
+            int desired = rows * RowHeight + Padding.Vertical + 1;
             if (Height != desired) Height = desired;
         }
 

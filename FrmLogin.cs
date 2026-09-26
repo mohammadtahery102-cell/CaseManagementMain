@@ -526,13 +526,14 @@ ORDER  BY CenterCode", con))
             public int    CenterId   = 0;
             public string CenterCode = "";
             public string CenterName = "";
+            public string Province   = "";
         }
 
         private AssignedCenter GetAssignedCenter(int userId)
         {
             using (SQLiteConnection con = _db.GetConnection())
             using (SQLiteCommand cmd = new SQLiteCommand(@"
-SELECT c.CenterID, c.CenterCode, c.CenterName
+SELECT c.CenterID, c.CenterCode, c.CenterName, TRIM(IFNULL(c.Province, '')) AS Province
 FROM   TblUsers u
 JOIN   TblCenter c ON c.CenterID = u.CenterID
 WHERE  u.UserID = @UID", con))
@@ -546,7 +547,8 @@ WHERE  u.UserID = @UID", con))
                         {
                             CenterId   = Convert.ToInt32(dr["CenterID"]),
                             CenterCode = dr["CenterCode"].ToString(),
-                            CenterName = dr["CenterName"].ToString()
+                            CenterName = dr["CenterName"].ToString(),
+                            Province   = dr["Province"].ToString()
                         };
                 }
             }
@@ -795,8 +797,17 @@ WHERE  UserID = @id", con))
                 AssignedCenter assigned = GetAssignedCenter(userId);
                 if (assigned == null)
                 {
+                    SecurityContext.SignOut();
                     _lblMessage.ForeColor = UiTheme.Danger;
                     _lblMessage.Text = "مرکز کاربر تنظیم نشده است. با مدیر سیستم تماس بگیرید.";
+                    return;
+                }
+
+                if (string.IsNullOrWhiteSpace(assigned.Province))
+                {
+                    SecurityContext.SignOut();
+                    _lblMessage.ForeColor = UiTheme.Danger;
+                    _lblMessage.Text = "ولایت مرکز کاربر تنظیم نشده است. ورود ممکن نیست.";
                     return;
                 }
 

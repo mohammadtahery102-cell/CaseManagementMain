@@ -75,7 +75,12 @@ namespace CaseManagement.Sync
             new[] { "TblCaseRepresentative", "RepresentativeID" },
             // والد این موجودیت TblFieldVisit است. SyncOutboxService و
             // SyncApplier اکنون ParentGlobalID را برای Visit ترجمه می‌کنند.
-            new[] { "TblFieldVisitPhoto", "PhotoID" }
+            new[] { "TblFieldVisitPhoto", "PhotoID" },
+            // Phase 8 — هویتِ مشترک. TblUsers والد ندارد (CasID) و SuperAdmin
+            // عمداً هرگز سینک نمی‌شود (SyncOutboxService.Capture رد می‌کند) —
+            // سرور SuperAdminِ مستقلِ خودش را دارد. جزئیات در
+            // UNIFIED_PLATFORM_ARCHITECTURE.md بندِ ۶.
+            new[] { "TblUsers", "UserID" }
         };
 
         public static void EnsureOfflineSyncObjects()
@@ -169,6 +174,9 @@ CREATE TABLE IF NOT EXISTS SyncState (
         public const string ConflictVersion        = "نسخهٔ ناسازگار";
         public const string ConflictDuplicateCode  = "کد اختصاصی تکراری";
         public const string ConflictAttachment     = "تعارض پیوست";
+        // Phase 8 — دو شعبه مستقلاً یک نامِ کاربری ساخته‌اند؛ عیناً
+        // ConflictDuplicateCode ولی برایِ TblUsers.
+        public const string ConflictDuplicateUsername = "نام کاربری تکراری";
 
         // ─── وضعیت‌های فایل (فاز ۷) ─────────────────────────────────────────
         public const string FilePending    = "در انتظار";

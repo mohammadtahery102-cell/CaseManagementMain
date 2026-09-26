@@ -289,6 +289,12 @@ WHERE  UserID = @id", con))
                     }
 
                     AuditLogger.Log("تغییر رمز", "TblUsers", userId, "", _username);
+
+                    // Phase 8 — هویتِ مشترک: رمزِ تازه باید روی پورتال/API هم
+                    // معتبر باشد. فرمتِ هش (PBKDF2+salt+iterations) از قبل با
+                    // سرور یکی است، پس نیازی به تبدیل نیست.
+                    CaseManagement.Sync.SyncOutboxService.Capture(
+                        "TblUsers", userId, CaseManagement.Sync.OfflineSyncInitializer.OperationUpdate);
                 }
 
                 Msg.Show(
