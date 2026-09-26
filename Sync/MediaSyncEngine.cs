@@ -25,7 +25,9 @@ namespace CaseManagement.Sync
     //
     // تضمین‌ها:
     //   • هیچ فایلی از قبل موجود، بدون تأیید صریح کاربر جایگزین نمی‌شود.
-    //   • هیچ سند یا عکسی هرگز حذف نمی‌شود.
+    //   • هیچ سند یا عکسی هرگز حذف نمی‌شود — تنها استثنا: عکسی که کاربر صریحاً
+    //     «جایگزینی»اش را تأیید کرده، و آن هم فقط پس از commitِ موفقِ دیتابیس.
+    //     لغو یا خطا هرگز به عکسِ قبلی دست نمی‌زند.
     //   • فایلِ منبعِ کاربر هرگز تغییر نمی‌کند.
     //   • همه‌چیز در AuditLog ثبت می‌شود.
     // ═════════════════════════════════════════════════════════════════════════
@@ -168,6 +170,12 @@ namespace CaseManagement.Sync
                     }
                 }
 
+                // ── فاز ۳: حذفِ عکس‌های جایگزین‌شده — فقط پس از commitِ موفق ──
+                // از این نقطه به بعد دیتابیس به فایل‌های تازه اشاره می‌کند؛
+                // خطا در حذفِ فایلِ قدیمی نباید ورودِ موفق را برگرداند.
+                foreach (var pair in photoWrites)
+                    RemoveReplacedPhoto(pair.Key, pair.Value);
+
                 report.Success = true;
                 report.Add("عکس‌های واردشده: " + report.PhotosImported +
                            "  |  جایگزین‌شده: " + report.PhotosReplaced);
@@ -176,7 +184,7 @@ namespace CaseManagement.Sync
             }
             catch (OperationCanceledException)
             {
-                CleanupFiles(writtenFiles, report);
+                CleanupFiles(writtenFiles, report, photos);
                 report.RolledBack = true;
                 report.Success = false;
                 report.ErrorMessage = "عملیات توسط کاربر لغو شد؛ هیچ تغییری ثبت نشد.";
@@ -185,7 +193,7 @@ namespace CaseManagement.Sync
             {
                 // جبرانِ کامل: هر فایلی که همین اجرا ساخته پاک می‌شود تا چیزی
                 // نیمه‌کاره روی دیسک نماند.
-                CleanupFiles(writtenFiles, report);
+                CleanupFiles(writtenFiles, report, photos);
                 report.RolledBack = true;
                 report.Success = false;
                 report.ErrorMessage = "خطا در ورود رسانه‌ها؛ همه‌چیز برگردانده شد: " + ex.Message;
@@ -269,12 +277,17 @@ namespace CaseManagement.Sync
                     }
                 }
 
+                // ⚠ مسیرِ عکسِ فعلی (ExistingPath) عمداً به FileHelper داده
+                // نمی‌شود. با آن، FileHelper فایلِ قبلی را *پیش از* ثبت در
+                // دیتابیس بازنویسی/حذف می‌کرد و در خطا همان مسیرِ قبلی را
+                // برمی‌گرداند؛ پاک‌سازیِ لغو/خطا سپس عکسِ اصلیِ پرونده را پاک
+                // می‌کرد. حالا همیشه فایلِ تازه ساخته می‌شود و عکسِ قبلی فقط
+                // پس از commitِ موفق حذف می‌شود (RemoveReplacedPhoto).
                 return FileHelper.SaveFileToCaseFolder(
                     prepared,
                     item.CaseCode,
                     section,
-                    baseName,
-                    item.ExistingPath ?? "");
+                    baseName);
             }
             finally
             {
@@ -372,13 +385,51 @@ VALUES (@CasID, @DocType, @OriginalFileName, @DocFilePath, @RelatedCaseRef, @Doc
             return "سایر";
         }
 
-        private void CleanupFiles(List<string> files, MediaReport report)
+        // عکسِ قبلیِ یک مورد «جایگزینی» — فقط وقتی فایلِ تازه جای دیگری است.
+        // DeleteFileIfExists خودش حذف بیرون از پوشه‌ی اصلی را رد می‌کند.
+        private static void RemoveReplacedPhoto(MediaItem item, string newPath)
         {
+            try
+            {
+                if (item == null || string.IsNullOrWhiteSpace(item.ExistingPath)) return;
+                if (IsSamePath(item.ExistingPath, newPath)) return;
+
+                // همان قاعده‌ی قبلیِ FileHelper: فقط عکسی که در پوشه‌ی همین بخشِ
+                // همین پرونده است (کنارِ فایلِ تازه) حذف می‌شود؛ مسیرِ جای دیگر دست‌نخورده می‌ماند.
+                if (!IsSamePath(Path.GetDirectoryName(Path.GetFullPath(item.ExistingPath)),
+                                Path.GetDirectoryName(Path.GetFullPath(newPath))))
+                    return;
+
+                FileHelper.DeleteFileIfExists(item.ExistingPath);
+            }
+            catch { }
+        }
+
+        private static bool IsSamePath(string first, string second)
+        {
+            try
+            {
+                return string.Equals(Path.GetFullPath(first), Path.GetFullPath(second),
+                                     StringComparison.OrdinalIgnoreCase);
+            }
+            catch { return false; }
+        }
+
+        // ⚠ محافظِ دوم: پاک‌سازیِ لغو/خطا هرگز فایلی را که پیش از این اجرا
+        // مالِ پرونده بوده (ExistingPath) حذف نمی‌کند — فقط فایل‌های همین اجرا.
+        private void CleanupFiles(List<string> files, MediaReport report, List<MediaItem> items = null)
+        {
+            var protectedPaths = new List<string>();
+            if (items != null)
+                foreach (MediaItem item in items)
+                    if (!string.IsNullOrWhiteSpace(item.ExistingPath)) protectedPaths.Add(item.ExistingPath);
+
             int removed = 0;
             foreach (string f in files)
             {
                 try
                 {
+                    if (protectedPaths.Any(p => IsSamePath(p, f))) continue;
                     if (!string.IsNullOrWhiteSpace(f) && File.Exists(f)) { File.Delete(f); removed++; }
                 }
                 catch { }
