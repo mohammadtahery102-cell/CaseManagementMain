@@ -3002,113 +3002,29 @@ WHERE GlobalID IS NULL;", tableName));
         }
 
         // ─────────────────────────────────────────────────────────────────────
-        // مهاجرت: تغییر نام وضعیت "در انتظار" به "در انتظار تأیید" + افزودن
-        // ستون StopReason ("دلیل قطع موقت"). SQLite اجازه تغییر CHECK constraint
-        // موجود روی جدول را نمی‌دهد، پس جدول با قید جدید بازسازی می‌شود.
-        // این تابع فقط یک‌بار اجرا می‌شود (idempotent — تشخیص از وجود ستون StopReason).
-        // نکته: باید بعد از EnsureColumn(GlobalID) و EnsureColumn(CenterID) فراخوانی
-        // شود چون داده‌های آن دو ستون هنگام کپی داده حفظ می‌شوند.
+        // مهاجرت: افزودن ستون StopReason ("دلیل قطع موقت") به دیتابیس‌هایی که
+        // پیش از وجود این ستون ساخته شده‌اند. idempotent — تشخیص از وجود ستون.
+        //
+        // ⚠ رفع باگ حیاتی (C1): نسخه‌ی قبلی برای این کار کلِ TblCase را بازسازی
+        // می‌کرد: «ALTER TABLE TblCase RENAME TO TblCase_old» با Foreign Key
+        // روشن. SQLite با این rename متنِ FOREIGN KEY همه‌ی جداول فرزند
+        // (TblFamily/TblDocs/TblAssistance/TblCaseRelation/TblArchiveHistory) را
+        // به TblCase_old بازنویسی می‌کرد و «DROP TABLE TblCase_old» سپس با
+        // ON DELETE CASCADE همه‌ی ردیف‌های فرزند را حذف می‌کرد. فهرستِ ثابتِ
+        // ستون‌ها هم هر ستونی را که بعداً با EnsureColumn اضافه شده بود دور می‌ریخت.
+        //
+        // حالا فقط ستون با ALTER TABLE ADD COLUMN اضافه می‌شود: بدون rename،
+        // بدون بازسازی، بدون حذف. بقیه‌ی کارِ آن مهاجرت — گسترشِ CHECK و نگاشتِ
+        // مقادیرِ قدیمیِ ServiceStatus — را StandardizeCaseDomains در همین
+        // اجرای EnsureDatabaseObjects از طریق RebuildCaseServiceStatusCheck انجام
+        // می‌دهد (FK خاموش، ساختِ جدولِ جدید و rename آن، حفظِ همه‌ی ستون‌ها و ایندکس‌ها).
         // ─────────────────────────────────────────────────────────────────────
         private static void MigrateServiceStatusRebuild(SQLiteConnection con)
         {
             if (!TableExists(con, "TblCase") || ColumnExists(con, "TblCase", "StopReason"))
                 return;
 
-            using (var tr = con.BeginTransaction())
-            {
-                try
-                {
-                    ExecuteNonQuery(con, tr, "ALTER TABLE TblCase RENAME TO TblCase_old;");
-
-                    ExecuteNonQuery(con, tr, @"
-CREATE TABLE TblCase (
-    CasID                 INTEGER PRIMARY KEY AUTOINCREMENT,
-    FormNo                INTEGER NULL,
-    Code                  TEXT NULL,
-    Phone                 TEXT NULL,
-    PhotoPath             TEXT NULL,
-    FamilyPhotoPath       TEXT NULL,
-    CaseNo                TEXT NULL,
-    CaseDate              TEXT NULL,
-    District              TEXT NULL,
-    RequestType           TEXT NULL,
-    PriorityLevel         TEXT NULL,
-    HeadFullName          TEXT NULL,
-    HeadFatherName        TEXT NULL,
-    HeadSadat             TEXT NULL,
-    Religion              TEXT NULL,
-    HeadTazkiraNo         TEXT NULL,
-    HeadOriginalResidence TEXT NULL,
-    HeadCurrentResidence  TEXT NULL,
-    RelationshipToFamily  TEXT NULL,
-    RelativePhone         TEXT NULL,
-    CoveredByOrg          TEXT NULL,
-    Job                   TEXT NULL,
-    Skill                 TEXT NULL,
-    DisabilityDegree      TEXT NULL,
-    DisabilityType        TEXT NULL,
-    MigrationCardType     TEXT NULL,
-    MaritalStatus         TEXT NULL,
-    Surveyors             TEXT NULL,
-    SurveyDate            TEXT NULL,
-    LocationAddress       TEXT NULL,
-    EducationLevel        TEXT NULL,
-    ServiceStatus         TEXT NOT NULL DEFAULT 'فعال',
-    StopReason            TEXT NULL,
-    UrgentSituation       TEXT NULL,
-    Zone                  TEXT NULL,
-    Province              TEXT NULL,
-    GlobalID              TEXT NULL,
-    CenterID              INTEGER NOT NULL DEFAULT 1,
-    CreatedAt             TEXT NOT NULL DEFAULT (datetime('now')),
-    UpdatedAt             TEXT NULL,
-    CONSTRAINT UQ_TblCase_Code   UNIQUE (Code),
-    CONSTRAINT UQ_TblCase_FormNo UNIQUE (FormNo),
-    " + CaseDomain.ServiceStatusCheckSql + @"
-);");
-
-                    ExecuteNonQuery(con, tr, @"
-INSERT INTO TblCase
-(
-    CasID, FormNo, Code, Phone, PhotoPath, FamilyPhotoPath, CaseNo, CaseDate,
-    District, RequestType, PriorityLevel, HeadFullName, HeadFatherName, HeadSadat,
-    Religion, HeadTazkiraNo, HeadOriginalResidence, HeadCurrentResidence,
-    RelationshipToFamily, RelativePhone, CoveredByOrg, Job, Skill,
-    DisabilityDegree, DisabilityType, MigrationCardType, MaritalStatus,
-    Surveyors, SurveyDate, LocationAddress, EducationLevel, ServiceStatus, StopReason,
-    UrgentSituation, Zone, Province, GlobalID, CenterID, CreatedAt, UpdatedAt
-)
-SELECT
-    CasID, FormNo, Code, Phone, PhotoPath, FamilyPhotoPath, CaseNo, CaseDate,
-    District, RequestType, PriorityLevel, HeadFullName, HeadFatherName, HeadSadat,
-    Religion, HeadTazkiraNo, HeadOriginalResidence, HeadCurrentResidence,
-    RelationshipToFamily, RelativePhone, CoveredByOrg, Job, Skill,
-    DisabilityDegree, DisabilityType, MigrationCardType, MaritalStatus,
-    Surveyors, SurveyDate, LocationAddress, EducationLevel,
-    " + LegacyServiceStatusExpression() + @",
-    NULL,
-    UrgentSituation, Zone, Province, GlobalID, CenterID, CreatedAt, UpdatedAt
-FROM TblCase_old;");
-
-                    ExecuteNonQuery(con, tr, "DROP TABLE TblCase_old;");
-                    tr.Commit();
-                }
-                catch
-                {
-                    try { tr.Rollback(); } catch { }
-                    throw;
-                }
-            }
-
-            // بازسازی ایندکس‌ها (جدول جدید تازه ساخته شده، ایندکس ندارد)
-            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblCase_CaseDate ON TblCase(CaseDate);");
-            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblCase_Code ON TblCase(Code);");
-            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblCase_FormNo ON TblCase(FormNo);");
-            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblCase_Province ON TblCase(Province);");
-            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblCase_ProvinceDistrict ON TblCase(Province, District);");
-            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblCase_ServiceStatus ON TblCase(ServiceStatus);");
-            ExecuteNonQuery(con, "CREATE UNIQUE INDEX IF NOT EXISTS IX_TblCase_GlobalID ON TblCase(GlobalID) WHERE GlobalID IS NOT NULL;");
-            ExecuteNonQuery(con, "CREATE INDEX IF NOT EXISTS IX_TblCase_CenterID ON TblCase(CenterID);");
+            EnsureColumn(con, "TblCase", "StopReason", "TEXT NULL");
         }
 
         // مهاجرت: نسخه‌های قبلی TblAssistance بدون FOREIGN KEY ساخته شده بودند
